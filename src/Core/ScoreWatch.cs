@@ -202,8 +202,16 @@ public sealed class ScoreWatch(
     /// consent sheet in front of the user again. The previous text here — "re-grant it under
     /// Plugins" — described a control that does not exist, the fourth wrong claim about the host
     /// found in this codebase.
+    /// <para>
+    /// INTERNAL rather than private (round 3, F4/F8): <c>MainWindow.SeedRowsAsync</c> is the FIRST
+    /// gated call of every cycle — it runs and is awaited before <see cref="RunOnceAsync"/> is ever
+    /// called — so a <c>PermissionDenied</c> there reaches this text only if the window calls it
+    /// too. One string, one place it is written, so the window's copy and this one cannot drift
+    /// from each other the way two independently maintained sentences already have once this
+    /// review (F6).
+    /// </para>
     /// </summary>
-    private static string RejectedMessage(string capability) =>
+    internal static string RejectedMessage(string capability) =>
         $"RoRoRo refused this: {capability} is not granted. There is no per-capability re-grant — "
         + "remove Ur Score from RoRoRo's Plugins page and reinstall it to be asked again.";
 

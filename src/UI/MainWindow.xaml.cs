@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
+using Grpc.Core;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Source;
@@ -196,7 +197,9 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Adds a row for every account RoRoRo has saved, defaulting to on unless the user has
-    /// previously switched it off.
+    /// previously switched it off. Returns a message when the capability that lists accounts has
+    /// been declined, so <see cref="CycleAsync"/> can show it; null otherwise, including on any
+    /// OTHER failure — this method never throws.
     /// <para>
     /// THIS MUST RUN BEFORE THE FIRST CYCLE, and the reason is a deadlock the pre-flight scan
     /// caught. The report policy's allow list comes from these rows. An earlier draft populated
@@ -211,20 +214,45 @@ public partial class MainWindow : Window
     /// dropped for want of a row and an allow-list entry, with nothing anywhere explaining why.
     /// </para>
     /// <para>
-    /// F3: deliberately UNGUARDED here — <see cref="IHostClient.GetAccountsAsync"/> rethrows by
-    /// design, and RoRoRo quitting between the reachability probe and the accounts call is a real
-    /// timing window. The caller (<see cref="CycleAsync"/>) wraps this the same way it wraps the
-    /// rest of the cycle, so a race here becomes a sentence, not a crash from an <c>async void</c>
-    /// handler with nothing to catch it.
+    /// ROUND 3 (F4/F8 — the same root cause, found twice): guarding this with the CALLER's
+    /// try/catch was not enough. This is the FIRST gated call of every cycle — <see cref="CycleAsync"/>
+    /// awaits it before <c>ScoreWatch.RunOnceAsync</c> is ever called — so a live test injecting
+    /// <c>PermissionDenied</c> here got the generic "Something unexpected went wrong" with a raw
+    /// gRPC status, never reaching <c>ScoreWatch</c>'s own identical catch. Worse, letting the
+    /// exception propagate aborted the WHOLE cycle before the clan poll ran at all: no dashboard,
+    /// no leaderboard, and the graceful <c>HostDown</c> path — the README's promise that Ur Score
+    /// "keeps polling the clan" — bypassed for a crash. A seed failure must cost the seed, not the
+    /// dashboard, so this method now catches its own two host calls: <c>PermissionDenied</c>
+    /// becomes the named capability message (the SAME text <c>ScoreWatch.RejectedMessage</c>
+    /// produces, so the two can never drift from each other), and any OTHER failure — most
+    /// plausibly F3's own named race, RoRoRo quitting between the reachability probe and the
+    /// accounts call — leaves the rows exactly as they were and returns null. Either way,
+    /// <see cref="CycleAsync"/> proceeds to the clan poll, whose own fresh
+    /// <c>IHostClient.IsReachableAsync</c> check will discover the same outage on its own and land
+    /// on <c>HostDown</c>, rather than this cycle producing nothing at all.
     /// </para>
     /// </summary>
-    private async Task SeedRowsAsync()
+    private async Task<string?> SeedRowsAsync()
     {
-        if (!await _host.IsReachableAsync(CancellationToken.None)) return;
+        if (!await _host.IsReachableAsync(CancellationToken.None)) return null;
+
+        IReadOnlyList<HostAccount> accounts;
+        try
+        {
+            accounts = await _host.GetAccountsAsync(CancellationToken.None);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
+        {
+            return ScoreWatch.RejectedMessage("host.queries.accounts");
+        }
+        catch (Exception)
+        {
+            return null;
+        }
 
         var excluded = _settings.Excluded;
 
-        foreach (var account in await _host.GetAccountsAsync(CancellationToken.None))
+        foreach (var account in accounts)
         {
             var existing = _rows.FirstOrDefault(r => r.AccountId == account.AccountId);
             if (existing is not null)
@@ -252,6 +280,7 @@ public partial class MainWindow : Window
         _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
 
         RenderPolicy();
+        return null;
     }
 
     /// <summary>
@@ -325,15 +354,28 @@ public partial class MainWindow : Window
     {
         try
         {
-            // F8: every cycle, not just the first — see SeedRowsAsync's doc. F3: unguarded on
-            // purpose; this try/catch is what turns a thrown exception from it (or from anything
-            // below) into a sentence instead of a crash out of an `async void` handler, or a
-            // silently faulted, never-observed Task from Start's fire-and-forget call.
-            await SeedRowsAsync();
+            // F8: every cycle, not just the first — see SeedRowsAsync's doc. Round 3: SeedRowsAsync
+            // now guards its OWN two host calls and never throws — this try/catch remains as the
+            // backstop for anything else in the cycle, not as the seed's only protection, which
+            // round 3 proved insufficient (a seed-level exception here used to abort everything
+            // below, including the clan poll and its graceful HostDown path).
+            var seedProblem = await SeedRowsAsync();
 
             var watch = EnsureWatch();
             var snapshot = await watch.RunOnceAsync(CancellationToken.None);
             Render(snapshot);
+
+            if (seedProblem is not null)
+            {
+                // Takes priority over whatever the poll cycle concluded: a declined capability is
+                // the more urgent fact, and the poll's own state (idle, no battle, whatever it is)
+                // says nothing about it at all. The clan poll still ran and the dashboard below
+                // still reflects it — only the diagnostics headline is overridden.
+                StateLine.Text = "RoRoRo refused this.";
+                DetailLine.Text = seedProblem;
+                _trail.Add($"{DateTimeOffset.UtcNow:O} SEED REJECTED: {seedProblem}");
+            }
+
             _trail.Add($"{DateTimeOffset.UtcNow:O} {snapshot.State}: {snapshot.Detail}");
 
             // The dashboard reads the SAME raw response the diagnostics above already caused
