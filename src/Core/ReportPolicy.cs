@@ -27,7 +27,8 @@ public sealed record PolicyDecision(bool Allowed, string? Reason);
 /// letting the next reader believe this is a security boundary.
 /// </para>
 /// </summary>
-public sealed class ReportPolicy(string metricId, IReadOnlySet<Guid> allowedSubjects)
+public sealed class ReportPolicy(
+    string metricId, IReadOnlySet<Guid> allowedSubjects, int sent = 0, int dropped = 0)
 {
     public string MetricId { get; } = metricId;
 
@@ -39,10 +40,23 @@ public sealed class ReportPolicy(string metricId, IReadOnlySet<Guid> allowedSubj
     public IReadOnlySet<Guid> AllowedSubjects { get; } = new HashSet<Guid>(allowedSubjects);
 
     /// <summary>Reports that passed. Shown in the window so "it is working" is a number.</summary>
-    public int Sent { get; private set; }
+    public int Sent { get; private set; } = sent;
 
     /// <summary>Reports the gate refused. A rising number here is worth someone looking.</summary>
-    public int Dropped { get; private set; }
+    public int Dropped { get; private set; } = dropped;
+
+    /// <summary>
+    /// A policy for a changed metric id or allow list, carrying the running <see cref="Sent"/> and
+    /// <see cref="Dropped"/> counts forward rather than resetting them to zero.
+    /// <para>
+    /// Exists so <see cref="ScoreWatch"/> can be updated in place instead of reconstructed (F2): a
+    /// reconstructed <c>ScoreWatch</c> gets a fresh <c>ReportPolicy</c> every cycle, which is
+    /// exactly how "a rising number here is worth someone looking" became a counter that could
+    /// never rise. <see cref="ScoreWatch.UpdatePolicy"/> is the only caller.
+    /// </para>
+    /// </summary>
+    public ReportPolicy With(string metricId, IReadOnlySet<Guid> allowedSubjects) =>
+        new(metricId, allowedSubjects, Sent, Dropped);
 
     public PolicyDecision Evaluate(Guid subject, string candidateMetricId, double value)
     {

@@ -137,6 +137,37 @@ public class ReportPolicyTests
     }
 
     [Fact]
+    public async Task WithCarriesSentAndDroppedForwardRatherThanResettingThem()
+    {
+        // F2: ScoreWatch.UpdatePolicy calls this instead of the window constructing a whole new
+        // ReportPolicy (which is what a rebuilt ScoreWatch used to do every cycle). If With reset
+        // the counts, "a rising number here is worth someone looking" would still be a counter
+        // that could never rise past whatever happened since the last allow-list change.
+        var client = new SpyClient();
+        var policy = Policy();
+
+        await policy.SendAsync(client, Allowed, "clan.battle.points", 1, DateTimeOffset.UtcNow,
+            CancellationToken.None);
+        await policy.SendAsync(client, NotAllowed, "clan.battle.points", 1, DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        Assert.Equal(1, policy.Sent);
+        Assert.Equal(1, policy.Dropped);
+
+        var widened = policy.With("clan.battle.points", new HashSet<Guid> { Allowed, NotAllowed });
+
+        Assert.Equal(1, widened.Sent);
+        Assert.Equal(1, widened.Dropped);
+        Assert.Contains(NotAllowed, widened.AllowedSubjects);
+
+        // And the widened policy actually enforces the new list, not just remembers old counts.
+        var sent = await widened.SendAsync(client, NotAllowed, "clan.battle.points", 1,
+            DateTimeOffset.UtcNow, CancellationToken.None);
+        Assert.True(sent);
+        Assert.Equal(2, widened.Sent);
+    }
+
+    [Fact]
     public void ReportMetricIsCalledFromTheReportPolicyAndNowhereElse()
     {
         // THE FENCE. The tests above prove the gate drops what it should; this proves nothing can

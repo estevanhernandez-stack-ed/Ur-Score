@@ -327,6 +327,65 @@ public class ScoreWatchTests
     }
 
     [Fact]
+    public async Task UpdatingThePolicyOnOneWatchAcrossCyclesKeepsTheGuardAndAccumulatesTheCounts()
+    {
+        // This is the shape production now uses (MainWindow.EnsureWatch + UpdatePolicy) instead of
+        // the shape that caused F2: a NEW ScoreWatch built every cycle, which meant a NEW
+        // serialization semaphore every cycle — one the timer's next tick and a concurrent "Test
+        // now" click did not share, so the same observation could reach ReportMetric twice. One
+        // instance, its policy updated in place as SeedRowsAsync would update it when an account
+        // newly maps, is what a correct window does now.
+        var second = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var source = new FakeSource(
+            new BattleProbe("B", null),
+            new ContributionsResult([new(111, 4200), new(222, 500)], null));
+        var host = new FakeHost(true, [new(Mine, 111, "mine"), new(second, 222, "alt")]);
+        var watch = Watch(source, host, allowed: [Mine]);   // only "Mine" allowed at first
+
+        var first = await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(WatchState.Reporting, first.State);
+        Assert.Single(host.Reported);                 // only 111/Mine sent
+        Assert.Equal(1, watch.Policy.Sent);
+        Assert.Equal(1, watch.Policy.Dropped);         // 222/second was dropped this cycle
+
+        // The allow list grows on the SAME instance — exactly what SeedRowsAsync now does when a
+        // newly seeded account maps — never by constructing a new ScoreWatch.
+        watch.UpdatePolicy(watch.Policy.MetricId, new HashSet<Guid> { Mine, second });
+
+        var second_ = await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(WatchState.Reporting, second_.State);
+        Assert.Equal(3, host.Reported.Count);          // 1 from before + both of this cycle's
+        Assert.Equal(3, watch.Policy.Sent);            // ACCUMULATED, never reset by the update
+        Assert.Equal(1, watch.Policy.Dropped);          // the earlier drop is still remembered
+    }
+
+    [Fact]
+    public async Task UpdateSettingsAloneWithoutUpdatingThePolicyMismatchesTheMetricId()
+    {
+        // Documents why the window always calls UpdateSettings and UpdatePolicy together
+        // (MainWindow.OnStartStopClick, SeedRowsAsync): changing what ScoreWatch reports UNDER
+        // without updating what the policy ENFORCES makes every report land on "not the
+        // configured metric" — silently, since mine.Count > 0 still yields WatchState.Reporting.
+        var source = new FakeSource(
+            new BattleProbe("B", null), new ContributionsResult([new(111, 4200)], null));
+        var host = new FakeHost(true, [new(Mine, 111, "mine")]);
+        var watch = Watch(source, host);   // policy's metric id starts as "clan.battle.points"
+
+        watch.UpdateSettings(new Settings("Noodle Clan", "new.metric.id", 180));
+
+        var mismatched = await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(WatchState.Reporting, mismatched.State);
+        Assert.Empty(host.Reported);
+        Assert.Equal(1, watch.Policy.Dropped);
+
+        // Updating the policy's metric id to match restores reporting on the very next cycle.
+        watch.UpdatePolicy("new.metric.id", watch.Policy.AllowedSubjects);
+        await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Single(host.Reported);
+    }
+
+    [Fact]
     public async Task TwoOverlappingCyclesDoNotBothRun()
     {
         // Task 9 drives this from a poll timer AND a "Test now" button, so overlap is not

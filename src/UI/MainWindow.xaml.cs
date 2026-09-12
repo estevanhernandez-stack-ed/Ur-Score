@@ -109,12 +109,31 @@ public partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "626labs.ur-score", "last-response");
 
-    private ScoreWatch Build()
+    private HashSet<Guid> CurrentAllowedSubjects() =>
+        _rows.Where(r => r.Send).Select(r => r.AccountId).ToHashSet();
+
+    /// <summary>
+    /// Builds the ONE <see cref="ScoreWatch"/> this window ever uses, the first time a cycle needs
+    /// it, and returns that same instance forever after.
+    /// <para>
+    /// F2: this used to be called fresh at the top of every cycle. A freshly constructed
+    /// <c>ScoreWatch</c> gets a freshly constructed serialization semaphore, which serializes
+    /// nothing against the instance it replaced — so the timer's tick and a concurrent "Test now"
+    /// click each got their own guard and could both reach <c>ReportMetric</c> for the same
+    /// observation. Holding one instance is what makes that guard (and the per-battle state it
+    /// protects, and the running Sent/Dropped counts) actually mean something across cycles. When
+    /// the send list or the settings change afterward, update THIS instance
+    /// (<see cref="ScoreWatch.UpdatePolicy"/>, <see cref="ScoreWatch.UpdateSettings"/>) rather than
+    /// building a new one.
+    /// </para>
+    /// </summary>
+    private ScoreWatch EnsureWatch()
     {
-        var allowed = _rows.Where(r => r.Send).Select(r => r.AccountId).ToHashSet();
-        var policy = new ReportPolicy(_settings.MetricId, allowed);
+        if (_watch is not null) return _watch;
+
+        var policy = new ReportPolicy(_settings.MetricId, CurrentAllowedSubjects());
         var source = new ClanClient(_http, RawDirectory);
-        return new ScoreWatch(source, _host, policy, _settings);
+        return _watch = new ScoreWatch(source, _host, policy, _settings);
     }
 
     /// <summary>
@@ -126,6 +145,19 @@ public partial class MainWindow : Window
     /// them only from accounts that had been reported — which the policy would never allow,
     /// because the list they came from was empty. Nothing would ever be reported, no row would
     /// ever appear, and every unit test would still pass.
+    /// </para>
+    /// <para>
+    /// F8: runs at the top of EVERY cycle, not just the first. It used to run only from Start and
+    /// Test now — <see cref="ScoreWatch"/> re-fetches accounts every cycle regardless, so an
+    /// account saved in RoRoRo mid-session mapped, reached the report gate, and was silently
+    /// dropped for want of a row and an allow-list entry, with nothing anywhere explaining why.
+    /// </para>
+    /// <para>
+    /// F3: deliberately UNGUARDED here — <see cref="IHostClient.GetAccountsAsync"/> rethrows by
+    /// design, and RoRoRo quitting between the reachability probe and the accounts call is a real
+    /// timing window. The caller (<see cref="CycleAsync"/>) wraps this the same way it wraps the
+    /// rest of the cycle, so a race here becomes a sentence, not a crash from an <c>async void</c>
+    /// handler with nothing to catch it.
     /// </para>
     /// </summary>
     private async Task SeedRowsAsync()
@@ -156,6 +188,11 @@ public partial class MainWindow : Window
 
         AccountsGrid.Items.Refresh();
         RenderPolicy();
+
+        // Push the (possibly grown) allow list into the persistent watch, if one exists yet — a
+        // freshly seeded account must be reportable THIS cycle, not the one after. When no watch
+        // exists yet, EnsureWatch() picks up the current rows when it constructs one.
+        _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
     }
 
     /// <summary>
@@ -170,6 +207,11 @@ public partial class MainWindow : Window
             _settings = _settings with { ExcludedAccountIds = excluded };
             Settings.Save(_settings);
             RenderPolicy();
+
+            // The checkbox just changed the allow list; the persistent watch's policy must agree
+            // by the NEXT cycle, not the one after (see EnsureWatch's doc for why it is updated in
+            // place rather than rebuilt).
+            _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
         }, DispatcherPriority.Background);
     }
 
@@ -185,20 +227,21 @@ public partial class MainWindow : Window
             return;
         }
 
+        // F9: reload from disk. settings.json is the file we tell people to hand-edit, and this
+        // window otherwise reads it exactly once, at construction — a checkbox toggled hours into
+        // a session would then save that startup snapshot back over whatever was edited in the
+        // meantime. Reloading on Start closes most of that window; push the fresh values into an
+        // already-existing watch rather than rebuilding it (see EnsureWatch's doc).
+        _settings = Settings.Load();
+        _watch?.UpdateSettings(_settings);
+        _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
+
         // Interval from settings, floored at the vendor's cache — polling faster returns the same
         // bytes and is simply rude.
         _timer.Interval = TimeSpan.FromSeconds(_settings.EffectivePollSeconds);
         _timer.Start();
 
-        // Seed BEFORE the first cycle. Without this the policy has an empty allow list and the
-        // first cycle reports nothing — see SeedRowsAsync.
-        _ = StartCycleAsync();
-    }
-
-    private async Task StartCycleAsync()
-    {
-        await SeedRowsAsync();
-        await CycleAsync();   // do not make the user wait three minutes to see whether it works
+        _ = CycleAsync();   // do not make the user wait three minutes to see whether it works
     }
 
     private async void OnTestNowClick(object sender, RoutedEventArgs e)
@@ -210,7 +253,6 @@ public partial class MainWindow : Window
         TestNowButton.IsEnabled = false;
         try
         {
-            await SeedRowsAsync();
             await CycleAsync();
         }
         finally
@@ -221,11 +263,16 @@ public partial class MainWindow : Window
 
     private async Task CycleAsync()
     {
-        _watch = Build();
-
         try
         {
-            var snapshot = await _watch.RunOnceAsync(CancellationToken.None);
+            // F8: every cycle, not just the first — see SeedRowsAsync's doc. F3: unguarded on
+            // purpose; this try/catch is what turns a thrown exception from it (or from anything
+            // below) into a sentence instead of a crash out of an `async void` handler, or a
+            // silently faulted, never-observed Task from Start's fire-and-forget call.
+            await SeedRowsAsync();
+
+            var watch = EnsureWatch();
+            var snapshot = await watch.RunOnceAsync(CancellationToken.None);
             Render(snapshot);
             _trail.Add($"{DateTimeOffset.UtcNow:O} {snapshot.State}: {snapshot.Detail}");
 

@@ -30,6 +30,36 @@ public sealed class ScoreWatch(
 
     public ReportPolicy Policy => policy;
 
+    /// <summary>
+    /// Updates the allow list and metric id this watch's policy enforces, keeping THIS instance's
+    /// serialization guard (<see cref="_oneAtATime"/>) and remembered per-battle state
+    /// (<see cref="_battle"/>, <see cref="_lines"/>) intact, and carrying <see cref="ReportPolicy"/>'s
+    /// running Sent/Dropped counts forward.
+    /// <para>
+    /// F2: the window used to call it a cycle by constructing a brand new <c>ScoreWatch</c> —
+    /// which meant a brand new <see cref="_oneAtATime"/> too, one the timer's next tick and a
+    /// concurrent "Test now" click did not share, so the guard serialized nothing between them and
+    /// the same observation could reach <c>ReportMetric</c> twice. The window now holds one
+    /// <c>ScoreWatch</c> for its whole lifetime and calls this instead, whenever the send list
+    /// changes (a checkbox, or a newly seeded account) or settings are reloaded.
+    /// </para>
+    /// </summary>
+    public void UpdatePolicy(string metricId, IReadOnlySet<Guid> allowedSubjects)
+    {
+        policy = policy.With(metricId, allowedSubjects);
+    }
+
+    /// <summary>
+    /// Swaps the settings this watch reads every cycle (clan name, metric id), keeping this
+    /// instance's guard and remembered state intact. Does not touch the report policy — call
+    /// <see cref="UpdatePolicy"/> alongside this so the two metric ids never briefly disagree,
+    /// which would otherwise make every report land on "not the configured metric" for a cycle.
+    /// </summary>
+    public void UpdateSettings(Settings newSettings)
+    {
+        settings = newSettings;
+    }
+
     public async Task<WatchSnapshot> RunOnceAsync(CancellationToken cancellationToken)
     {
         await _oneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
