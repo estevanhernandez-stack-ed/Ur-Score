@@ -53,7 +53,17 @@ public static class RulesFile
     /// hand-editable and always will be. It exists because one file has several writers.</summary>
     public const string Owner = "626labs.ur-score";
 
-    /// <summary>RoRoRo's own folder, which is the one place this plugin reaches outside its own.</summary>
+    /// <summary>
+    /// RoRoRo's own folder, which is the one place this plugin reaches outside its own.
+    /// <para>
+    /// HARDCODED, and coupled to a decision the host made differently. RoRoRo derives this from
+    /// AppSettings rather than a literal, "so it follows settings.json if the app's data location
+    /// moves again" — implying it has moved once. The plugin contract exposes no way to ask where
+    /// that folder is, so this literal is the best available. If the host's data location ever
+    /// moves, this silently points at a file nothing reads, which is exactly the
+    /// reports-land-and-nothing-alerts failure this class exists to close.
+    /// </para>
+    /// </summary>
     public static string DefaultPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ROROROblox", "metric-rules.json");
@@ -115,17 +125,22 @@ public static class RulesFile
         {
             var status = Inspect(file, metricId);
 
-            // Unreadable: almost certainly a hand edit in progress. Replacing it would destroy
-            // work the user can see and we cannot.
-            if (status.State == RuleState.Unreadable) return false;
-
-            // Any rule for this id — ours, theirs, or the user's — is left exactly as it is.
+            // Covers every case but NoRuleForMetric in one check: Unreadable (almost certainly a
+            // hand edit in progress — replacing it would destroy work the user can see and we
+            // cannot), and any rule already there for this id — ours, another plugin's, or the
+            // user's — left exactly as it is.
             if (status.State != RuleState.NoRuleForMetric) return false;
 
             rules = JsonNode.Parse(File.ReadAllText(file), documentOptions: ReadOptions) as JsonArray ?? [];
 
             // Back up before the first byte changes, beside the original so it is findable
             // without knowing where we would have put it.
+            //
+            // The state immediately before THIS write, not an archive: a later AddRule overwrites
+            // it. That is acceptable because every merge here is purely additive — we only ever add
+            // one rule and never modify or remove another — so the user's own rules are recoverable
+            // from the live file by deleting what we own. The backup exists for the case where that
+            // reasoning turns out to be wrong.
             File.Copy(file, file + ".ur-score-backup", overwrite: true);
         }
         else
@@ -163,10 +178,14 @@ public static class RulesFile
         // hand-written "MetricId" must not read as a different rule here than it does there.
         foreach (var pair in obj)
         {
-            if (string.Equals(pair.Key, property, StringComparison.OrdinalIgnoreCase))
-            {
-                return pair.Value?.GetValue<string>();
-            }
+            if (!string.Equals(pair.Key, property, StringComparison.OrdinalIgnoreCase)) continue;
+
+            // A hand-edited file can hold anything, and GetValue<string> THROWS on a number — so a
+            // single mistyped row ANYWHERE in the file used to take down every call here, while
+            // the host tolerated the identical shape row by row and carried on.
+            return pair.Value is JsonValue value && value.TryGetValue<string>(out var text)
+                ? text
+                : null;
         }
 
         return null;

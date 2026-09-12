@@ -30,6 +30,24 @@ public class RulesFileTests
     }
 
     [Fact]
+    public void AMistypedMetricIdDoesNotCrashInspectForTheRestOfTheFile()
+    {
+        // A hand-edited file can hold anything. GetValue<string> throws for a non-string value, so
+        // a single mistyped row anywhere used to take down every call here, while the host's own
+        // parser (LocalFileMetricRuleSource) tolerates the identical shape row by row and carries
+        // on regardless of where in the file the bad row sits. We must be at least as forgiving as
+        // the host on a file we do not own.
+        var path = TempRules("""
+            [
+              { "metricId": 12345, "kind": "Event" },
+              { "metricId": "other.one", "kind": "Event" }
+            ]
+            """);
+
+        Assert.Equal(RuleState.NoRuleForMetric, RulesFile.Inspect(path, MetricId).State);
+    }
+
+    [Fact]
     public void ARuleWithNoOwnerIsTheUsersAndIsSaidSo()
     {
         // Hand-editing this file is a documented, supported path. A rule the user wrote is theirs,
@@ -106,15 +124,19 @@ public class RulesFileTests
     }
 
     [Fact]
-    public void AddingBacksUpTheExistingFileFirst()
+    public void AddingBacksUpTheStateFromBeforeTheWrite()
     {
+        // Asserting the backup does NOT contain our rule is the only thing that distinguishes
+        // "backed up first" from "backed up last". The previous version asserted only that the
+        // backup held the pre-existing rule, which stays true if the copy happens afterwards —
+        // it passed with the backup moved below the write.
         var path = TempRules("""[ { "metricId": "other.one", "kind": "Event" } ]""");
 
         RulesFile.AddRule(path, MetricId, threshold: 100, windowMinutes: 10);
 
-        var backup = path + ".ur-score-backup";
-        Assert.True(File.Exists(backup));
-        Assert.Contains("other.one", File.ReadAllText(backup));
+        var backup = File.ReadAllText(path + ".ur-score-backup");
+        Assert.Contains("other.one", backup);
+        Assert.DoesNotContain(MetricId, backup);
     }
 
     [Fact]
