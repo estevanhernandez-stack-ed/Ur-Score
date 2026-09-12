@@ -89,16 +89,15 @@
                        Foreground="#9fb3c8" />
         </StackPanel>
 
-        <!-- The report policy, in the words the policy itself composes. -->
+        <!-- The report policy, in the words ReportPolicy.Describe itself composes — not a second,
+             hand-rolled copy of that sentence (a prior version of this window had one, and it
+             drifted from the truth once already: F6). Describe's own text covers both what leaves
+             RoRoRo and whether name lookups are currently sending other members' Roblox ids to
+             Roblox, so there is one sentence here, not two. -->
         <Border Grid.Row="9" Background="#16293d" CornerRadius="4" Padding="10" Margin="0,0,0,12">
             <StackPanel>
                 <TextBlock Text="Report policy" FontWeight="SemiBold" Margin="0,0,0,4" />
                 <TextBlock x:Name="PolicyLine" TextWrapping="Wrap" Foreground="#9fb3c8" />
-                <!-- F6: PolicyLine ends "Nothing else leaves this plugin," which is not true of
-                     this branch whenever name resolution is on (the default) — NameClient POSTs
-                     other members' Roblox ids to Roblox every poll. This line says so, and reflects
-                     whichever way Settings.ResolveNames is currently set. -->
-                <TextBlock x:Name="NameLookupLine" TextWrapping="Wrap" Foreground="#9fb3c8" Margin="0,4,0,0" />
                 <TextBlock x:Name="PolicyCounts" Margin="0,4,0,0" Foreground="#9fb3c8" />
             </StackPanel>
         </Border>

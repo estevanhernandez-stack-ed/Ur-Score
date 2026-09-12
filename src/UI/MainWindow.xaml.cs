@@ -244,12 +244,14 @@ public partial class MainWindow : Window
             });
         }
 
-        RenderPolicy();
-
         // Push the (possibly grown) allow list into the persistent watch, if one exists yet — a
         // freshly seeded account must be reportable THIS cycle, not the one after. When no watch
-        // exists yet, EnsureWatch() picks up the current rows when it constructs one.
+        // exists yet, EnsureWatch() picks up the current rows when it constructs one. BEFORE
+        // RenderPolicy: it now reads _watch.Policy.AllowedSubjects (via ReportPolicy.Describe), so
+        // calling it first would show yesterday's count next to today's total.
         _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
+
+        RenderPolicy();
     }
 
     /// <summary>
@@ -263,12 +265,13 @@ public partial class MainWindow : Window
             var excluded = _rows.Where(r => !r.Send).Select(r => r.AccountId.ToString()).ToList();
             _settings = _settings with { ExcludedAccountIds = excluded };
             Settings.Save(_settings);
-            RenderPolicy();
 
             // The checkbox just changed the allow list; the persistent watch's policy must agree
             // by the NEXT cycle, not the one after (see EnsureWatch's doc for why it is updated in
-            // place rather than rebuilt).
+            // place rather than rebuilt). BEFORE RenderPolicy, for the same reason as SeedRowsAsync.
             _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
+
+            RenderPolicy();
         }, DispatcherPriority.Background);
     }
 
@@ -511,25 +514,21 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Residual from the F6 fix round: this used to build the policy sentence by hand, right down
+    /// to <c>Math.Max(_rows.Count, allowed)</c> — the exact plausible-looking-wrong-number clamp
+    /// Task 5's review rejected in favour of dropping the comparison. Calling
+    /// <see cref="ReportPolicy.Describe"/> instead means the sentence shown on screen is the same
+    /// one <c>ReportPolicyTests</c> guards, rather than a second, independently maintained copy
+    /// that can drift from it (which is exactly what happened: <c>Describe</c> still said "leaves
+    /// this plugin" after this method had already been fixed to say something true).
+    /// </summary>
     private void RenderPolicy()
     {
-        var allowed = _rows.Count(r => r.Send);
-        var total = Math.Max(_rows.Count, allowed);
-
-        // F6: dropped the old blanket "Nothing else leaves this plugin" — untrue on this branch
-        // whenever ResolveNames is on (the default), since NameClient POSTs other members' Roblox
-        // ids to Roblox every poll. What actually leaves RoRoRo (the report policy's own job) is
-        // still stated plainly; what else leaves the machine is stated separately, below.
-        PolicyLine.Text = $"Ur Score sends points for {allowed} of your {total} accounts, "
-            + $"as {_settings.MetricId}. Nothing else reaches RoRoRo.";
-
-        // Worded from design §6.1 ("How this squares with the report policy"): ids Roblox issued
-        // go to Roblox to retrieve names Roblox publishes, and that is a real outbound call, not
-        // an extension of the report policy above — reflects whichever way the setting is now.
-        NameLookupLine.Text = _settings.ResolveNames
-            ? "Name lookups are on: other members' Roblox ids are sent to Roblox to resolve "
-              + "usernames for the leaderboard. Set resolveNames to false in settings.json to stop it."
-            : "Name lookups are off: no other member's Roblox id leaves this machine for any reason.";
+        // No clamp: the real count, however it compares to the allow list. Describe itself decides
+        // whether "X of your Y accounts" is sayable or whether to fall back to "X accounts".
+        var policy = _watch?.Policy ?? new ReportPolicy(_settings.MetricId, CurrentAllowedSubjects());
+        PolicyLine.Text = policy.Describe(_rows.Count, _settings.ResolveNames);
 
         PolicyCounts.Text = _watch is null
             ? ""

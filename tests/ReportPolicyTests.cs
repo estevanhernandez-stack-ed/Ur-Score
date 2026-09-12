@@ -94,27 +94,35 @@ public class ReportPolicyTests
         Assert.NotNull(policy.Evaluate(Allowed, "clan.battle.points", double.NaN).Reason);
     }
 
-    [Fact]
-    public void DescribesItselfInPlainWords()
+    [Theory]
+    [InlineData(true, "Name lookups are on")]
+    [InlineData(false, "Name lookups are off")]
+    public void DescribesItselfInPlainWords(bool resolveNames, string expectedNameLookupPhrase)
     {
         // Rendered verbatim in the window, so the user can read what leaves without reading code.
-        var description = Policy().Describe(totalAccounts: 8);
+        // Both wordings of the name-lookup disclosure (residual from F6) are covered — this is the
+        // one sentence the window actually shows, so both states it can be in must be guarded here.
+        var description = Policy().Describe(totalAccounts: 8, resolveNames);
 
         Assert.Contains("1 of your 8 accounts", description);
         Assert.Contains("clan.battle.points", description);
+        Assert.Contains(expectedNameLookupPhrase, description);
     }
 
-    [Fact]
-    public void DescribeDropsOfYourNWhenTheTotalCannotBeRight()
+    [Theory]
+    [InlineData(true, "Name lookups are on")]
+    [InlineData(false, "Name lookups are off")]
+    public void DescribeDropsOfYourNWhenTheTotalCannotBeRight(bool resolveNames, string expectedNameLookupPhrase)
     {
         // A caller passing a total smaller than the allow list is a bug somewhere else. Clamping
         // would hide that bug behind a plausible-looking "3 of your 2 accounts"; dropping the
         // comparison instead says only what is still true.
-        var description = Policy().Describe(totalAccounts: 0);
+        var description = Policy().Describe(totalAccounts: 0, resolveNames);
 
         Assert.DoesNotContain("of your", description);
         Assert.Contains("1 accounts", description);
         Assert.Contains("clan.battle.points", description);
+        Assert.Contains(expectedNameLookupPhrase, description);
     }
 
     [Fact]

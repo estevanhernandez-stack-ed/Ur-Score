@@ -103,19 +103,39 @@ public sealed class ReportPolicy(
     }
 
     /// <summary>
-    /// Rendered verbatim in the window, so what leaves is readable without reading code.
+    /// Rendered verbatim in the window (<c>MainWindow.RenderPolicy</c>), so what leaves is readable
+    /// without reading code.
     /// <para>
     /// The "of your N" half is dropped when the numbers cannot both be right. A caller passing a
     /// total smaller than the allow list is a bug somewhere else, and "3 of your 2 accounts" would
-    /// make the user distrust a sentence whose whole job is to be trusted.
+    /// make the user distrust a sentence whose whole job is to be trusted. THIS is why the caller
+    /// must pass the real count, not <c>Math.Max</c>'d against the allow list — that clamp is
+    /// exactly the plausible-looking-wrong-number Task 5's review rejected in the first place, and
+    /// re-clamping here would just move the mistake rather than fix it.
+    /// </para>
+    /// <para>
+    /// Residual from F6: this used to end "Nothing else leaves this plugin" unconditionally, which
+    /// <c>NameClient</c> contradicts every poll whenever <paramref name="resolveNames"/> is true —
+    /// it POSTs other members' Roblox ids to Roblox to resolve usernames. The claim now covers only
+    /// the report policy's real job (the pipe to RoRoRo), and a second sentence states plainly
+    /// whether name lookups are currently on. For a time, the window built its own copy of this
+    /// sentence independently instead of calling this method — the two drifted, this one carrying
+    /// the old wording while `MainWindow` had already been fixed to say something true. Calling
+    /// this from the one place it is shown is what keeps that from happening again.
     /// </para>
     /// </summary>
-    public string Describe(int totalAccounts)
+    public string Describe(int totalAccounts, bool resolveNames = true)
     {
         var scope = totalAccounts >= AllowedSubjects.Count
             ? $"{AllowedSubjects.Count} of your {totalAccounts} accounts"
             : $"{AllowedSubjects.Count} accounts";
 
-        return $"Ur Score sends points for {scope}, as {MetricId}. Nothing else leaves this plugin.";
+        var nameLookups = resolveNames
+            ? "Name lookups are on: other members' Roblox ids are sent to Roblox to resolve "
+              + "usernames for the leaderboard. Set resolveNames to false in settings.json to stop it."
+            : "Name lookups are off: no other member's Roblox id leaves this machine for any reason.";
+
+        return $"Ur Score sends points for {scope}, as {MetricId}. Nothing else reaches RoRoRo. "
+            + nameLookups;
     }
 }
