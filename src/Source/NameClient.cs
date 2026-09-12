@@ -47,7 +47,12 @@ public sealed class NameClient(HttpClient http) : INameSource
     public async Task<IReadOnlyDictionary<long, string>> ResolveAsync(
         IReadOnlyCollection<long> ids, CancellationToken cancellationToken)
     {
-        if (ids.Count == 0) return _cache;
+        // An empty ask gets an empty answer, never the roster. Returning _cache here used to hand
+        // back every name resolved this session, AND a live reference that kept growing after the
+        // call returned — in a client whose whole posture is holding as little about other people
+        // as it can. (A battle poll returning zero contributors mid-session is the plausible way
+        // to hit this for real.)
+        if (ids.Count == 0) return new Dictionary<long, string>();
 
         var missing = ids.Where(id => !_cache.ContainsKey(id)).Distinct().ToList();
 
@@ -57,11 +62,11 @@ public sealed class NameClient(HttpClient http) : INameSource
             var wanted = batch.ToHashSet();
             foreach (var (id, name) in await FetchAsync(batch, cancellationToken).ConfigureAwait(false))
             {
-                // Cache only what THIS batch asked for. Anything else in the body — an id we did
-                // not request, echoed back for whatever reason — is not trusted into the cache
-                // just because the endpoint said so; that keeps "asked for" and "known" the same
-                // set, which is what lets a later request tell a truly-unseen id apart from one
-                // this cache should already have an opinion on.
+                // Defensive hygiene, not a fix for anything observed — users.roblox.com only ever
+                // answers with rows for the ids actually sent, so this is inert against the real
+                // endpoint. Trusting only what THIS batch asked for anyway keeps "asked for" and
+                // "known" the same set, in a client whose whole posture is holding as little about
+                // other people as it can.
                 if (wanted.Contains(id)) _cache[id] = name;
             }
         }

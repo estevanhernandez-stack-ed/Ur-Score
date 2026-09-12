@@ -110,4 +110,18 @@ public class SettingsTests
         Assert.Equal("Noodle Clan", loaded.ClanName);
         Assert.Equal(Settings.DefaultMetricId, loaded.MetricId);
     }
+
+    [Fact]
+    public void ASettingsFileFromBeforeResolveNamesExistedLoadsWithItOn()
+    {
+        // A real installed base wrote this file before ResolveNames existed. If a missing
+        // property deserialized to bool's own default (false) rather than the constructor
+        // parameter's stated default (true), every existing install would silently lose names
+        // the moment it updated — with nothing anywhere saying why.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+        File.WriteAllText(path, "{\"clanName\":\"Noodle Clan\",\"metricId\":\"run.points\",\"pollSeconds\":300}");
+
+        Assert.True(Settings.Load(path).ResolveNames);
+    }
 }
