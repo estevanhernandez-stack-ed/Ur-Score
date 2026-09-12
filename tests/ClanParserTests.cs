@@ -176,8 +176,10 @@ public class ClanParserTests
 
         Assert.Empty(result.Contributions);
         Assert.NotNull(result.Miss);
-        Assert.Contains("UserID", result.Miss);
-        Assert.Contains("Points", result.Miss);
+        // Both keys ARE present here — the failure is that Points holds a nested object, not a
+        // number. Naming "keys present: UserID, Points" would send a user hunting for a missing
+        // key that isn't missing; the message must instead say which field's VALUE was wrong.
+        Assert.Contains("'Points' was present but not a finite number", result.Miss);
     }
 
     [Fact]
@@ -195,6 +197,29 @@ public class ClanParserTests
 
         Assert.NotNull(result.Miss);
         Assert.Empty(result.Contributions);
+        // UserID is present — the failure is that its value is not a whole number a user id can
+        // be. The message must name that, not just list the keys (which would mislead: they are
+        // both there).
+        Assert.Contains("'UserID' was present but not a whole number", result.Miss);
+    }
+
+    [Fact]
+    public void AMissingUserIdOnTheOnlyRowNamesTheKeysThatWereThere()
+    {
+        // The genuine "a key is absent" case, which must not regress now that value-shaped
+        // failures get their own wording: when UserID itself is missing, naming the keys that
+        // WERE on the row is still the right answer.
+        var json = """
+            { "data": { "Battles": { "B": { "PointContributions": [
+                { "Points": 20 }
+            ] } } } }
+            """;
+        var result = ClanParser.Contributions(json, "B");
+
+        Assert.Empty(result.Contributions);
+        Assert.NotNull(result.Miss);
+        Assert.Contains("no 'UserID'", result.Miss);
+        Assert.Contains("Points", result.Miss);
     }
 
     [Fact]

@@ -98,26 +98,48 @@ public static class ClanParser
             }
 
             var contributions = new List<Contribution>();
+            string? firstProblem = null;
+
             foreach (var row in rows.EnumerateArray())
             {
-                // One unreadable row costs only itself. A response that grew a summary object in
-                // the middle of the array must not discard the rows around it.
-                if (!JsonNav.TryGet(row, "UserID", out var userId)) continue;
-                if (!JsonNav.TryGet(row, "Points", out var points)) continue;
-                if (!JsonNav.TryUserId(userId, out var id)) continue;
-                if (!JsonNav.TryNumber(points, out var value)) continue;
+                // One unreadable row costs only itself — but the FIRST reason is kept, because if
+                // nothing survives it is the only thing that explains why.
+                if (!JsonNav.TryGet(row, "UserID", out var userId))
+                {
+                    firstProblem ??= $"no 'UserID' (keys present: {Join(JsonNav.Keys(row))})";
+                    continue;
+                }
+
+                if (!JsonNav.TryGet(row, "Points", out var points))
+                {
+                    firstProblem ??= $"no 'Points' (keys present: {Join(JsonNav.Keys(row))})";
+                    continue;
+                }
+
+                if (!JsonNav.TryUserId(userId, out var id))
+                {
+                    firstProblem ??= "'UserID' was present but not a whole number a user id can be";
+                    continue;
+                }
+
+                if (!JsonNav.TryNumber(points, out var value))
+                {
+                    firstProblem ??= "'Points' was present but not a finite number";
+                    continue;
+                }
 
                 contributions.Add(new Contribution(id, value));
             }
 
             // Rows came back and none of them could be read. Returning a clean empty list here
             // would be indistinguishable from a battle nobody has scored in — the one outcome
-            // this parser must never produce. Name what a rejected row actually held.
+            // this parser must never produce. Say why the first one failed: naming keys that are
+            // present but hold the wrong kind of value sends a user hunting for a missing key that
+            // is not missing.
             if (contributions.Count == 0 && rows.GetArrayLength() > 0)
             {
                 return Miss($"Battle '{configName}' returned {rows.GetArrayLength()} contribution "
-                            + $"row(s) and none could be read. First row's keys: "
-                            + $"{Join(JsonNav.Keys(rows[0]))}.");
+                            + $"row(s) and none could be read. First problem: {firstProblem}.");
             }
 
             return new ContributionsResult(contributions, null);
