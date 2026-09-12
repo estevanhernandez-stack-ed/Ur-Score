@@ -473,4 +473,51 @@ public class ScoreWatchTests
         // twice for the same read.
         Assert.Equal(2, host.Reported.Count);
     }
+
+    [Fact]
+    public void MainWindowConstructsScoreWatchExactlyOnce()
+    {
+        // Round 3, F2 fence: the defect this guards against already came back once, at a seam,
+        // after being fixed — MainWindow rebuilding ScoreWatch every cycle silently undid Task 8's
+        // reentrancy guard, because a fresh ScoreWatch gets a fresh semaphore that serializes
+        // nothing against the instance it replaces. Nothing in the type system stops a second
+        // `new ScoreWatch(` from reappearing inside CycleAsync; this counts them instead. Same
+        // source-scan shape as ReportPolicyTests' fence, scoped to one file and one construction.
+        var path = Path.Combine(RepoRoot(), "src", "UI", "MainWindow.xaml.cs");
+        var text = File.ReadAllText(path);
+
+        var count = CountOccurrences(text, "new ScoreWatch(");
+
+        Assert.True(count == 1,
+            $"Expected exactly one 'new ScoreWatch(' in MainWindow.xaml.cs — inside EnsureWatch, "
+            + $"the only place a ScoreWatch may ever be constructed for the window's whole "
+            + $"lifetime — found {count}. A second construction site would silently reintroduce "
+            + "F2: a fresh ScoreWatch gets a fresh semaphore that serializes nothing against the "
+            + "instance it replaces.");
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) != -1)
+        {
+            count++;
+            index += needle.Length;
+        }
+
+        return count;
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Ur-Score.csproj")))
+        {
+            dir = dir.Parent;
+        }
+
+        Assert.False(dir is null, "Could not locate Ur-Score.csproj above the test assembly.");
+        return dir!.FullName;
+    }
 }
