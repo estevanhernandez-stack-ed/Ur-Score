@@ -124,7 +124,19 @@ public sealed class ScoreWatch(
         var hostUp = await host.IsReachableAsync(cancellationToken).ConfigureAwait(false);
         if (hostUp)
         {
-            accounts = await host.GetAccountsAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                accounts = await host.GetAccountsAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
+            {
+                // F4: this is the FIRST gated call every cycle, before the report gate below ever
+                // runs. Declining host.queries.accounts at the consent sheet is reachable, and
+                // before this catch it fell through to the generic "Something unexpected went
+                // wrong" the design forbids and the README contradicts.
+                return Snapshot(WatchState.Rejected, RejectedMessage("host.queries.accounts"),
+                    seen, [], contributions.Contributions, contributions.Standing);
+            }
         }
 
         var unresolved = AccountMap.Unresolved(accounts);
@@ -170,12 +182,10 @@ public sealed class ScoreWatch(
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
             {
-                // The user revoked consent in RoRoRo. Stop, say which capability, and do not retry
+                // The user declined or lost consent. Stop, say which capability, and do not retry
                 // in a loop against a decision they made deliberately.
-                return Snapshot(WatchState.Rejected,
-                    "RoRoRo refused the report: host.metrics.report is not granted. "
-                    + "Re-grant it in RoRoRo under Plugins.", seen, unresolved,
-                    contributions.Contributions, contributions.Standing);
+                return Snapshot(WatchState.Rejected, RejectedMessage("host.metrics.report"),
+                    seen, unresolved, contributions.Contributions, contributions.Standing);
             }
         }
 
@@ -183,6 +193,19 @@ public sealed class ScoreWatch(
             $"Reporting {mine.Count} of {seen} contributor(s).", seen, unresolved,
             contributions.Contributions, contributions.Standing);
     }
+
+    /// <summary>
+    /// F4: verified against the running host — the Plugins page's only consent control is
+    /// <b>Remove</b>, which stops the process, deletes the consent record, and deletes the install
+    /// directory. There is no per-capability re-grant, and an existing consent record is never
+    /// re-prompted. The only way back is removing Ur Score and reinstalling it, which puts the
+    /// consent sheet in front of the user again. The previous text here — "re-grant it under
+    /// Plugins" — described a control that does not exist, the fourth wrong claim about the host
+    /// found in this codebase.
+    /// </summary>
+    private static string RejectedMessage(string capability) =>
+        $"RoRoRo refused this: {capability} is not granted. There is no per-capability re-grant — "
+        + "remove Ur Score from RoRoRo's Plugins page and reinstall it to be asked again.";
 
     private void Remember(
         Guid subject, IReadOnlyList<HostAccount> accounts, double value, DateTimeOffset at)

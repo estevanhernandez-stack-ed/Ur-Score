@@ -158,7 +158,7 @@ are the states it can be in and what each one means:
 | None of your accounts are in this battle's contributions | Contributors came back, but none matched a saved RoRoRo account. Check the clan name and that your accounts have resolved Roblox ids. |
 | Reporting to RoRoRo | Working. At least one account matched and was sent. |
 | RoRoRo is not running | Ur Score keeps polling the clan and keeps its account mapping warm, but holds every report — nothing is queued to send once RoRoRo comes back; it resumes from the next live poll. |
-| RoRoRo refused the report | `host.metrics.report` was revoked in RoRoRo. Re-grant it under RoRoRo's Plugins page. |
+| RoRoRo refused the report | A capability (named in the message — `host.metrics.report` or `host.queries.accounts`) is not granted. RoRoRo's Plugins page has no per-capability re-grant and never re-prompts an existing consent record — the only way back is **Remove** Ur Score there, then reinstall it, which puts the consent screen in front of you again. |
 
 If none of that explains it, click **Copy diagnostics** and paste the result into wherever you're
 asking for help — it carries the clan name, metric id, poll interval, RoRoRo's version (or "not

@@ -37,11 +37,15 @@ this repo's.
       says RoRoRo is not running and polling continues. Relaunch RoRoRo and confirm exactly one
       report goes out per account on the next cycle — not a backlog of everything missed while it
       was down (`ScoreWatch` deliberately keeps no queue for this).
-- [ ] **Revoking `host.metrics.report` in RoRoRo stops reporting** and names the capability. Turn
-      the capability off for Ur Score under RoRoRo's Plugins page while Score Watch is running,
-      wait for the next cycle, and confirm the window shows `WatchState.Rejected` and names
-      `host.metrics.report` specifically (not a generic "refused" message) — see the exact text in
-      `ScoreWatch.RunOnceCoreAsync`'s `PermissionDenied` handler.
+- [ ] **Declining a capability at reinstall stops reporting** and names the capability. Verified
+      live (F4): RoRoRo's Plugins page has no per-capability toggle — its only control is
+      **Remove**, which deletes the consent record and the install directory outright. To exercise
+      this, remove Ur Score from Plugins, reinstall it, and decline `host.metrics.report` at the
+      consent sheet. Start Score Watch and confirm the window shows `WatchState.Rejected` naming
+      `host.metrics.report` specifically (not a generic "something unexpected went wrong") and
+      says there is no re-grant — remove and reinstall to be asked again. Repeat declining
+      `host.queries.accounts` instead and confirm that is named too, not swallowed by the generic
+      handler (see `ScoreWatch.RunOnceCoreAsync`'s two `PermissionDenied` catches).
 - [ ] **A wrong clan name reads as a wrong clan name**, not as a network failure or an empty clan.
       Set `clanName` in settings.json to something that does not exist and confirm the window's
       detail line names the clan as sent (so a typo is visible), distinct from "could not reach

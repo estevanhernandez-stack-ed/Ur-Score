@@ -28,14 +28,27 @@ public class ScoreWatchTests
         public List<(Guid Subject, double Value)> Reported { get; } = [];
         public bool ThrowPermissionDenied { get; set; }
 
+        /// <summary>F4: the FIRST gated call each cycle, ahead of the report gate — a separate
+        /// flag because a real consent decline on host.queries.accounts must be caught there and
+        /// not conflated with a decline on host.metrics.report.</summary>
+        public bool ThrowPermissionDeniedOnGetAccounts { get; set; }
+
         /// <summary>Mutable so one watch can be driven across the host going away and coming back,
         /// which is the only way the no-backlog test can actually fail.</summary>
         public bool Reachable { get; set; } = reachable;
 
         public Task<bool> IsReachableAsync(CancellationToken ct) => Task.FromResult(Reachable);
 
-        public Task<IReadOnlyList<HostAccount>> GetAccountsAsync(CancellationToken ct) =>
-            Task.FromResult(accounts);
+        public Task<IReadOnlyList<HostAccount>> GetAccountsAsync(CancellationToken ct)
+        {
+            if (ThrowPermissionDeniedOnGetAccounts)
+            {
+                throw new Grpc.Core.RpcException(
+                    new Grpc.Core.Status(Grpc.Core.StatusCode.PermissionDenied, "revoked"));
+            }
+
+            return Task.FromResult(accounts);
+        }
 
         public Task ReportMetricAsync(
             Guid subject, string metricId, double value, DateTimeOffset observedAt, CancellationToken ct)
@@ -250,6 +263,30 @@ public class ScoreWatchTests
 
         Assert.Equal(WatchState.Rejected, snapshot.State);
         Assert.Contains("host.metrics.report", snapshot.Detail);
+
+        // F4: verified against the running host — the Plugins page's only control is Remove, which
+        // deletes the consent record outright. There is no per-capability re-grant, so the advice
+        // must not claim one.
+        Assert.DoesNotContain("Re-grant", snapshot.Detail);
+        Assert.Contains("reinstall", snapshot.Detail);
+    }
+
+    [Fact]
+    public async Task DecliningAccountsAccessIsRejectedAndNamedRatherThanGeneric()
+    {
+        // F4: GetAccountsAsync is the FIRST gated call each cycle, ahead of the report gate this
+        // file's other Rejected test covers. Before this was caught here specifically, a decline
+        // on host.queries.accounts fell through to the generic "something unexpected went wrong"
+        // the design forbids and the README contradicts.
+        var source = new FakeSource(
+            new BattleProbe("B", null), new ContributionsResult([new(111, 4200)], null));
+        var host = new FakeHost(true, []) { ThrowPermissionDeniedOnGetAccounts = true };
+
+        var snapshot = await Watch(source, host).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.Rejected, snapshot.State);
+        Assert.Contains("host.queries.accounts", snapshot.Detail);
+        Assert.Empty(host.Reported);
     }
 
     [Fact]
