@@ -53,7 +53,7 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
 
     public async Task<BattleProbe> ActiveBattleAsync(CancellationToken cancellationToken)
     {
-        var (body, error) = await GetAsync($"{BaseUrl}/activeClanBattle", "active-battle", cancellationToken)
+        var (body, error, _) = await GetAsync($"{BaseUrl}/activeClanBattle", "active-battle", cancellationToken)
             .ConfigureAwait(false);
 
         return error is not null
@@ -65,9 +65,23 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
         string clanName, string configName, CancellationToken cancellationToken)
     {
         var url = $"{BaseUrl}/clan/{Uri.EscapeDataString(clanName)}";
-        var (body, error) = await GetAsync(url, "clan", cancellationToken).ConfigureAwait(false);
+        var (body, error, statusCode) = await GetAsync(url, "clan", cancellationToken).ConfigureAwait(false);
 
-        if (error is not null) return new ContributionsResult([], error, MissIsTransport: true);
+        if (error is not null)
+        {
+            // F7: was implemented nowhere — every non-2xx became the same generic transport miss,
+            // so a typo in the clan name read exactly like the whole endpoint being down. A 4xx
+            // from THIS call is overwhelmingly a clan name the vendor does not recognise (confirmed
+            // live: a made-up name returns 400, not 404), so name the clan AS SENT ourselves —
+            // the vendor's own error body does not say so plainly, and the spec's "clan name not
+            // found" state exists precisely so a typo is visible rather than read as "could not
+            // reach the clan data".
+            var message = statusCode is >= 400 and < 500
+                ? $"Clan '{clanName}' was not found ({error})"
+                : error;
+
+            return new ContributionsResult([], message, MissIsTransport: true);
+        }
 
         // Same string, asked a second question. ClanStanding.Read is quiet on its own failures
         // (ClanParser already reports this response's shape problems), so this can never turn a
@@ -76,7 +90,7 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
         return parsed with { Standing = ClanStanding.Read(body!, configName) };
     }
 
-    private async Task<(string? Body, string? Error)> GetAsync(
+    private async Task<(string? Body, string? Error, int? StatusCode)> GetAsync(
         string url, string label, CancellationToken cancellationToken)
     {
         try
@@ -97,8 +111,9 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
             SaveRaw(label, body);
 
             return response.IsSuccessStatusCode
-                ? (body, null)
-                : (null, $"The {label} request returned {(int)response.StatusCode} {response.ReasonPhrase}.");
+                ? (body, null, null)
+                : (null, $"The {label} request returned {(int)response.StatusCode} {response.ReasonPhrase}.",
+                   (int)response.StatusCode);
         }
         // Guarded on the CALLER's token, not the linked one. A stop the user asked for is not a
         // failure to report and must propagate; our own timeout is a transport failure and must
@@ -112,7 +127,7 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
         {
             // A DNS failure, a TLS failure, a dropped connection. To the window they are one thing:
             // we could not reach it. The message carries the detail.
-            return (null, $"Could not reach the {label} endpoint: {ex.Message}");
+            return (null, $"Could not reach the {label} endpoint: {ex.Message}", null);
         }
     }
 

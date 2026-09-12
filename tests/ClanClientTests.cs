@@ -83,6 +83,38 @@ public class ClanClientTests
     }
 
     [Fact]
+    public async Task A4xxOnTheClanCallNamesTheClanAsSentSoATypoIsVisible()
+    {
+        // F7: "clan name not found" was specified (spec §5's state table, docs/SMOKE.md) and
+        // implemented nowhere — every non-2xx became the identical generic transport miss, so a
+        // typo in the clan name read exactly like the whole endpoint being down. Verified live: a
+        // made-up clan name returns 400 from the real endpoint, not 404 — this must not depend on
+        // which 4xx it is, or on the vendor's error body saying anything about the name at all.
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest));
+        var client = new ClanClient(new HttpClient(handler), rawDirectory: null);
+
+        var result = await client.ContributionsAsync("Noodle Clan", "B", CancellationToken.None);
+
+        Assert.Contains("Noodle Clan", result.Miss);
+        Assert.Contains("400", result.Miss);
+        Assert.True(result.MissIsTransport);
+    }
+
+    [Fact]
+    public async Task A5xxOnTheClanCallDoesNotClaimTheClanWasNotFound()
+    {
+        // A 5xx is the vendor's own server failing, not a name lookup failing — must not be
+        // misattributed to a typo the user did not make.
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var client = new ClanClient(new HttpClient(handler), rawDirectory: null);
+
+        var result = await client.ContributionsAsync("Noodle Clan", "B", CancellationToken.None);
+
+        Assert.DoesNotContain("was not found", result.Miss);
+        Assert.Contains("500", result.Miss);
+    }
+
+    [Fact]
     public async Task ATransportFailureIsAMissNotAnException()
     {
         var handler = new StubHandler(_ => throw new HttpRequestException("no network"));
