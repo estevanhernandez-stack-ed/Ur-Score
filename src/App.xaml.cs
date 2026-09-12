@@ -31,6 +31,7 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+        new UI.MainWindow().Show();
     }
 
     protected override void OnExit(ExitEventArgs e)

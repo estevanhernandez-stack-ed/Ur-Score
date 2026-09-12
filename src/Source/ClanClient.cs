@@ -30,6 +30,21 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
         $"UrScore/{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0"} (RoRoRo plugin)";
 
     /// <summary>
+    /// One line of credit for the window (spec §6.1, "Attribution"). A window on one person's
+    /// machine is not the vendor's terms' "public display" and does not trigger their attribution
+    /// clause, but the alternative — showing someone else's clan data with no word on where it came
+    /// from — is a tool presenting someone else's work as its own, and the cost of saying so is one
+    /// line.
+    /// <para>
+    /// Lives HERE rather than in the window's own code so this stays the only file naming the
+    /// vendor: the window reads this constant instead of holding its own copy of the name.
+    /// </para>
+    /// </summary>
+    public const string Attribution =
+        "Clan battle data comes from Big Games' public Pet Simulator 99 API (ps99.biggamesapi.io). "
+        + "Ur Score is not made by, endorsed by, or affiliated with Big Games or Roblox.";
+
+    /// <summary>
     /// Bounds one request. Two calls per poll against a three-minute cadence, so the framework's
     /// default 100 seconds is far too long — a slow endpoint would eat most of the interval before
     /// giving up.
