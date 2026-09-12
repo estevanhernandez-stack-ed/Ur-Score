@@ -20,6 +20,11 @@ this repo's.
       real account's contribution rate actually falls below the configured rule's threshold, the
       host raises it, the phone rings. This is the row the host's own metric-alert smoke list has
       been waiting on — it is the first time anything closes that loop end to end.
+      **Precondition (F5), confirm this FIRST:** RoRoRo's metric alerts toggle in Settings is ON.
+      It defaults to off and is separate from having a matching rule — with it off, the host
+      returns before it ever reads the rules file, so "Reporting" next to "Ready: RoRoRo has a
+      rule" would sit there forever with nothing to explain why the phone never rings. Ur Score
+      cannot see this toggle's state over the plugin contract and cannot warn you either.
 - [ ] **A battle ending is not an error.** When the live battle closes, the window's state returns
       to "No clan battle is running right now" (`WatchState.NoBattle`), not to
       `ShapeNotUnderstood` or any other failure state.

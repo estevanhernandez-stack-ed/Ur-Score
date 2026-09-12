@@ -101,6 +101,12 @@
         <!-- The rule in RoRoRo, and the one-click that adds it. -->
         <Border Grid.Row="10" Background="#16293d" CornerRadius="4" Padding="10" Margin="0,0,0,12">
             <StackPanel>
+                <!-- F5: a matching rule existing is necessary but not sufficient — RoRoRo's metric
+                     alerts toggle is OFF by default, and Ur Score cannot query it over the plugin
+                     contract, so this is stated as a fixed precondition rather than something the
+                     rule-status sentence below could ever confirm for you. -->
+                <TextBlock TextWrapping="Wrap" FontStyle="Italic" Foreground="#9fb3c8" Margin="0,0,0,6"
+                           Text="RoRoRo's metric alerts are off by default. A rule below is not enough on its own — turn Metric alerts on in RoRoRo's Settings too, or a perfectly matching rule will still never ring your phone." />
                 <TextBlock x:Name="RuleLine" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <Button x:Name="AddRuleButton" Content="Add this rule to RoRoRo" Padding="10,5"

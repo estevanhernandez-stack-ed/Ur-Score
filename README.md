@@ -76,6 +76,11 @@ too, every time it's open.
 - **A RoRoRo alert rule for the metric id you're reporting**, if you actually want a phone alert
   out of this (see *Actually getting an alert* below). Without one, Ur Score still runs the
   dashboard — it's the "phone rings" half specifically that needs it.
+- **RoRoRo's own metric alerts toggle, turned on.** This is separate from having a rule, off by
+  default, and Ur Score has no way to check it over the plugin contract — so it can't warn you.
+  With it off, RoRoRo returns before it ever reads the rules file: a perfectly configured Ur Score
+  can show "Reporting" next to "Ready: RoRoRo has a rule" and your phone will still never ring.
+  Turn it on in RoRoRo's Settings.
 
 ## Setup
 
@@ -115,6 +120,11 @@ the exact JSON it's about to add before it adds it, backs up the file first
 (`metric-rules.json.ur-score-backup`, right beside the original), and only ever adds — it never
 edits a rule that's already there, whether you wrote it or another plugin did. RoRoRo re-reads
 that file live, so the rule takes effect without restarting anything.
+
+**A matching rule is not enough by itself.** RoRoRo's metric alerts toggle is a separate switch,
+off by default, and Ur Score cannot see its state over the plugin contract — it can't tell you if
+this is the reason nothing is ringing. Turn **Metric alerts** on in RoRoRo's own Settings; without
+that, a rule that matches exactly still returns before it's ever read.
 
 ### If you don't want other members' names
 
