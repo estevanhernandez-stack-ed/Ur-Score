@@ -1,3 +1,5 @@
+using Labs626.UrScore.Source;
+
 namespace Labs626.UrScore.Core;
 
 /// <summary>
@@ -47,6 +49,14 @@ public sealed record AccountLine(
 /// id yet coexist with <see cref="WatchState.Reporting"/>, so three can report while a fourth
 /// waits. Making it a state would hide the reporting.
 /// </para>
+/// <para>
+/// <see cref="Contributions"/> and <see cref="Standing"/> carry the WHOLE clan response — every
+/// contributor, not just the user's own — and the clan's place and total, for the dashboard (spec
+/// §6.1). <see cref="ScoreWatch"/> already has both in hand from the one contributions fetch it
+/// makes each cycle; this is that data riding along rather than the window re-reading a diagnostics
+/// file to get a second copy of it. Null/empty when no battle was fetched this cycle (mirrors
+/// <see cref="Battle"/>'s own null-on-<see cref="WatchState.NoBattle"/> contract).
+/// </para>
 /// </summary>
 public sealed record WatchSnapshot(
     WatchState State,
@@ -54,4 +64,6 @@ public sealed record WatchSnapshot(
     IReadOnlyList<AccountLine> Accounts,
     IReadOnlyList<HostAccount> Unresolved,
     int ContributorsSeen,
-    string? Battle = null);
+    string? Battle = null,
+    IReadOnlyList<Contribution>? Contributions = null,
+    ClanStanding? Standing = null);

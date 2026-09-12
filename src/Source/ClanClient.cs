@@ -67,9 +67,13 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
         var url = $"{BaseUrl}/clan/{Uri.EscapeDataString(clanName)}";
         var (body, error) = await GetAsync(url, "clan", cancellationToken).ConfigureAwait(false);
 
-        return error is not null
-            ? new ContributionsResult([], error, MissIsTransport: true)
-            : ClanParser.Contributions(body!, configName);
+        if (error is not null) return new ContributionsResult([], error, MissIsTransport: true);
+
+        // Same string, asked a second question. ClanStanding.Read is quiet on its own failures
+        // (ClanParser already reports this response's shape problems), so this can never turn a
+        // clean parse into a miss — it can only add Standing or leave it null.
+        var parsed = ClanParser.Contributions(body!, configName);
+        return parsed with { Standing = ClanStanding.Read(body!, configName) };
     }
 
     private async Task<(string? Body, string? Error)> GetAsync(

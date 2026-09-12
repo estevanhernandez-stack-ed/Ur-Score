@@ -61,6 +61,11 @@ public sealed class ScoreWatch(
 
         if (battle.ConfigName is null)
         {
+            // Clear it: Battle means "the battle that is live right now", and a stale name here
+            // would let a caller believe one is running between battles. The remembered LINES are
+            // deliberately not cleared — they are the finished battle's final numbers and stay
+            // readable until a new battle replaces them.
+            _battle = null;
             return Snapshot(WatchState.NoBattle, "No clan battle is running right now.", 0, []);
         }
 
@@ -107,13 +112,15 @@ public sealed class ScoreWatch(
             // emptiness is load-bearing: there is literally nothing to replay when the host comes
             // back, which is why a stale observation cannot be sent minutes after it was read.
             return Snapshot(WatchState.HostDown,
-                "RoRoRo is not running. Still watching; nothing is being sent.", seen, unresolved);
+                "RoRoRo is not running. Still watching; nothing is being sent.", seen, unresolved,
+                contributions.Contributions, contributions.Standing);
         }
 
         if (mine.Count == 0)
         {
             return Snapshot(WatchState.NoMatches,
-                $"Read {seen} contributor(s); none of them are your accounts.", seen, unresolved);
+                $"Read {seen} contributor(s); none of them are your accounts.", seen, unresolved,
+                contributions.Contributions, contributions.Standing);
         }
 
         var observedAt = DateTimeOffset.UtcNow;
@@ -137,12 +144,14 @@ public sealed class ScoreWatch(
                 // in a loop against a decision they made deliberately.
                 return Snapshot(WatchState.Rejected,
                     "RoRoRo refused the report: host.metrics.report is not granted. "
-                    + "Re-grant it in RoRoRo under Plugins.", seen, unresolved);
+                    + "Re-grant it in RoRoRo under Plugins.", seen, unresolved,
+                    contributions.Contributions, contributions.Standing);
             }
         }
 
         return Snapshot(WatchState.Reporting,
-            $"Reporting {mine.Count} of {seen} contributor(s).", seen, unresolved);
+            $"Reporting {mine.Count} of {seen} contributor(s).", seen, unresolved,
+            contributions.Contributions, contributions.Standing);
     }
 
     private void Remember(
@@ -153,6 +162,7 @@ public sealed class ScoreWatch(
     }
 
     private WatchSnapshot Snapshot(
-        WatchState state, string? detail, int seen, IReadOnlyList<HostAccount> unresolved) =>
-        new(state, detail, [.. _lines.Values], unresolved, seen, _battle);
+        WatchState state, string? detail, int seen, IReadOnlyList<HostAccount> unresolved,
+        IReadOnlyList<Contribution>? contributions = null, ClanStanding? standing = null) =>
+        new(state, detail, [.. _lines.Values], unresolved, seen, _battle, contributions, standing);
 }

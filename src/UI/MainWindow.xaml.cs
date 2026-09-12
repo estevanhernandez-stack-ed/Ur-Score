@@ -13,13 +13,15 @@ namespace Labs626.UrScore.UI;
 /// <summary>
 /// The clan battle dashboard (spec §6.1) with the alert-pipeline diagnostics beneath it.
 /// <para>
-/// The dashboard's numbers come from the SAME poll the diagnostics use — <see cref="ScoreWatch"/>
-/// already fetches the whole clan response and keeps only the rows matching the user's accounts.
-/// Rather than widen <see cref="ScoreWatch"/>'s own tested surface to carry the discarded rows back
-/// out, this window re-reads the raw response <see cref="Source.ClanClient"/> already saves to
-/// <see cref="RawDirectory"/> for diagnostics (spec §5, "Never return empty quietly") and asks
-/// <see cref="ClanStanding"/> the same question a second time, for free: no new network call, no
-/// change to a file three prior tasks already have tests pinned against.
+/// The dashboard's numbers come from <see cref="WatchSnapshot.Contributions"/> and
+/// <see cref="WatchSnapshot.Standing"/> — the SAME contributions fetch <see cref="ScoreWatch"/>
+/// already makes each cycle to decide what to report, carried out on the result rather than
+/// re-derived. Earlier this window instead re-read the raw response
+/// <see cref="Source.ClanClient"/> separately saves to <see cref="RawDirectory"/> for diagnostics —
+/// that file is explicitly best-effort (<c>SaveRaw</c> swallows its own write failures, and a
+/// <see cref="ClanClient"/> can be built with no <see cref="RawDirectory"/> at all), so making the
+/// dashboard depend on it meant a diagnostics failure could silently become a dashboard failure.
+/// Reading the typed result instead makes that impossible by construction.
 /// </para>
 /// </summary>
 public partial class MainWindow : Window
@@ -284,19 +286,6 @@ public partial class MainWindow : Window
         RenderRule();
     }
 
-    /// <summary>
-    /// The four states that can only be reached AFTER this cycle's clan response was fetched and
-    /// parsed cleanly (<see cref="ScoreWatch.RunOnceAsync"/> reaches every one of them only past
-    /// its contributions fetch). Gates the dashboard refresh on this rather than on
-    /// <see cref="WatchSnapshot.Battle"/> alone: <c>Battle</c> is <see cref="ScoreWatch"/>'s own
-    /// remembered config name, and it is not cleared back to null on a normal
-    /// <see cref="WatchState.NoBattle"/> tick between battles — only ever reassigned when a NEW
-    /// battle is found. Trusting it unconditionally would show a just-finished battle's name and
-    /// numbers as though they were still live.
-    /// </summary>
-    private static bool BattleDataIsFreshThisCycle(WatchState state) => state is
-        WatchState.Reporting or WatchState.HostDown or WatchState.NoMatches or WatchState.Rejected;
-
     private async Task RenderDashboardAsync(WatchSnapshot snapshot)
     {
         ClanLine.Text = snapshot.State switch
@@ -308,11 +297,13 @@ public partial class MainWindow : Window
             _ => snapshot.Battle is not null ? $"Battle: {snapshot.Battle}" : "Waiting for a battle.",
         };
 
-        if (!BattleDataIsFreshThisCycle(snapshot.State) || snapshot.Battle is null)
+        if (snapshot.Contributions is null)
         {
-            // Nothing new this cycle. Leave whatever the last successful cycle drew — a frozen
-            // dashboard next to a state sentence that plainly says "no battle running" reads as
-            // "here is how it ended," not as a lie about what is live right now.
+            // No fresh clan data landed this cycle — read plainly off the snapshot rather than
+            // re-deriving "was there a fetch" from the state enum. Leave whatever the last
+            // successful cycle drew: a frozen dashboard beside a state sentence that plainly says
+            // what happened (above) reads as "here is the last we knew," never as a lie about what
+            // is live right now.
             return;
         }
 
@@ -324,26 +315,11 @@ public partial class MainWindow : Window
             _lastDashboardBattle = snapshot.Battle;
         }
 
-        string json;
-        try
-        {
-            var rawPath = Path.Combine(RawDirectory, "clan.json");
-            if (!File.Exists(rawPath)) return;
-            json = await File.ReadAllTextAsync(rawPath);
-        }
-        catch (IOException)
-        {
-            // ClanClient can be mid-write to the same file. Costs this cycle's dashboard refresh,
-            // never the diagnostics that already rendered above.
-            return;
-        }
+        ClanDetailLine.Text = $"Place {FormatPlace(snapshot.Standing?.Place)} · "
+            + $"{FormatPoints(snapshot.Standing?.Points)} points";
 
-        var standing = ClanStanding.Read(json, snapshot.Battle);
-        ClanDetailLine.Text = $"Place {FormatPlace(standing.Place)} · {FormatPoints(standing.Points)} points";
-
-        var parsed = ClanParser.Contributions(json, snapshot.Battle);
         var mine = _rows.Where(r => r.RobloxUserId != 0).Select(r => r.RobloxUserId).ToHashSet();
-        var ranked = ClanStanding.Rank(parsed.Contributions, mine);
+        var ranked = ClanStanding.Rank(snapshot.Contributions, mine);
 
         await RenderLeaderboardAsync(ranked);
         RenderAccountDashboardRows(ranked, DateTimeOffset.UtcNow);

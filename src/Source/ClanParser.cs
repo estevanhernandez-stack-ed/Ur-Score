@@ -20,9 +20,20 @@ public sealed record BattleProbe(string? ConfigName, string? Miss, bool MissIsTr
 /// The contributions, or an explanation. An empty list with a null <see cref="Miss"/> is a real
 /// empty list — a battle nobody has scored in — and is deliberately distinguishable from a shape
 /// that could not be read.
+/// <para>
+/// <see cref="Standing"/> rides along on the same call for the dashboard's sake (spec §6.1) —
+/// <see cref="ClanClient.ContributionsAsync"/> already has the response body in hand for
+/// <see cref="ClanParser.Contributions"/> and reads <see cref="ClanStanding"/> from the identical
+/// string, so the window never needs to re-fetch or re-read anything to get it. Null on a miss, on
+/// the same "quiet, not a second complaint about the same bytes" terms <see cref="ClanStanding.Read"/>
+/// already documents.
+/// </para>
 /// </summary>
 public sealed record ContributionsResult(
-    IReadOnlyList<Contribution> Contributions, string? Miss, bool MissIsTransport = false);
+    IReadOnlyList<Contribution> Contributions,
+    string? Miss,
+    bool MissIsTransport = false,
+    ClanStanding? Standing = null);
 
 /// <summary>
 /// Extraction that survives being wrong about the shape.
