@@ -1,0 +1,43 @@
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+.vs/
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts shipped via GitHub Releases — never commit
+artifacts/
+publish/
+plugin.zip
+manifest.sha256
+
+# OS noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Logs
+*.log
+
+# Local credentials / secrets — paranoia bar
+*.env
+.env.local
+secrets/
+# .mcp.json holds a 626 agent bearer token — never commit
+.mcp.json
+
+# Superpowers brainstorming companion (local mockups)
+.superpowers/
+.gitnexus
