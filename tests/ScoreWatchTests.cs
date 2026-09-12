@@ -134,6 +134,25 @@ public class ScoreWatchTests
     }
 
     [Fact]
+    public async Task AClanNotFoundMissIsItsOwnStateNotSourceUnreachable()
+    {
+        // Round 3, F7: half-closed after round 2 — the detail line named the clan, but the STATE
+        // was still SourceUnreachable, whose own doc says "waiting is the remedy." Waiting will
+        // never fix a typo. The design lists this as its own state; this proves ScoreWatch
+        // actually branches to it rather than folding it back into SourceUnreachable.
+        var source = new FakeSource(
+            new BattleProbe("B", null),
+            new ContributionsResult([], "Clan 'Ghost Clan' was not found (...)",
+                MissIsTransport: false, ClanNotFound: true));
+
+        var snapshot = await Watch(source, new FakeHost(true, [])).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.ClanNotFound, snapshot.State);
+        Assert.NotEqual(WatchState.SourceUnreachable, snapshot.State);
+        Assert.Contains("Ghost Clan", snapshot.Detail);
+    }
+
+    [Fact]
     public async Task AnUnreadableShapeSaysSoAndCarriesTheKeys()
     {
         var source = new FakeSource(

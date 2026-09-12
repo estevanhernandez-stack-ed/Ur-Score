@@ -77,9 +77,12 @@ public class ClanClientTests
         Assert.NotNull(result.Miss);
         Assert.Contains("404", result.Miss);
 
-        // A refusal from the server is grouped with "could not reach it" — the remedy for both
-        // is the same (wait), unlike a shape the parser could not read.
-        Assert.True(result.MissIsTransport);
+        // Round 3, F7: a 404 on the CLAN call specifically is a clan-not-found signal, not a
+        // generic transport refusal — the comment this replaced said the two belonged together
+        // ("the remedy for both is the same: wait"), which is exactly the false promise
+        // SourceUnreachable's own doc makes about a typo. ClanNotFound true, MissIsTransport false.
+        Assert.True(result.ClanNotFound);
+        Assert.False(result.MissIsTransport);
     }
 
     [Fact]
@@ -97,7 +100,12 @@ public class ClanClientTests
 
         Assert.Contains("Noodle Clan", result.Miss);
         Assert.Contains("400", result.Miss);
-        Assert.True(result.MissIsTransport);
+
+        // Round 3: ClanNotFound (not MissIsTransport) is the signal ScoreWatch now branches on —
+        // see ClanNotFoundIsItsOwnStateNotSourceUnreachable in ScoreWatchTests for the state-level
+        // proof.
+        Assert.True(result.ClanNotFound);
+        Assert.False(result.MissIsTransport);
     }
 
     [Fact]
@@ -112,6 +120,23 @@ public class ClanClientTests
 
         Assert.DoesNotContain("was not found", result.Miss);
         Assert.Contains("500", result.Miss);
+        Assert.False(result.ClanNotFound);
+        Assert.True(result.MissIsTransport);
+    }
+
+    [Fact]
+    public async Task A429OnTheClanCallIsNotClanNotFound()
+    {
+        // Round 3, F7: the signal is "400 or 404 specifically," not "any 4xx" — a rate limit is
+        // reachable and real, and calling it "not found" would send someone hunting for a typo
+        // that is not there.
+        var handler = new StubHandler(_ => new HttpResponseMessage((HttpStatusCode)429));
+        var client = new ClanClient(new HttpClient(handler), rawDirectory: null);
+
+        var result = await client.ContributionsAsync("Noodle Clan", "B", CancellationToken.None);
+
+        Assert.False(result.ClanNotFound);
+        Assert.True(result.MissIsTransport);
     }
 
     [Fact]

@@ -291,16 +291,28 @@ public partial class MainWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
-            var excluded = _rows.Where(r => !r.Send).Select(r => r.AccountId.ToString()).ToList();
-            _settings = _settings with { ExcludedAccountIds = excluded };
-            Settings.Save(_settings);
+            try
+            {
+                var excluded = _rows.Where(r => !r.Send).Select(r => r.AccountId.ToString()).ToList();
+                _settings = _settings with { ExcludedAccountIds = excluded };
+                Settings.Save(_settings);
 
-            // The checkbox just changed the allow list; the persistent watch's policy must agree
-            // by the NEXT cycle, not the one after (see EnsureWatch's doc for why it is updated in
-            // place rather than rebuilt). BEFORE RenderPolicy, for the same reason as SeedRowsAsync.
-            _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
+                // The checkbox just changed the allow list; the persistent watch's policy must
+                // agree by the NEXT cycle, not the one after (see EnsureWatch's doc for why it is
+                // updated in place rather than rebuilt). BEFORE RenderPolicy, for the same reason
+                // as SeedRowsAsync.
+                _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
 
-            RenderPolicy();
+                RenderPolicy();
+            }
+            catch (Exception ex)
+            {
+                // Round 3: the last unguarded IO reachable from a UI callback, on the file the
+                // README invites people to keep open while Ur Score runs. No dispatcher exception
+                // handler is registered anywhere, so an escaping exception here would have killed
+                // the whole window over a single checkbox failing to save.
+                DetailLine.Text = $"Could not save that change: {ex.Message}";
+            }
         }, DispatcherPriority.Background);
     }
 
@@ -322,6 +334,18 @@ public partial class MainWindow : Window
         // meantime. Reloading on Start closes most of that window; push the fresh values into an
         // already-existing watch rather than rebuilding it (see EnsureWatch's doc).
         _settings = Settings.Load();
+
+        // Round 3, F9's missed key: reloading _settings alone left every EXISTING row's Send
+        // exactly as it was — SeedRowsAsync only ever sets Send on a NEW row. A hand-edited
+        // excludedAccountIds was therefore ignored by an already-open window, and the very next
+        // checkbox commit would have saved the stale in-memory state straight back over it. Every
+        // row's Send is re-synced from the freshly loaded exclusions before anything reads it.
+        var excluded = _settings.Excluded;
+        foreach (var row in _rows)
+        {
+            row.Send = !excluded.Contains(row.AccountId);
+        }
+
         _watch?.UpdateSettings(_settings);
         _watch?.UpdatePolicy(_settings.MetricId, CurrentAllowedSubjects());
 
@@ -399,6 +423,7 @@ public partial class MainWindow : Window
         {
             WatchState.Idle => "Idle — no clan name set.",
             WatchState.SourceUnreachable => "Could not reach the clan data.",
+            WatchState.ClanNotFound => "Clan not found.",
             WatchState.NoBattle => "No clan battle running.",
             WatchState.ShapeNotUnderstood => "The response was not a shape Ur Score understands.",
             WatchState.NoMatches => "None of your accounts are in this battle's contributions.",
@@ -440,6 +465,7 @@ public partial class MainWindow : Window
         {
             WatchState.Idle => "No clan name set.",
             WatchState.SourceUnreachable => "Could not reach the clan data.",
+            WatchState.ClanNotFound => "Clan not found.",
             WatchState.ShapeNotUnderstood => "The response was not a shape Ur Score understands yet.",
             WatchState.NoBattle => "No clan battle is running right now.",
             _ => snapshot.Battle is not null ? $"Battle: {snapshot.Battle}" : "Waiting for a battle.",

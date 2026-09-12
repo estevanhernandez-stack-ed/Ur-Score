@@ -52,9 +52,13 @@ this repo's.
       `host.queries.accounts` instead and confirm that is named too, not swallowed by the generic
       handler (see `ScoreWatch.RunOnceCoreAsync`'s two `PermissionDenied` catches).
 - [ ] **A wrong clan name reads as a wrong clan name**, not as a network failure or an empty clan.
-      Set `clanName` in settings.json to something that does not exist and confirm the window's
-      detail line names the clan as sent (so a typo is visible), distinct from "could not reach
-      the clan data" and from "no battle running."
+      Set `clanName` in settings.json to something that does not exist and confirm the window shows
+      its own distinct state — `WatchState.ClanNotFound`, headlined "Clan not found." — not
+      "Could not reach the clan data" (`SourceUnreachable`, whose own doc promises waiting as the
+      remedy, which is false for a typo). The detail line additionally names the clan as sent, so
+      a typo is visible. **Restored to this bar 2026-09-12 (round 3):** an earlier pass rewrote
+      this row to require only the detail line, matching what the code did instead of what the
+      design specifies — the state itself is the thing that was missing, and now exists.
 - [ ] **The rule button writes something the host actually reads.** Click **Add this rule to
       RoRoRo**, confirm it, then trigger a report cycle (Test now, or wait for the next poll) with
       RoRoRo running and its log visible. Read `LocalFileMetricRuleSource`'s output carefully —

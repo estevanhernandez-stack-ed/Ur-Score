@@ -5,10 +5,12 @@ namespace Labs626.UrScore.Core;
 /// <summary>
 /// What the plugin is doing, in terms a user can act on.
 /// <para>
-/// Eight values instead of a shared "error", because four different causes otherwise look
-/// identical from the outside: no clan by that name, a clan with no battle running, a battle whose
-/// response we could not read, and contributors none of whom are yours. One of those is normal and
-/// three need different things done about them.
+/// Nine values instead of a shared "error" (round 3 added <see cref="ClanNotFound"/> — a wrong
+/// clan name used to collapse into <see cref="SourceUnreachable"/>, whose own doc promises waiting
+/// as the remedy, which is false for a typo). Five different causes otherwise look identical from
+/// the outside: no clan by that name, a clan that does not exist at all, a clan with no battle
+/// running, a battle whose response we could not read, and contributors none of whom are yours.
+/// One of those is normal and four need different things done about them.
 /// </para>
 /// </summary>
 public enum WatchState
@@ -16,8 +18,16 @@ public enum WatchState
     /// <summary>No clan name configured. Nothing is polled.</summary>
     Idle,
 
-    /// <summary>The endpoint could not be reached, or refused us. Waiting is the remedy.</summary>
+    /// <summary>The endpoint could not be reached, or refused us for a reason other than the clan
+    /// not existing. Waiting is the remedy.</summary>
     SourceUnreachable,
+
+    /// <summary>
+    /// The vendor's own response says this clan name does not exist (a 400 or 404 on the clan
+    /// call, specifically). Distinct from <see cref="SourceUnreachable"/> on purpose: waiting will
+    /// never fix a typo, so the remedy the two states imply must not be the same one.
+    /// </summary>
+    ClanNotFound,
 
     /// <summary>No battle is live. Normal, frequent, and explicitly not an error.</summary>
     NoBattle,

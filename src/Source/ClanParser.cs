@@ -28,12 +28,19 @@ public sealed record BattleProbe(string? ConfigName, string? Miss, bool MissIsTr
 /// the same "quiet, not a second complaint about the same bytes" terms <see cref="ClanStanding.Read"/>
 /// already documents.
 /// </para>
+/// <para>
+/// <see cref="ClanNotFound"/> (round 3, F7): carried the same way <see cref="MissIsTransport"/> is
+/// — <see cref="ClanClient.ContributionsAsync"/> sets it for a 400 or 404 specifically on the clan
+/// call, so <c>ScoreWatch</c> can give a wrong clan name its own state instead of folding it into
+/// <c>SourceUnreachable</c>, whose own doc promises "waiting is the remedy" — false for a typo.
+/// </para>
 /// </summary>
 public sealed record ContributionsResult(
     IReadOnlyList<Contribution> Contributions,
     string? Miss,
     bool MissIsTransport = false,
-    ClanStanding? Standing = null);
+    ClanStanding? Standing = null,
+    bool ClanNotFound = false);
 
 /// <summary>
 /// Extraction that survives being wrong about the shape.

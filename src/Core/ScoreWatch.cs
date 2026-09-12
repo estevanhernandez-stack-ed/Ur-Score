@@ -111,9 +111,14 @@ public sealed class ScoreWatch(
 
         if (contributions.Miss is not null)
         {
-            return Snapshot(
-                contributions.MissIsTransport ? WatchState.SourceUnreachable : WatchState.ShapeNotUnderstood,
-                contributions.Miss, 0, []);
+            // F7 (round 3): a wrong clan name is its own state, not SourceUnreachable — whose own
+            // doc says "waiting is the remedy," which is false for a typo that will never resolve
+            // by waiting. ClanNotFound takes priority over MissIsTransport when both could apply.
+            var state = contributions.ClanNotFound
+                ? WatchState.ClanNotFound
+                : contributions.MissIsTransport ? WatchState.SourceUnreachable : WatchState.ShapeNotUnderstood;
+
+            return Snapshot(state, contributions.Miss, 0, []);
         }
 
         var seen = contributions.Contributions.Count;

@@ -69,18 +69,20 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
 
         if (error is not null)
         {
-            // F7: was implemented nowhere — every non-2xx became the same generic transport miss,
-            // so a typo in the clan name read exactly like the whole endpoint being down. A 4xx
-            // from THIS call is overwhelmingly a clan name the vendor does not recognise (confirmed
-            // live: a made-up name returns 400, not 404), so name the clan AS SENT ourselves —
-            // the vendor's own error body does not say so plainly, and the spec's "clan name not
-            // found" state exists precisely so a typo is visible rather than read as "could not
-            // reach the clan data".
-            var message = statusCode is >= 400 and < 500
+            // F7: half-closed after round 2 — the detail line named the clan, but MissIsTransport
+            // stayed true, so the STATE was still SourceUnreachable (whose own doc says "waiting is
+            // the remedy," false for a typo). Round 3 gives it its own state: a 400 or 404 on THIS
+            // call specifically (confirmed live: a made-up name returns 400, not 404 — this must
+            // not key off one code) sets ClanNotFound, and ScoreWatch branches on it. Any OTHER
+            // status (5xx, 401, 429, ...) is left as a plain transport miss — those are the vendor's
+            // server or rate limiting, not a name problem, and must not be misattributed to a typo
+            // the user did not make.
+            var clanNotFound = statusCode is 400 or 404;
+            var message = clanNotFound
                 ? $"Clan '{clanName}' was not found ({error})"
                 : error;
 
-            return new ContributionsResult([], message, MissIsTransport: true);
+            return new ContributionsResult([], message, MissIsTransport: !clanNotFound, ClanNotFound: clanNotFound);
         }
 
         // Same string, asked a second question. ClanStanding.Read is quiet on its own failures
