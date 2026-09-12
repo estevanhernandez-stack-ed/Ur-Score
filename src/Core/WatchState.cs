@@ -53,4 +53,5 @@ public sealed record WatchSnapshot(
     string? Detail,
     IReadOnlyList<AccountLine> Accounts,
     IReadOnlyList<HostAccount> Unresolved,
-    int ContributorsSeen);
+    int ContributorsSeen,
+    string? Battle = null);

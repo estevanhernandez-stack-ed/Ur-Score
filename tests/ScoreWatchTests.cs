@@ -10,10 +10,17 @@ public class ScoreWatchTests
 
     private sealed class FakeSource(BattleProbe probe, ContributionsResult contributions) : IClanSource
     {
-        public Task<BattleProbe> ActiveBattleAsync(CancellationToken ct) => Task.FromResult(probe);
+        /// <summary>Mutable so one source can be driven across a battle changing mid-sequence,
+        /// which is what the stale-line test needs — a fresh source for the later cycle would
+        /// pass whether or not the old line was cleared.</summary>
+        public BattleProbe Probe { get; set; } = probe;
+
+        public ContributionsResult Contributions { get; set; } = contributions;
+
+        public Task<BattleProbe> ActiveBattleAsync(CancellationToken ct) => Task.FromResult(Probe);
 
         public Task<ContributionsResult> ContributionsAsync(string clan, string config, CancellationToken ct) =>
-            Task.FromResult(contributions);
+            Task.FromResult(Contributions);
     }
 
     private sealed class FakeHost(bool reachable, IReadOnlyList<HostAccount> accounts) : IHostClient
@@ -237,5 +244,63 @@ public class ScoreWatchTests
         Assert.Equal(WatchState.Reporting, snapshot.State);
         Assert.Single(snapshot.Unresolved);
         Assert.Equal("pending", snapshot.Unresolved[0].DisplayName);
+    }
+
+    [Fact]
+    public async Task AnUnreadableActiveBattleShapeIsNotMistakenForUnreachable()
+    {
+        // Guards the FIRST miss-check specifically: a shape miss on the active-battle call (the
+        // default MissIsTransport: false) must land on ShapeNotUnderstood, not SourceUnreachable.
+        // A mutation that hardcodes this check to always return SourceUnreachable passed 12/12
+        // without this test.
+        var source = new FakeSource(
+            new BattleProbe(null, "No 'configName' in the active-battle response. Keys present: Foo."),
+            new ContributionsResult([], null));
+
+        var snapshot = await Watch(source, new FakeHost(true, [])).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.ShapeNotUnderstood, snapshot.State);
+    }
+
+    [Fact]
+    public async Task AnUnreachableContributionsCallIsNotMistakenForAnUnreadableShape()
+    {
+        // Guards the SECOND miss-check specifically: a transport miss on the contributions call
+        // must land on SourceUnreachable. A mutation that read battle.MissIsTransport here instead
+        // of contributions.MissIsTransport passed 12/12 without this test, because the only prior
+        // contributions-miss test left MissIsTransport at its false default.
+        var source = new FakeSource(
+            new BattleProbe("B", null),
+            new ContributionsResult([], "Could not reach the clan endpoint: timed out", MissIsTransport: true));
+
+        var snapshot = await Watch(source, new FakeHost(true, [])).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.SourceUnreachable, snapshot.State);
+    }
+
+    [Fact]
+    public async Task ANewBattleClearsAStaleLineFromTheOneBefore()
+    {
+        // Two cycles in battle "A" report and remember 4200 for the account. Battle "A" then ends
+        // and "B" starts before the account has scored in it. The remembered 4200 must not sit in
+        // the snapshot looking like a live figure for "B" — the reviewer reproduced exactly that
+        // across three cycles before this fix.
+        var source = new FakeSource(
+            new BattleProbe("A", null), new ContributionsResult([new(111, 4200)], null));
+        var host = new FakeHost(true, [new(Mine, 111, "mine")]);
+        var watch = Watch(source, host);
+
+        await watch.RunOnceAsync(CancellationToken.None);
+        var second = await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Single(second.Accounts);
+        Assert.Equal("A", second.Battle);
+
+        source.Probe = new BattleProbe("B", null);
+        source.Contributions = new ContributionsResult([new(999, 100)], null);   // not ours
+
+        var third = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("B", third.Battle);
+        Assert.Empty(third.Accounts);
     }
 }

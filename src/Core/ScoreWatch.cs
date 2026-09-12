@@ -17,9 +17,33 @@ public sealed class ScoreWatch(
 {
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
+    /// <summary>
+    /// One cycle at a time. Task 9 drives this from a poll timer AND a "Test now" button, and two
+    /// overlapping runs were shown to send the same observation twice while the policy's counter
+    /// recorded one — its accounting disagreeing with what the host received. Waiting rather than
+    /// skipping, so "Test now" always actually tests: the second run costs one extra request
+    /// against a three-minute server cache, which serves it from the same bytes.
+    /// </summary>
+    private readonly SemaphoreSlim _oneAtATime = new(1, 1);
+
+    private string? _battle;
+
     public ReportPolicy Policy => policy;
 
     public async Task<WatchSnapshot> RunOnceAsync(CancellationToken cancellationToken)
+    {
+        await _oneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await RunOnceCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _oneAtATime.Release();
+        }
+    }
+
+    private async Task<WatchSnapshot> RunOnceCoreAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(settings.ClanName))
         {
@@ -39,6 +63,12 @@ public sealed class ScoreWatch(
         {
             return Snapshot(WatchState.NoBattle, "No clan battle is running right now.", 0, []);
         }
+
+        // A new battle means every remembered value belongs to a finished one. Keeping them
+        // would show last week's points beside this week's, with nothing marking which is
+        // which — the reviewer reproduced exactly that across three cycles.
+        if (_battle is not null && _battle != battle.ConfigName) _lines.Clear();
+        _battle = battle.ConfigName;
 
         var contributions = await source
             .ContributionsAsync(settings.ClanName, battle.ConfigName, cancellationToken)
@@ -72,9 +102,10 @@ public sealed class ScoreWatch(
 
         if (!hostUp)
         {
-            // Polling continues so the window stays useful and the mapping cache stays warm, but
-            // nothing is sent and NOTHING IS QUEUED. A stale observation replayed later is exactly
-            // the input a Rate rule cannot use and a Level rule would judge on.
+            // Polling continues so the window stays useful, but NOTHING is fetched from the host
+            // and nothing is queued. The account map is empty here rather than warm — and that
+            // emptiness is load-bearing: there is literally nothing to replay when the host comes
+            // back, which is why a stale observation cannot be sent minutes after it was read.
             return Snapshot(WatchState.HostDown,
                 "RoRoRo is not running. Still watching; nothing is being sent.", seen, unresolved);
         }
@@ -123,5 +154,5 @@ public sealed class ScoreWatch(
 
     private WatchSnapshot Snapshot(
         WatchState state, string? detail, int seen, IReadOnlyList<HostAccount> unresolved) =>
-        new(state, detail, [.. _lines.Values], unresolved, seen);
+        new(state, detail, [.. _lines.Values], unresolved, seen, _battle);
 }
