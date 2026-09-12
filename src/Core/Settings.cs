@@ -11,7 +11,8 @@ public sealed record Settings(
     string ClanName,
     string MetricId,
     int PollSeconds,
-    IReadOnlyList<string>? ExcludedAccountIds = null)
+    IReadOnlyList<string>? ExcludedAccountIds = null,
+    bool ResolveNames = true)
 {
     /// <summary>
     /// Accounts the user has switched OFF, as Guid strings. An EXCLUDE list rather than an include

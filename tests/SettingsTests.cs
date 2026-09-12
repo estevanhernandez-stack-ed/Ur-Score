@@ -55,6 +55,21 @@ public class SettingsTests
     }
 
     [Fact]
+    public void ResolveNamesDefaultsOnAndSurvivesADiskRoundTripWhenTurnedOff()
+    {
+        // Default true: a fresh install shows names without the user finding a switch first.
+        Assert.True(Settings.Defaults.ResolveNames);
+
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+        var written = new Settings("Noodle Clan", "run.points", 300, ResolveNames: false);
+
+        Settings.Save(written, path);
+
+        Assert.False(Settings.Load(path).ResolveNames);
+    }
+
+    [Fact]
     public void AnUnreadableFileYieldsDefaultsRatherThanThrowing()
     {
         // The window must open. A settings file someone hand-edited into invalid JSON is a thing
