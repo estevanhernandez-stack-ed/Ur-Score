@@ -404,7 +404,11 @@ here and only one of them is the report policy's:
 
 Boundary 3 is still a choice a user might not want made for them, so `resolveNames` is a setting.
 Turned off, the leaderboard shows positions and points with only the user's own accounts named — the
-plugin then makes exactly one outbound call per poll, to the game's API, and none about anybody else.
+plugin then makes exactly two outbound calls per poll (`activeClanBattle` and `clan/{name}`, both to
+the game's own API) and none about anybody else. **Corrected 2026-09-12 (F6):** this section
+previously said "one outbound call" — wrong in either state of the setting, since the two calls to
+the game's API happen regardless of it. Turned *on*, that becomes three: the same two, plus one
+batched call to Roblox for names.
 
 ### Attribution
 

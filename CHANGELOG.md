@@ -35,8 +35,8 @@ owed).
   restart.
 - **Leaderboard names, resolved through Roblox's own public batch lookup**, cached for the life of
   the process. Optional — turn off `resolveNames` in settings and the leaderboard still shows
-  positions and points, just not other members' names, and the plugin then makes exactly one
-  outbound call per poll instead of two.
+  positions and points, just not other members' names, and the plugin then makes exactly two
+  outbound calls per poll (both to the game's own API) instead of three.
 - **Accounts with no Roblox id yet are named, not silently skipped** — RoRoRo hasn't resolved one
   yet (a brand-new saved account that's never been launched), and the window says so per account.
 - **Attribution line** crediting Big Games' public API in the window itself, on every launch.

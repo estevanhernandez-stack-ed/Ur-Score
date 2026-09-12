@@ -458,8 +458,21 @@ public partial class MainWindow : Window
     {
         var allowed = _rows.Count(r => r.Send);
         var total = Math.Max(_rows.Count, allowed);
+
+        // F6: dropped the old blanket "Nothing else leaves this plugin" — untrue on this branch
+        // whenever ResolveNames is on (the default), since NameClient POSTs other members' Roblox
+        // ids to Roblox every poll. What actually leaves RoRoRo (the report policy's own job) is
+        // still stated plainly; what else leaves the machine is stated separately, below.
         PolicyLine.Text = $"Ur Score sends points for {allowed} of your {total} accounts, "
-            + $"as {_settings.MetricId}. Nothing else leaves this plugin.";
+            + $"as {_settings.MetricId}. Nothing else reaches RoRoRo.";
+
+        // Worded from design §6.1 ("How this squares with the report policy"): ids Roblox issued
+        // go to Roblox to retrieve names Roblox publishes, and that is a real outbound call, not
+        // an extension of the report policy above — reflects whichever way the setting is now.
+        NameLookupLine.Text = _settings.ResolveNames
+            ? "Name lookups are on: other members' Roblox ids are sent to Roblox to resolve "
+              + "usernames for the leaderboard. Set resolveNames to false in settings.json to stop it."
+            : "Name lookups are off: no other member's Roblox id leaves this machine for any reason.";
 
         PolicyCounts.Text = _watch is null
             ? ""

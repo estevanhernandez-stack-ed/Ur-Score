@@ -19,7 +19,10 @@ public interface INameSource
 /// §6.1 states why that is acceptable rather than leaving it implied: ids Roblox issued go to
 /// Roblox for names Roblox publishes, and they arrived from a public endpoint in the first place.
 /// The user can switch it off (`Settings.ResolveNames`), and with it off the plugin makes exactly
-/// one outbound call per poll and none about anybody else.
+/// two outbound calls per poll — <c>ClanClient</c>'s <c>activeClanBattle</c> and <c>clan/{name}</c>
+/// calls, both to the game's own API — and none about anybody else. (Corrected 2026-09-12, F6:
+/// this previously said "one outbound call," which was wrong regardless of this setting — those
+/// two calls happen either way. With names on, the count is three.)
 /// </para>
 /// <para>
 /// Cached for the life of the process and never re-asked. Usernames change rarely and a clan

@@ -50,8 +50,9 @@ Three separate destinations, and they're not the same boundary:
 
 **You can turn the third one off.** Set `resolveNames` to `false` in settings (see *Configure it*
 below) and the leaderboard still shows positions and points, with everyone but your own accounts
-shown as `Member <id>` instead of a name. With it off, Ur Score makes exactly one outbound call
-per poll — to the game's own API — and none to Roblox for anyone else's identity.
+shown as `Member <id>` instead of a name. With it off, Ur Score makes exactly two outbound calls
+per poll — both to the game's own API — and none to Roblox for anyone else's identity. With it on
+(the default), that's three: the same two, plus one batched call to Roblox for names.
 
 Ur Score has no webhook of its own, posts nothing anywhere, and cannot type or click inside
 Roblox. Its only outbound calls are the two named above, and its only inbound connection is the
