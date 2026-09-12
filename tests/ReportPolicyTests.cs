@@ -105,28 +105,78 @@ public class ReportPolicyTests
     }
 
     [Fact]
+    public void DescribeDropsOfYourNWhenTheTotalCannotBeRight()
+    {
+        // A caller passing a total smaller than the allow list is a bug somewhere else. Clamping
+        // would hide that bug behind a plausible-looking "3 of your 2 accounts"; dropping the
+        // comparison instead says only what is still true.
+        var description = Policy().Describe(totalAccounts: 0);
+
+        Assert.DoesNotContain("of your", description);
+        Assert.Contains("1 accounts", description);
+        Assert.Contains("clan.battle.points", description);
+    }
+
+    [Fact]
+    public async Task CountersTrackSentAndDroppedSeparately()
+    {
+        // Sent/Dropped are what the window shows to say "it is working". Deleting the increments
+        // entirely still passes every other test in this file, so the counters need their own.
+        var client = new SpyClient();
+        var policy = Policy();
+
+        await policy.SendAsync(client, Allowed, "clan.battle.points", 1, DateTimeOffset.UtcNow,
+            CancellationToken.None);
+        await policy.SendAsync(client, NotAllowed, "clan.battle.points", 1, DateTimeOffset.UtcNow,
+            CancellationToken.None);
+        await policy.SendAsync(client, Allowed, "something.else", 1, DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        Assert.Equal(1, policy.Sent);
+        Assert.Equal(2, policy.Dropped);
+    }
+
+    [Fact]
     public void ReportMetricIsCalledFromTheReportPolicyAndNowhereElse()
     {
         // THE FENCE. The tests above prove the gate drops what it should; this proves nothing can
         // route around the gate. A later change that calls the client directly from the loop would
         // pass every other test in this file.
         var src = Path.Combine(RepoRoot(), "src");
-        // Exact file NAMES, not suffixes. "IHostClient.cs".EndsWith("HostClient.cs") is true, so a
-        // suffix filter would also exempt any future FakeHostClient.cs or ScoringHostClient.cs from
-        // the one fence that keeps the report policy honest. Three files may say this word:
-        // the policy, the interface that declares it, and the client that implements it.
-        string[] permitted = ["ReportPolicy.cs", "HostClient.cs", "IHostClient.cs"];
+
+        // Paths relative to src/, not bare file names. A bare-name match would also exempt an
+        // unrelated src/Somewhere/HostClient.cs — a different file that happens to share a name
+        // with the one client this fence means to exempt. Not suffixes either: "IHostClient.cs"
+        // .EndsWith("HostClient.cs") is true, so a suffix filter would also exempt any future
+        // FakeHostClient.cs or ScoringHostClient.cs from the one fence that keeps the report policy
+        // honest. Three files may say this word: the policy, the interface that declares it, and
+        // the client that implements it.
+        string[] permitted =
+        [
+            Path.Combine("Core", "ReportPolicy.cs"),
+            Path.Combine("Host", "HostClient.cs"),
+            Path.Combine("Host", "IHostClient.cs"),
+        ];
+
+        // Three needles, not one. The method name alone missed a proven bypass: string-concatenate
+        // the name and reach it through reflection and the substring never appears contiguously.
+        string[] needles = ["ReportMetricAsync", "typeof(IHostClient)", "GetMethod("];
 
         var offenders = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !permitted.Contains(Path.GetFileName(f), StringComparer.Ordinal))
-            .Where(f => File.ReadAllText(f).Contains("ReportMetricAsync", StringComparison.Ordinal))
-            .Select(Path.GetFileName)
+            .Where(f => !permitted.Contains(Path.GetRelativePath(src, f), StringComparer.Ordinal))
+            .Where(f =>
+            {
+                var text = File.ReadAllText(f);
+                return needles.Any(needle => text.Contains(needle, StringComparison.Ordinal));
+            })
+            .Select(f => Path.GetRelativePath(src, f))
             .ToList();
 
         Assert.True(offenders.Count == 0,
-            $"These files call ReportMetricAsync directly: {string.Join(", ", offenders)}. "
-            + "Every outbound report goes through ReportPolicy, which is what makes the report "
-            + "policy shown in the window true rather than aspirational.");
+            $"These files reach ReportMetricAsync directly or through reflection: "
+            + $"{string.Join(", ", offenders)}. Every outbound report goes through ReportPolicy, "
+            + "which is what makes the report policy shown in the window true rather than "
+            + "aspirational.");
     }
 
     private static string RepoRoot()
