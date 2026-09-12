@@ -33,8 +33,16 @@ public sealed class HostClient(string pluginId) : IHostClient, IDisposable
     private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(5);
 
     private readonly Metadata _headers = new() { { "x-plugin-id", pluginId } };
+    private readonly object _connectLock = new();
     private GrpcChannel? _channel;
     private RoRoRoHost.RoRoRoHostClient? _client;
+
+    /// <summary>Whether a handshake has completed on the CURRENT connection. Tracked separately
+    /// from <see cref="HostVersion"/> so a reconnect after the host dies can't be mistaken for an
+    /// already-handshaken session just because the old version string is still sitting there.</summary>
+    private bool _handshaken;
+
+    private bool _disposed;
 
     /// <summary>The host's version, once a handshake has been accepted. Shown in the window.</summary>
     public string? HostVersion { get; private set; }
@@ -53,7 +61,7 @@ public sealed class HostClient(string pluginId) : IHostClient, IDisposable
             // considered and makes a clean liveness probe.
             await client.GetHostInfoAsync(new Empty(), Options(cancellationToken)).ConfigureAwait(false);
 
-            if (HostVersion is null) await HandshakeAsync(cancellationToken).ConfigureAwait(false);
+            if (!_handshaken) await HandshakeAsync(cancellationToken).ConfigureAwait(false);
             return RejectReason is null;
         }
         catch (OperationCanceledException)
@@ -72,14 +80,25 @@ public sealed class HostClient(string pluginId) : IHostClient, IDisposable
 
     public async Task<IReadOnlyList<HostAccount>> GetAccountsAsync(CancellationToken cancellationToken)
     {
-        var list = await Connect()
-            .GetAccountsAsync(new Empty(), Options(cancellationToken))
-            .ConfigureAwait(false);
+        try
+        {
+            var list = await Connect()
+                .GetAccountsAsync(new Empty(), Options(cancellationToken))
+                .ConfigureAwait(false);
 
-        return [.. list.Accounts.Select(a => new HostAccount(
-            Guid.TryParse(a.AccountId, out var id) ? id : Guid.Empty,
-            a.RobloxUserId,
-            a.DisplayName))];
+            return [.. list.Accounts.Select(a => new HostAccount(
+                Guid.TryParse(a.AccountId, out var id) ? id : Guid.Empty,
+                a.RobloxUserId,
+                a.DisplayName))];
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Drop the channel so the next attempt reconnects and re-handshakes cleanly. Rethrow
+            // rather than swallow: ReportPolicy counts what it sent, and a failure it never saw
+            // would be counted as a success.
+            Reset();
+            throw;
+        }
     }
 
     /// <summary>
@@ -90,27 +109,51 @@ public sealed class HostClient(string pluginId) : IHostClient, IDisposable
         Guid subject, string metricId, double value, DateTimeOffset observedAt,
         CancellationToken cancellationToken)
     {
-        await Connect().ReportMetricAsync(new MetricReport
+        try
         {
-            SubjectId = subject.ToString(),
-            MetricId = metricId,
-            Value = value,
+            await Connect().ReportMetricAsync(new MetricReport
+            {
+                SubjectId = subject.ToString(),
+                MetricId = metricId,
+                Value = value,
 
-            // ToUnixTimeMilliseconds truncates rather than rounds, which is the direction that
-            // matters: the host drops anything stamped in its own future, and rounding up on an
-            // observation made right now could tip it over by a fraction of a millisecond.
-            ObservedAtUnixMs = observedAt.ToUnixTimeMilliseconds(),
-        }, Options(cancellationToken)).ConfigureAwait(false);
+                // ToUnixTimeMilliseconds truncates rather than rounds. The host's
+                // FutureTolerance is 30 seconds, so a sub-millisecond truncation-versus-rounding
+                // difference could never be what decides whether a report is dropped — this
+                // isn't load-bearing. Truncating is still the correct direction, though: it can
+                // only stamp a report earlier than "now", never later, so it can't be the reason
+                // one tips into the host's future.
+                ObservedAtUnixMs = observedAt.ToUnixTimeMilliseconds(),
+            }, Options(cancellationToken)).ConfigureAwait(false);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Drop the channel so the next attempt reconnects and re-handshakes cleanly. Rethrow
+            // rather than swallow: ReportPolicy counts what it sent, and a failure it never saw
+            // would be counted as a success.
+            Reset();
+            throw;
+        }
     }
 
     private async Task HandshakeAsync(CancellationToken cancellationToken)
     {
-        // The first call after the pipe connects. Until it is accepted, every gated RPC fails.
+        // The first call after the pipe connects, and worth being accurate about: the host does
+        // NOT gate anything on it. CapabilityInterceptor checks the capability map, the
+        // x-plugin-id header and the consent record, and never tracks whether a handshake
+        // happened — the host's own MetricSmoke reporter skips it entirely. We do it because it
+        // is the contract's front door and because the reject reason is the fastest way to learn
+        // a contract-version mismatch, not because anything downstream depends on it.
         var response = await Connect().HandshakeAsync(new HandshakeRequest
         {
             PluginId = pluginId,
             ContractVersion = ContractVersion,
         }, Options(cancellationToken)).ConfigureAwait(false);
+
+        // Marked done for this connection either way — accepted or rejected, the handshake
+        // itself completed, and a rejection this connection won't un-reject by asking again.
+        // Only a Reset() (a fresh connection) clears this and earns another attempt.
+        _handshaken = true;
 
         if (response.Accepted)
         {
@@ -132,33 +175,57 @@ public sealed class HostClient(string pluginId) : IHostClient, IDisposable
 
     private RoRoRoHost.RoRoRoHostClient Connect()
     {
-        if (_client is not null) return _client;
-
-        _channel = GrpcChannel.ForAddress("http://pipe", new GrpcChannelOptions
+        // Guards only the field checks and the (synchronous) channel/client construction below —
+        // never an await — so a reachability check and a report racing each other with _client
+        // still null build at most one channel between them instead of one each, with the loser's
+        // leaked and undisposed.
+        lock (_connectLock)
         {
-            HttpHandler = new SocketsHttpHandler
-            {
-                ConnectTimeout = CallTimeout,
-                ConnectCallback = async (ctx, ct) =>
-                {
-                    var pipe = new NamedPipeClientStream(
-                        ".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-                    await pipe.ConnectAsync(ct).ConfigureAwait(false);
-                    return pipe;
-                },
-            },
-        });
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
-        return _client = new RoRoRoHost.RoRoRoHostClient(_channel);
+            if (_client is not null) return _client;
+
+            _channel = GrpcChannel.ForAddress("http://pipe", new GrpcChannelOptions
+            {
+                HttpHandler = new SocketsHttpHandler
+                {
+                    ConnectTimeout = CallTimeout,
+                    ConnectCallback = async (ctx, ct) =>
+                    {
+                        var pipe = new NamedPipeClientStream(
+                            ".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                        await pipe.ConnectAsync(ct).ConfigureAwait(false);
+                        return pipe;
+                    },
+                },
+            });
+
+            return _client = new RoRoRoHost.RoRoRoHostClient(_channel);
+        }
     }
 
     private void Reset()
     {
-        _channel?.Dispose();
-        _channel = null;
-        _client = null;
-        HostVersion = null;
+        lock (_connectLock)
+        {
+            _channel?.Dispose();
+            _channel = null;
+            _client = null;
+            HostVersion = null;
+            _handshaken = false;
+        }
     }
 
-    public void Dispose() => Reset();
+    public void Dispose()
+    {
+        lock (_connectLock)
+        {
+            _disposed = true;
+            _channel?.Dispose();
+            _channel = null;
+            _client = null;
+            HostVersion = null;
+            _handshaken = false;
+        }
+    }
 }
