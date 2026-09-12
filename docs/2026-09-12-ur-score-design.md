@@ -118,10 +118,14 @@ Ur-Score/
     App.xaml(.cs)          single-instance guard, then the window
     Core/Settings.cs       %LOCALAPPDATA%\626labs.ur-score\settings.json
     Core/ScoreWatch.cs     the poll → map → report loop
-    Source/ClanClient.cs   the two HTTP calls and their parsing
+    Core/WatchState.cs     the state enum every failure resolves to — no shared "error"
+    Core/RulesFile.cs      read RoRoRo's metric-rules.json; merge one rule on explicit click
+    Source/ClanClient.cs   the two HTTP calls
+    Source/ClanParser.cs   forgiving extraction; on a miss, the keys actually present
     Host/HostClient.cs     pipe connect, handshake, GetAccounts, ReportMetric
-    UI/MainWindow.xaml     mapped accounts, last poll, last value, errors, start/stop
-  tests/                   ClanClient parsing, mapping, cadence flooring
+    UI/MainWindow.xaml     per-account table, state sentence, Test now, Copy diagnostics
+  tests/                   parser shape-tolerance and miss-reporting, mapping,
+                           cadence flooring, rules-file merge preserves other rules
 ```
 
 **Capabilities declared:** `host.metrics.report` and `host.queries.accounts`. Nothing else. Absence
@@ -153,6 +157,75 @@ Score Watch first, or quit RoRoRo mid-battle. Neither is an error worth stopping
 - **`PermissionDenied`:** the capability was revoked in RoRoRo. Stop reporting, say which capability
   in the window, and keep polling nothing — do not retry in a loop against a decision the user made.
 
+### Never return empty quietly
+
+The response shape is known from **one** live verification, and the vendor's own published example
+was already wrong about it. So the shape this plugin expects will eventually be wrong too, and the
+failure it must never produce is an empty list that reads like a quiet clan.
+
+Every parse step names what it actually saw:
+
+- **Key matching is forgiving.** Case-insensitive, and each field accepts the spellings that
+  plausibly occur: `UserID` / `userId` / `userid`, `Points` / `points`. A shape change in casing
+  alone should not take the feature down.
+- **A miss reports the keys that were there.** If `Battles` is absent, the error names the keys the
+  object *did* have. If the battle config key is absent, it lists the battle names present. If
+  `PointContributions` is absent, it lists that battle's keys. The user — or whoever they send it
+  to — can then see the new shape without reading the vendor's stale docs.
+- **The raw response is kept.** The last response for each call goes to
+  `%LOCALAPPDATA%\626labs.ur-score\last-response\`, overwritten each poll, never transmitted
+  anywhere. A **Copy diagnostics** button puts the parse trail and those keys on the clipboard.
+- **Zero contributors is a loud state**, distinct in the window from "clan not found", "no battle
+  running", and "shape not understood". Four different causes that all look like silence otherwise.
+
+### The states, and why they must be distinguishable
+
+"Nothing happened" is the enemy. Each of these gets its own sentence in the window, never a shared
+"something went wrong":
+
+| State | What the user sees |
+| --- | --- |
+| No clan name set | Idle. Nothing is polled. |
+| Clan name not found | Named, with the spelling as sent, so a typo is visible |
+| Clan found, no battle running | Normal and frequent — explicitly *not* an error |
+| Battle running, shape not understood | The keys actually present, plus Copy diagnostics |
+| Contributions found, none match your accounts | How many contributors were seen, and which of your accounts were looked for |
+| Some accounts have no Roblox user id yet | Those accounts named; they are skipped, and that is why |
+| Matched and reporting | Per account: last value, last report time |
+| RoRoRo not running | Polling continues, reporting held |
+| Capability revoked | Which one, and that reporting has stopped |
+
+### Test now
+
+One button that runs a single full cycle and narrates every step: which clan was requested, whether
+a battle is live, how many contributors came back, which of your accounts matched, what value was
+reported for each. It is the difference between configuring this and guessing at it, and it is the
+first thing anyone will reach for when it does not work.
+
+### Closing the metric-id seam
+
+The metric id has to match the `metricId` in RoRoRo's `metric-rules.json` or nothing can ever
+alert, and a mismatch is silent on both sides: the plugin reports happily, the host stores history,
+no rule matches, no alert fires, nothing looks broken anywhere. For an audience whose bar is "a
+common Windows user", leaving that to hand-editing a JSON file in another app's data folder is not
+a setup step, it is a trap.
+
+So Ur Score **reads** RoRoRo's rules file — read-only, every cycle — and says plainly whether a rule
+for its configured metric id exists. Three states: a matching rule exists; the file exists but has
+no rule for this id; no rules file at all.
+
+And it offers a one-click **Add this rule to RoRoRo**, under these conditions, all of which matter:
+
+- It shows the exact JSON it will add, before adding it.
+- It fires only on that explicit click. Never on startup, never as a side effect of anything else.
+- It **merges**, never replaces: existing rules for other metric ids are preserved byte-for-byte.
+- It backs the file up first, beside the original.
+- It never edits an existing rule. A rule already present for this metric id is the user's, and the
+  button says so instead of overwriting their threshold.
+
+The host re-reads that file live, which the 2026-09-12 smoke run proved end to end, so the rule
+takes effect without restarting anything.
+
 ### Settings, and their defaults
 
 `%LOCALAPPDATA%\626labs.ur-score\settings.json`:
@@ -163,9 +236,9 @@ Score Watch first, or quit RoRoRo mid-battle. Neither is an error worth stopping
 | `metricId` | `clan.battle.points` | Opaque to the host; must match the `metricId` in RoRoRo's rules file or nothing can ever alert. |
 | `pollSeconds` | `180` | Floored at 180. A smaller configured value is raised, and the window says so. |
 
-The metric id is the one setting a user must copy into RoRoRo's `metric-rules.json` by hand, and a
-mismatch there is silent on both sides — the plugin reports happily, the host stores history, and no
-rule ever matches. The window shows the configured id prominently for exactly that reason.
+The metric id must match a rule in RoRoRo's `metric-rules.json`. That seam is closed by reading the
+file and offering to write the rule — see *Closing the metric-id seam* above — rather than by asking
+anyone to hand-edit JSON in another app's data folder.
 
 ### Rules this loop does not get to break
 
