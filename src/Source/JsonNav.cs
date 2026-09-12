@@ -37,10 +37,20 @@ internal static class JsonNav
     {
         if (root.ValueKind != JsonValueKind.Object) return root;
 
+        // An object wrapper wins over a null one. Returning on the first wrapper that is EITHER
+        // would let a response carrying both `data: null` and a populated `result` report "no
+        // battle running" while the payload sat unread one key over.
         foreach (var wrapper in Wrappers)
         {
-            if (TryGet(root, wrapper, out var inner)
-                && inner.ValueKind is JsonValueKind.Object or JsonValueKind.Null)
+            if (TryGet(root, wrapper, out var inner) && inner.ValueKind == JsonValueKind.Object)
+            {
+                return inner;
+            }
+        }
+
+        foreach (var wrapper in Wrappers)
+        {
+            if (TryGet(root, wrapper, out var inner) && inner.ValueKind == JsonValueKind.Null)
             {
                 return inner;
             }
@@ -94,5 +104,21 @@ internal static class JsonNav
         // A non-finite value would poison the host's history silently. Refuse it here as well as
         // at the report policy, because two gates on the same class of nonsense is cheap.
         return double.IsFinite(value);
+    }
+
+    /// <summary>
+    /// A Roblox user id, which must be a whole number a long can hold exactly. A double happily
+    /// holds 1e20, and casting that to long yields long.MaxValue — fabricating an id rather than
+    /// rejecting the row. 2^53 is the largest integer a double represents exactly, so anything
+    /// above it cannot be trusted to be the number that was sent.
+    /// </summary>
+    public static bool TryUserId(JsonElement element, out long id)
+    {
+        id = 0;
+        if (!TryNumber(element, out var raw)) return false;
+        if (raw < 0 || raw > 9007199254740992d || Math.Floor(raw) != raw) return false;
+
+        id = (long)raw;
+        return true;
     }
 }

@@ -158,4 +158,70 @@ public class ClanParserTests
         Assert.Equal(1, result.Contributions[0].UserId);
         Assert.Equal(4, result.Contributions[1].UserId);
     }
+
+    [Fact]
+    public void AllRowsRejectedIsAMissNotACleanEmptyList()
+    {
+        // Schema drift where every row fails its own check (here: Points becomes a nested object)
+        // must not read as "a battle nobody has scored in" — that is the one outcome this parser
+        // must never produce. Mixing rows that fail for different reasons is deliberate: the old
+        // code returned a clean empty list regardless of why every row failed.
+        var json = """
+            { "data": { "Battles": { "B": { "PointContributions": [
+                { "UserID": 1, "Points": { "amount": 10 } },
+                { "UserID": 2, "Points": { "amount": 20 } }
+            ] } } } }
+            """;
+        var result = ClanParser.Contributions(json, "B");
+
+        Assert.Empty(result.Contributions);
+        Assert.NotNull(result.Miss);
+        Assert.Contains("UserID", result.Miss);
+        Assert.Contains("Points", result.Miss);
+    }
+
+    [Fact]
+    public void AUserIdBeyondDoublePrecisionIsRejectedNotFabricated()
+    {
+        // A double cannot hold 1e20 exactly; casting it to long silently yields long.MaxValue.
+        // That is a fabricated id, not the id that was sent, and the row must be dropped rather
+        // than reported against the wrong account (or none).
+        var json = """
+            { "data": { "Battles": { "B": { "PointContributions": [
+                { "UserID": 1e20, "Points": 5 }
+            ] } } } }
+            """;
+        var result = ClanParser.Contributions(json, "B");
+
+        Assert.NotNull(result.Miss);
+        Assert.Empty(result.Contributions);
+    }
+
+    [Fact]
+    public void AnObjectWrapperWinsOverANullSiblingWrapper()
+    {
+        // Returning on the first wrapper that is EITHER an object or null would let a response
+        // carrying both "data": null and a populated "result" report "no battle running" while
+        // the real payload sat unread one key over.
+        var probe = ClanParser.ActiveBattle("""{ "data": null, "result": { "configName": "X" } }""");
+
+        Assert.Null(probe.Miss);
+        Assert.Equal("X", probe.ConfigName);
+    }
+
+    [Fact]
+    public void ToleratesCasingOnTheBattleKeyToo()
+    {
+        // ToleratesFieldCasing varies every key except the one used to look the battle up. A
+        // regression that made only the battle-name lookup case-sensitive would slip past it.
+        var json = """
+            { "data": { "Battles": { "arcadebattle2026": { "PointContributions": [
+                { "UserID": 1, "Points": 10 }
+            ] } } } }
+            """;
+        var result = ClanParser.Contributions(json, "ArcadeBattle2026");
+
+        Assert.Null(result.Miss);
+        Assert.Equal(1, result.Contributions[0].UserId);
+    }
 }

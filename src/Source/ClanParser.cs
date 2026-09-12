@@ -104,10 +104,20 @@ public static class ClanParser
                 // the middle of the array must not discard the rows around it.
                 if (!JsonNav.TryGet(row, "UserID", out var userId)) continue;
                 if (!JsonNav.TryGet(row, "Points", out var points)) continue;
-                if (!JsonNav.TryNumber(userId, out var id)) continue;
+                if (!JsonNav.TryUserId(userId, out var id)) continue;
                 if (!JsonNav.TryNumber(points, out var value)) continue;
 
-                contributions.Add(new Contribution((long)id, value));
+                contributions.Add(new Contribution(id, value));
+            }
+
+            // Rows came back and none of them could be read. Returning a clean empty list here
+            // would be indistinguishable from a battle nobody has scored in — the one outcome
+            // this parser must never produce. Name what a rejected row actually held.
+            if (contributions.Count == 0 && rows.GetArrayLength() > 0)
+            {
+                return Miss($"Battle '{configName}' returned {rows.GetArrayLength()} contribution "
+                            + $"row(s) and none could be read. First row's keys: "
+                            + $"{Join(JsonNav.Keys(rows[0]))}.");
             }
 
             return new ContributionsResult(contributions, null);
