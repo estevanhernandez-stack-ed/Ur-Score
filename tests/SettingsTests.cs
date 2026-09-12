@@ -65,4 +65,34 @@ public class SettingsTests
 
         Assert.Equal(Settings.Defaults, Settings.Load(path));
     }
+
+    [Fact]
+    public void AnEmptyJsonObjectYieldsUsableDefaultsForBothStrings()
+    {
+        // Deserializing a record does not enforce non-nullability. Valid JSON that simply has
+        // nothing in it must not hand back a Settings whose ClanName or MetricId is null.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+        File.WriteAllText(path, "{}");
+
+        var loaded = Settings.Load(path);
+
+        Assert.Equal(Settings.Defaults.ClanName, loaded.ClanName);
+        Assert.Equal(Settings.Defaults.MetricId, loaded.MetricId);
+    }
+
+    [Fact]
+    public void APartialFileKeepsWhatItHasAndDefaultsWhatIsMissing()
+    {
+        // The far more likely real-world shape than corrupt syntax: a file missing one line.
+        // Repair per field rather than discarding the whole thing the user wrote.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+        File.WriteAllText(path, "{\"clanName\":\"Noodle Clan\"}");
+
+        var loaded = Settings.Load(path);
+
+        Assert.Equal("Noodle Clan", loaded.ClanName);
+        Assert.Equal(Settings.DefaultMetricId, loaded.MetricId);
+    }
 }

@@ -21,8 +21,9 @@ public sealed record Settings(
     /// turning one off persists.
     /// </summary>
     public IReadOnlySet<Guid> Excluded => (ExcludedAccountIds ?? [])
-        .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
-        .Where(g => g != Guid.Empty)
+        .Select(id => (Parsed: Guid.TryParse(id, out var g), Id: g))
+        .Where(x => x.Parsed)
+        .Select(x => x.Id)
         .ToHashSet();
 
     /// <summary>The vendor's clan endpoints carry a three minute server cache
@@ -57,7 +58,19 @@ public sealed record Settings(
         {
             var file = path ?? DefaultPath;
             if (!File.Exists(file)) return Defaults;
-            return JsonSerializer.Deserialize<Settings>(File.ReadAllText(file), Options) ?? Defaults;
+
+            var loaded = JsonSerializer.Deserialize<Settings>(File.ReadAllText(file), Options);
+            if (loaded is null) return Defaults;
+
+            // A record's required-looking members are not enforced by deserialization: a file
+            // missing one line produces nulls that every downstream consumer trusting
+            // `Nullable enable` would then NRE on. Repair the missing fields and keep the rest of
+            // what the user wrote.
+            return loaded with
+            {
+                ClanName = loaded.ClanName ?? Defaults.ClanName,
+                MetricId = string.IsNullOrWhiteSpace(loaded.MetricId) ? Defaults.MetricId : loaded.MetricId,
+            };
         }
         catch (Exception)
         {
