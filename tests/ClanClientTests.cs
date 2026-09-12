@@ -22,6 +22,21 @@ public class ClanClientTests
     private static HttpResponseMessage Ok(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
+    /// <summary>
+    /// Never completes on its own — only cancellation of the token handed to it ends the wait.
+    /// Stands in for a merely slow endpoint: with a short <see cref="HttpClient.Timeout"/> set by
+    /// the caller, that cancellation arrives in milliseconds instead of the real 30-second bound.
+    /// </summary>
+    private sealed class NeverRespondsHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+            return new HttpResponseMessage(HttpStatusCode.OK);   // unreachable: the delay above never returns normally
+        }
+    }
+
     [Fact]
     public async Task IdentifiesItselfInTheUserAgent()
     {
@@ -39,17 +54,16 @@ public class ClanClientTests
     [Fact]
     public async Task EscapesTheClanNameIntoThePath()
     {
-        // Clan names contain spaces. Unescaped, the request is malformed and the failure that
-        // comes back reads exactly like "no clan by that name".
+        // A slash, not a space: Uri auto-escapes a bare space to %20 in AbsoluteUri whether or not
+        // we escape it ourselves, so a space cannot tell escaped from unescaped apart and an
+        // earlier version of this test stayed green with the escaping deleted. A slash changes the
+        // request's SHAPE if it is not escaped — it becomes another path segment.
         var handler = new StubHandler(_ => Ok("""{ "data": { "Battles": {} } }"""));
         var client = new ClanClient(new HttpClient(handler), rawDirectory: null);
 
-        await client.ContributionsAsync("Noodle Clan", "B", CancellationToken.None);
+        await client.ContributionsAsync("Noodle/Clan", "B", CancellationToken.None);
 
-        // RequestUri.ToString() unescapes %20 back to a literal space for display — it is not
-        // what goes out over the wire. AbsoluteUri is the escaped form that actually gets sent,
-        // which is the thing this test exists to check.
-        Assert.Contains("Noodle%20Clan", handler.Requests[0].RequestUri!.AbsoluteUri);
+        Assert.EndsWith("/clan/Noodle%2FClan", handler.Requests[0].RequestUri!.AbsoluteUri);
     }
 
     [Fact]
@@ -73,6 +87,24 @@ public class ClanClientTests
     {
         var handler = new StubHandler(_ => throw new HttpRequestException("no network"));
         var client = new ClanClient(new HttpClient(handler), rawDirectory: null);
+
+        var probe = await client.ActiveBattleAsync(CancellationToken.None);
+
+        Assert.NotNull(probe.Miss);
+        Assert.True(probe.MissIsTransport);
+    }
+
+    [Fact]
+    public async Task ASlowEndpointIsAMissNotAnUnhandledCancellation()
+    {
+        // A merely slow endpoint looks, to the exception type, exactly like HttpClient's own
+        // request timeout firing — an OperationCanceledException with nobody having asked to
+        // stop. Before the fix, the bare `catch (OperationCanceledException) { throw; }` rethrew
+        // that as though the caller had cancelled. A short HttpClient.Timeout reproduces the same
+        // exception shape in milliseconds, without waiting out ClanClient's own 30-second bound —
+        // this is deliberately fast, not a multi-second sleep in the suite.
+        var http = new HttpClient(new NeverRespondsHandler()) { Timeout = TimeSpan.FromMilliseconds(50) };
+        var client = new ClanClient(http, rawDirectory: null);
 
         var probe = await client.ActiveBattleAsync(CancellationToken.None);
 

@@ -29,6 +29,13 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
     public static string UserAgent { get; } =
         $"UrScore/{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0"} (RoRoRo plugin)";
 
+    /// <summary>
+    /// Bounds one request. Two calls per poll against a three-minute cadence, so the framework's
+    /// default 100 seconds is far too long — a slow endpoint would eat most of the interval before
+    /// giving up.
+    /// </summary>
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
+
     public async Task<BattleProbe> ActiveBattleAsync(CancellationToken cancellationToken)
     {
         var (body, error) = await GetAsync($"{BaseUrl}/activeClanBattle", "active-battle", cancellationToken)
@@ -55,11 +62,16 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
     {
         try
         {
+            // Linked, so a caller's stop still stops us, and CancelAfter gives us our own bound
+            // regardless of the HttpClient we were handed.
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(RequestTimeout);
+
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.UserAgent.ParseAdd(UserAgent);
 
-            using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var response = await http.SendAsync(request, timeout.Token).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
 
             // Saved BEFORE the status check: a 500 carrying a body that explains itself is exactly
             // the thing worth having on disk.
@@ -69,9 +81,13 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
                 ? (body, null)
                 : (null, $"The {label} request returned {(int)response.StatusCode} {response.ReasonPhrase}.");
         }
-        catch (OperationCanceledException)
+        // Guarded on the CALLER's token, not the linked one. A stop the user asked for is not a
+        // failure to report and must propagate; our own timeout is a transport failure and must
+        // fall through to the catch below and become a Miss. Before this guard, a merely slow
+        // endpoint threw out of the poll loop dressed as a deliberate stop.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            throw;   // a stop is not a failure to report
+            throw;
         }
         catch (Exception ex)
         {
