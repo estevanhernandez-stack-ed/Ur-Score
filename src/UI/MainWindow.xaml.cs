@@ -101,7 +101,7 @@ public partial class MainWindow : Window
 
         StateLine.Text = "Not started.";
         DetailLine.Text = string.IsNullOrWhiteSpace(_settings.ClanName)
-            ? "Set a clan name in settings.json, then press Start."
+            ? $"Set a clan name in {Settings.DefaultPath}, then press Start."
             : $"Watching {_settings.ClanName} when started.";
     }
 

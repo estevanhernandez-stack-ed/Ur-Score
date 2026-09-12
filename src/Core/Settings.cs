@@ -58,7 +58,17 @@ public sealed record Settings(
         try
         {
             var file = path ?? DefaultPath;
-            if (!File.Exists(file)) return Defaults;
+
+            if (!File.Exists(file))
+            {
+                // F1: the README and the window both say "start it once and it creates the file" —
+                // and that was false. Save's only other caller needs seeded rows, which need a
+                // reachable RoRoRo, so a fresh install with no host running yet opened to a folder
+                // that never appeared. Writing the defaults here is what makes that claim true, and
+                // it gives the user a real file to open and edit instead of a blank folder.
+                Save(Defaults, file);
+                return Defaults;
+            }
 
             var loaded = JsonSerializer.Deserialize<Settings>(File.ReadAllText(file), Options);
             if (loaded is null) return Defaults;

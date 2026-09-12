@@ -70,6 +70,23 @@ public class SettingsTests
     }
 
     [Fact]
+    public void LoadingWithNoFilePresentWritesTheDefaultsSoThereIsSomethingToEdit()
+    {
+        // The README and the window both say "start it once and it creates the file." Before this,
+        // that was false: Save's only other caller needs seeded rows, which need a reachable
+        // RoRoRo — unreachable on a fresh install that has never run RoRoRo yet. A user following
+        // that instruction found no folder at all and stopped.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+
+        var loaded = Settings.Load(path);
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(Settings.Defaults, loaded);
+        Assert.Equal(Settings.Defaults, Settings.Load(path));   // idempotent on a second read
+    }
+
+    [Fact]
     public void AnUnreadableFileYieldsDefaultsRatherThanThrowing()
     {
         // The window must open. A settings file someone hand-edited into invalid JSON is a thing
