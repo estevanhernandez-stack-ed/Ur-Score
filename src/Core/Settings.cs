@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Labs626.UrScore.Core;
 
@@ -21,6 +22,14 @@ public sealed record Settings(
     /// because nothing was on the list yet. Excluding means a new account is watched by default and
     /// turning one off persists.
     /// </summary>
+    /// <remarks>
+    /// F9: <c>[JsonIgnore]</c> — without it, <c>System.Text.Json</c> serializes every public
+    /// readable property by default, computed ones included, so <c>Save</c> was writing a
+    /// PascalCase <c>"Excluded"</c> key nothing reads back (the real, settable key is
+    /// <c>excludedAccountIds</c>, camelCase, per the README). A phantom key next to the real one in
+    /// a file we tell people to hand-edit is confusion with no upside.
+    /// </remarks>
+    [JsonIgnore]
     public IReadOnlySet<Guid> Excluded => (ExcludedAccountIds ?? [])
         .Select(id => (Parsed: Guid.TryParse(id, out var g), Id: g))
         .Where(x => x.Parsed)
@@ -43,6 +52,13 @@ public sealed record Settings(
 
     /// <summary>Honours the floor rather than trusting the file. A hand-edited 5 becomes 180 and
     /// the window says so.</summary>
+    /// <remarks>
+    /// F9: <c>[JsonIgnore]</c> for the same reason as <see cref="Excluded"/> — a second,
+    /// PascalCase, phantom <c>"EffectivePollSeconds"</c> key was being written next to the real
+    /// <c>pollSeconds</c>, giving someone wanting a ten-minute poll a coin flip between the two
+    /// keys, one of which does nothing.
+    /// </remarks>
+    [JsonIgnore]
     public int EffectivePollSeconds => Math.Max(MinimumPollSeconds, PollSeconds);
 
     private static readonly JsonSerializerOptions Options = new()

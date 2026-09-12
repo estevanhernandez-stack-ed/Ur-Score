@@ -36,16 +36,58 @@ public class SettingsTests
     }
 
     [Fact]
-    public void ExcludedAccountsRoundTripAndIgnoreRubbish()
+    public void ExcludedAccountsIgnoreRubbishEntries()
     {
-        // An exclude list, not an include list: a new account is watched by default, and turning
-        // one off is what persists. A hand-edited entry that is not a Guid is dropped rather than
-        // taking the list down with it.
+        // Renamed from ExcludedAccountsRoundTripAndIgnoreRubbish: it never touched disk, so it
+        // proved nothing about a round trip — only that Settings.Excluded, built in memory, drops
+        // a hand-edited entry that is not a Guid rather than taking the list down with it. The
+        // disk round trip this was named for is its own test below.
         var settings = new Settings("Clan", "clan.battle.points", 180,
             ["9ad5e605-6b41-478c-add3-b916a31a5ab2", "not-a-guid"]);
 
         Assert.Single(settings.Excluded);
         Assert.Contains(Guid.Parse("9ad5e605-6b41-478c-add3-b916a31a5ab2"), settings.Excluded);
+    }
+
+    [Fact]
+    public void ExcludedAccountsSurviveADiskRoundTrip()
+    {
+        // The behaviour every unticked account depends on: OnSendToggled saves ExcludedAccountIds
+        // to disk, and the next launch's SeedRowsAsync reads Settings.Excluded back from whatever
+        // Load deserializes. Before this test, that whole path rested entirely on
+        // System.Text.Json's binding of a record's primary constructor from disk JSON — untested,
+        // with a privacy-shaped failure mode (an account the user turned off silently turning back
+        // on and reporting again).
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+        var written = new Settings("Clan", "clan.battle.points", 180,
+            ["9ad5e605-6b41-478c-add3-b916a31a5ab2", "88dc7685-3a36-4f93-b526-a9bff2d7da6c"]);
+
+        Settings.Save(written, path);
+        var loaded = Settings.Load(path);
+
+        Assert.Equal(2, loaded.Excluded.Count);
+        Assert.Contains(Guid.Parse("9ad5e605-6b41-478c-add3-b916a31a5ab2"), loaded.Excluded);
+        Assert.Contains(Guid.Parse("88dc7685-3a36-4f93-b526-a9bff2d7da6c"), loaded.Excluded);
+    }
+
+    [Fact]
+    public void SavedJsonHasNoPhantomKeysForComputedProperties()
+    {
+        // F9: Excluded and EffectivePollSeconds are computed properties. Without [JsonIgnore],
+        // System.Text.Json serializes every public readable property by default, so Save was
+        // writing PascalCase "Excluded" and "EffectivePollSeconds" keys nothing reads back —
+        // sitting right next to the real, camelCase, settable keys in a file the README tells
+        // people to hand-edit. A coin flip between pollSeconds and EffectivePollSeconds should not
+        // exist.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+
+        Settings.Save(new Settings("Clan", "clan.battle.points", 300, ["9ad5e605-6b41-478c-add3-b916a31a5ab2"]), path);
+        var json = File.ReadAllText(path);
+
+        Assert.DoesNotContain("Excluded\"", json);
+        Assert.DoesNotContain("EffectivePollSeconds", json);
     }
 
     [Fact]
