@@ -34,10 +34,7 @@ public sealed record ClanStanding(long? Place, double? Points)
             if (!JsonNav.TryGet(body, "Battles", out var battles)) return Empty;
             if (!JsonNav.TryGet(battles, configName, out var battle)) return Empty;
 
-            long? place = JsonNav.TryGet(battle, "Place", out var placeElement)
-                          && JsonNav.TryNumber(placeElement, out var placeValue)
-                ? (long)placeValue
-                : null;
+            long? place = PlaceOf(battle);
 
             double? points = JsonNav.TryGet(battle, "Points", out var pointsElement)
                              && JsonNav.TryNumber(pointsElement, out var pointsValue)
@@ -55,6 +52,25 @@ public sealed record ClanStanding(long? Place, double? Points)
     }
 
     private static ClanStanding Empty { get; } = new(null, null);
+
+    /// <summary>
+    /// A clan rank: a whole number, at least 1, inside the range a double represents exactly.
+    /// <para>
+    /// Not a bare cast, and the reason sits one file over. `JsonNav.TryUserId` exists because
+    /// casting a double to long fabricates rather than rejects — 1e20 becomes long.MaxValue — and
+    /// the same trap was walked into here anyway. A fabricated rank is worse than no rank, because
+    /// it is shown to the user as their clan's standing. Zero and negatives are absences too:
+    /// there is no 0th place.
+    /// </para>
+    /// </summary>
+    private static long? PlaceOf(JsonElement battle)
+    {
+        if (!JsonNav.TryGet(battle, "Place", out var element)) return null;
+        if (!JsonNav.TryNumber(element, out var value)) return null;
+        if (value < 1 || value > 9007199254740992d || Math.Floor(value) != value) return null;
+
+        return (long)value;
+    }
 
     /// <summary>
     /// The leaderboard, highest first, with the user's own accounts marked.
