@@ -51,6 +51,28 @@ public class ScoreWatchTests
         }
     }
 
+    private sealed class GatedSource(TaskCompletionSource gate, Action onEnter) : IClanSource
+    {
+        private int _calls;
+
+        public async Task<BattleProbe> ActiveBattleAsync(CancellationToken ct)
+        {
+            onEnter();
+
+            // Only the FIRST call blocks. A second call landing here while the first is still
+            // blocked is exactly what a missing reentrancy guard would allow.
+            if (Interlocked.Increment(ref _calls) == 1)
+            {
+                await gate.Task;
+            }
+
+            return new BattleProbe("B", null);
+        }
+
+        public Task<ContributionsResult> ContributionsAsync(string clan, string config, CancellationToken ct) =>
+            Task.FromResult(new ContributionsResult([new(111, 4200)], null));
+    }
+
     private static Settings Configured => new("Noodle Clan", "clan.battle.points", 180);
 
     private static ScoreWatch Watch(
@@ -302,5 +324,38 @@ public class ScoreWatchTests
 
         Assert.Equal("B", third.Battle);
         Assert.Empty(third.Accounts);
+    }
+
+    [Fact]
+    public async Task TwoOverlappingCyclesDoNotBothRun()
+    {
+        // Task 9 drives this from a poll timer AND a "Test now" button, so overlap is not
+        // hypothetical. Before the semaphore, two in-flight cycles sent the SAME observation twice
+        // while ReportPolicy.Sent recorded one — the policy's account of what left the plugin
+        // disagreeing with what the host actually received.
+        //
+        // Deterministic by construction: the source blocks on a gate the test controls, so the
+        // second cycle either entered (no guard) or did not (guard working). Nothing is timed.
+        var entered = 0;
+        var gate = new TaskCompletionSource();
+
+        var source = new GatedSource(gate, () => Interlocked.Increment(ref entered));
+        var host = new FakeHost(true, [new(Mine, 111, "mine")]);
+        var watch = Watch(source, host);
+
+        var first = watch.RunOnceAsync(CancellationToken.None);
+        var second = watch.RunOnceAsync(CancellationToken.None);
+
+        // One cycle is inside the source and blocked; the other must not have got in.
+        await Task.Yield();
+        Assert.Equal(1, Volatile.Read(ref entered));
+
+        gate.SetResult();
+        await first;
+        await second;
+
+        // And having run one after the other, the observation was sent once per cycle — never
+        // twice for the same read.
+        Assert.Equal(2, host.Reported.Count);
     }
 }
