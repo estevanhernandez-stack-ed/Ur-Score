@@ -119,13 +119,16 @@ Ur-Score/
     Core/Settings.cs       %LOCALAPPDATA%\626labs.ur-score\settings.json
     Core/ScoreWatch.cs     the poll → map → report loop
     Core/WatchState.cs     the state enum every failure resolves to — no shared "error"
-    Core/RulesFile.cs      read RoRoRo's metric-rules.json; merge one rule on explicit click
+    Core/RulesFile.cs      read RoRoRo's metric-rules.json; merge one owned rule on click
+    Core/ReportPolicy.cs   the only path to the host client — metric id, subject, finite value
     Source/ClanClient.cs   the two HTTP calls
     Source/ClanParser.cs   forgiving extraction; on a miss, the keys actually present
     Host/HostClient.cs     pipe connect, handshake, GetAccounts, ReportMetric
     UI/MainWindow.xaml     per-account table, state sentence, Test now, Copy diagnostics
   tests/                   parser shape-tolerance and miss-reporting, mapping,
-                           cadence flooring, rules-file merge preserves other rules
+                           cadence flooring, rules-file merge preserves other rules,
+                           policy drops unlisted subjects and ids, and a fence that
+                           the policy is the only route to the client
 ```
 
 **Capabilities declared:** `host.metrics.report` and `host.queries.accounts`. Nothing else. Absence
@@ -260,7 +263,60 @@ Every one of these is from the author guide, and every one of them fails silentl
   phone only starves the host of the samples a rate needs.
 - **Do throttle for the vendor.** Three minutes, floored, because that is their cache.
 
-## §6 Accounts that cannot be mapped
+## §6 The report policy
+
+The clan endpoint returns **every** contributor — around seventy-five entries of other people's
+Roblox user ids and scores. "Own accounts only" (§1.1) decides what Ur Score does with that, but as
+a decision buried in code it is invisible to the user and unverifiable by anyone. The report policy
+turns it into a declared boundary that is stated in the window and enforced at one place.
+
+**One chokepoint.** Every outbound report passes `ReportPolicy`, and nothing else in the plugin is
+permitted to touch the host client. Three checks, and anything failing one is dropped and counted:
+
+| Check | Rule | Why this one |
+| --- | --- | --- |
+| Metric id | exactly the configured id | One id, not a family. A shape change that starts yielding new field names cannot invent new metrics to send. |
+| Subject | an account in the user's allow list | Per-account, individually toggleable. An alt you do not care about sends nothing at all. |
+| Value | a finite number | `NaN` or an infinity would poison the host's history silently, and that arrives from a shape change far more plausibly than from malice. |
+
+**What never leaves.** Other members' user ids and scores are read, compared against the user's
+accounts, and dropped. They are never reported, never written to the rules file, and never logged.
+The clan name and the raw response stay on the machine — the raw response only in
+`last-response\`, for diagnostics, overwritten each poll.
+
+**Stated where it can be read.** The window carries a **Report policy** section in plain words, not
+a promise buried in this document: *"Ur Score sends points for 3 of your 8 accounts, as
+`clan.battle.points`. Nothing else leaves this plugin."*
+
+**Enforced, not asserted.** Two tests, and the second is the one that survives a refactor:
+
+1. A report for an unlisted account, and a report with an unconfigured metric id, are both dropped
+   at the gate and never reach the client.
+2. A fence proving the gate is the **only** path to the host client — a direct client call from
+   anywhere else fails the build. Same shape as the host's capability map, where absence is denial.
+
+### The one thing it writes
+
+Rule writing (see *Closing the metric-id seam*) sits under the same policy: exactly one rule row,
+for exactly the configured metric id, and nothing else in that file is ever touched.
+
+Each rule Ur Score writes carries an **`owner`** field holding this plugin's id. That is provenance,
+not security — the file is meant to be hand-editable and always will be — and it exists because one
+file has several writers: the user, this plugin, and any future one.
+
+- A rule with **no owner is the user's**, and no plugin ever touches it.
+- A rule owned by **someone else** is left alone and shown, not overwritten.
+- Ur Score only ever reads, updates or removes rules **it owns**.
+
+This costs nothing in the host: the rules parser deserializes each row with default
+`System.Text.Json` behaviour, so an unknown `owner` property is already ignored by shipped code. No
+host change is needed for any of it.
+
+**Ur Score also keeps its own inventory** of what it wrote, in its own folder. That is what lets it
+say "the rule I added has since been changed" rather than silently re-adding it or overwriting a
+threshold the user tuned by hand. Drift is reported, never corrected.
+
+## §7 Accounts that cannot be mapped
 
 `SavedAccount.roblox_user_id` is documented as `0` when not yet resolved. Those accounts are
 skipped and **listed by name in the window**, because a silently unwatched account is the failure
@@ -270,14 +326,14 @@ a user would never diagnose.
 streamer mode is on — which is exactly when someone is streaming a clan battle. A plugin matching
 on names would work in every test and break at the only moment that matters.
 
-## §7 What is out of scope
+## §8 What is out of scope
 
 - Watching clan members who are not your accounts (§1.1).
 - Any threshold, cooldown or notification logic. RoRoRo owns all of it.
 - Posting anything anywhere. Ur Score has no webhook and no outbound destination but the host pipe.
 - Any game action. The macro wall is absolute: this reads HTTP and writes to a named pipe.
 
-## §8 Prerequisites outside this repo
+## §9 Prerequisites outside this repo
 
 1. **Publish `ROROROblox.PluginContract` 0.10.0.** One manual dispatch of `publish-nuget.yml` in
    the host repo. Deferred by decision §1.4 until Ur Score is built.
