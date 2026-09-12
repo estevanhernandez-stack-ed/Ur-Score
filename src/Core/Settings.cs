@@ -61,9 +61,20 @@ public sealed record Settings(
     [JsonIgnore]
     public int EffectivePollSeconds => Math.Max(MinimumPollSeconds, PollSeconds);
 
+    /// <summary>
+    /// Residual from F1: writing the defaults file on first load (F1) made a pre-existing casing
+    /// mismatch visible for the first time — Save wrote PascalCase keys ("ClanName", "PollSeconds")
+    /// while the README's Settings reference documents camelCase ("clanName", "pollSeconds").
+    /// Reads never broke (case-insensitive below), but a user comparing a real, freshly-created
+    /// file against the docs now saw different keys in the one file this plugin lets them edit.
+    /// <c>PropertyNameCaseInsensitive</c> — deliberately still on — is what lets a PascalCase file
+    /// written by an earlier build keep loading under this policy; verified rather than assumed,
+    /// see <c>ASettingsFileWrittenByAnOlderPascalCaseBuildStillLoads</c>.
+    /// </summary>
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,

@@ -91,6 +91,62 @@ public class SettingsTests
     }
 
     [Fact]
+    public void SavedJsonUsesTheCamelCaseKeysTheReadmeDocuments()
+    {
+        // Residual from F1: writing the defaults file on first load made a pre-existing casing
+        // mismatch visible for the first time. Before this, Save wrote the C# property names
+        // as-is (PascalCase — "ClanName", "PollSeconds") while the README's Settings reference
+        // table documents camelCase ("clanName", "pollSeconds") — a real, freshly-created file no
+        // longer matched the one document a user would compare it against.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+
+        Settings.Save(new Settings("Noodle Clan", "run.points", 300,
+            ["9ad5e605-6b41-478c-add3-b916a31a5ab2"], ResolveNames: false), path);
+        var json = File.ReadAllText(path);
+
+        Assert.Contains("\"clanName\"", json);
+        Assert.Contains("\"metricId\"", json);
+        Assert.Contains("\"pollSeconds\"", json);
+        Assert.Contains("\"excludedAccountIds\"", json);
+        Assert.Contains("\"resolveNames\"", json);
+
+        Assert.DoesNotContain("\"ClanName\"", json);
+        Assert.DoesNotContain("\"MetricId\"", json);
+        Assert.DoesNotContain("\"PollSeconds\"", json);
+        Assert.DoesNotContain("\"ExcludedAccountIds\"", json);
+        Assert.DoesNotContain("\"ResolveNames\"", json);
+    }
+
+    [Fact]
+    public void ASettingsFileWrittenByAnOlderPascalCaseBuildStillLoads()
+    {
+        // Checked rather than assumed, per the coordinator's own instruction: adding
+        // PropertyNamingPolicy could plausibly have broken reading a file an earlier build (before
+        // the naming policy existed) already wrote in PascalCase — someone may already have one.
+        // PropertyNameCaseInsensitive is what's meant to prevent that; this proves it does.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "settings.json");
+        File.WriteAllText(path, """
+            {
+              "ClanName": "Noodle Clan",
+              "MetricId": "run.points",
+              "PollSeconds": 300,
+              "ExcludedAccountIds": ["9ad5e605-6b41-478c-add3-b916a31a5ab2"],
+              "ResolveNames": false
+            }
+            """);
+
+        var loaded = Settings.Load(path);
+
+        Assert.Equal("Noodle Clan", loaded.ClanName);
+        Assert.Equal("run.points", loaded.MetricId);
+        Assert.Equal(300, loaded.PollSeconds);
+        Assert.Single(loaded.Excluded);
+        Assert.False(loaded.ResolveNames);
+    }
+
+    [Fact]
     public void NoExclusionsMeansEveryAccountIsWatched()
     {
         Assert.Empty(Settings.Defaults.Excluded);
