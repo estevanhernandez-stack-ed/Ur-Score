@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
@@ -33,18 +35,74 @@ public partial class MainWindow : Window
     /// <summary>One row of the accounts grid: the dashboard figures (position, points, rate) and
     /// the diagnostic ones (last value actually sent, and when) side by side, because a toggled-off
     /// account keeps climbing on the left while the right two columns sit still — which is the
-    /// point.</summary>
-    public sealed class Row
+    /// point.
+    /// <para>
+    /// F10: implements <see cref="INotifyPropertyChanged"/> so mutating a row's properties in place
+    /// (every cycle, for every row) updates its cells directly instead of the window calling
+    /// <c>AccountsGrid.Items.Refresh()</c> after every render. <c>Refresh()</c> throws if a cell is
+    /// mid-edit — exactly the state the Send checkbox is in for the moment between a click and the
+    /// edit committing — so a poll tick landing in that instant turned the state line into
+    /// "Something unexpected went wrong" for no reason a user could see or reproduce reliably.
+    /// </para>
+    /// </summary>
+    public sealed class Row : INotifyPropertyChanged
     {
-        public bool Send { get; set; } = true;
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private bool _send = true;
+        private string _position = "—";
+        private string _points = "—";
+        private string _ratePerMinute = "—";
+        private string _lastValue = "—";
+        private string _lastSent = "—";
+
+        public bool Send
+        {
+            get => _send;
+            set => SetField(ref _send, value);
+        }
+
+        // Set once, at seed time, and never mutated afterward — no notification needed.
         public string DisplayName { get; set; } = "";
         public Guid AccountId { get; set; }
         public long RobloxUserId { get; set; }
-        public string Position { get; set; } = "—";
-        public string Points { get; set; } = "—";
-        public string RatePerMinute { get; set; } = "—";
-        public string LastValue { get; set; } = "—";
-        public string LastSent { get; set; } = "—";
+
+        public string Position
+        {
+            get => _position;
+            set => SetField(ref _position, value);
+        }
+
+        public string Points
+        {
+            get => _points;
+            set => SetField(ref _points, value);
+        }
+
+        public string RatePerMinute
+        {
+            get => _ratePerMinute;
+            set => SetField(ref _ratePerMinute, value);
+        }
+
+        public string LastValue
+        {
+            get => _lastValue;
+            set => SetField(ref _lastValue, value);
+        }
+
+        public string LastSent
+        {
+            get => _lastSent;
+            set => SetField(ref _lastSent, value);
+        }
+
+        private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value)) return;
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     /// <summary>One row of the leaderboard grid.</summary>
@@ -186,7 +244,6 @@ public partial class MainWindow : Window
             });
         }
 
-        AccountsGrid.Items.Refresh();
         RenderPolicy();
 
         // Push the (possibly grown) allow list into the persistent watch, if one exists yet — a
@@ -328,7 +385,6 @@ public partial class MainWindow : Window
             row.LastSent = line.LastReportedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "—";
         }
 
-        AccountsGrid.Items.Refresh();
         RenderPolicy();
         RenderRule();
     }
@@ -414,7 +470,10 @@ public partial class MainWindow : Window
             });
         }
 
-        LeaderboardGrid.Items.Refresh();
+        // No Refresh() needed: LeaderboardGrid is read-only (no cell can be mid-edit, so nothing
+        // here can throw the way AccountsGrid's could) and _leaderboardRows is an
+        // ObservableCollection whose Clear/Add above already raise the change notifications the
+        // grid is bound to.
     }
 
     /// <summary>
@@ -450,8 +509,6 @@ public partial class MainWindow : Window
             row.RatePerMinute = rate is double perMinute ? $"{perMinute:+0.#;-0.#;0}/min" : "—";
             _previousSamples[row.AccountId] = current;
         }
-
-        AccountsGrid.Items.Refresh();
     }
 
     private void RenderPolicy()
@@ -522,9 +579,21 @@ public partial class MainWindow : Window
 
         if (answer != MessageBoxResult.OK) return;
 
-        if (RulesFile.AddRule(null, _settings.MetricId, DefaultThreshold, DefaultWindowMinutes))
+        try
         {
-            RuleInventory.Record(_settings.MetricId, DefaultThreshold);
+            // F10: unguarded before this — RulesFile.AddRule does real file IO (a copy for the
+            // backup, then a write) with no try/catch of its own, unlike RuleInventory.Record,
+            // which already protects itself. A locked file or a denied permission mid-click must
+            // not crash the window that exists to make this easy.
+            if (RulesFile.AddRule(null, _settings.MetricId, DefaultThreshold, DefaultWindowMinutes))
+            {
+                RuleInventory.Record(_settings.MetricId, DefaultThreshold);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not add the rule: {ex.Message}", "Ur Score",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         RenderRule();
@@ -544,7 +613,17 @@ public partial class MainWindow : Window
             .AppendLine(string.Join(Environment.NewLine, _trail.TakeLast(40)))
             .ToString();
 
-        Clipboard.SetText(text);
-        DetailLine.Text = "Diagnostics copied to the clipboard.";
+        try
+        {
+            // F10: the one button someone reaches for when everything else has already failed
+            // must not itself throw — Clipboard.SetText can (another app holding the clipboard
+            // mid-copy is a common, transient Windows condition, not a bug in either program).
+            Clipboard.SetText(text);
+            DetailLine.Text = "Diagnostics copied to the clipboard.";
+        }
+        catch (Exception ex)
+        {
+            DetailLine.Text = $"Could not copy diagnostics: {ex.Message}";
+        }
     }
 }
