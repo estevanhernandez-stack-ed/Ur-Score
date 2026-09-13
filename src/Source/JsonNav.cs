@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Labs626.UrScore.Source;
@@ -47,7 +48,7 @@ internal static class JsonNav
             value = n;
         }
         else if (element.ValueKind == JsonValueKind.String
-                 && double.TryParse(element.GetString(), out var parsed))
+                 && double.TryParse(element.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
         {
             value = parsed;
         }
