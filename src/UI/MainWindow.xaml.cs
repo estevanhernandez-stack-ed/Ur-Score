@@ -648,6 +648,17 @@ public partial class MainWindow : Window
         var recipe = parsed.Recipe!;
         var installed = _store.Find(recipe.Slug);
 
+        if (installed is not null
+            && (!string.Equals(installed.Recipe.Name, recipe.Name, StringComparison.Ordinal)
+                || !string.Equals(installed.Recipe.Author, recipe.Author, StringComparison.Ordinal)))
+        {
+            MessageBox.Show(this,
+                $"A different recipe, {installed.Recipe.Name}, is already installed under the same file name. "
+                + "Rename one of them before importing.",
+                "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         if (installed is not null && string.Equals(installed.Text, text, StringComparison.Ordinal))
         {
             // Spec §6.3: an identical file imports without asking.
