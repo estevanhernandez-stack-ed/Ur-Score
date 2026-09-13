@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Grpc.Core;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
@@ -296,6 +297,30 @@ public class RecipeWatchTests
         watch.UpdateRecipe(PetSim, new Dictionary<string, string>(Clan));
 
         Assert.Single((await watch.RunOnceAsync(CancellationToken.None)).Accounts);
+    }
+
+    [Fact]
+    public void TheWindowConstructsExactlyOneRecipeWatch()
+    {
+        // F2: a watch built per cycle gets a fresh serialization guard, and a timer tick and a Test
+        // now click could then both report one observation.
+        var text = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "MainWindow.xaml.cs"));
+        var count = Regex.Matches(text, Regex.Escape("new RecipeWatch(")).Count;
+
+        Assert.True(count == 1, $"src/UI/MainWindow.xaml.cs constructs RecipeWatch {count} time(s); expected exactly 1. "
+            + "A watch built per cycle regresses F2: a fresh semaphore serializes nothing, and one observation can be reported twice.");
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Ur-Score.csproj")))
+        {
+            dir = dir.Parent;
+        }
+
+        Assert.False(dir is null, "Could not locate Ur-Score.csproj above the test assembly.");
+        return dir!.FullName;
     }
 
     [Fact]
