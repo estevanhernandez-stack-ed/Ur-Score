@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<Row> _rows = [];
     private readonly ObservableCollection<LeaderboardRow> _leaderboardRows = [];
     private readonly HttpClient _http = new();
+    private readonly HttpClient _recipeHttp = new(HttpRecipeTransport.CreateHandler());
     private readonly DispatcherTimer _timer = new();
     private readonly HostClient _host = new(PluginId);
     private readonly NameClient _nameClient;
@@ -210,7 +211,7 @@ public partial class MainWindow : Window
     {
         if (_watch is not null) return _watch;
 
-        var engine = new RecipeEngine(new HttpRecipeTransport(_http, RawDirectory, _redactor), _keys);
+        var engine = new RecipeEngine(new HttpRecipeTransport(_recipeHttp, RawDirectory, _redactor), _keys);
         var policy = new ReportPolicy(MetricId, CurrentAllowedSubjects());
         return _watch = new RecipeWatch(engine, _host, _keys, policy, active.Recipe, active.State.InputValues);
     }

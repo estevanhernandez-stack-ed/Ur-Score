@@ -187,6 +187,12 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
 
         var status = fetched.Status!.Value;
 
+        if (status is >= 300 and < 400)
+        {
+            return RecipeReading.Stop(ReadingOutcome.Unreachable,
+                $"{host} redirected to another address. Recipes never follow redirects, so nothing was sent there.");
+        }
+
         if (status == 429)
         {
             return RecipeReading.Stop(ReadingOutcome.RateLimited, $"{host} asked us to slow down. Trying again next poll.");

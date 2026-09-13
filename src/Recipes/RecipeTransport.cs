@@ -32,6 +32,13 @@ public sealed class HttpRecipeTransport(HttpClient http, string? rawDirectory, R
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// The handler every real recipe client must use. Redirects are never followed: a 3xx would send
+    /// the request, its inputs, user ids and keys to a host the import screen never named (spec §6.1,
+    /// §7.2). Cookies are off so one source cannot set state another request carries.
+    /// </summary>
+    public static SocketsHttpHandler CreateHandler() => new() { AllowAutoRedirect = false, UseCookies = false };
+
     public async Task<FetchResult> GetAsync(
         Uri url, IReadOnlyDictionary<string, string> headers, string label, CancellationToken cancellationToken)
     {

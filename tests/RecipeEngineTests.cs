@@ -286,6 +286,19 @@ public class RecipeEngineTests
     }
 
     [Fact]
+    public async Task ARedirectIsReportedAndNotFollowed()
+    {
+        var transport = new FakeTransport().On("https://ps99.biggamesapi.io/api/activeClanBattle", 302, "");
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(ReadingOutcome.Unreachable, reading.Outcome);
+        Assert.Equal(
+            "ps99.biggamesapi.io redirected to another address. Recipes never follow redirects, so nothing was sent there.",
+            reading.Detail);
+        Assert.Single(transport.Requests);
+    }
+
+    [Fact]
     public async Task InvalidJsonIsAShapeMiss()
     {
         var transport = new FakeTransport().On("https://ps99.biggamesapi.io/", 200, "<html>");

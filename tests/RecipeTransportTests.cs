@@ -125,6 +125,14 @@ public class RecipeTransportTests
     }
 
     [Fact]
+    public void TheRecipeHandlerNeverFollowsRedirectsOrKeepsCookies()
+    {
+        using var handler = HttpRecipeTransport.CreateHandler();
+        Assert.False(handler.AllowAutoRedirect);
+        Assert.False(handler.UseCookies);
+    }
+
+    [Fact]
     public async Task ATransportErrorIsRedacted()
     {
         var result = await new HttpRecipeTransport(new HttpClient(new ThrowingHandler("bad url ?key=abc123secret")), null,
