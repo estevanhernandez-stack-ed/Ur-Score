@@ -153,17 +153,27 @@ public partial class MainWindow : Window
             return;
         }
 
+        ApplyActive(fresh);
+    }
+
+    /// <summary>
+    /// The one place a recipe becomes the running one: the missing-file note clears, the Send
+    /// checkboxes follow its state, the watch takes its recipe and inputs, and the heading re-renders.
+    /// Both <see cref="ReloadActive"/> and <see cref="Activate"/> go through here, so a recipe swap
+    /// cannot update the watch in one place and forget it in the other.
+    /// </summary>
+    private void ApplyActive(InstalledRecipe installed)
+    {
+        _active = installed;
         _recipeFileNote = null;
 
-        _active = fresh;
-
-        var excluded = _active.State.Excluded;
+        var excluded = installed.State.Excluded;
         foreach (var row in _rows)
         {
             row.Send = !excluded.Contains(row.AccountId);
         }
 
-        _watch?.UpdateRecipe(_active.Recipe, _active.State.InputValues);
+        _watch?.UpdateRecipe(installed.Recipe, installed.State.InputValues);
         _watch?.UpdatePolicy(MetricId, CurrentAllowedSubjects());
         RenderRecipe();
     }
@@ -720,8 +730,6 @@ public partial class MainWindow : Window
     private void Activate(InstalledRecipe installed)
     {
         var switching = !string.Equals(_active?.Recipe.Slug, installed.Recipe.Slug, StringComparison.Ordinal);
-        _active = installed;
-        _recipeFileNote = null;
 
         _settings = _settings with { ActiveRecipe = installed.Recipe.Slug };
         try
@@ -745,16 +753,8 @@ public partial class MainWindow : Window
             }
         }
 
-        var excluded = installed.State.Excluded;
-        foreach (var row in _rows)
-        {
-            row.Send = !excluded.Contains(row.AccountId);
-        }
+        ApplyActive(installed);
 
-        _watch?.UpdateRecipe(installed.Recipe, installed.State.InputValues);
-        _watch?.UpdatePolicy(MetricId, CurrentAllowedSubjects());
-
-        RenderRecipe();
         RenderRule();
         RenderPolicy();
 
