@@ -271,6 +271,22 @@ public class RecipeWatchTests
     }
 
     [Fact]
+    public async Task SignInRequiredIsNotReleasedByAKeyChange()
+    {
+        // Saving a key cannot give a recipe a Roblox session; only a recipe or input change can.
+        var keys = new FakeKeys();
+        var engine = new FakeEngine(() => RecipeReading.Stop(ReadingOutcome.SignInRequired, "requires signing in"));
+        var watch = Watch(engine, new FakeHost(true, [MyAccount]), keys: keys);
+
+        await watch.RunOnceAsync(CancellationToken.None);
+        keys.Saved.Add("an-unrelated-key-value");
+        var held = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.SignInRequired, held.State);
+        Assert.Equal(1, engine.Calls);
+    }
+
+    [Fact]
     public async Task TheSameRecipeAndInputsKeepTheRememberedValues()
     {
         var host = new FakeHost(true, [MyAccount]);

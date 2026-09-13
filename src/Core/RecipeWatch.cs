@@ -42,8 +42,13 @@ public sealed class RecipeWatch(
 
     private string? _context;
 
-    /// <summary>A stop that retrying cannot fix, and what would release it (plan Ruling 6).</summary>
-    private (RecipeSnapshot Snapshot, string KeyFingerprint)? _held;
+    /// <summary>
+    /// A stop that retrying cannot fix, and what would release it (plan Ruling 6). A null
+    /// <c>KeyFingerprint</c> means only <see cref="UpdateRecipe"/> releases the hold — that is
+    /// <see cref="ReadingOutcome.SignInRequired"/>, which no key change can fix. A non-null one is
+    /// <see cref="ReadingOutcome.KeyRejected"/>, released when the saved keys change (Ruling E).
+    /// </summary>
+    private (RecipeSnapshot Snapshot, string? KeyFingerprint)? _held;
 
     public ReportPolicy Policy => policy;
 
@@ -90,7 +95,7 @@ public sealed class RecipeWatch(
 
     private async Task<RecipeSnapshot> RunOnceCoreAsync(CancellationToken cancellationToken)
     {
-        if (_held is { } held && held.KeyFingerprint == KeyFingerprint())
+        if (_held is { } held && (held.KeyFingerprint is null || held.KeyFingerprint == KeyFingerprint()))
         {
             return held.Snapshot;
         }
@@ -139,9 +144,13 @@ public sealed class RecipeWatch(
             if (reading.Outcome == ReadingOutcome.Idle) _context = null;
 
             var snapshot = Snapshot(state, reading.Detail, 0, unresolved);
-            if (state is WatchState.KeyRejected or WatchState.SignInRequired)
+            if (state == WatchState.KeyRejected)
             {
                 _held = (snapshot, KeyFingerprint());
+            }
+            else if (state == WatchState.SignInRequired)
+            {
+                _held = (snapshot, null);
             }
 
             return snapshot;
