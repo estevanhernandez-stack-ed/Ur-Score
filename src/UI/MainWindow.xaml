@@ -122,6 +122,10 @@
         </Border>
 
         <StackPanel Grid.Row="11" Orientation="Horizontal">
+            <Button x:Name="ImportRecipeButton" Content="Import recipe…" Padding="12,6" Margin="0,0,8,0"
+                    Click="OnImportRecipeClick" AutomationProperties.Name="Import a recipe file" />
+            <Button x:Name="RecipeSettingsButton" Content="Recipe settings…" Padding="12,6" Margin="0,0,16,0"
+                    Click="OnRecipeSettingsClick" AutomationProperties.Name="Change this recipe's inputs and metric id" />
             <Button x:Name="StartStopButton" Content="Start Score Watch" Padding="12,6"
                     Click="OnStartStopClick" AutomationProperties.Name="Start or stop Score Watch" />
             <Button x:Name="TestNowButton" Content="Test now" Padding="12,6" Margin="8,0,0,0"

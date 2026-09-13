@@ -512,11 +512,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        var metricId = MetricId;
+        (RuleLine.Text, AddRuleButton.IsEnabled) = RuleSentence(MetricId);
+        RulePreview.Text = AddRuleButton.IsEnabled
+            ? $"Rate, below {DefaultThreshold} per minute over {DefaultWindowMinutes} minutes"
+            : "";
+    }
+
+    /// <summary>What RoRoRo's rules file holds for a metric id, and whether the helper can add one.</summary>
+    private static (string Text, bool CanAdd) RuleSentence(string metricId)
+    {
         var status = RulesFile.Inspect(null, metricId);
         var recorded = RuleInventory.Recorded(metricId);
 
-        (RuleLine.Text, AddRuleButton.IsEnabled) = status.State switch
+        return status.State switch
         {
             RuleState.NoFile =>
                 ("RoRoRo has no rules file yet, so nothing can alert. Adding the rule below creates one.", true),
@@ -535,10 +543,6 @@ public partial class MainWindow : Window
                 ("RoRoRo's rules file is not valid JSON. Ur Score will not overwrite it — check it by hand.", false),
             _ => (status.State.ToString(), false),
         };
-
-        RulePreview.Text = AddRuleButton.IsEnabled
-            ? $"Rate, below {DefaultThreshold} per minute over {DefaultWindowMinutes} minutes"
-            : "";
     }
 
     private void OnAddRuleClick(object sender, RoutedEventArgs e)
@@ -597,6 +601,167 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             DetailLine.Text = $"Could not copy diagnostics: {ex.Message}";
+        }
+    }
+
+    private void OnImportRecipeClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import a recipe",
+            Filter = "Ur Score recipe (*.recipe.json)|*.recipe.json|JSON file (*.json)|*.json",
+        };
+
+        if (dialog.ShowDialog(this) != true) return;
+
+        string text;
+        try
+        {
+            text = File.ReadAllText(dialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not read that file: {ex.Message}", "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var parsed = RecipeParser.Parse(text);
+        if (!parsed.Ok)
+        {
+            MessageBox.Show(this,
+                "That recipe could not be imported:\n\n" + string.Join("\n", parsed.Problems.Select(p => "• " + p)),
+                "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var recipe = parsed.Recipe!;
+        var installed = _store.Find(recipe.Slug);
+
+        if (installed is not null && string.Equals(installed.Text, text, StringComparison.Ordinal))
+        {
+            // Spec §6.3: an identical file imports without asking.
+            Activate(installed);
+            DetailLine.Text = $"{recipe.Name} is already installed, and is the recipe this window runs.";
+            return;
+        }
+
+        var review = ImportReview.Review(recipe, _keys);
+        var comparison = ImportReview.CompareToInstalled(installed?.Recipe, recipe, _keys);
+
+        try
+        {
+            if (installed is not null && review.CanImport && !comparison.AsksAgain)
+            {
+                // An update that contacts the same hosts with the same things: listed, not asked.
+                _store.Save(recipe, text, installed.State);
+                Activate(_store.Find(recipe.Slug)!);
+                DetailLine.Text = $"Updated {recipe.Name}. {string.Join(" ", comparison.Changes)}".Trim();
+                return;
+            }
+
+            var window = new ImportWindow(recipe, review, comparison, installed?.State, RuleSentence(recipe.MetricId).Text)
+            {
+                Owner = this,
+            };
+
+            if (window.ShowDialog() != true) return;
+
+            var state = (installed?.State ?? new RecipeState()) with
+            {
+                Inputs = window.Inputs,
+                MetricIdOverride = window.MetricIdOverride,
+            };
+
+            _store.Save(recipe, text, state);
+            Activate(_store.Find(recipe.Slug)!);
+            DetailLine.Text = $"Imported {recipe.Name}.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not save that recipe: {ex.Message}", "Ur Score", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OnRecipeSettingsClick(object sender, RoutedEventArgs e)
+    {
+        if (_active is null)
+        {
+            DetailLine.Text = "Import a recipe first.";
+            return;
+        }
+
+        var active = _active;
+        var window = new ImportWindow(active.Recipe, ImportReview.Review(active.Recipe, _keys),
+            new UpdateComparison(false, false, []), active.State, RuleSentence(MetricId).Text, settingsOnly: true)
+        {
+            Owner = this,
+        };
+
+        if (window.ShowDialog() != true) return;
+
+        try
+        {
+            var state = active.State with { Inputs = window.Inputs, MetricIdOverride = window.MetricIdOverride };
+            _store.SaveState(active.Recipe, state);
+            Activate(active with { State = state });
+            DetailLine.Text = $"Saved settings for {active.Recipe.Name}.";
+        }
+        catch (Exception ex)
+        {
+            DetailLine.Text = $"Could not save those settings: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Makes a recipe the one this window runs. A different recipe clears what the dashboard drew
+    /// for the old one; <see cref="RecipeWatch.UpdateRecipe"/> clears remembered values when the
+    /// recipe or its inputs changed.
+    /// </summary>
+    private void Activate(InstalledRecipe installed)
+    {
+        var switching = !string.Equals(_active?.Recipe.Slug, installed.Recipe.Slug, StringComparison.Ordinal);
+        _active = installed;
+        _recipeFileNote = null;
+
+        _settings = _settings with { ActiveRecipe = installed.Recipe.Slug };
+        try
+        {
+            Settings.Save(_settings);
+        }
+        catch (Exception)
+        {
+            // Remembering which recipe was active is a convenience; failing to save it costs only that.
+        }
+
+        if (switching)
+        {
+            _previousSamples.Clear();
+            _leaderboardRows.Clear();
+            foreach (var row in _rows)
+            {
+                row.Position = "—";
+                row.Value = "—";
+                row.RatePerMinute = "—";
+            }
+        }
+
+        var excluded = installed.State.Excluded;
+        foreach (var row in _rows)
+        {
+            row.Send = !excluded.Contains(row.AccountId);
+        }
+
+        _watch?.UpdateRecipe(installed.Recipe, installed.State.InputValues);
+        _watch?.UpdatePolicy(MetricId, CurrentAllowedSubjects());
+
+        RenderRecipe();
+        RenderRule();
+        RenderPolicy();
+
+        if (_running)
+        {
+            _timer.Interval = TimeSpan.FromSeconds(installed.Recipe.EffectiveEverySeconds);
+            _ = CycleAsync();
         }
     }
 }

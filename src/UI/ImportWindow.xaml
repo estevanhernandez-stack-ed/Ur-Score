@@ -1,0 +1,54 @@
+<Window x:Class="Labs626.UrScore.UI.ImportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Import recipe" Width="580" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="#0f1f31" Foreground="#f2f6fa">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="760">
+        <StackPanel Margin="18">
+            <TextBlock x:Name="NameLine" FontSize="18" FontWeight="Bold" TextWrapping="Wrap" />
+            <TextBlock x:Name="CreditLine" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="#9fb3c8" />
+            <TextBlock x:Name="AuthorLine" Margin="0,2,0,0" TextWrapping="Wrap" FontStyle="Italic" Foreground="#9fb3c8" />
+
+            <TextBlock Text="Your PC will contact" FontSize="15" FontWeight="SemiBold" Margin="0,16,0,6" />
+            <ItemsControl x:Name="HostsList" AutomationProperties.Name="Every host this recipe contacts and what each receives">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#16293d" CornerRadius="4" Padding="10,6" Margin="0,0,0,6">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Host}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding SendsText}" TextWrapping="Wrap" Foreground="#9fb3c8" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock x:Name="PollLine" Margin="0,4,0,0" TextWrapping="Wrap" />
+            <TextBlock x:Name="ReusedLine" Margin="0,4,0,0" TextWrapping="Wrap" />
+            <TextBlock x:Name="ChangesLine" Margin="0,4,0,0" TextWrapping="Wrap" />
+
+            <ItemsControl x:Name="InputsList" Margin="0,14,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,0,0,10">
+                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Padding="4"
+                                     AutomationProperties.Name="{Binding Label}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="Metric id RoRoRo sees" FontWeight="SemiBold" Margin="0,4,0,4" />
+            <TextBox x:Name="MetricIdBox" Padding="4" AutomationProperties.Name="Metric id RoRoRo sees" />
+            <TextBlock x:Name="RuleLine" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="#9fb3c8" />
+
+            <TextBlock x:Name="RefusalLine" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#ff8a8a" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button x:Name="ImportButton" Content="Import" Padding="16,6" IsDefault="True" Click="OnImportClick" />
+                <Button Content="Cancel" Padding="16,6" Margin="8,0,0,0" IsCancel="True" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>
