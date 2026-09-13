@@ -132,7 +132,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                     .ConfigureAwait(false);
             }
 
-            var (document, stop) = await FetchJsonAsync(recipe, step, values, label, cancellationToken).ConfigureAwait(false);
+            var (document, stop, _) = await FetchJsonAsync(recipe, step, values, label, cancellationToken).ConfigureAwait(false);
             if (stop is not null) return stop;
 
             using (document!)
@@ -184,7 +184,9 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             ? RecipeReading.Stop(ReadingOutcome.Idle, message)
             : null;
 
-    private async Task<(JsonDocument? Document, RecipeReading? Stop)> FetchJsonAsync(
+    /// <summary><c>Status</c> is the raw HTTP status behind a stop, when there was one, so a caller that
+    /// cares about the difference between a 400 and a 404 (spec §3.2) does not have to reparse <c>Stop.Detail</c>.</summary>
+    private async Task<(JsonDocument? Document, RecipeReading? Stop, int? Status)> FetchJsonAsync(
         Recipe recipe, RecipeStep step, IReadOnlyDictionary<string, string> values, string label,
         CancellationToken cancellationToken)
     {
@@ -200,7 +202,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             if (saved is null)
             {
                 return (null, RecipeReading.Stop(ReadingOutcome.KeyMissing,
-                    $"This recipe needs your {declared.Label} key. Get one at {RecipeHosts.HostOf(declared.GetOneAt)}."));
+                    $"This recipe needs your {declared.Label} key. Get one at {RecipeHosts.HostOf(declared.GetOneAt)}."), null);
             }
 
             if (!string.Equals(saved.Host, host, StringComparison.OrdinalIgnoreCase))
@@ -208,7 +210,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                 // Spec §7.2: a key is only ever sent to the host it is bound to. Checked here as well
                 // as at import, because a recipe file on disk can be edited after it was imported.
                 return (null, RecipeReading.Stop(ReadingOutcome.KeyMissing,
-                    $"Your {declared.Label} key is saved for {saved.Host}, and this recipe would send it to {host}. It was not sent."));
+                    $"Your {declared.Label} key is saved for {saved.Host}, and this recipe would send it to {host}. It was not sent."), null);
             }
 
             if (declared.In == KeyPlacement.Header) headers[declared.Name] = saved.Value;
@@ -218,21 +220,21 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         var address = AppendQuery(Placeholders.Fill(step.Url, values, encode: true), query);
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
         {
-            return (null, RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"The address for {host} is not valid once filled in."));
+            return (null, RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"The address for {host} is not valid once filled in."), null);
         }
 
         var fetched = await transport.GetAsync(uri, headers, label, cancellationToken).ConfigureAwait(false);
 
         var stop = Classify(recipe, step, fetched, host, values);
-        if (stop is not null) return (null, stop);
+        if (stop is not null) return (null, stop, fetched.Status);
 
         try
         {
-            return (JsonDocument.Parse(fetched.Body ?? ""), null);
+            return (JsonDocument.Parse(fetched.Body ?? ""), null, fetched.Status);
         }
         catch (JsonException ex)
         {
-            return (null, RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"{host} did not return valid JSON: {ex.Message}"));
+            return (null, RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"{host} did not return valid JSON: {ex.Message}"), fetched.Status);
         }
     }
 
@@ -401,14 +403,17 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                 [Placeholders.UserId] = userId.ToString(CultureInfo.InvariantCulture),
             };
 
-            var (document, stop) = await FetchJsonAsync(recipe, step, perRequest, label, cancellationToken).ConfigureAwait(false);
+            var (document, stop, status) = await FetchJsonAsync(recipe, step, perRequest, label, cancellationToken).ConfigureAwait(false);
             if (stop is not null)
             {
                 if (stop.Outcome == ReadingOutcome.InputNotFound)
                 {
-                    // Plan Ruling 5: one account's 404. The recipe's own words when it declares
-                    // unavailable, else part 1's text naming the host.
-                    unavailable[userId] = step.Unavailable?.Message ?? stop.Detail!;
+                    // Plan Ruling 5: one account's 400 or 404 costs only that account either way.
+                    // Spec §3.2 / controller ruling (fix round 1): only a 404 means "this account
+                    // isn't there", which the recipe's own unavailable message may describe. A 400
+                    // usually means something else went wrong for this account, so it keeps part 1's
+                    // text naming the host regardless of what the recipe declares.
+                    unavailable[userId] = status == 404 ? step.Unavailable?.Message ?? stop.Detail! : stop.Detail!;
                     firstUnavailable ??= unavailable[userId];
                     continue;
                 }

@@ -429,6 +429,22 @@ public class RecipeEngineTests
     }
 
     [Fact]
+    public async Task ABadRequestOnARecipeWithUnavailableKeepsTheHostsTextNotTheRecipesMessage()
+    {
+        // A 400 is not the source saying "this account isn't there" the way a 404 is, so the
+        // recipe's own unavailable message would misdirect: only a 404 gets it (spec §3.2).
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 400, """{ "error": "bad" }""")
+            .On(ProfileUrl2, 200, ProfileResponse(FullProfile));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal("ps99.biggamesapi.io has nothing for user id 1.", Assert.Single(reading.Unavailable).Value);
+        Assert.Equal(2, Assert.Single(reading.Rows).UserId);
+    }
+
+    [Fact]
     public async Task EveryAccountUnavailableIsStillAReading()
     {
         var transport = new FakeTransport().On("https://ps99.biggamesapi.io/v1/players/", 200, PrivateProfile);
