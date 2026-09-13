@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "626labs.ur-score",
+  "name": "RoRoRo Ur Score",
+  "version": "0.1.0",
+  "contractVersion": "1.0",
+  "publisher": "626 Labs LLC",
+  "description": "Watches clan battle scores for your own accounts and hands each number to RoRoRo.",
+  "capabilities": [
+    "host.metrics.report",
+    "host.queries.accounts"
+  ],
+  "icon": "icon.png",
+  "autostartDefault": "off",
+  "minHostVersion": "1.28.0.0",
+  "entrypoint": "626labs.ur-score.exe"
+}

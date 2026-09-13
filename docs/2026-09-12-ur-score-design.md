@@ -12,7 +12,12 @@
 RoRoRo shipped metric alerts with a deliberate hole in the middle: the host keeps history, applies
 rules, and routes a breach to a toast, a Discord channel or a phone — but nothing in the host
 gathers a number, and nothing ever will, because gathering one means naming a game's API. Ur Score
-is the piece that fills the hole for one game. It reads clan battle point totals, matches the
+is the piece that fills the hole for one game.
+
+**And it is a clan battle dashboard in its own right** (§6.1), which is the half that earns its place
+on someone's machine when they never configure an alert at all: the clan's rank and total, every
+contributor ranked with your own accounts marked, and a rate per member computed from data the
+reporter was already fetching and throwing away. It reads clan battle point totals, matches the
 members it finds against the Roblox accounts you have saved in RoRoRo, and reports each match. It
 sets no thresholds, sends no notifications, and cannot tell whether anything it reported made your
 phone ring.
@@ -121,10 +126,12 @@ Ur-Score/
     Core/WatchState.cs     the state enum every failure resolves to — no shared "error"
     Core/RulesFile.cs      read RoRoRo's metric-rules.json; merge one owned rule on click
     Core/ReportPolicy.cs   the only path to the host client — metric id, subject, finite value
-    Source/ClanClient.cs   the two HTTP calls
+    Source/ClanClient.cs   the two HTTP calls; the only file naming the game's vendor
     Source/ClanParser.cs   forgiving extraction; on a miss, the keys actually present
+    Source/ClanStanding.cs clan Place and Points, and ranking the contributors (§6.1)
+    Source/NameClient.cs   Roblox's batch id-to-username lookup, cached (§6.1)
     Host/HostClient.cs     pipe connect, handshake, GetAccounts, ReportMetric
-    UI/MainWindow.xaml     per-account table, state sentence, Test now, Copy diagnostics
+    UI/MainWindow.xaml     the dashboard (§6.1), then the state sentence, policy and controls
   tests/                   parser shape-tolerance and miss-reporting, mapping,
                            cadence flooring, rules-file merge preserves other rules,
                            policy drops unlisted subjects and ids, and a fence that
@@ -316,6 +323,100 @@ host change is needed for any of it.
 say "the rule I added has since been changed" rather than silently re-adding it or overwriting a
 threshold the user tuned by hand. Drift is reported, never corrected.
 
+## §6.1 What the plugin is worth on its own
+
+Decided 2026-09-12, after the question "what does this look like if the user is not using the alert
+features?" — for which the honest answer was **nothing**. Everything above describes a diagnostic
+panel for the alert pipeline: which accounts matched, what was last sent, whether RoRoRo has a rule.
+Useful when you are debugging why a phone did not ring, and useless otherwise.
+
+The irony was in the documents already. The clan's rank appeared exactly once across the spec and
+the plan, as filler in a test fixture demonstrating a key the parser steps past:
+
+```json
+{ "data": { "Battles": { "B": { "Points": 5, "Place": 9 } } } }
+```
+
+`Place` is the clan's standing out of 169,161 clans, and it was an example of something thrown away.
+
+**Every poll already fetches what a dashboard needs and discards it.** One response carries the
+clan's total `Points`, its `Place`, and all ~75 members' contributions. The parser keeps only the
+handful matching the user's accounts. And because the poll cadence is three minutes, consecutive
+samples are a real points-per-minute **per member** — which is the thing the clan currently works out
+by hand and posts in Discord.
+
+So Ur Score shows, whether or not a single alert is ever configured:
+
+| | |
+| --- | --- |
+| **Your clan** | Place, total points, and which battle is live |
+| **Your accounts** | Points, position within the clan, and rate per minute |
+| **The clan** | Every contributor, ranked, with your own accounts marked |
+| **Rate** | Computed locally from consecutive polls, labelled as a display figure |
+
+### The rate shown here is not the rate RoRoRo judges
+
+Worth stating because the two will occasionally disagree and that is not a bug. The plugin sends raw
+cumulative points and RoRoRo derives its own rate over the window the user's rule names. The figure
+in this window is computed from the plugin's own last two samples, for reading. A ten-minute rule and
+a three-minute display sample answer different questions, and the window says which it is showing.
+
+### Names come from Roblox, in one call, cached
+
+A leaderboard of user ids is unreadable, and nobody recognises their own clanmates in it. So ids are
+resolved to usernames through Roblox's own public batch endpoint, **verified live 2026-09-12**:
+
+```text
+POST https://users.roblox.com/v1/users
+     {"userIds":[1,156,261],"excludeBannedUsers":false}
+  -> {"data":[{"hasVerifiedBadge":true,"id":1,"name":"Roblox","displayName":"Roblox"}, ...]}
+```
+
+`name` is the username and `displayName` the display name; both come back. One request covers a clan,
+since the endpoint takes up to 100 ids and a clan battle returns around 75 contributors.
+
+**Cached hard, because usernames barely change.** Resolved once and kept; only ids never seen before
+are looked up. Re-resolving 75 names every three minutes would be twenty calls an hour against
+Roblox for data that changes about never, and this plugin's whole posture toward other people's
+services is to ask for as little as it can.
+
+**This is a second endpoint in a plugin that had one, and it lives in its own file.** `ClanClient`
+remains the only file that names the game's vendor; Roblox is the platform RoRoRo is built on and
+the host already calls the same domain. Keeping them apart keeps that statement precise.
+
+### How this squares with the report policy
+
+§6 says other members' ids and scores are "read, compared, and dropped: never reported, never
+written, never logged." A leaderboard appears to contradict that, and the distinction has to be
+explicit or the next reader will think one of the two is wrong. There are three different boundaries
+here and only one of them is the report policy's:
+
+1. **What reaches RoRoRo** — and therefore the user's toast, Discord channel or phone. Unchanged:
+   only the user's own accounts, only the configured metric, only a finite value. The report policy
+   governs exactly this and is not relaxed by anything in this section.
+2. **What is shown on the user's own screen** — the leaderboard. Nothing leaves the machine. This is
+   not an egress at all, and the policy's wording was about egress.
+3. **What is sent to Roblox to resolve a name** — other members' user ids. This *is* an outbound
+   call carrying other people's identifiers, so it gets said plainly rather than hidden inside "we
+   show names now": ids Roblox issued go to Roblox to retrieve names Roblox publishes. Nothing about
+   a clan member's participation is disclosed to anyone who did not already have it, and the ids came
+   from a public endpoint in the first place.
+
+Boundary 3 is still a choice a user might not want made for them, so `resolveNames` is a setting.
+Turned off, the leaderboard shows positions and points with only the user's own accounts named — the
+plugin then makes exactly two outbound calls per poll (`activeClanBattle` and `clan/{name}`, both to
+the game's own API) and none about anybody else. **Corrected 2026-09-12 (F6):** this section
+previously said "one outbound call" — wrong in either state of the setting, since the two calls to
+the game's API happen regardless of it. Turned *on*, that becomes three: the same two, plus one
+batched call to Roblox for names.
+
+### Attribution
+
+The vendor's terms require attribution for public display of their data (§3). A window on one
+person's machine is not public display, so this does not trigger the clause — but the window credits
+the source anyway, because the cost is one line of text and the alternative is a tool that presents
+someone else's work as though it had gathered it.
+
 ## §7 Accounts that cannot be mapped
 
 `SavedAccount.roblox_user_id` is documented as `0` when not yet resolved. Those accounts are
@@ -328,10 +429,16 @@ on names would work in every test and break at the only moment that matters.
 
 ## §8 What is out of scope
 
-- Watching clan members who are not your accounts (§1.1).
+- **REPORTING** on clan members who are not your accounts (§1.1). Since §6.1 they are *shown* — a
+  leaderboard of your own three accounts would be a strange thing to look at — but the report
+  policy is unchanged and nothing about them reaches RoRoRo, a Discord channel or a phone.
 - Any threshold, cooldown or notification logic. RoRoRo owns all of it.
-- Posting anything anywhere. Ur Score has no webhook and no outbound destination but the host pipe.
+- Posting anything anywhere. Ur Score has no webhook, and its only outbound calls are the game's
+  API and Roblox's name lookup (§6.1), neither of which carries anything the user typed.
 - Any game action. The macro wall is absolute: this reads HTTP and writes to a named pipe.
+- Alerting on other members. Even with the whole clan on screen, the cooldown is keyed
+  `(account id, kind)` and unmapped subjects collapse to one bucket (§1.1) — so watching the clan
+  for alerts remains the thing that needs host work, and seeing the clan does not.
 
 ## §9 Prerequisites outside this repo
 
