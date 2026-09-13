@@ -92,7 +92,7 @@ public sealed class NameClient(HttpClient http) : INameSource
                 // gap in the leaderboard would read as a bug.
                 Content = JsonContent.Create(new { userIds = batch, excludeBannedUsers = false }),
             };
-            request.Headers.UserAgent.ParseAdd(ClanClient.UserAgent);
+            request.Headers.UserAgent.ParseAdd(UrScoreIdentity.UserAgent);
 
             using var response = await http.SendAsync(request, timeout.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return [];

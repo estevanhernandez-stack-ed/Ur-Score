@@ -26,8 +26,7 @@ public sealed class ClanClient(HttpClient http, string? rawDirectory) : IClanSou
     private const string BaseUrl = "https://ps99.biggamesapi.io/api";
 
     /// <summary>Identifies us to the service being polled.</summary>
-    public static string UserAgent { get; } =
-        $"UrScore/{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0"} (RoRoRo plugin)";
+    public static string UserAgent => UrScoreIdentity.UserAgent;
 
     /// <summary>
     /// One line of credit for the window (spec §6.1, "Attribution"). A window on one person's
