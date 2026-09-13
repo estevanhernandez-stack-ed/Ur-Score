@@ -50,7 +50,7 @@ public partial class ImportWindow : Window
             ? ""
             : "What changed:" + string.Concat(comparison.Changes.Select(c => Environment.NewLine + "• " + c)));
 
-        MetricIdBox.Text = existing?.MetricIdFor(recipe) ?? recipe.LastStep.Values[0].MetricId;
+        MetricIdBox.Text = existing?.StatChoices.GetValueOrDefault(recipe.LastStep.Values[0].Id)?.MetricId ?? recipe.LastStep.Values[0].MetricId;
         RuleLine.Text = ruleSentence;
 
         _inputs =

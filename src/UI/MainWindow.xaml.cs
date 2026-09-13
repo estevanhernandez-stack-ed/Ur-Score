@@ -187,18 +187,27 @@ public partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "626labs.ur-score", "last-response");
 
-    private string MetricId => _active is null ? "" : _active.State.MetricIdFor(_active.Recipe);
+    /// <summary>Until the rule helper picks a sent stat (Task 13), it writes a rule for the first one.</summary>
+    private string MetricId => SentStats().FirstOrDefault()?.MetricId ?? "";
 
     /// <summary>Until the window shows a column per stat (Task 13), it ranks and shows the recipe's first value.</summary>
     private string FirstStatKey => _active?.Recipe.LastStep.Values[0].Id ?? "";
 
-    /// <summary>Until stats are chosen per recipe (Task 7), the watch reads the stats it sends.</summary>
-    private IReadOnlySet<string> TrackedStats() => SentStats().Select(stat => stat.Key).ToHashSet(StringComparer.Ordinal);
+    private IReadOnlySet<string> TrackedStats() => _active?.State.TrackedStats(_active.Recipe) ?? new HashSet<string>();
 
-    /// <summary>Until stats are chosen per recipe (Task 7), the recipe's first value is the one stat sent.</summary>
-    private IReadOnlyList<SentStat> SentStats() => _active is null
-        ? []
-        : [new SentStat(_active.Recipe.LastStep.Values[0].Id, _active.Recipe.LastStep.Values[0].Label, MetricId)];
+    private IReadOnlyList<SentStat> SentStats() => _active?.State.SentStats(_active.Recipe) ?? [];
+
+    /// <summary>
+    /// Until the import screen has a Stats section (Task 11), its one name box pins the first value's
+    /// metric id and ticks nothing, so an import sends nothing until then.
+    /// </summary>
+    private static RecipeState WithFirstValueName(RecipeState state, Recipe recipe, string? metricId)
+    {
+        var first = recipe.LastStep.Values[0];
+        var stats = new Dictionary<string, StatChoice>(state.StatChoices, StringComparer.Ordinal);
+        stats[first.Id] = stats.GetValueOrDefault(first.Id, new StatChoice()) with { MetricId = metricId ?? first.MetricId };
+        return state with { Stats = stats };
+    }
 
     private HashSet<Guid> CurrentAllowedSubjects() => _rows.Where(r => r.Send).Select(r => r.AccountId).ToHashSet();
 
@@ -781,11 +790,8 @@ public partial class MainWindow : Window
 
             if (window.ShowDialog() != true) return;
 
-            var state = (installed?.State ?? new RecipeState()) with
-            {
-                Inputs = window.Inputs,
-                MetricIdOverride = window.MetricIdOverride,
-            };
+            var state = WithFirstValueName((installed?.State ?? new RecipeState()) with { Inputs = window.Inputs },
+                recipe, window.MetricIdOverride);
 
             _store.Save(recipe, text, state);
             Activate(_store.Find(recipe.Slug)!);
@@ -816,7 +822,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var state = active.State with { Inputs = window.Inputs, MetricIdOverride = window.MetricIdOverride };
+            var state = WithFirstValueName(active.State with { Inputs = window.Inputs }, active.Recipe, window.MetricIdOverride);
             _store.SaveState(active.Recipe, state);
             Activate(active with { State = state });
             DetailLine.Text = $"Saved settings for {active.Recipe.Name}.";
