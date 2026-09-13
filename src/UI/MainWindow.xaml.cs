@@ -189,6 +189,11 @@ public partial class MainWindow : Window
 
     private string MetricId => _active is null ? "" : _active.State.MetricIdFor(_active.Recipe);
 
+    /// <summary>Until stats are chosen per recipe (Task 7), the recipe's first value is the one stat sent.</summary>
+    private IReadOnlyList<SentStat> SentStats() => _active is null
+        ? []
+        : [new SentStat(_active.Recipe.LastStep.Values[0].Id, _active.Recipe.LastStep.Values[0].Label, MetricId)];
+
     private HashSet<Guid> CurrentAllowedSubjects() => _rows.Where(r => r.Send).Select(r => r.AccountId).ToHashSet();
 
     private string Stamp(string text) => $"{DateTimeOffset.UtcNow:O} {_redactor.Redact(text)}";
@@ -243,7 +248,7 @@ public partial class MainWindow : Window
         }
 
         _watch?.UpdateRecipe(installed.Recipe, installed.State.InputValues);
-        _watch?.UpdatePolicy(MetricId, CurrentAllowedSubjects());
+        _watch?.UpdatePolicy(SentStats(), CurrentAllowedSubjects());
         RenderRecipe();
     }
 
@@ -280,7 +285,7 @@ public partial class MainWindow : Window
         if (_watch is not null) return _watch;
 
         var engine = new RecipeEngine(new HttpRecipeTransport(_recipeHttp, RawDirectory, _redactor), _keys);
-        var policy = new ReportPolicy(MetricId, CurrentAllowedSubjects());
+        var policy = new ReportPolicy(SentStats(), CurrentAllowedSubjects());
         return _watch = new RecipeWatch(engine, _host, _keys, policy, active.Recipe, active.State.InputValues);
     }
 
@@ -327,7 +332,7 @@ public partial class MainWindow : Window
             });
         }
 
-        _watch?.UpdatePolicy(MetricId, CurrentAllowedSubjects());
+        _watch?.UpdatePolicy(SentStats(), CurrentAllowedSubjects());
         RenderPolicy();
         return null;
     }
@@ -345,7 +350,7 @@ public partial class MainWindow : Window
                 _store.SaveState(_active.Recipe, state);
                 _active = _active with { State = state };
 
-                _watch?.UpdatePolicy(MetricId, CurrentAllowedSubjects());
+                _watch?.UpdatePolicy(SentStats(), CurrentAllowedSubjects());
                 RenderPolicy();
             }
             catch (Exception ex)
@@ -583,7 +588,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var policy = _watch?.Policy ?? new ReportPolicy(MetricId, CurrentAllowedSubjects());
+        var policy = _watch?.Policy ?? new ReportPolicy(SentStats(), CurrentAllowedSubjects());
         PolicyLine.Text = policy.Describe(_rows.Count, _settings.ResolveNames);
         PolicyCounts.Text = _watch is null ? "" : $"Sent {_watch.Policy.Sent}, dropped {_watch.Policy.Dropped}.";
     }

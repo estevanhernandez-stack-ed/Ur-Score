@@ -54,9 +54,9 @@ public sealed class RecipeWatch(
 
     public Recipe Recipe => recipe;
 
-    public void UpdatePolicy(string metricId, IReadOnlySet<Guid> allowedSubjects)
+    public void UpdatePolicy(IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects)
     {
-        policy = policy.With(metricId, allowedSubjects);
+        policy = policy.With(sentStats, allowedSubjects);
     }
 
     /// <summary>
@@ -183,11 +183,15 @@ public sealed class RecipeWatch(
         {
             try
             {
-                // Raw and unmodified, through the only route out.
-                var sent = await policy.SendAsync(host, subject, policy.MetricId, value, observedAt, cancellationToken)
-                    .ConfigureAwait(false);
+                // Raw and unmodified, through the only route out. Until the engine reads several
+                // stats per row (Task 5), a row carries one value and the window sends one stat.
+                foreach (var stat in policy.SentStats)
+                {
+                    var sent = await policy.SendAsync(host, subject, stat.MetricId, value, observedAt, cancellationToken)
+                        .ConfigureAwait(false);
 
-                if (sent) Remember(subject, accounts, value, observedAt);
+                    if (sent) Remember(subject, accounts, value, observedAt);
+                }
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
             {

@@ -16,6 +16,8 @@ public class RecipeWatchTests
 
     private static readonly Dictionary<string, string> Clan = new() { ["clan"] = "Noodle Clan" };
 
+    private static readonly SentStat PointsStat = new("value", "Points", "clan.battle.points");
+
     private sealed class FakeEngine(Func<RecipeReading> read) : IRecipeEngine
     {
         public Func<RecipeReading> Read { get; set; } = read;
@@ -106,7 +108,7 @@ public class RecipeWatchTests
         new(ReadingOutcome.Read, null, rows, [], context, rows.Length);
 
     private static RecipeWatch Watch(IRecipeEngine engine, FakeHost host, IEnumerable<Guid>? allowed = null, FakeKeys? keys = null) =>
-        new(engine, host, keys ?? new FakeKeys(), new ReportPolicy("clan.battle.points", new HashSet<Guid>(allowed ?? [Mine])), PetSim, Clan);
+        new(engine, host, keys ?? new FakeKeys(), new ReportPolicy([PointsStat], new HashSet<Guid>(allowed ?? [Mine])), PetSim, Clan);
 
     [Fact]
     public async Task NeedsInputIsItsOwnStateAndSendsNothing()
@@ -232,7 +234,7 @@ public class RecipeWatchTests
     {
         var host = new FakeHost(true, [MyAccount]);
         var watch = Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 1))), host);
-        watch.UpdatePolicy("my.points", new HashSet<Guid> { Mine });
+        watch.UpdatePolicy([PointsStat with { MetricId = "my.points" }], new HashSet<Guid> { Mine });
 
         await watch.RunOnceAsync(CancellationToken.None);
 
@@ -373,7 +375,7 @@ public class RecipeWatchTests
         var engine = new RecipeEngine(transport, new FakeKeys());
         var host = new FakeHost(true, [MyAccount]);
         var watch = new RecipeWatch(
-            engine, host, new FakeKeys(), new ReportPolicy("clan.battle.points", new HashSet<Guid> { Mine }), PetSim, Clan);
+            engine, host, new FakeKeys(), new ReportPolicy([PointsStat], new HashSet<Guid> { Mine }), PetSim, Clan);
 
         var snapshot = await watch.RunOnceAsync(CancellationToken.None);
 

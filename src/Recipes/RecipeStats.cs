@@ -8,6 +8,9 @@ namespace Labs626.UrScore.Recipes;
 /// </summary>
 public sealed record RecipeStat(string Key, string Label, string Path, string SuggestedMetricId, bool Sum);
 
+/// <summary>A stat the user set to send, and the metric id RoRoRo gets it under.</summary>
+public sealed record SentStat(string Key, string Label, string MetricId);
+
 /// <summary>
 /// Stat keys and what they stand for. Pure: the engine uses it to find a tracked stat's path, and the
 /// settings screen uses it to list and search what a recipe offers.

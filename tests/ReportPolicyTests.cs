@@ -1,5 +1,6 @@
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
+using Labs626.UrScore.Recipes;
 
 namespace UrScore.Tests;
 
@@ -7,6 +8,10 @@ public class ReportPolicyTests
 {
     private static readonly Guid Allowed = Guid.Parse("9ad5e605-6b41-478c-add3-b916a31a5ab2");
     private static readonly Guid NotAllowed = Guid.Parse("88dc7685-3a36-4f93-b526-a9bff2d7da6c");
+
+    private static readonly SentStat Points = new("value", "Points", "clan.battle.points");
+    private static readonly SentStat Diamonds = new("diamonds", "Diamonds", "ps99.diamonds");
+    private static readonly SentStat Rank = new("rank", "Player rank", "ps99.rank");
 
     private sealed class SpyClient : IHostClient
     {
@@ -25,7 +30,7 @@ public class ReportPolicyTests
         }
     }
 
-    private static ReportPolicy Policy() => new("clan.battle.points", new HashSet<Guid> { Allowed });
+    private static ReportPolicy Policy() => new([Points], new HashSet<Guid> { Allowed });
 
     [Fact]
     public async Task SendsWhatTheUserAskedFor()
@@ -53,16 +58,42 @@ public class ReportPolicyTests
     }
 
     [Fact]
-    public async Task DropsAMetricIdThatIsNotTheConfiguredOne()
+    public async Task DropsAMetricIdThatIsNotASentStat()
     {
-        // One id, not a family. A shape change that starts yielding new field names cannot invent
-        // new metrics to send.
+        // Only the stats the user set to send. A shape change that starts yielding new field names
+        // cannot invent new metrics to send.
         var client = new SpyClient();
         var sent = await Policy().SendAsync(client, Allowed, "something.else", 4200,
             DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.False(sent);
         Assert.Empty(client.Sent);
+    }
+
+    [Fact]
+    public async Task EverySentStatMayBeReported()
+    {
+        var client = new SpyClient();
+        var policy = new ReportPolicy([Diamonds, Rank], new HashSet<Guid> { Allowed });
+
+        Assert.True(await policy.SendAsync(client, Allowed, "ps99.diamonds", 9169613101, DateTimeOffset.UtcNow, CancellationToken.None));
+        Assert.True(await policy.SendAsync(client, Allowed, "ps99.rank", 12, DateTimeOffset.UtcNow, CancellationToken.None));
+
+        Assert.Equal(new[] { "ps99.diamonds", "ps99.rank" }, client.Sent.Select(s => s.MetricId).ToArray());
+    }
+
+    [Fact]
+    public async Task AReportNeedsTheAccountsSendAndTheStatsSend()
+    {
+        // Diamonds is sent and Player rank is not; Allowed has Send on and NotAllowed does not.
+        var client = new SpyClient();
+        var policy = new ReportPolicy([Diamonds], new HashSet<Guid> { Allowed });
+
+        Assert.False(await policy.SendAsync(client, Allowed, "ps99.rank", 12, DateTimeOffset.UtcNow, CancellationToken.None));
+        Assert.False(await policy.SendAsync(client, NotAllowed, "ps99.diamonds", 5, DateTimeOffset.UtcNow, CancellationToken.None));
+        Assert.True(await policy.SendAsync(client, Allowed, "ps99.diamonds", 5, DateTimeOffset.UtcNow, CancellationToken.None));
+
+        Assert.Equal((Allowed, "ps99.diamonds", 5d), Assert.Single(client.Sent));
     }
 
     [Theory]
@@ -126,6 +157,20 @@ public class ReportPolicyTests
     }
 
     [Fact]
+    public void DescribeNamesEverySentStatByLabelAndMetricId()
+    {
+        var description = new ReportPolicy([Diamonds, Rank], new HashSet<Guid> { Allowed }).Describe(totalAccounts: 5);
+
+        Assert.StartsWith("Ur Score sends Diamonds and Player rank for 1 of your 5 accounts, as ps99.diamonds and ps99.rank. Nothing else reaches RoRoRo.", description);
+        Assert.DoesNotContain("points", description);
+    }
+
+    [Fact]
+    public void DescribeSaysSoWhenNoStatIsSent() =>
+        Assert.StartsWith("Ur Score sends nothing to RoRoRo: no stat is set to send.",
+            new ReportPolicy([], new HashSet<Guid> { Allowed }).Describe(totalAccounts: 5));
+
+    [Fact]
     public async Task CountersTrackSentAndDroppedSeparately()
     {
         // Sent/Dropped are what the window shows to say "it is working". Deleting the increments
@@ -147,10 +192,10 @@ public class ReportPolicyTests
     [Fact]
     public async Task WithCarriesSentAndDroppedForwardRatherThanResettingThem()
     {
-        // F2: ScoreWatch.UpdatePolicy calls this instead of the window constructing a whole new
-        // ReportPolicy (which is what a rebuilt ScoreWatch used to do every cycle). If With reset
-        // the counts, "a rising number here is worth someone looking" would still be a counter
-        // that could never rise past whatever happened since the last allow-list change.
+        // F2: RecipeWatch.UpdatePolicy calls this instead of the window constructing a whole new
+        // ReportPolicy (which is what a rebuilt watch used to do every cycle). If With reset the
+        // counts, "a rising number here is worth someone looking" would still be a counter that
+        // could never rise past whatever happened since the last allow-list change.
         var client = new SpyClient();
         var policy = Policy();
 
@@ -162,7 +207,7 @@ public class ReportPolicyTests
         Assert.Equal(1, policy.Sent);
         Assert.Equal(1, policy.Dropped);
 
-        var widened = policy.With("clan.battle.points", new HashSet<Guid> { Allowed, NotAllowed });
+        var widened = policy.With([Points], new HashSet<Guid> { Allowed, NotAllowed });
 
         Assert.Equal(1, widened.Sent);
         Assert.Equal(1, widened.Dropped);
