@@ -3,6 +3,26 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Recipes.** A recipe file says where a number is and how to read it; Ur Score runs it and hands
+  your own accounts' values to RoRoRo. The Pet Simulator 99 clan battle is now a recipe
+  (`tests/Fixtures/petsim99-clan-battle.recipe.json`) rather than code, and Ur Score itself names no
+  vendor. Importing shows every host a recipe contacts and what each receives before anything runs.
+
+### Changed
+
+- **Ur Score paints in RoRoRo's theme.** It asks RoRoRo for its palette on connect and follows every
+  theme switch after that, including the title bar. RoRoRo's Brand colours are used whenever RoRoRo
+  is not running. No new capability: both theme calls are ungated.
+- **Readable tables.** Cell text, headers, selection, checkboxes and scrollbars all use the theme,
+  where the stock controls had painted black text on dark rows.
+- Screen readers now read the status, clan and headline lines instead of a fixed label.
+- The clan line reads "Live: ArcadeBattle2026" instead of the raw "battle=ArcadeBattle2026".
+- The update screen lists each change on its own line.
+
 ## 0.1.0 — 2026-09-12
 
 Initial build. Not yet installable — see the README's status callout: it needs RoRoRo v1.28.0.0,
