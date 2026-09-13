@@ -70,6 +70,20 @@ public class RecipePathTests
     public void AnEmptyObjectSaysItHasNoKeys() =>
         Assert.Equal("No 'x' in 'data'. Keys present: none.", Resolve("""{ "data": {} }""", "data.x").Miss);
 
+    [Fact]
+    public void NumericKeysAreCountedNotListed()
+    {
+        var result = Resolve("""{ "data": { "name": "x", "111": 1, "222": 2 } }""", "data.missing");
+        Assert.Equal("No 'missing' in 'data'. Keys present: name, and 2 numeric keys.", result.Miss);
+    }
+
+    [Fact]
+    public void OnlyNumericKeysAreCounted()
+    {
+        var result = Resolve("""{ "data": { "111": 1 } }""", "data.missing");
+        Assert.Equal("No 'missing' in 'data'. Keys present: 1 numeric key.", result.Miss);
+    }
+
     [Theory]
     [InlineData("\"B\"", "B")]
     [InlineData("12", "12")]

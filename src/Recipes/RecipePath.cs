@@ -49,10 +49,8 @@ public static class RecipePath
 
             if (!JsonNav.TryGet(current, segment, out var next))
             {
-                var keys = JsonNav.Keys(current);
                 return new PathResult(PathOutcome.Missing, default,
-                    $"No '{segment}' in {Where(walked, rootName)}. Keys present: "
-                    + $"{(keys.Count == 0 ? "none" : string.Join(", ", keys))}.");
+                    $"No '{segment}' in {Where(walked, rootName)}. Keys present: {KeysText(current)}.");
             }
 
             walked.Add(segment);
@@ -77,6 +75,25 @@ public static class RecipePath
         JsonValueKind.False => "false",
         _ => null,
     };
+
+    /// <summary>
+    /// Keys present, for a miss message. All-digit keys are never listed by value: an object keyed
+    /// by user id would otherwise copy other members' ids into DetailLine, the trail and diagnostics,
+    /// which the Global Constraint forbids. They are counted instead.
+    /// </summary>
+    private static string KeysText(JsonElement element)
+    {
+        var keys = JsonNav.Keys(element);
+        if (keys.Count == 0) return "none";
+
+        var named = keys.Where(key => !key.All(char.IsAsciiDigit)).ToList();
+        var numericCount = keys.Count - named.Count;
+
+        if (numericCount == 0) return string.Join(", ", named);
+
+        var suffix = numericCount == 1 ? "1 numeric key" : $"{numericCount} numeric keys";
+        return named.Count == 0 ? suffix : $"{string.Join(", ", named)}, and {suffix}";
+    }
 
     private static string Where(List<string> walked, string rootName) =>
         walked.Count == 0 ? rootName : $"'{string.Join('.', walked)}'";
