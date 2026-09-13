@@ -22,11 +22,11 @@
         <!-- YOUR CLAN. Place, total points, and which battle is live — the reason to open this
              window even if nobody ever configures an alert (spec §6.1). -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="Your clan" FontSize="18" FontWeight="Bold" />
+            <TextBlock x:Name="HeadingLine" Text="Ur Score" FontSize="18" FontWeight="Bold" />
             <TextBlock x:Name="ClanLine" FontSize="14" Margin="0,4,0,0" TextWrapping="Wrap"
-                       AutomationProperties.Name="Which battle is live" />
+                       AutomationProperties.Name="What is being read" />
             <TextBlock x:Name="ClanDetailLine" Margin="0,2,0,0" Foreground="#9fb3c8"
-                       TextWrapping="Wrap" AutomationProperties.Name="Your clan's place and total points" />
+                       TextWrapping="Wrap" AutomationProperties.Name="Headline values" />
         </StackPanel>
 
         <!-- THE LEADERBOARD. Every contributor, ranked, with the user's own accounts marked.
@@ -41,7 +41,7 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="#" Binding="{Binding Position}" Width="50" />
                 <DataGridTextColumn Header="Member" Binding="{Binding Name}" Width="*" />
-                <DataGridTextColumn Header="Points" Binding="{Binding Points}" Width="110" />
+                <DataGridTextColumn x:Name="LeaderboardValueColumn" Header="Value" Binding="{Binding Value}" Width="110" />
                 <DataGridTextColumn Header="" Binding="{Binding Yours}" Width="50" />
             </DataGrid.Columns>
         </DataGrid>
@@ -60,7 +60,7 @@
                 <DataGridCheckBoxColumn Header="Send" Binding="{Binding Send}" Width="55" />
                 <DataGridTextColumn Header="Account" Binding="{Binding DisplayName}" Width="*" IsReadOnly="True" />
                 <DataGridTextColumn Header="Position" Binding="{Binding Position}" Width="70" IsReadOnly="True" />
-                <DataGridTextColumn Header="Points" Binding="{Binding Points}" Width="90" IsReadOnly="True" />
+                <DataGridTextColumn x:Name="AccountsValueColumn" Header="Value" Binding="{Binding Value}" Width="90" IsReadOnly="True" />
                 <DataGridTextColumn Header="Rate/min" Binding="{Binding RatePerMinute}" Width="90" IsReadOnly="True" />
                 <DataGridTextColumn Header="Last sent value" Binding="{Binding LastValue}" Width="110" IsReadOnly="True" />
                 <DataGridTextColumn Header="Last sent at" Binding="{Binding LastSent}" Width="90" IsReadOnly="True" />
@@ -69,7 +69,7 @@
 
         <TextBlock x:Name="RateDisclaimerLine" Grid.Row="5" TextWrapping="Wrap" FontStyle="Italic"
                    Foreground="#9fb3c8" FontSize="11" Margin="0,0,0,8"
-                   Text="Rate/min is Ur Score's own figure, from its last two polls of the clan's data. RoRoRo's alert rule judges its own rate, over the window the rule names — the two can disagree, and that is not a bug." />
+                   Text="Rate/min is Ur Score's own figure, from its last two polls. RoRoRo's alert rule judges its own rate, over the window the rule names — the two can disagree, and that is not a bug." />
 
         <!-- ATTRIBUTION. A window on one machine is not public display and does not trigger the
              vendor's terms, but the credit costs one line (spec §6.1). -->

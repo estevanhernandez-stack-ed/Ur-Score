@@ -49,10 +49,10 @@ public sealed class ReportPolicy(
     /// A policy for a changed metric id or allow list, carrying the running <see cref="Sent"/> and
     /// <see cref="Dropped"/> counts forward rather than resetting them to zero.
     /// <para>
-    /// Exists so <see cref="ScoreWatch"/> can be updated in place instead of reconstructed (F2): a
-    /// reconstructed <c>ScoreWatch</c> gets a fresh <c>ReportPolicy</c> every cycle, which is
+    /// Exists so <see cref="RecipeWatch"/> can be updated in place instead of reconstructed (F2): a
+    /// reconstructed <c>RecipeWatch</c> gets a fresh <c>ReportPolicy</c> every cycle, which is
     /// exactly how "a rising number here is worth someone looking" became a counter that could
-    /// never rise. <see cref="ScoreWatch.UpdatePolicy"/> is the only caller.
+    /// never rise. <see cref="RecipeWatch.UpdatePolicy"/> is the only caller.
     /// </para>
     /// </summary>
     public ReportPolicy With(string metricId, IReadOnlySet<Guid> allowedSubjects) =>
