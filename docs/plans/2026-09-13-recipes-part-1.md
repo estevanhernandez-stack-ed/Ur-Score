@@ -5479,3 +5479,64 @@ Add a dated line to `CHANGELOG.md` naming what was seen, and commit it:
 git add CHANGELOG.md build/serve-local.py
 git commit -m "docs: recipes part 1 live acceptance, and the local install server it used"
 ```
+
+---
+
+## Execution record and what carries into part 2
+
+Executed 2026-09-13 with subagent-driven development: Tasks 1–11 implemented and reviewed, a
+whole-branch review, and one fix wave. Head `d9ebb79`, 201 tests passing, Release build 0 warnings.
+Task 12 (live acceptance) is manual and was not run.
+
+### Rulings made during execution that changed this plan
+
+- **A** — fixture item uses `<None Update=…>`, not `Include` (default None items are on).
+- **D** — no `ProtectedData` NuGet package; the WPF framework ships it.
+- **E** — a `SignInRequired` stop is released only by a recipe or input change, never by a key change.
+- **F** — a running recipe whose file vanished keeps running and says so.
+- **G** — `ApplyActive` is the one place a recipe becomes the running one.
+- **H** — the hostname fence stays case-sensitive (case-insensitive flagged 13 namespace names).
+- **I** — recipe requests never follow redirects; a 3xx is reported by name.
+- **J** — the accepted metric id is pinned at import, so a recipe update cannot move reports.
+- **K** — the F2 one-watch fence is restored for `RecipeWatch`.
+- **L** — numbers in text parse with the invariant culture.
+- **M** — "Keys present" counts all-digit keys instead of listing them.
+- **N** — the first watch is built from the recipe active after the seed await.
+- **O** — a slug collision between different recipes is refused, not treated as an update.
+- **P** — non-ASCII hosts are refused.
+- **R** — one test composes the real engine inside the real watch.
+
+### Still pending from part 1
+
+- Task 9 step 7 — manual window smoke against a hand-placed recipe.
+- Task 10 step 6 — manual walkthrough of the six import paths.
+- Task 12 — live acceptance. Note for step 5: `.state.json` also holds `excludedAccountIds` and, since
+  Ruling J, the pinned `metricIdOverride` — not only the clan name.
+
+### Must be handled in part 2
+
+- **`KeyStore.Load` swallows every exception, and `Save` then writes a list without the other keys.**
+  An unreadable or momentarily locked `keys.dat` followed by one save wipes every saved key. Fix
+  before key entry ships.
+- **Ports, loopback and private address ranges.** The import screen hides a non-default port, key
+  binding ignores the port, and `localhost`/private ranges are accepted. Needs a design decision,
+  since a local test source may legitimately need loopback.
+- **The rule helper's hardcoded threshold** (rate below 100 per minute over 10 minutes) and
+  `ReportPolicy.Describe`'s "sends points" wording — both plan-mandated for part 1, and wrong for a
+  non-points recipe such as followers.
+- **The import screen line for per-account sources** should say "all your resolved accounts": an
+  account with Send switched off still has its user id sent to a per-account source, because Send
+  means "report to RoRoRo".
+- **Commit `59cf413`** carries its Co-Authored-By trailer inline in the subject; squash-merging
+  removes it.
+
+### Deferred minors worth a look in part 2
+
+`KeyStore`'s lock is per instance, so a second instance on the same file would not be excluded (the
+window holds one); `KeyFingerprint` hashes the set of saved values, so two keys swapping values does
+not count as a change; `RecipeStore.Load`/`LoadState` also catch every exception;
+`{userId}` in a path gets the generic unknown-placeholder message; an empty-string JSON key counts as
+numeric in miss messages; a Windows reserved device name as a slug fails to save; duplicate refusal
+strings when one mismatched key is used in several steps; the three untested `WatchState` mapping arms
+(`InputNotFound`, `RateLimited`, `KeyMissing`); `ImportWindow`'s empty-line margins; import errors via
+message box against settings errors via the detail line.
