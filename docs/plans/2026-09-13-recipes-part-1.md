@@ -6,7 +6,7 @@
 
 **Architecture:** A recipe is data: a list of GET requests, dotted paths into their JSON, and a reading form. A pure parser turns a file into a `Recipe` or named problems; a path walker reads values and tells "the source says nothing" apart from "the shape changed"; an engine runs the steps through a transport seam and returns a `RecipeReading`; `RecipeWatch` replaces `ScoreWatch` and keeps every guarantee it had (one cycle at a time, own accounts only through `ReportPolicy`, no backlog). Keys live in a DPAPI file bound to one host and are redacted from everything that leaves the window.
 
-**Tech Stack:** .NET 10 (SDK 10.0.203, pinned by `global.json`), WPF, `Grpc.Net.Client` 2.70.0, `ROROROblox.PluginContract` 0.10.0 (nuget.org), `System.Security.Cryptography.ProtectedData` 10.0.12, xUnit 2.9.2.
+**Tech Stack:** .NET 10 (SDK 10.0.203, pinned by `global.json`), WPF, `Grpc.Net.Client` 2.70.0, `ROROROblox.PluginContract` 0.10.0 (nuget.org), DPAPI via the WPF framework's `System.Security.Cryptography.ProtectedData` (no package; Ruling D), xUnit 2.9.2.
 
 **Spec:** [`docs/2026-09-13-recipes-design.md`](../2026-09-13-recipes-design.md). This plan is §13 part 1. Parts 2 (the window) and 3 (the builder) get their own plans.
 
