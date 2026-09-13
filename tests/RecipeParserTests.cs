@@ -108,6 +108,20 @@ public class RecipeParserTests
         Assert.Contains("Step 1's url must name its host directly, not through a placeholder.", Problems(With(steps, extra)));
     }
 
+    // The second letter is Cyrillic U+043E, a lookalike for the Latin 'o', written as the
+    // backslash-u escape below in a regular string literal so this source file stays ASCII.
+    private const string LookalikeHost = "g\u043Eogle.com";
+
+    [Fact]
+    public void ANonAsciiHostIsRefused()
+    {
+        var steps = $$"""[{ "url": "https://{{LookalikeHost}}/rows", "rows": "data", "userId": "id", "value": "score" }]""";
+        Assert.Contains(
+            "Step 1's url names its host with non-ASCII characters. Write it in plain ASCII (punycode) "
+            + "so the import screen shows the host that is actually contacted.",
+            Problems(With(steps)));
+    }
+
     [Fact]
     public void AUrlCarryingAUsernameIsRefused()
     {

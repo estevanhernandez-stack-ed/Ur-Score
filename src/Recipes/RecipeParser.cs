@@ -149,6 +149,12 @@ public static class RecipeParser
         {
             problems.Add($"{Capitalize(what)} must name its host directly, not through a placeholder.");
         }
+
+        if (host.Any(c => c > 127))
+        {
+            problems.Add($"{Capitalize(what)} names its host with non-ASCII characters. Write it in plain ASCII "
+                + "(punycode) so the import screen shows the host that is actually contacted.");
+        }
     }
 
     private static List<RecipeInput> ParseInputs(JsonElement root, List<string> problems)
