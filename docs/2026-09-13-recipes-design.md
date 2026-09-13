@@ -6,6 +6,10 @@
 >
 > Host-side spec this still answers to:
 > `ROROROblox/docs/superpowers/specs/2026-09-09-external-metric-alerts-design.md`.
+>
+> **Extended 2026-09-13 by `2026-09-13-stats-games-icons-design.md`,** which replaces this
+> document's single `metricId` and `value` (§3.1, §3.2), the import screen (§6.2), the window (§8.1)
+> and the build order (§13). Read both.
 
 ## §0 Why this exists
 
