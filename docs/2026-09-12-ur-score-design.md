@@ -44,7 +44,9 @@ the result.
    synthetic Guid per member so each gets an independent bucket, and put the member's name in the
    metric id, which the alert body already displays. That is deliberately not in scope here.
 
-2. **The endpoint is compiled in; the clan is configured.** A plugin is the one place a vendor's
+2. **The endpoint is compiled in; the clan is configured.** *(Superseded 2026-09-13 by
+   `2026-09-13-recipes-design.md`: sources now come from recipe files, and Ur Score's binary
+   names no vendor. The reasoning below is kept as the record of what was believed.)* A plugin is the one place a vendor's
    hostname and field path are allowed to exist — the host binary ships neither, and
    `NoVendorNameFenceTests` fails the build if that ever changes. Making the endpoint
    user-configurable would buy generality nobody asked for and hand the user a way to get it
