@@ -84,6 +84,24 @@ public class RecipeWatchTests
         public IReadOnlyCollection<string> Values() => [.. Saved];
     }
 
+    /// <summary>A minimal transport for driving a real <see cref="RecipeEngine"/> without a network.</summary>
+    private sealed class FakeTransport : IRecipeTransport
+    {
+        private readonly List<(Func<Uri, bool> Match, FetchResult Result)> _routes = [];
+
+        public FakeTransport On(string urlStart, int status, string body)
+        {
+            _routes.Add((u => u.AbsoluteUri.StartsWith(urlStart, StringComparison.Ordinal), new FetchResult(status, body, null)));
+            return this;
+        }
+
+        public Task<FetchResult> GetAsync(Uri url, IReadOnlyDictionary<string, string> headers, string label, CancellationToken ct)
+        {
+            var route = _routes.FirstOrDefault(r => r.Match(url));
+            return Task.FromResult(route.Result ?? new FetchResult(404, "{}", null));
+        }
+    }
+
     private static RecipeReading Reading(string? context, params RecipeRow[] rows) =>
         new(ReadingOutcome.Read, null, rows, [], context, rows.Length);
 
@@ -334,5 +352,34 @@ public class RecipeWatchTests
         Assert.Equal(new long[] { 111 }, engine.LastIds.ToArray());
         Assert.Equal(WatchState.Reporting, snapshot.State);
         Assert.Equal("New Alt", Assert.Single(snapshot.Unresolved).DisplayName);
+    }
+
+    [Fact]
+    public async Task ThePetSimRecipeReportsYourAccountEndToEnd()
+    {
+        // The seam between RecipeWatch and RecipeEngine is otherwise only type-checked: this drives
+        // a real engine, through a real watch, off a fake transport standing in for the network.
+        const string battle = """{ "status": "ok", "data": { "configName": "B" } }""";
+        const string clanResponse = """
+            { "status": "ok", "data": { "Battles": { "B": {
+                "PointContributions": [ { "UserID": 111, "Points": 4200 }, { "UserID": 222, "Points": 10 } ]
+            } } } }
+            """;
+
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, clanResponse);
+
+        var engine = new RecipeEngine(transport, new FakeKeys());
+        var host = new FakeHost(true, [MyAccount]);
+        var watch = new RecipeWatch(
+            engine, host, new FakeKeys(), new ReportPolicy("clan.battle.points", new HashSet<Guid> { Mine }), PetSim, Clan);
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.Reporting, snapshot.State);
+        var sent = Assert.Single(host.Reported);
+        Assert.Equal((Mine, "clan.battle.points", 4200d), (sent.Subject, sent.MetricId, sent.Value));
+        Assert.Equal(2, snapshot.Rows!.Count);
     }
 }
