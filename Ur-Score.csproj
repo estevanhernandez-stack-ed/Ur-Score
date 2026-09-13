@@ -13,6 +13,9 @@
     <Description>Reads a number for your own accounts from wherever a recipe says, and hands it to RoRoRo.</Description>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
+    <!-- Made by build/make-icon.py from the same art as icon.png. WPF windows with no Icon of their
+         own use the EXE's, so this one line gives the title bar, taskbar and Alt+Tab the icon. -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
