@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Labs626.UrScore.Recipes;
 
 namespace UrScore.Tests;
@@ -19,6 +20,9 @@ public class RecipeParserTests
     private const string OneListStep =
         """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score" }]""";
 
+    private const string OnePerAccountStep =
+        """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count" }]""";
+
     private static IReadOnlyList<string> Problems(string json) => RecipeParser.Parse(json).Problems;
 
     [Fact]
@@ -29,7 +33,6 @@ public class RecipeParserTests
         Assert.True(result.Ok, string.Join(" | ", result.Problems));
         var recipe = result.Recipe!;
         Assert.Equal("Pet Sim 99 clan battle points", recipe.Name);
-        Assert.Equal("Points", recipe.ValueLabel);
         Assert.Equal(180, recipe.EffectiveEverySeconds);
         Assert.Equal("clan", Assert.Single(recipe.Inputs).Id);
         Assert.Equal("data", recipe.Inputs[0].Search!.List);
@@ -37,22 +40,61 @@ public class RecipeParserTests
         Assert.Equal("data.configName", recipe.Steps[0].Take["battle"]);
         Assert.Equal("battle", recipe.Steps[0].IdleWithout);
         Assert.Equal("UserID", recipe.LastStep.UserId);
-        Assert.Equal(2, recipe.Headline.Count);
+        Assert.Equal("Your clan hasn't joined this battle.", recipe.LastStep.AbsentMessage);
+        Assert.Equal("Clan place", recipe.PlaceLabel);
+        Assert.Equal("data.Icon", recipe.Icon);
+        Assert.Equal(new[] { false, true }, recipe.Headline.Select(h => h.Sum).ToArray());
     }
 
     [Fact]
-    public void TheFollowersRecipeParsesAsPerAccount()
+    public void ASingleValueBecomesAOneItemValuesList()
     {
-        var result = RecipeParser.Parse(Fixture("roblox-followers.recipe.json"));
+        // The shorthand never reaches the engine, the watch or the window: they only see Values.
+        var clan = RecipeParser.Parse(Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+        Assert.Equal(new RecipeValue("value", "Points", "Points", "clan.battle.points", Sum: true), Assert.Single(clan.LastStep.Values));
+
+        var followers = RecipeParser.Parse(Fixture("roblox-followers.recipe.json"));
+        Assert.True(followers.Ok, string.Join(" | ", followers.Problems));
+        Assert.True(followers.Recipe!.LastStep.PerAccount);
+        Assert.Equal(new RecipeValue("value", "Followers", "count", "roblox.followers"), Assert.Single(followers.Recipe.LastStep.Values));
+    }
+
+    [Fact]
+    public void TheProfileRecipeParsesItsValuesCountersAndUnavailable()
+    {
+        var result = RecipeParser.Parse(Fixture("petsim99-profile.recipe.json"));
 
         Assert.True(result.Ok, string.Join(" | ", result.Problems));
-        Assert.True(result.Recipe!.LastStep.PerAccount);
-        Assert.Equal("count", result.Recipe.LastStep.Value);
+        var step = result.Recipe!.LastStep;
+        Assert.Equal(new[] { "diamonds", "eggs", "rank" }, step.Values.Select(v => v.Id).ToArray());
+        Assert.Equal(new[] { "ps99.diamonds", "ps99.eggs-hatched", "ps99.rank" }, step.Values.Select(v => v.MetricId).ToArray());
+        Assert.Equal(new[] { true, true, false }, step.Values.Select(v => v.Sum).ToArray());
+        Assert.Equal(new RecipeCounters("Game statistics", "data.views.profile.data.Statistics", "ps99.stat."), step.Counters);
+        Assert.Equal("data.views.profile.available", step.Unavailable!.Path);
+        Assert.Equal(JsonValueKind.False, step.Unavailable.IsKind);
+        Assert.Equal("Profile is private. Make it public in Pet Sim 99's dashboard.", step.Unavailable.Message);
+        Assert.Null(result.Recipe.Icon);
+        Assert.Equal("Place", result.Recipe.PlaceLabel);
+    }
+
+    [Fact]
+    public void UnavailableMatchesTheSameJsonKindAndValueOnly()
+    {
+        var isFalse = new RecipeUnavailable("p", JsonValueKind.False, "false", "m");
+        var isZero = new RecipeUnavailable("p", JsonValueKind.Number, "0", "m");
+        var isText = new RecipeUnavailable("p", JsonValueKind.String, "private", "m");
+
+        using var document = JsonDocument.Parse("""[false, "false", 0, 0.0, 1, "private", "Private"]""");
+        var items = document.RootElement.EnumerateArray().ToArray();
+
+        Assert.Equal(new[] { true, false, false, false, false, false, false }, items.Select(isFalse.Matches).ToArray());
+        Assert.Equal(new[] { false, false, true, true, false, false, false }, items.Select(isZero.Matches).ToArray());
+        Assert.Equal(new[] { false, false, false, false, false, true, false }, items.Select(isText.Matches).ToArray());
     }
 
     [Fact]
     public void ValueLabelDefaultsToValue() =>
-        Assert.Equal("Value", RecipeParser.Parse(With(OneListStep)).Recipe!.ValueLabel);
+        Assert.Equal("Value", RecipeParser.Parse(With(OneListStep)).Recipe!.LastStep.Values[0].Label);
 
     [Fact]
     public void APollFasterThanTheFloorIsRaisedToIt()
@@ -197,9 +239,8 @@ public class RecipeParserTests
     [Fact]
     public void AHeadlineNeedsAListFormLastStep()
     {
-        var steps = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count" }]""";
         var extra = """, "headline": [{ "label": "Total", "path": "total" }]""";
-        Assert.Contains("A headline can only be read from a list-form last step.", Problems(With(steps, extra)));
+        Assert.Contains("A headline can only be read from a list-form last step.", Problems(With(OnePerAccountStep, extra)));
     }
 
     [Fact]
@@ -244,4 +285,84 @@ public class RecipeParserTests
     [InlineData("https://example.com?x=1", "example.com")]
     public void HostOfReadsTheLiteralHostLowercased(string url, string host) =>
         Assert.Equal(host, RecipeHosts.HostOf(url));
+
+    // Stats design §7.3: every rule names its field and its step.
+
+    [Fact]
+    public void ValueAndValuesInOneStepAreRefused()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score", "values": [{ "id": "a", "label": "A", "path": "a", "metricId": "t.a" }] }]""";
+        Assert.Contains("Step 1 has both 'value' and 'values'. Use 'values' for several stats, or 'value' for one.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void ADuplicateValueIdIsNamedWithItsStep()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "values": [{ "id": "a", "label": "A", "path": "a", "metricId": "t.a" }, { "id": "a", "label": "B", "path": "b", "metricId": "t.b" }] }]""";
+        Assert.Contains("Step 1 uses the value id 'a' more than once.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void ADuplicateMetricIdWithinTheRecipeIsNamed()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "values": [{ "id": "a", "label": "A", "path": "a", "metricId": "t.same" }, { "id": "b", "label": "B", "path": "b", "metricId": "t.same" }] }]""";
+        Assert.Contains("The metricId 't.same' is suggested for more than one value. Each stat needs its own.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void AValueIdCannotUseTheCounterPrefix()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "values": [{ "id": "counter:a", "label": "A", "path": "a", "metricId": "t.a" }] }]""";
+        Assert.Contains("Step 1's value id 'counter:a' starts with 'counter:', which is kept for statistics picked from counters.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void ASumThatIsNotTrueOrFalseIsNamed()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "values": [{ "id": "a", "label": "A", "path": "a", "metricId": "t.a", "sum": "no" }] }]""";
+        Assert.Contains("'sum' in step 1's value 1 must be true or false.", Problems(With(steps)));
+
+        var extra = """, "headline": [{ "label": "Place", "path": "place", "sum": 0 }]""";
+        Assert.Contains("'sum' in headline 1 must be true or false.", Problems(With(OneListStep, extra)));
+    }
+
+    [Fact]
+    public void CountersNeedAPath()
+    {
+        var steps = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "counters": { "label": "Stats", "metricIdPrefix": "t." } }]""";
+        Assert.Contains("Step 1's counters has no 'path'.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void AnIconOnAPerAccountRecipeIsRefused() =>
+        Assert.Contains("An icon can only be read from a list-form last step.", Problems(With(OnePerAccountStep, """, "icon": "data.Icon" """)));
+
+    [Fact]
+    public void APlaceLabelOnAPerAccountRecipeIsRefused() =>
+        Assert.Contains("A placeLabel only applies to a list-form last step.", Problems(With(OnePerAccountStep, """, "placeLabel": "Rank" """)));
+
+    [Fact]
+    public void UnavailableOnAListStepIsRefused()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score", "unavailable": { "path": "open", "is": false, "message": "Closed." } }]""";
+        Assert.Contains("Step 1 has 'unavailable', but only a perAccount step can.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void UnavailableNeedsAPathAnIsAndAMessage()
+    {
+        var steps = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "unavailable": { "is": { } } }]""";
+        var problems = Problems(With(steps));
+
+        Assert.Contains("Step 1's unavailable has no 'path'.", problems);
+        Assert.Contains("Step 1's unavailable has no 'message'.", problems);
+        Assert.Contains("Step 1's unavailable has no 'is'. It must be true, false, a number or text.", problems);
+    }
+
+    [Fact]
+    public void AnAbsentMessageThatIsNotTextIsNamed()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score", "absentMessage": true }]""";
+        Assert.Contains("Step 1's 'absentMessage' must be text.", Problems(With(steps)));
+    }
 }

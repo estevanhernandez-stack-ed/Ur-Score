@@ -108,9 +108,11 @@ public static class ImportReview
             changes.Add($"Polls every {incoming.EffectiveEverySeconds}s instead of {installed.EffectiveEverySeconds}s.");
         }
 
-        if (!string.Equals(installed.MetricId, incoming.MetricId, StringComparison.Ordinal))
+        var installedMetricId = installed.LastStep.Values[0].MetricId;
+        var incomingMetricId = incoming.LastStep.Values[0].MetricId;
+        if (!string.Equals(installedMetricId, incomingMetricId, StringComparison.Ordinal))
         {
-            changes.Add($"Suggests metric id {incoming.MetricId} instead of {installed.MetricId}.");
+            changes.Add($"Suggests metric id {incomingMetricId} instead of {installedMetricId}.");
         }
 
         return new UpdateComparison(true, added.Count > 0 || removed.Count > 0, changes);

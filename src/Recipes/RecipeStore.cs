@@ -25,7 +25,7 @@ public sealed record RecipeState(
         .ToHashSet();
 
     public string MetricIdFor(Recipe recipe) =>
-        string.IsNullOrWhiteSpace(MetricIdOverride) ? recipe.MetricId : MetricIdOverride.Trim();
+        string.IsNullOrWhiteSpace(MetricIdOverride) ? recipe.LastStep.Values[0].MetricId : MetricIdOverride.Trim();
 }
 
 public sealed record InstalledRecipe(Recipe Recipe, string Text, RecipeState State);

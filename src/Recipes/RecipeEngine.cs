@@ -248,7 +248,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         }
 
         var userIdPath = Placeholders.Fill(step.UserId!, values, encode: false);
-        var valuePath = Placeholders.Fill(step.Value!, values, encode: false);
+        var valuePath = Placeholders.Fill(step.Values[0].Path, values, encode: false);
         var rows = new List<RecipeRow>();
         string? firstProblem = null;
         var total = 0;
@@ -328,7 +328,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
 
             using (document!)
             {
-                var valuePath = Placeholders.Fill(step.Value!, values, encode: false);
+                var valuePath = Placeholders.Fill(step.Values[0].Path, values, encode: false);
                 var result = RecipePath.Resolve(document!.RootElement, valuePath);
 
                 if (result.Outcome != PathOutcome.Found)

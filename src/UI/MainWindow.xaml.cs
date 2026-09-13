@@ -266,8 +266,8 @@ public partial class MainWindow : Window
         ClanLine.Text = "Not started.";
         ClanDetailLine.Text = "";
         AttributionLine.Text = recipe.Credit;
-        LeaderboardValueColumn.Header = recipe.ValueLabel;
-        AccountsValueColumn.Header = recipe.ValueLabel;
+        LeaderboardValueColumn.Header = recipe.LastStep.Values[0].Label;
+        AccountsValueColumn.Header = recipe.LastStep.Values[0].Label;
         DetailLine.Text = $"Reads {recipe.Name} when started.";
     }
 
@@ -756,7 +756,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var window = new ImportWindow(recipe, review, comparison, installed?.State, RuleSentence(recipe.MetricId).Text)
+            var window = new ImportWindow(recipe, review, comparison, installed?.State, RuleSentence(recipe.LastStep.Values[0].MetricId).Text)
             {
                 Owner = this,
             };

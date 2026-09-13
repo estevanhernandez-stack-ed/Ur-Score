@@ -118,7 +118,10 @@ public class ImportReviewTests
     public void AMetricIdChangeIsListed()
     {
         var installed = Load("petsim99-clan-battle.recipe.json");
-        var incoming = installed with { MetricId = "clan.points" };
+        var incoming = installed with
+        {
+            Steps = [installed.Steps[0], installed.LastStep with { Values = [installed.LastStep.Values[0] with { MetricId = "clan.points" }] }],
+        };
 
         var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
 
