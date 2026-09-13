@@ -90,6 +90,7 @@ public partial class MainWindow : Window
 
     private string? _lastDashboardContext;
     private IReadOnlyList<string> _storeProblems = [];
+    private string? _recipeFileNote;
     private Settings _settings = Settings.Load();
     private InstalledRecipe? _active;
     private RecipeWatch? _watch;
@@ -142,7 +143,17 @@ public partial class MainWindow : Window
         if (_active is null) return;
 
         var fresh = _store.Find(_active.Recipe.Slug);
-        if (fresh is null) return;
+        if (fresh is null)
+        {
+            // Removed on disk mid-session. Keep running what was loaded, so a live read is not cut off, but say so:
+            // quietly running a recipe that no longer exists on disk is the kind of silent divergence this window avoids.
+            _recipeFileNote = $"The recipe file for {_active.Recipe.Name} is no longer in {RecipeStore.DefaultDirectory}. "
+                + "Still running the copy loaded earlier; import it again to keep it.";
+            _trail.Add(Stamp($"RECIPE FILE GONE: {_recipeFileNote}"));
+            return;
+        }
+
+        _recipeFileNote = null;
 
         _active = fresh;
 
@@ -370,6 +381,11 @@ public partial class MainWindow : Window
         {
             DetailLine.Text += "  Not watched yet, no Roblox user id resolved: "
                 + string.Join(", ", snapshot.Unresolved.Select(a => a.DisplayName));
+        }
+
+        if (_recipeFileNote is not null)
+        {
+            DetailLine.Text += "  " + _recipeFileNote;
         }
 
         foreach (var line in snapshot.Accounts)
