@@ -344,7 +344,7 @@ public partial class MainWindow : Window
         {
             var seedProblem = await SeedRowsAsync();
 
-            var snapshot = await EnsureWatch(active).RunOnceAsync(CancellationToken.None);
+            var snapshot = await EnsureWatch(_active ?? active).RunOnceAsync(CancellationToken.None);
             Render(snapshot);
 
             if (seedProblem is not null)
