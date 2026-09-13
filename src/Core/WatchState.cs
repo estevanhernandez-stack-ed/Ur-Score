@@ -46,6 +46,27 @@ public enum WatchState
 
     /// <summary>RoRoRo refused us — a revoked capability, or a rejected handshake.</summary>
     Rejected,
+
+    /// <summary>The recipe has an input the user has not filled in. Nothing is polled.</summary>
+    NeedsInput,
+
+    /// <summary>The source says a value the user entered, such as a clan name, matches nothing. Waiting will not fix it.</summary>
+    InputNotFound,
+
+    /// <summary>The source says there is nothing to read right now, such as no clan battle running. Normal, not an error.</summary>
+    SourceIdle,
+
+    /// <summary>The source asked us to slow down. The next poll tries again.</summary>
+    RateLimited,
+
+    /// <summary>The source wants a signed-in session, which recipes never have. Held until the recipe or its inputs change.</summary>
+    SignInRequired,
+
+    /// <summary>The recipe needs a key that is not saved, or that is saved for a different host.</summary>
+    KeyMissing,
+
+    /// <summary>The source refused the saved key. Held until a key changes, so a bad key is not retried every poll.</summary>
+    KeyRejected,
 }
 
 /// <summary>One of the user's accounts, as the window lists it.</summary>

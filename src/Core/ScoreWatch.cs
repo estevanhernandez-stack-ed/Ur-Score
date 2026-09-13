@@ -216,9 +216,7 @@ public sealed class ScoreWatch(
     /// review (F6).
     /// </para>
     /// </summary>
-    internal static string RejectedMessage(string capability) =>
-        $"RoRoRo refused this: {capability} is not granted. There is no per-capability re-grant — "
-        + "remove Ur Score from RoRoRo's Plugins page and reinstall it to be asked again.";
+    internal static string RejectedMessage(string capability) => RecipeWatch.RejectedMessage(capability);
 
     private void Remember(
         Guid subject, IReadOnlyList<HostAccount> accounts, double value, DateTimeOffset at)
