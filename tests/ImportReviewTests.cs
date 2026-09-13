@@ -115,6 +115,19 @@ public class ImportReviewTests
     }
 
     [Fact]
+    public void AMetricIdChangeIsListed()
+    {
+        var installed = Load("petsim99-clan-battle.recipe.json");
+        var incoming = installed with { MetricId = "clan.points" };
+
+        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.True(comparison.IsUpdate);
+        Assert.False(comparison.AsksAgain);
+        Assert.Contains("Suggests metric id clan.points instead of clan.battle.points.", comparison.Changes);
+    }
+
+    [Fact]
     public void AnUpdateThatContactsANewHostAsksAgainAndSaysWhatIsNew()
     {
         var installed = Load("petsim99-clan-battle.recipe.json");

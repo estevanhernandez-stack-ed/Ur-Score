@@ -68,7 +68,10 @@ public partial class ImportWindow : Window
     public IReadOnlyDictionary<string, string> Inputs =>
         _inputs.ToDictionary(i => i.Id, i => i.Value.Trim(), StringComparer.Ordinal);
 
-    /// <summary>Null when the user kept the recipe's suggested metric id.</summary>
+    /// <summary>
+    /// The metric id the user accepted, pinned so a later recipe update cannot move reports to a
+    /// metric with no rule (spec §2: a recipe never decides what happens with the number).
+    /// </summary>
     public string? MetricIdOverride { get; private set; }
 
     private void OnImportClick(object sender, RoutedEventArgs e)
@@ -88,7 +91,7 @@ public partial class ImportWindow : Window
             return;
         }
 
-        MetricIdOverride = string.Equals(metricId, _recipe.MetricId, StringComparison.Ordinal) ? null : metricId;
+        MetricIdOverride = metricId;
         DialogResult = true;
     }
 }
