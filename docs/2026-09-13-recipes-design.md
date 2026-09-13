@@ -86,7 +86,7 @@ Every step has a `url`. Earlier steps can `take` values; the last step does the 
 | `url` | https only. May contain placeholders (§3.5). |
 | `useKeys` | Optional list of key ids this step sends. Each is placed as its declaration says (§3.4). |
 | `take` | Map of variable name to path. Makes the value available to later steps as `{name}`. |
-| `idleWithout` | A variable name. If `take` finds nothing for it (absent, null or an empty string), the recipe is idle, not failing. |
+| `idleWithout` | A variable name. If `take` reads a JSON null on its path or an empty string, the recipe is idle, not failing. A key that is not there at all is a changed shape, reported with the keys present, never read as idle. |
 | `idleMessage` | What the window says when idle, such as "No clan battle running". |
 | `rows` | Last step, list form: path to an array whose items are players. |
 | `userId` | Last step, list form: the field inside each row holding a Roblox user id. |
