@@ -12,6 +12,7 @@ using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.Source;
+using Labs626.UrScore.Theming;
 
 namespace Labs626.UrScore.UI;
 
@@ -80,6 +81,10 @@ public partial class MainWindow : Window
     private readonly HttpClient _recipeHttp = new(HttpRecipeTransport.CreateHandler());
     private readonly DispatcherTimer _timer = new();
     private readonly HostClient _host = new(PluginId);
+
+    /// <summary>Its own connection, so the long-lived theme stream never shares a channel with reports.</summary>
+    private readonly HostClient _themeHost = new(PluginId);
+    private readonly CancellationTokenSource _closing = new();
     private readonly NameClient _nameClient;
     private readonly RecipeStore _store = new(RecipeStore.DefaultDirectory);
     private readonly KeyStore _keys = new(KeyStore.DefaultPath);
@@ -100,6 +105,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ThemeService.Attach(this);
+        Loaded += (_, _) => _ = FollowThemeAsync(_closing.Token);
         AccountsGrid.ItemsSource = _rows;
         AccountsGrid.CellEditEnding += OnSendToggled;
         LeaderboardGrid.ItemsSource = _leaderboardRows;
@@ -113,6 +120,67 @@ public partial class MainWindow : Window
         RenderRule();
         RenderPolicy();
         StateLine.Text = "Not started.";
+    }
+
+    /// <summary>How long to wait before asking RoRoRo for its theme again after it was not there.</summary>
+    private static readonly TimeSpan ThemeRetry = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Follows RoRoRo's theme for as long as the window is open: the current palette on connect, then
+    /// every switch. While RoRoRo is not running the window keeps the last palette it had (Brand at
+    /// first) and asks again every <see cref="ThemeRetry"/>. A host too old to have the theme feed
+    /// is asked once and left on the fallback.
+    /// </summary>
+    private async Task FollowThemeAsync(CancellationToken cancellationToken)
+    {
+        var following = false;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _themeHost.FollowThemeAsync(palette => Dispatcher.InvokeAsync(() =>
+                {
+                    ThemeService.Apply(ThemeService.Current.Merge(palette));
+                    if (following) return;
+                    following = true;
+                    _trail.Add(Stamp("THEME: following RoRoRo's theme."));
+                }), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
+            {
+                _trail.Add(Stamp("THEME: this RoRoRo has no theme feed, so the window keeps RoRoRo's Brand colours."));
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (following)
+                {
+                    following = false;
+                    _trail.Add(Stamp($"THEME: stopped following RoRoRo's theme ({ex.GetType().Name}); colours stay as they are."));
+                }
+            }
+
+            try
+            {
+                await Task.Delay(ThemeRetry, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _closing.Cancel();
+        _themeHost.Dispose();
+        base.OnClosed(e);
     }
 
     private string RawDirectory => Path.Combine(
@@ -412,10 +480,17 @@ public partial class MainWindow : Window
         RenderRule();
     }
 
+    /// <summary>
+    /// The values a recipe took, for people: "battle=ArcadeBattle2026" reads as "ArcadeBattle2026".
+    /// The names stay in the trail and diagnostics, where the recipe's own words are what helps.
+    /// </summary>
+    private static string ContextText(string context) => string.Join(" · ",
+        context.Split("; ").Select(part => part.IndexOf('=') is var at and >= 0 ? part[(at + 1)..] : part));
+
     private async Task RenderDashboardAsync(RecipeSnapshot snapshot)
     {
         ClanLine.Text = snapshot.State is WatchState.Reporting or WatchState.NoMatches or WatchState.HostDown
-            ? snapshot.Context is not null ? $"Reading {snapshot.Context}" : "Reading live."
+            ? snapshot.Context is not null ? $"Live: {ContextText(snapshot.Context)}" : "Live."
             : _redactor.Redact(snapshot.Detail);
 
         // No fresh rows this cycle: leave the last drawing, beside a state line that says what happened.
@@ -538,7 +613,7 @@ public partial class MainWindow : Window
         return status.State switch
         {
             RuleState.NoFile =>
-                ("RoRoRo has no rules file yet, so nothing can alert. Adding the rule below creates one.", true),
+                ("RoRoRo has no rules file yet, so nothing can alert until a rule is added. Adding one creates the file.", true),
             RuleState.NoRuleForMetric =>
                 ($"RoRoRo has rules, but none for {metricId} — so reports will land and never alert.", true),
             RuleState.OursIntact when recorded is not null && status.Threshold != recorded =>

@@ -1,5 +1,6 @@
 using System.Windows;
 using Labs626.UrScore.Recipes;
+using Labs626.UrScore.Theming;
 
 namespace Labs626.UrScore.UI;
 
@@ -29,6 +30,7 @@ public partial class ImportWindow : Window
         string ruleSentence, bool settingsOnly = false)
     {
         InitializeComponent();
+        ThemeService.Attach(this);
         _recipe = recipe;
 
         Title = settingsOnly ? "Recipe settings" : comparison.IsUpdate ? "Update recipe" : "Import recipe";
@@ -43,8 +45,10 @@ public partial class ImportWindow : Window
             .ToList();
 
         PollLine.Text = $"Asks every {recipe.EffectiveEverySeconds} seconds.";
-        ReusedLine.Text = string.Join(" ", review.ReusedKeys);
-        ChangesLine.Text = comparison.Changes.Count == 0 ? "" : "What changed: " + string.Join(" ", comparison.Changes);
+        Show(ReusedLine, string.Join(" ", review.ReusedKeys));
+        Show(ChangesLine, comparison.Changes.Count == 0
+            ? ""
+            : "What changed:" + string.Concat(comparison.Changes.Select(c => Environment.NewLine + "• " + c)));
 
         MetricIdBox.Text = existing?.MetricIdFor(recipe) ?? recipe.MetricId;
         RuleLine.Text = ruleSentence;
@@ -60,7 +64,7 @@ public partial class ImportWindow : Window
         ];
         InputsList.ItemsSource = _inputs;
 
-        RefusalLine.Text = string.Join(Environment.NewLine, review.Refusals);
+        Show(RefusalLine, string.Join(Environment.NewLine, review.Refusals));
         ImportButton.IsEnabled = review.CanImport;
         ImportButton.Content = settingsOnly ? "Save" : comparison.IsUpdate ? "Update" : "Import";
     }
@@ -80,18 +84,25 @@ public partial class ImportWindow : Window
         var missing = _inputs.FirstOrDefault(i => string.IsNullOrWhiteSpace(i.Value));
         if (missing is not null)
         {
-            RefusalLine.Text = $"Set {missing.Label} first.";
+            Show(RefusalLine, $"Set {missing.Label} first.");
             return;
         }
 
         var metricId = MetricIdBox.Text.Trim();
         if (metricId.Length == 0)
         {
-            RefusalLine.Text = "The metric id cannot be empty. RoRoRo's rules find the number by it.";
+            Show(RefusalLine, "The metric id cannot be empty. RoRoRo's rules find the number by it.");
             return;
         }
 
         MetricIdOverride = metricId;
         DialogResult = true;
+    }
+
+    /// <summary>An empty line takes no space, so the screen has no gaps where nothing applies.</summary>
+    private static void Show(System.Windows.Controls.TextBlock line, string text)
+    {
+        line.Text = text;
+        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }
