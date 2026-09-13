@@ -10,7 +10,7 @@
     <Version>0.1.0</Version>
     <Company>626 Labs LLC</Company>
     <Product>RoRoRo Ur Score</Product>
-    <Description>Watches clan battle scores for your own accounts and hands each number to RoRoRo.</Description>
+    <Description>Reads a number for your own accounts from wherever a recipe says, and hands it to RoRoRo.</Description>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
   </PropertyGroup>

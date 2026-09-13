@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "contractVersion": "1.0",
   "publisher": "626 Labs LLC",
-  "description": "Watches clan battle scores for your own accounts and hands each number to RoRoRo.",
+  "description": "Reads a number for your own accounts from wherever a recipe says, and hands it to RoRoRo.",
   "capabilities": [
     "host.metrics.report",
     "host.queries.accounts"

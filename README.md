@@ -1,3 +1,8 @@
+> **Being rebuilt around recipes (2026-09-13).** Ur Score no longer knows any one game. It reads
+> whatever a recipe file describes, and Pet Simulator 99 is one recipe among any number. The setup
+> below describes the build before recipes and is rewritten when the new window lands. Design:
+> [`docs/2026-09-13-recipes-design.md`](docs/2026-09-13-recipes-design.md).
+
 # RoRoRo Ur Score
 
 > A [RoRoRo](https://github.com/estevanhernandez-stack-ed/ROROROblox) plugin that watches Pet
