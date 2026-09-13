@@ -625,6 +625,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(MetricId))
+        {
+            RuleLine.Text = "No stat is set to send. Tick Send on a stat in Recipe settings, then add its rule here.";
+            AddRuleButton.IsEnabled = false;
+            RulePreview.Text = "";
+            return;
+        }
+
         (RuleLine.Text, AddRuleButton.IsEnabled) = RuleSentence(MetricId);
         RulePreview.Text = AddRuleButton.IsEnabled
             ? $"Rate, below {DefaultThreshold} per minute over {DefaultWindowMinutes} minutes"
@@ -661,6 +669,7 @@ public partial class MainWindow : Window
     private void OnAddRuleClick(object sender, RoutedEventArgs e)
     {
         if (_active is null) return;
+        if (string.IsNullOrWhiteSpace(MetricId)) return;
 
         var metricId = MetricId;
         var preview = RulesFile.Preview(metricId, DefaultThreshold, DefaultWindowMinutes);
