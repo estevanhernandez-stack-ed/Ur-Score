@@ -189,6 +189,9 @@ public partial class MainWindow : Window
 
     private string MetricId => _active is null ? "" : _active.State.MetricIdFor(_active.Recipe);
 
+    /// <summary>Until the window shows a column per stat (Task 13), it ranks and shows the recipe's first value.</summary>
+    private string FirstStatKey => _active?.Recipe.LastStep.Values[0].Id ?? "";
+
     /// <summary>Until stats are chosen per recipe (Task 7), the recipe's first value is the one stat sent.</summary>
     private IReadOnlyList<SentStat> SentStats() => _active is null
         ? []
@@ -512,7 +515,7 @@ public partial class MainWindow : Window
             : "";
 
         var mine = _rows.Where(r => r.RobloxUserId != 0).Select(r => r.RobloxUserId).ToHashSet();
-        var ranked = Leaderboard.Rank(snapshot.Rows, mine);
+        var ranked = Leaderboard.Rank(snapshot.Rows, mine, FirstStatKey);
 
         await RenderLeaderboardAsync(ranked);
         RenderAccountDashboardRows(ranked, DateTimeOffset.UtcNow);
@@ -549,7 +552,7 @@ public partial class MainWindow : Window
                 Name = r.IsMine
                     ? mineNames.GetValueOrDefault(r.UserId, $"You ({r.UserId})")
                     : resolved.GetValueOrDefault(r.UserId, $"Member {r.UserId}"),
-                Value = r.Value.ToString("N0"),
+                Value = r.Values.TryGetValue(FirstStatKey, out var value) ? value.ToString("N0") : "—",
                 Yours = r.IsMine ? "You" : "",
             });
         }
@@ -570,9 +573,15 @@ public partial class MainWindow : Window
             }
 
             row.Position = $"#{r.Position}";
-            row.Value = r.Value.ToString("N0");
+            if (!r.Values.TryGetValue(FirstStatKey, out var value))
+            {
+                row.Value = "—";
+                continue;
+            }
 
-            var current = new PointsSample(r.Value, observedAt);
+            row.Value = value.ToString("N0");
+
+            var current = new PointsSample(value, observedAt);
             var rate = PointsRate.PerMinute(_previousSamples.GetValueOrDefault(row.AccountId), current);
             row.RatePerMinute = rate is double perMinute ? $"{perMinute:+0.#;-0.#;0}/min" : "—";
             _previousSamples[row.AccountId] = current;

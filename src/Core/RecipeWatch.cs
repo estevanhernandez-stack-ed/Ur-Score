@@ -121,7 +121,9 @@ public sealed class RecipeWatch(
         var unresolved = AccountMap.Unresolved(accounts);
         var map = AccountMap.Build(accounts);
 
-        var reading = await engine.ReadAsync(recipe, inputs, [.. map.Keys], cancellationToken).ConfigureAwait(false);
+        // Until the watch is told which stats are shown (Task 6), it reads the stats it sends.
+        var tracked = policy.SentStats.Select(stat => stat.Key).ToHashSet(StringComparer.Ordinal);
+        var reading = await engine.ReadAsync(recipe, inputs, [.. map.Keys], tracked, cancellationToken).ConfigureAwait(false);
 
         WatchState? stopped = reading.Outcome switch
         {
@@ -162,7 +164,7 @@ public sealed class RecipeWatch(
         var seen = reading.RowsSeen;
         var mine = reading.Rows
             .Where(r => map.ContainsKey(r.UserId))
-            .Select(r => (Subject: map[r.UserId], r.Value))
+            .Select(r => (Subject: map[r.UserId], r.Values))
             .ToList();
 
         if (!hostUp)
@@ -179,14 +181,16 @@ public sealed class RecipeWatch(
 
         var observedAt = DateTimeOffset.UtcNow;
 
-        foreach (var (subject, value) in mine)
+        foreach (var (subject, values) in mine)
         {
             try
             {
-                // Raw and unmodified, through the only route out. Until the engine reads several
-                // stats per row (Task 5), a row carries one value and the window sends one stat.
+                // Raw and unmodified, through the only route out: one observation per sent stat
+                // this row has a number for.
                 foreach (var stat in policy.SentStats)
                 {
+                    if (!values.TryGetValue(stat.Key, out var value)) continue;
+
                     var sent = await policy.SendAsync(host, subject, stat.MetricId, value, observedAt, cancellationToken)
                         .ConfigureAwait(false);
 

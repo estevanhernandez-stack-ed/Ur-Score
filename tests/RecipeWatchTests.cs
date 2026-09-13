@@ -27,7 +27,7 @@ public class RecipeWatchTests
         public IReadOnlyCollection<long> LastIds { get; private set; } = [];
 
         public Task<RecipeReading> ReadAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs,
-            IReadOnlyCollection<long> accountUserIds, CancellationToken ct)
+            IReadOnlyCollection<long> accountUserIds, IReadOnlySet<string> trackedStats, CancellationToken ct)
         {
             Calls++;
             LastIds = accountUserIds;
@@ -44,13 +44,13 @@ public class RecipeWatchTests
         public int MaxInFlight;
 
         public async Task<RecipeReading> ReadAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs,
-            IReadOnlyCollection<long> accountUserIds, CancellationToken ct)
+            IReadOnlyCollection<long> accountUserIds, IReadOnlySet<string> trackedStats, CancellationToken ct)
         {
             var call = Interlocked.Increment(ref Calls);
             MaxInFlight = Math.Max(MaxInFlight, Interlocked.Increment(ref _inFlight));
             if (call == 1) await gate.Task;
             Interlocked.Decrement(ref _inFlight);
-            return Reading(("battle=A"), new RecipeRow(111, 1));
+            return Reading(("battle=A"), Row(111, 1));
         }
     }
 
@@ -104,6 +104,8 @@ public class RecipeWatchTests
         }
     }
 
+    private static RecipeRow Row(long userId, double value) => RecipeEngineTests.Row(userId, value);
+
     private static RecipeReading Reading(string? context, params RecipeRow[] rows) =>
         new(ReadingOutcome.Read, null, rows, [], context, rows.Length);
 
@@ -128,7 +130,7 @@ public class RecipeWatchTests
         var host = new FakeHost(true, [MyAccount]);
         var before = DateTimeOffset.UtcNow;
 
-        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 4200), new RecipeRow(222, 10))), host)
+        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", Row(111, 4200), Row(222, 10))), host)
             .RunOnceAsync(CancellationToken.None);
 
         Assert.Equal(WatchState.Reporting, snapshot.State);
@@ -143,7 +145,7 @@ public class RecipeWatchTests
     public async Task SourceIdleIsNotAnErrorAndKeepsTheLastValues()
     {
         var host = new FakeHost(true, [MyAccount]);
-        var engine = new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 4200)));
+        var engine = new FakeEngine(() => Reading("battle=A", Row(111, 4200)));
         var watch = Watch(engine, host);
         await watch.RunOnceAsync(CancellationToken.None);
 
@@ -159,11 +161,11 @@ public class RecipeWatchTests
     {
         // Last battle's points beside this battle's, with nothing saying which is which, is a lie.
         var host = new FakeHost(true, [MyAccount]);
-        var engine = new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 4200)));
+        var engine = new FakeEngine(() => Reading("battle=A", Row(111, 4200)));
         var watch = Watch(engine, host);
         await watch.RunOnceAsync(CancellationToken.None);
 
-        engine.Read = () => Reading("battle=B", new RecipeRow(222, 5));
+        engine.Read = () => Reading("battle=B", Row(222, 5));
         var snapshot = await watch.RunOnceAsync(CancellationToken.None);
 
         Assert.Equal(WatchState.NoMatches, snapshot.State);
@@ -174,14 +176,14 @@ public class RecipeWatchTests
     public async Task WhileRoRoRoIsDownNothingIsSentAndNothingIsReplayedAfter()
     {
         var host = new FakeHost(false, [MyAccount]);
-        var engine = new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 100)));
+        var engine = new FakeEngine(() => Reading("battle=A", Row(111, 100)));
         var watch = Watch(engine, host);
 
         var down = await watch.RunOnceAsync(CancellationToken.None);
         Assert.Equal(WatchState.HostDown, down.State);
 
         host.Reachable = true;
-        engine.Read = () => Reading("battle=A", new RecipeRow(111, 200));
+        engine.Read = () => Reading("battle=A", Row(111, 200));
         await watch.RunOnceAsync(CancellationToken.None);
 
         Assert.Equal(new[] { 200d }, host.Reported.Select(r => r.Value).ToArray());
@@ -191,7 +193,7 @@ public class RecipeWatchTests
     public async Task DecliningTheAccountsCapabilityIsRejectedByName()
     {
         var host = new FakeHost(true, [MyAccount]) { DenyAccounts = true };
-        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 1))), host).RunOnceAsync(CancellationToken.None);
+        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", Row(111, 1))), host).RunOnceAsync(CancellationToken.None);
 
         Assert.Equal(WatchState.Rejected, snapshot.State);
         Assert.Contains("host.queries.accounts", snapshot.Detail);
@@ -201,7 +203,7 @@ public class RecipeWatchTests
     public async Task DecliningTheReportCapabilityIsRejectedByName()
     {
         var host = new FakeHost(true, [MyAccount]) { DenyReports = true };
-        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 1))), host).RunOnceAsync(CancellationToken.None);
+        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", Row(111, 1))), host).RunOnceAsync(CancellationToken.None);
 
         Assert.Equal(WatchState.Rejected, snapshot.State);
         Assert.Contains("host.metrics.report", snapshot.Detail);
@@ -211,7 +213,7 @@ public class RecipeWatchTests
     public async Task NoRowOfYoursIsNoMatches()
     {
         var host = new FakeHost(true, [MyAccount]);
-        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(222, 1))), host).RunOnceAsync(CancellationToken.None);
+        var snapshot = await Watch(new FakeEngine(() => Reading("battle=A", Row(222, 1))), host).RunOnceAsync(CancellationToken.None);
 
         Assert.Equal(WatchState.NoMatches, snapshot.State);
         Assert.Equal("Read 1 row(s); none of them are your accounts.", snapshot.Detail);
@@ -221,7 +223,7 @@ public class RecipeWatchTests
     public async Task AnAccountOffTheSendListIsDroppedAndCounted()
     {
         var host = new FakeHost(true, [MyAccount]);
-        var watch = Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 1))), host, allowed: []);
+        var watch = Watch(new FakeEngine(() => Reading("battle=A", Row(111, 1))), host, allowed: []);
 
         await watch.RunOnceAsync(CancellationToken.None);
 
@@ -233,7 +235,7 @@ public class RecipeWatchTests
     public async Task TheMetricIdSentIsTheOneThePolicyHolds()
     {
         var host = new FakeHost(true, [MyAccount]);
-        var watch = Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 1))), host);
+        var watch = Watch(new FakeEngine(() => Reading("battle=A", Row(111, 1))), host);
         watch.UpdatePolicy([PointsStat with { MetricId = "my.points" }], new HashSet<Guid> { Mine });
 
         await watch.RunOnceAsync(CancellationToken.None);
@@ -311,7 +313,7 @@ public class RecipeWatchTests
     public async Task TheSameRecipeAndInputsKeepTheRememberedValues()
     {
         var host = new FakeHost(true, [MyAccount]);
-        var watch = Watch(new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 4200))), host);
+        var watch = Watch(new FakeEngine(() => Reading("battle=A", Row(111, 4200))), host);
         await watch.RunOnceAsync(CancellationToken.None);
 
         watch.UpdateRecipe(PetSim, new Dictionary<string, string>(Clan));
@@ -347,7 +349,7 @@ public class RecipeWatchTests
     public async Task OnlyResolvedUserIdsReachTheEngineAndUnresolvedAccountsAreNamed()
     {
         var waiting = new HostAccount(Guid.NewGuid(), 0, "New Alt");
-        var engine = new FakeEngine(() => Reading("battle=A", new RecipeRow(111, 1)));
+        var engine = new FakeEngine(() => Reading("battle=A", Row(111, 1)));
 
         var snapshot = await Watch(engine, new FakeHost(true, [MyAccount, waiting])).RunOnceAsync(CancellationToken.None);
 
