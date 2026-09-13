@@ -9,7 +9,8 @@ namespace Labs626.UrScore.Core;
 /// <summary>
 /// Everything the window renders from one cycle. <see cref="Rows"/> carries every row the recipe
 /// read, the user's own and everyone else's, for the leaderboard; only the user's own are ever
-/// reported, through <see cref="ReportPolicy"/>.
+/// reported, through <see cref="ReportPolicy"/>. <see cref="CellMisses"/> holds only the user's own
+/// accounts, so another member's id never travels further than the leaderboard.
 /// </summary>
 public sealed record RecipeSnapshot(
     WatchState State,
@@ -19,11 +20,22 @@ public sealed record RecipeSnapshot(
     int RowsSeen,
     string? Context = null,
     IReadOnlyList<RecipeRow>? Rows = null,
-    IReadOnlyList<HeadlineValue>? Headline = null);
+    IReadOnlyList<HeadlineValue>? Headline = null)
+{
+    public IReadOnlyDictionary<long, string> Unavailable { get; init; } = new Dictionary<long, string>();
+
+    public IReadOnlyDictionary<string, string> StatMisses { get; init; } = new Dictionary<string, string>();
+
+    public IReadOnlyDictionary<(long UserId, string Stat), string> CellMisses { get; init; } = new Dictionary<(long UserId, string Stat), string>();
+
+    public IReadOnlyList<string> CounterNames { get; init; } = [];
+
+    public string? IconText { get; init; }
+}
 
 /// <summary>
 /// One cycle: ask RoRoRo for the user's accounts, read the recipe, keep the rows that are the
-/// user's, and hand each value to RoRoRo through the report policy. Carries every guarantee
+/// user's, and hand each sent stat to RoRoRo through the report policy. Carries every guarantee
 /// <c>ScoreWatch</c> earned: one cycle at a time, raw values in UTC, no backlog when RoRoRo returns,
 /// and a named capability when consent is declined.
 /// </summary>
@@ -33,7 +45,8 @@ public sealed class RecipeWatch(
     IKeyStore keys,
     ReportPolicy policy,
     Recipe recipe,
-    IReadOnlyDictionary<string, string> inputs)
+    IReadOnlyDictionary<string, string> inputs,
+    IReadOnlySet<string> trackedStats)
 {
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
@@ -61,9 +74,10 @@ public sealed class RecipeWatch(
 
     /// <summary>
     /// A different recipe or different inputs mean every remembered value belongs to something else,
-    /// so they are cleared. The same recipe and inputs, reloaded, keep them.
+    /// so they are cleared. The same recipe and inputs, reloaded, keep them. A change to which stats
+    /// are tracked only changes what the next read asks for.
     /// </summary>
-    public void UpdateRecipe(Recipe newRecipe, IReadOnlyDictionary<string, string> newInputs)
+    public void UpdateRecipe(Recipe newRecipe, IReadOnlyDictionary<string, string> newInputs, IReadOnlySet<string> newTrackedStats)
     {
         var same = string.Equals(newRecipe.Slug, recipe.Slug, StringComparison.Ordinal)
                    && newInputs.Count == inputs.Count
@@ -71,6 +85,7 @@ public sealed class RecipeWatch(
 
         recipe = newRecipe;
         inputs = new Dictionary<string, string>(newInputs, StringComparer.Ordinal);
+        trackedStats = new HashSet<string>(newTrackedStats, StringComparer.Ordinal);
         _held = null;
 
         if (!same)
@@ -121,9 +136,7 @@ public sealed class RecipeWatch(
         var unresolved = AccountMap.Unresolved(accounts);
         var map = AccountMap.Build(accounts);
 
-        // Until the watch is told which stats are shown (Task 6), it reads the stats it sends.
-        var tracked = policy.SentStats.Select(stat => stat.Key).ToHashSet(StringComparer.Ordinal);
-        var reading = await engine.ReadAsync(recipe, inputs, [.. map.Keys], tracked, cancellationToken).ConfigureAwait(false);
+        var reading = await engine.ReadAsync(recipe, inputs, [.. map.Keys], trackedStats, cancellationToken).ConfigureAwait(false);
 
         WatchState? stopped = reading.Outcome switch
         {
@@ -145,7 +158,8 @@ public sealed class RecipeWatch(
             // finished thing's final numbers and stay readable until something new replaces them.
             if (reading.Outcome == ReadingOutcome.Idle) _context = null;
 
-            var snapshot = Snapshot(state, reading.Detail, 0, unresolved);
+            // An idle clan still has an icon: the engine reads it before deciding the clan sat out.
+            var snapshot = Snapshot(state, reading.Detail, 0, unresolved) with { IconText = reading.IconText };
             if (state == WatchState.KeyRejected)
             {
                 _held = (snapshot, KeyFingerprint());
@@ -171,12 +185,21 @@ public sealed class RecipeWatch(
         {
             // Nothing is fetched from the host and nothing is queued, so there is nothing to replay
             // when it comes back.
-            return Snapshot(WatchState.HostDown, "RoRoRo is not running. Still watching; nothing is being sent.", seen, unresolved, reading);
+            return Snapshot(WatchState.HostDown, "RoRoRo is not running. Still watching; nothing is being sent.", seen, unresolved, reading, map);
         }
 
         if (mine.Count == 0)
         {
-            return Snapshot(WatchState.NoMatches, $"Read {seen} row(s); none of them are your accounts.", seen, unresolved, reading);
+            var none = $"Read {seen} row(s); none of them are your accounts.";
+            if (reading.Detail is not null) none += " " + reading.Detail;
+            return Snapshot(WatchState.NoMatches, none, seen, unresolved, reading, map);
+        }
+
+        if (policy.SentStats.Count == 0)
+        {
+            var showing = $"Read {mine.Count} of {seen} row(s). No stat is set to send, so nothing went to RoRoRo.";
+            if (reading.Detail is not null) showing += " " + reading.Detail;
+            return Snapshot(WatchState.Showing, showing, seen, unresolved, reading, map);
         }
 
         var observedAt = DateTimeOffset.UtcNow;
@@ -185,8 +208,8 @@ public sealed class RecipeWatch(
         {
             try
             {
-                // Raw and unmodified, through the only route out: one observation per sent stat
-                // this row has a number for.
+                // Raw and unmodified, through the only route out: one observation per sent stat this
+                // account has a number for. The policy also checks the account's own Send.
                 foreach (var stat in policy.SentStats)
                 {
                     if (!values.TryGetValue(stat.Key, out var value)) continue;
@@ -194,18 +217,18 @@ public sealed class RecipeWatch(
                     var sent = await policy.SendAsync(host, subject, stat.MetricId, value, observedAt, cancellationToken)
                         .ConfigureAwait(false);
 
-                    if (sent) Remember(subject, accounts, value, observedAt);
+                    if (sent) Remember(subject, accounts, stat.Key, value, observedAt);
                 }
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
             {
-                return Snapshot(WatchState.Rejected, RejectedMessage("host.metrics.report"), seen, unresolved, reading);
+                return Snapshot(WatchState.Rejected, RejectedMessage("host.metrics.report"), seen, unresolved, reading, map);
             }
         }
 
         var detail = $"Reporting {mine.Count} of {seen} row(s).";
         if (reading.Detail is not null) detail += " " + reading.Detail;
-        return Snapshot(WatchState.Reporting, detail, seen, unresolved, reading);
+        return Snapshot(WatchState.Reporting, detail, seen, unresolved, reading, map);
     }
 
     /// <summary>
@@ -220,13 +243,28 @@ public sealed class RecipeWatch(
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             string.Join('\u0001', keys.Values().Order(StringComparer.Ordinal)))));
 
-    private void Remember(Guid subject, IReadOnlyList<HostAccount> accounts, double value, DateTimeOffset at)
+    private void Remember(Guid subject, IReadOnlyList<HostAccount> accounts, string statKey, double value, DateTimeOffset at)
     {
         var name = accounts.FirstOrDefault(a => a.AccountId == subject)?.DisplayName ?? subject.ToString();
-        _lines[subject] = new AccountLine(name, subject, value, at);
+        var values = _lines.TryGetValue(subject, out var line)
+            ? new Dictionary<string, double>(line.LastValues, StringComparer.Ordinal)
+            : new Dictionary<string, double>(StringComparer.Ordinal);
+
+        values[statKey] = value;
+        _lines[subject] = new AccountLine(name, subject, values, at);
     }
 
     private RecipeSnapshot Snapshot(
-        WatchState state, string? detail, int seen, IReadOnlyList<HostAccount> unresolved, RecipeReading? reading = null) =>
-        new(state, detail, [.. _lines.Values], unresolved, seen, reading?.Context ?? _context, reading?.Rows, reading?.Headline);
+        WatchState state, string? detail, int seen, IReadOnlyList<HostAccount> unresolved,
+        RecipeReading? reading = null, IReadOnlyDictionary<long, Guid>? map = null) =>
+        new(state, detail, [.. _lines.Values], unresolved, seen, reading?.Context ?? _context, reading?.Rows, reading?.Headline)
+        {
+            Unavailable = reading?.Unavailable ?? new Dictionary<long, string>(),
+            StatMisses = reading?.StatMisses ?? new Dictionary<string, string>(),
+            CellMisses = reading is null || map is null
+                ? new Dictionary<(long UserId, string Stat), string>()
+                : reading.CellMisses.Where(cell => map.ContainsKey(cell.Key.UserId)).ToDictionary(cell => cell.Key, cell => cell.Value),
+            CounterNames = reading?.CounterNames ?? [],
+            IconText = reading?.IconText,
+        };
 }

@@ -192,6 +192,9 @@ public partial class MainWindow : Window
     /// <summary>Until the window shows a column per stat (Task 13), it ranks and shows the recipe's first value.</summary>
     private string FirstStatKey => _active?.Recipe.LastStep.Values[0].Id ?? "";
 
+    /// <summary>Until stats are chosen per recipe (Task 7), the watch reads the stats it sends.</summary>
+    private IReadOnlySet<string> TrackedStats() => SentStats().Select(stat => stat.Key).ToHashSet(StringComparer.Ordinal);
+
     /// <summary>Until stats are chosen per recipe (Task 7), the recipe's first value is the one stat sent.</summary>
     private IReadOnlyList<SentStat> SentStats() => _active is null
         ? []
@@ -250,7 +253,7 @@ public partial class MainWindow : Window
             row.Send = !excluded.Contains(row.AccountId);
         }
 
-        _watch?.UpdateRecipe(installed.Recipe, installed.State.InputValues);
+        _watch?.UpdateRecipe(installed.Recipe, installed.State.InputValues, TrackedStats());
         _watch?.UpdatePolicy(SentStats(), CurrentAllowedSubjects());
         RenderRecipe();
     }
@@ -289,7 +292,7 @@ public partial class MainWindow : Window
 
         var engine = new RecipeEngine(new HttpRecipeTransport(_recipeHttp, RawDirectory, _redactor), _keys);
         var policy = new ReportPolicy(SentStats(), CurrentAllowedSubjects());
-        return _watch = new RecipeWatch(engine, _host, _keys, policy, active.Recipe, active.State.InputValues);
+        return _watch = new RecipeWatch(engine, _host, _keys, policy, active.Recipe, active.State.InputValues, TrackedStats());
     }
 
     /// <summary>
@@ -459,6 +462,7 @@ public partial class MainWindow : Window
             WatchState.SignInRequired => "The source wants signing in, which recipes cannot do.",
             WatchState.KeyMissing => "A key is needed.",
             WatchState.KeyRejected => "The source rejected the key.",
+            WatchState.Showing => "Reading. No stat is set to send to RoRoRo.",
             _ => snapshot.State.ToString(),
         };
 
@@ -480,7 +484,7 @@ public partial class MainWindow : Window
             var row = _rows.FirstOrDefault(r => r.AccountId == line.AccountId);
             if (row is null) continue;
 
-            row.LastValue = line.LastValue?.ToString("0.##") ?? "—";
+            row.LastValue = line.LastValues.TryGetValue(FirstStatKey, out var last) ? last.ToString("0.##") : "—";
             row.LastSent = line.LastReportedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "—";
         }
 
@@ -497,7 +501,7 @@ public partial class MainWindow : Window
 
     private async Task RenderDashboardAsync(RecipeSnapshot snapshot)
     {
-        ClanLine.Text = snapshot.State is WatchState.Reporting or WatchState.NoMatches or WatchState.HostDown
+        ClanLine.Text = snapshot.State is WatchState.Reporting or WatchState.Showing or WatchState.NoMatches or WatchState.HostDown
             ? snapshot.Context is not null ? $"Live: {ContextText(snapshot.Context)}" : "Live."
             : _redactor.Redact(snapshot.Detail);
 

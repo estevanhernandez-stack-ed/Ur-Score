@@ -45,8 +45,11 @@ public enum WatchState
 
     /// <summary>The source refused the saved key. Held until a key changes.</summary>
     KeyRejected,
+
+    /// <summary>Your accounts were read and are on the board, and no stat is set to send. Nothing went to RoRoRo.</summary>
+    Showing,
 }
 
-/// <summary>One of the user's accounts, as the window lists it.</summary>
+/// <summary>One of the user's accounts, as the window lists it: the last value sent for each stat key, and when.</summary>
 public sealed record AccountLine(
-    string DisplayName, Guid AccountId, double? LastValue, DateTimeOffset? LastReportedUtc);
+    string DisplayName, Guid AccountId, IReadOnlyDictionary<string, double> LastValues, DateTimeOffset? LastReportedUtc);

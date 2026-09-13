@@ -26,11 +26,14 @@ public class RecipeWatchTests
 
         public IReadOnlyCollection<long> LastIds { get; private set; } = [];
 
+        public IReadOnlySet<string> LastTracked { get; private set; } = new HashSet<string>();
+
         public Task<RecipeReading> ReadAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs,
             IReadOnlyCollection<long> accountUserIds, IReadOnlySet<string> trackedStats, CancellationToken ct)
         {
             Calls++;
             LastIds = accountUserIds;
+            LastTracked = trackedStats;
             return Task.FromResult(Read());
         }
     }
@@ -109,8 +112,12 @@ public class RecipeWatchTests
     private static RecipeReading Reading(string? context, params RecipeRow[] rows) =>
         new(ReadingOutcome.Read, null, rows, [], context, rows.Length);
 
-    private static RecipeWatch Watch(IRecipeEngine engine, FakeHost host, IEnumerable<Guid>? allowed = null, FakeKeys? keys = null) =>
-        new(engine, host, keys ?? new FakeKeys(), new ReportPolicy([PointsStat], new HashSet<Guid>(allowed ?? [Mine])), PetSim, Clan);
+    private static readonly HashSet<string> ValueOnly = ["value"];
+
+    private static RecipeWatch Watch(IRecipeEngine engine, FakeHost host, IEnumerable<Guid>? allowed = null, FakeKeys? keys = null,
+        IReadOnlyList<SentStat>? sent = null, IReadOnlySet<string>? tracked = null) =>
+        new(engine, host, keys ?? new FakeKeys(), new ReportPolicy(sent ?? [PointsStat], new HashSet<Guid>(allowed ?? [Mine])),
+            PetSim, Clan, tracked ?? ValueOnly);
 
     [Fact]
     public async Task NeedsInputIsItsOwnStateAndSendsNothing()
@@ -153,7 +160,7 @@ public class RecipeWatchTests
         var snapshot = await watch.RunOnceAsync(CancellationToken.None);
 
         Assert.Equal(WatchState.SourceIdle, snapshot.State);
-        Assert.Equal(4200, Assert.Single(snapshot.Accounts).LastValue);
+        Assert.Equal(4200, Assert.Single(snapshot.Accounts).LastValues["value"]);
     }
 
     [Fact]
@@ -288,7 +295,7 @@ public class RecipeWatchTests
         await watch.RunOnceAsync(CancellationToken.None);
         Assert.Equal(1, engine.Calls);
 
-        watch.UpdateRecipe(PetSim, new Dictionary<string, string> { ["clan"] = "Other Clan" });
+        watch.UpdateRecipe(PetSim, new Dictionary<string, string> { ["clan"] = "Other Clan" }, ValueOnly);
         await watch.RunOnceAsync(CancellationToken.None);
         Assert.Equal(2, engine.Calls);
     }
@@ -316,7 +323,7 @@ public class RecipeWatchTests
         var watch = Watch(new FakeEngine(() => Reading("battle=A", Row(111, 4200))), host);
         await watch.RunOnceAsync(CancellationToken.None);
 
-        watch.UpdateRecipe(PetSim, new Dictionary<string, string>(Clan));
+        watch.UpdateRecipe(PetSim, new Dictionary<string, string>(Clan), ValueOnly);
 
         Assert.Single((await watch.RunOnceAsync(CancellationToken.None)).Accounts);
     }
@@ -358,6 +365,112 @@ public class RecipeWatchTests
         Assert.Equal("New Alt", Assert.Single(snapshot.Unresolved).DisplayName);
     }
 
+    private static readonly SentStat Diamonds = new("diamonds", "Diamonds", "ps99.diamonds");
+
+    private static readonly SentStat Rank = new("rank", "Player rank", "ps99.rank");
+
+    private static RecipeRow Stats(long userId, params (string Key, double Value)[] values) =>
+        new(userId, values.ToDictionary(v => v.Key, v => v.Value));
+
+    [Fact]
+    public async Task EachOfYourAccountsReportsOnceForEverySentStat()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var engine = new FakeEngine(() => Reading(null,
+            Stats(111, ("diamonds", 10), ("eggs", 5), ("rank", 3)),
+            Stats(222, ("diamonds", 99), ("eggs", 1), ("rank", 1))));
+        var watch = Watch(engine, host, sent: [Diamonds, Rank], tracked: new HashSet<string> { "diamonds", "eggs", "rank" });
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.Reporting, snapshot.State);
+        Assert.Equal(new[] { (Mine, "ps99.diamonds", 10d), (Mine, "ps99.rank", 3d) },
+            host.Reported.Select(r => (r.Subject, r.MetricId, r.Value)).ToArray());
+        var line = Assert.Single(snapshot.Accounts);
+        Assert.Equal(new Dictionary<string, double> { ["diamonds"] = 10, ["rank"] = 3 }, line.LastValues);
+    }
+
+    [Fact]
+    public async Task AStatWithNoNumberThisCycleIsNotReported()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var watch = Watch(new FakeEngine(() => Reading(null, Stats(111, ("diamonds", 10)))), host,
+            sent: [Diamonds, Rank], tracked: new HashSet<string> { "diamonds", "rank" });
+
+        await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("ps99.diamonds", Assert.Single(host.Reported).MetricId);
+        Assert.Equal(0, watch.Policy.Dropped);
+    }
+
+    [Fact]
+    public async Task ShownStatsAreReadButOnlySentStatsAreReported()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var engine = new FakeEngine(() => Reading(null, Stats(111, ("diamonds", 10), ("eggs", 5))));
+        var watch = Watch(engine, host, sent: [Diamonds], tracked: new HashSet<string> { "diamonds", "eggs" });
+
+        await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "diamonds", "eggs" }, engine.LastTracked.Order().ToArray());
+        Assert.Equal("ps99.diamonds", Assert.Single(host.Reported).MetricId);
+
+        watch.UpdateRecipe(PetSim, Clan, new HashSet<string> { "rank" });
+        await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "rank" }, engine.LastTracked.ToArray());
+    }
+
+    [Fact]
+    public async Task WithNoStatSentYourAccountsAreShowingAndNothingIsReported()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var watch = Watch(new FakeEngine(() => Reading(null, Stats(111, ("eggs", 5)))), host,
+            sent: [], tracked: new HashSet<string> { "eggs" });
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.Showing, snapshot.State);
+        Assert.Equal("Read 1 of 1 row(s). No stat is set to send, so nothing went to RoRoRo.", snapshot.Detail);
+        Assert.Empty(host.Reported);
+    }
+
+    [Fact]
+    public async Task OnlyYourOwnAccountsCellMissesReachTheSnapshot()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var reading = Reading("battle=A", Row(111, 1), Row(222, 2)) with
+        {
+            CellMisses = new Dictionary<(long UserId, string Stat), string>
+            {
+                [(111, "eggs")] = "No 'Eggs' in this row.",
+                [(222, "eggs")] = "No 'Eggs' in this row.",
+            },
+            StatMisses = new Dictionary<string, string> { ["rank"] = "No 'Rank' in this row." },
+            CounterNames = ["Huge Pets Opened"],
+            IconText = "rbxassetid://1",
+        };
+
+        var snapshot = await Watch(new FakeEngine(() => reading), host).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal((111L, "eggs"), Assert.Single(snapshot.CellMisses).Key);
+        Assert.Equal("No 'Rank' in this row.", snapshot.StatMisses["rank"]);
+        Assert.Equal(new[] { "Huge Pets Opened" }, snapshot.CounterNames.ToArray());
+        Assert.Equal("rbxassetid://1", snapshot.IconText);
+    }
+
+    [Fact]
+    public async Task AnIdleStopKeepsTheIconItRead()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var idle = RecipeReading.Stop(ReadingOutcome.Idle, "Your clan hasn't joined this battle.") with { IconText = "rbxassetid://1" };
+
+        var snapshot = await Watch(new FakeEngine(() => idle), host).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.SourceIdle, snapshot.State);
+        Assert.Equal("rbxassetid://1", snapshot.IconText);
+    }
+
     [Fact]
     public async Task ThePetSimRecipeReportsYourAccountEndToEnd()
     {
@@ -377,7 +490,7 @@ public class RecipeWatchTests
         var engine = new RecipeEngine(transport, new FakeKeys());
         var host = new FakeHost(true, [MyAccount]);
         var watch = new RecipeWatch(
-            engine, host, new FakeKeys(), new ReportPolicy([PointsStat], new HashSet<Guid> { Mine }), PetSim, Clan);
+            engine, host, new FakeKeys(), new ReportPolicy([PointsStat], new HashSet<Guid> { Mine }), PetSim, Clan, ValueOnly);
 
         var snapshot = await watch.RunOnceAsync(CancellationToken.None);
 
