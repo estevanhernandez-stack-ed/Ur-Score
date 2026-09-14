@@ -53,12 +53,15 @@ public sealed class RecipeWatch(
 {
     internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
 
+    internal const string RecipeChangedMidSendDetail = "The recipe changed while this reading was being sent, so the rest of it was not sent.";
+
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
     /// <summary>
     /// <see cref="UpdateRecipe"/> runs on the UI thread while a cycle runs on the pool. Every access to
     /// the recipe, inputs, tracked stats, <see cref="_lines"/>, <see cref="_context"/> and
-    /// <see cref="_held"/> from both sides goes through this one lock. Never held across an await.
+    /// <see cref="_held"/> from both sides goes through this one lock, as does every read of the policy
+    /// that must match a recipe check. Never held across an await.
     /// </summary>
     private readonly object _gate = new();
 
@@ -81,7 +84,7 @@ public sealed class RecipeWatch(
 
     public void UpdatePolicy(IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects)
     {
-        policy = policy.With(sentStats, allowedSubjects);
+        lock (_gate) policy = policy.With(sentStats, allowedSubjects);
     }
 
     /// <summary>
@@ -245,12 +248,10 @@ public sealed class RecipeWatch(
             return Snapshot(readRecipe, WatchState.Showing, showing, seen, unresolved, reading, map);
         }
 
-        // The policy is the one current now. A reading of a recipe that is no longer running would go
-        // out under the new recipe's metric ids wherever the stat keys coincide, so it goes nowhere.
-        lock (_gate)
-        {
-            if (RecipeChanged(readRecipe, readInputs)) return ChangedSnapshot(readRecipe, unresolved);
-        }
+        // One fixed list for the whole loop. A stat unticked mid-loop is refused by the policy each send
+        // captures, which checks its own metric ids.
+        IReadOnlyList<SentStat> stats;
+        lock (_gate) stats = policy.SentStats;
 
         var observedAt = DateTimeOffset.UtcNow;
 
@@ -260,14 +261,26 @@ public sealed class RecipeWatch(
             {
                 // Raw and unmodified, through the only route out: one observation per sent stat this
                 // account has a number for. The policy also checks the account's own Send.
-                foreach (var stat in policy.SentStats)
+                foreach (var stat in stats)
                 {
                     if (!values.TryGetValue(stat.Key, out var value)) continue;
 
-                    var sent = await policy.SendAsync(host, subject, stat.MetricId, value, observedAt, cancellationToken)
+                    // The recipe can be replaced during any send's await. A reading of a recipe that is
+                    // no longer running would go out under the new recipe's metric ids wherever the stat
+                    // keys coincide, so each send re-checks and takes the policy in the same section.
+                    // The first send's check also covers a change during the read.
+                    ReportPolicy current;
+                    lock (_gate)
+                    {
+                        if (RecipeChanged(readRecipe, readInputs))
+                            return Snapshot(readRecipe, WatchState.Showing, RecipeChangedMidSendDetail, seen, unresolved);
+                        current = policy;
+                    }
+
+                    var sent = await current.SendAsync(host, subject, stat.MetricId, value, observedAt, cancellationToken)
                         .ConfigureAwait(false);
 
-                    if (sent) Remember(subject, accounts, stat.Key, value, observedAt);
+                    if (sent) Remember(readRecipe, readInputs, subject, accounts, stat.Key, value, observedAt);
                 }
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
@@ -301,12 +314,18 @@ public sealed class RecipeWatch(
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             string.Join('\u0001', keys.Values().Order(StringComparer.Ordinal)))));
 
-    private void Remember(Guid subject, IReadOnlyList<HostAccount> accounts, string statKey, double value, DateTimeOffset at)
+    private void Remember(
+        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs,
+        Guid subject, IReadOnlyList<HostAccount> accounts, string statKey, double value, DateTimeOffset at)
     {
         var name = accounts.FirstOrDefault(a => a.AccountId == subject)?.DisplayName ?? subject.ToString();
 
         lock (_gate)
         {
+            // A reading sent just before its recipe was replaced must not come back into the lines
+            // UpdateRecipe cleared for the new one.
+            if (RecipeChanged(readRecipe, readInputs)) return;
+
             var values = _lines.TryGetValue(subject, out var line)
                 ? new Dictionary<string, double>(line.LastValues, StringComparer.Ordinal)
                 : new Dictionary<string, double>(StringComparer.Ordinal);

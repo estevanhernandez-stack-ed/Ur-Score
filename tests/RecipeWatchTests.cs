@@ -67,6 +67,9 @@ public class RecipeWatchTests
 
         public bool DenyReports { get; set; }
 
+        /// <summary>Runs once, after the first report is recorded, as if the window acted during that send.</summary>
+        public Action? OnFirstReport { get; set; }
+
         public Task<bool> IsReachableAsync(CancellationToken ct) => Task.FromResult(Reachable);
 
         public Task<IReadOnlyList<HostAccount>> GetAccountsAsync(CancellationToken ct) =>
@@ -76,6 +79,7 @@ public class RecipeWatchTests
         {
             if (DenyReports) throw new RpcException(new Status(StatusCode.PermissionDenied, "revoked"));
             Reported.Add((subject, metricId, value, observedAt));
+            if (Reported.Count == 1) OnFirstReport?.Invoke();
             return Task.CompletedTask;
         }
     }
@@ -350,6 +354,31 @@ public class RecipeWatchTests
         Assert.Equal("The recipe changed while it was being read, so nothing was sent this time.", snapshot.Detail);
         Assert.Equal(PetSim.Slug, snapshot.RecipeSlug);
         Assert.Null(snapshot.Rows);
+    }
+
+    [Fact]
+    public async Task ARecipeChangedWhileSendingSendsNoMore()
+    {
+        // The switch lands during the first send's await. Both recipes use the stat key "value", so
+        // the second account's reading would otherwise go out under the new recipe's metric id.
+        var second = new HostAccount(Guid.Parse("3c1f0a2e-5b7d-4e8a-9f60-2d4b8c1e7a93"), 112, "Alt Two");
+        var followers = RecipeParser.Parse(RecipeParserTests.Fixture("roblox-followers.recipe.json")).Recipe!;
+        var host = new FakeHost(true, [MyAccount, second]);
+        var watch = Watch(new FakeEngine(() => Reading("battle=A", Row(111, 4200), Row(112, 5100))), host,
+            allowed: [Mine, second.AccountId]);
+        host.OnFirstReport = () =>
+        {
+            watch.UpdateRecipe(followers, new Dictionary<string, string>(), ValueOnly);
+            watch.UpdatePolicy([new SentStat("value", "Followers", "roblox.followers")], new HashSet<Guid> { Mine, second.AccountId });
+        };
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Single(host.Reported);
+        Assert.Equal(RecipeWatch.RecipeChangedMidSendDetail, snapshot.Detail);
+        Assert.DoesNotContain(snapshot.Accounts, line => line.AccountId == second.AccountId);
+        // Nor does the replaced recipe's first reading come back after the switch cleared it.
+        Assert.Empty(snapshot.Accounts);
     }
 
     [Fact]
