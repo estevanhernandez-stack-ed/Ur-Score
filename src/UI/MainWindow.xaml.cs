@@ -646,7 +646,8 @@ public partial class MainWindow : Window
                 DetailLine.Text = seedProblem;
             }
 
-            if (snapshot.IconText is { } iconText) _ = ApplyIconAsync(iconText, _active.Recipe);
+            // A reading taken before an update removed the recipe's icon must not put the old one back.
+            if (snapshot.IconText is { } iconText && _active.Recipe.Icon is not null) _ = ApplyIconAsync(iconText, _active.Recipe);
             if (snapshot.CounterNames.Count > 0) SaveCounterNames(snapshot.CounterNames);
 
             await RenderDashboardAsync(snapshot);
