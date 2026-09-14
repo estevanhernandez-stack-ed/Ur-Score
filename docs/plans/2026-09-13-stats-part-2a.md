@@ -9235,7 +9235,7 @@ EOF
 
 ## Execution record
 
-Tasks 1–13 were executed with subagent-driven development: a review after each task, a whole-branch review, one fix wave from that review, and a residual fix for the two load-bearing items its re-check found (a recipe replaced mid-send, stacked import and settings dialogs) plus three small window items. The suite finished at 329 tests, with the Release build at 0 warnings. Task 14, the live acceptance, is pending for Este.
+Tasks 1–13 were executed with subagent-driven development: a review after each task, a whole-branch review, one fix wave from that review, and a residual fix for the two load-bearing items its re-check found (a recipe replaced mid-send, stacked import and settings dialogs) plus three small items (two window fixes and this record). The suite finished at 329 tests, with the Release build at 0 warnings. Task 14, the live acceptance, is pending for Este.
 
 ### Carried into part 2b and the backlog
 
@@ -9247,6 +9247,7 @@ Parked (can wait):
 - Every `Activate`, even a tick-only save, discards the in-flight cycle, and a same-slug update shows a false "No stat is set to send" line for one cycle.
 - `ReportPolicy` `Sent`/`Dropped` increments can be lost across `With()` and aren't synchronized (diagnostic counters only).
 - `ReloadActive` on Start re-parses the recipe into a new instance, so a draw in flight across a Start click is still skipped once.
+- When no row carries a sent stat, or a recipe change lands during the last send's await, no later per-send check runs, so the cycle returns Reporting with the replaced recipe's rows; display only, since nothing is sent or remembered.
 
 Minor (deferred):
 - Recipes: `ParseSteps` reads `usesValues` after its loop; `RecipeUnavailable.IsText` is unused for true/false; `CounterKey`/`IsCounterKey` lack summaries; `Offered` and `Find` parse a counter key twice.
