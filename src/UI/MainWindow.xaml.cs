@@ -197,17 +197,7 @@ public partial class MainWindow : Window
 
     private IReadOnlyList<SentStat> SentStats() => _active?.State.SentStats(_active.Recipe) ?? [];
 
-    /// <summary>
-    /// Until the import screen has a Stats section (Task 11), its one name box pins the first value's
-    /// metric id and ticks nothing, so an import sends nothing until then.
-    /// </summary>
-    private static RecipeState WithFirstValueName(RecipeState state, Recipe recipe, string? metricId)
-    {
-        var first = recipe.LastStep.Values[0];
-        var stats = new Dictionary<string, StatChoice>(state.StatChoices, StringComparer.Ordinal);
-        stats[first.Id] = stats.GetValueOrDefault(first.Id, new StatChoice()) with { MetricId = metricId ?? first.MetricId };
-        return state with { Stats = stats };
-    }
+    private IReadOnlyCollection<Guid> AccountIds() => [.. _rows.Select(r => r.AccountId)];
 
     private HashSet<Guid> CurrentAllowedSubjects() => _rows.Where(r => r.Send).Select(r => r.AccountId).ToHashSet();
 
@@ -792,15 +782,20 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var window = new ImportWindow(recipe, review, comparison, installed?.State, RuleSentence(recipe.LastStep.Values[0].MetricId).Text)
+            var window = new ImportWindow(recipe, review, comparison, installed?.State, _store.LoadAll().Recipes, AccountIds(),
+                metricId => RuleSentence(metricId).Text, CounterLookupFor(recipe))
             {
                 Owner = this,
             };
 
             if (window.ShowDialog() != true) return;
 
-            var state = WithFirstValueName((installed?.State ?? new RecipeState()) with { Inputs = window.Inputs },
-                recipe, window.MetricIdOverride);
+            var state = (installed?.State ?? new RecipeState()) with
+            {
+                Inputs = window.Inputs,
+                Stats = window.Stats,
+                CounterNames = window.CounterNames,
+            };
 
             _store.Save(recipe, text, state);
             Activate(_store.Find(recipe.Slug)!);
@@ -822,7 +817,8 @@ public partial class MainWindow : Window
 
         var active = _active;
         var window = new ImportWindow(active.Recipe, ImportReview.Review(active.Recipe, _keys),
-            new UpdateComparison(false, false, []), active.State, RuleSentence(MetricId).Text, settingsOnly: true)
+            new UpdateComparison(false, false, []), active.State, _store.LoadAll().Recipes, AccountIds(),
+            metricId => RuleSentence(metricId).Text, CounterLookupFor(active.Recipe), settingsOnly: true)
         {
             Owner = this,
         };
@@ -831,7 +827,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var state = WithFirstValueName(active.State with { Inputs = window.Inputs }, active.Recipe, window.MetricIdOverride);
+            var state = active.State with { Inputs = window.Inputs, Stats = window.Stats, CounterNames = window.CounterNames };
             _store.SaveState(active.Recipe, state);
             Activate(active with { State = state });
             DetailLine.Text = $"Saved settings for {active.Recipe.Name}.";
@@ -839,6 +835,39 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             DetailLine.Text = $"Could not save those settings: {ex.Message}";
+        }
+    }
+
+    /// <summary>The settings screen's "Look up stat names" read, offered only for a recipe with counters.</summary>
+    private Func<IReadOnlyDictionary<string, string>, Task<ImportWindow.CounterLookup>>? CounterLookupFor(Recipe recipe) =>
+        recipe.LastStep.Counters is null ? null : inputs => LookUpCounterNamesAsync(recipe, inputs);
+
+    /// <summary>
+    /// One read with every recipe value asked for, so the response can offer its counter names. Its
+    /// own engine and no report policy: nothing read here can reach RoRoRo.
+    /// </summary>
+    private async Task<ImportWindow.CounterLookup> LookUpCounterNamesAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs)
+    {
+        try
+        {
+            await SeedRowsAsync();
+            var ids = _rows.Where(r => r.RobloxUserId != 0).Select(r => r.RobloxUserId).ToList();
+            var everyValue = recipe.LastStep.Values.Select(v => v.Id).ToHashSet(StringComparer.Ordinal);
+            var engine = new RecipeEngine(new HttpRecipeTransport(_recipeHttp, RawDirectory, _redactor), _keys);
+
+            var reading = await engine.ReadAsync(recipe, inputs, ids, everyValue, CancellationToken.None);
+            _trail.Add(Stamp($"LOOK UP STAT NAMES: {reading.Outcome}, {reading.CounterNames.Count} name(s). {reading.Detail}"));
+
+            if (reading.CounterNames.Count > 0) return new ImportWindow.CounterLookup(reading.CounterNames, null);
+
+            var problem = reading.Outcome != ReadingOutcome.Read ? reading.Detail
+                : recipe.LastStep.PerAccount && ids.Count == 0 ? "RoRoRo hasn't shared any accounts yet, so there was nothing to read."
+                : $"The source answered, but no {recipe.LastStep.Counters!.Label} came back.";
+            return new ImportWindow.CounterLookup([], _redactor.Redact(problem));
+        }
+        catch (Exception ex)
+        {
+            return new ImportWindow.CounterLookup([], _redactor.Redact($"Could not look them up: {ex.Message}"));
         }
     }
 
