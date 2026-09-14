@@ -83,8 +83,14 @@ public partial class MainWindow : Window
         public string Yours { get; set; } = "";
     }
 
-    /// <summary>One sent stat in the rule helper's list: label, then the metric id the rule matches.</summary>
-    public sealed record RuleChoice(string MetricId, string Text);
+    /// <summary>
+    /// One sent stat in the rule helper's list: label, then the metric id the rule matches. Its text is
+    /// its string, so a screen reader names the pick "Points (clan.battle.points)", not the record.
+    /// </summary>
+    public sealed record RuleChoice(string MetricId, string Text)
+    {
+        public override string ToString() => Text;
+    }
 
     private readonly ObservableCollection<Row> _rows = [];
     private readonly ObservableCollection<LeaderboardRow> _leaderboardRows = [];
