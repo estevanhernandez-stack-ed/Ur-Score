@@ -56,7 +56,7 @@ public sealed class SourceStore(string path)
             var loaded = JsonSerializer.Deserialize<List<Source>>(File.ReadAllText(path), Options) ?? [];
             return [.. loaded.Where(s => !string.IsNullOrWhiteSpace(s.Id) && !string.IsNullOrWhiteSpace(s.Recipe) && s.Inputs is not null)];
         }
-        catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException)
+        catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
             return [];
         }

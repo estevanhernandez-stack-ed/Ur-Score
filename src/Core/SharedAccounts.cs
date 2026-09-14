@@ -27,7 +27,7 @@ public sealed class AccountsCache(string path)
         {
             return File.Exists(path) ? JsonSerializer.Deserialize<List<HostAccount>>(File.ReadAllText(path), Options) ?? [] : [];
         }
-        catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException)
+        catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
             return [];
         }
