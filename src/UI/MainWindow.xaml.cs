@@ -29,6 +29,9 @@ public partial class MainWindow : Window
     private const double DefaultThreshold = 100;
     private const int DefaultWindowMinutes = 10;
 
+    /// <summary>Shown while Import or Recipe settings waits on RoRoRo's accounts, and taken down only if nothing replaced it.</summary>
+    private const string AskingForAccounts = "Asking RoRoRo for your accounts…";
+
     /// <summary>
     /// One row of the accounts grid. Raises change notifications so rows update in place: calling
     /// <c>Items.Refresh()</c> throws while the Send checkbox is mid-edit (F10). Stat values are bound
@@ -1130,9 +1133,9 @@ public partial class MainWindow : Window
 
                 // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
                 var shown = DetailLine.Text;
-                DetailLine.Text = "Asking RoRoRo for your accounts…";
+                DetailLine.Text = AskingForAccounts;
                 await SeedRowsAsync();
-                DetailLine.Text = shown;
+                if (DetailLine.Text == AskingForAccounts) DetailLine.Text = shown;
 
                 var window = new ImportWindow(recipe, review, comparison, installed?.State, _store.LoadAll().Recipes, AccountIds,
                     metricId => RuleSentence(metricId).Text, CounterLookupFor(recipe))
@@ -1184,9 +1187,9 @@ public partial class MainWindow : Window
 
             // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
             var shown = DetailLine.Text;
-            DetailLine.Text = "Asking RoRoRo for your accounts…";
+            DetailLine.Text = AskingForAccounts;
             await SeedRowsAsync();
-            DetailLine.Text = shown;
+            if (DetailLine.Text == AskingForAccounts) DetailLine.Text = shown;
 
             var active = _active;
             var window = new ImportWindow(active.Recipe, ImportReview.Review(active.Recipe, _keys),
