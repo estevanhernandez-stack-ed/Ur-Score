@@ -247,7 +247,7 @@ public class ImportReviewTests
         var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.True(comparison.AsksAgain);
-        Assert.Equal(new[] { "Adds a clan or league icon, which asks Roblox for the picture." }, comparison.Changes);
+        Assert.Equal(new[] { "Adds an icon, which asks Roblox for the picture." }, comparison.Changes);
     }
 
     [Fact]

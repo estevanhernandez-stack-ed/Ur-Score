@@ -182,7 +182,7 @@ public static class ImportReview
 
         if (installed.Icon is null && incoming.Icon is not null)
         {
-            changes.Add("Adds a clan or league icon, which asks Roblox for the picture.");
+            changes.Add("Adds an icon, which asks Roblox for the picture.");
             asks = true;
         }
         else if (installed.Icon is not null && incoming.Icon is null)
