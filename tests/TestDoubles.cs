@@ -1,4 +1,5 @@
 using Grpc.Core;
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
@@ -89,5 +90,31 @@ internal static class TempDir
         {
             if (Directory.Exists(Path)) Directory.Delete(Path, recursive: true);
         }
+    }
+}
+
+internal sealed class MemoryBook : IScoreBook
+{
+    public List<BookLine> Lines { get; } = [];
+
+    public List<string> RecipeTexts { get; } = [];
+
+    public event Action<BookLine>? Written;
+
+    public int Pending => 0;
+
+    public int Dropped => 0;
+
+    public string Root => "memory";
+
+    public void Append(BookLine line, string recipeText)
+    {
+        Lines.Add(line);
+        RecipeTexts.Add(recipeText);
+        Written?.Invoke(line);
+    }
+
+    public void Flush()
+    {
     }
 }
