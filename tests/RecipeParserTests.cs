@@ -72,7 +72,7 @@ public class RecipeParserTests
         Assert.Equal(new RecipeCounters("Game statistics", "data.views.profile.data.Statistics", "ps99.stat."), step.Counters);
         Assert.Equal("data.views.profile.available", step.Unavailable!.Path);
         Assert.Equal(JsonValueKind.False, step.Unavailable.IsKind);
-        Assert.Equal("Profile is private. Make it public in Pet Sim 99's dashboard.", step.Unavailable.Message);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", step.Unavailable.Message);
         Assert.Null(result.Recipe.Icon);
         Assert.Equal("Place", result.Recipe.PlaceLabel);
     }

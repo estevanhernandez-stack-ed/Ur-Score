@@ -410,8 +410,8 @@ public class RecipeEngineTests
 
         Assert.Equal(ReadingOutcome.Read, reading.Outcome);
         Assert.Equal(2, Assert.Single(reading.Rows).UserId);
-        Assert.Equal("Profile is private. Make it public in Pet Sim 99's dashboard.", reading.Unavailable[1]);
-        Assert.Equal("1 of your accounts could not be read: Profile is private. Make it public in Pet Sim 99's dashboard.", reading.Detail);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", reading.Unavailable[1]);
+        Assert.Equal("1 of your accounts could not be read: Profile is private. Link this account on db.biggames.io and turn on its Profile view.", reading.Detail);
         Assert.Empty(reading.StatMisses);
     }
 
@@ -425,7 +425,7 @@ public class RecipeEngineTests
         var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
 
         Assert.Equal(ReadingOutcome.Read, reading.Outcome);
-        Assert.Equal("Profile is private. Make it public in Pet Sim 99's dashboard.", Assert.Single(reading.Unavailable).Value);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", Assert.Single(reading.Unavailable).Value);
     }
 
     [Fact]
