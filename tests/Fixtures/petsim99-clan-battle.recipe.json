@@ -9,13 +9,14 @@
   "inputs": [ { "id": "clan", "label": "Your clan", "plural": "Clans", "search": { "url": "https://ps99.biggamesapi.io/api/clansList", "list": "data" } } ],
   "steps": [
     { "url": "https://ps99.biggamesapi.io/api/activeClanBattle",
-      "take": { "battle": "data.configName" },
+      "take": { "battle": "data.configName", "battleStarts": "data.configData.StartTime", "battleEnds": "data.configData.FinishTime" },
       "idleWithout": "battle", "idleMessage": "No clan battle running" },
     { "url": "https://ps99.biggamesapi.io/api/clan/{clan}",
       "absentMessage": "Your clan hasn't joined this battle.",
       "rows": "data.Battles.{battle}.PointContributions",
       "userId": "UserID", "value": "Points" }
   ],
+  "period": { "value": "battle", "starts": "battleStarts", "ends": "battleEnds", "past": "data.Battles" },
   "headline": [
     { "id": "clan-place", "label": "Clan place", "path": "data.Battles.{battle}.Place", "sum": false },
     { "id": "clan-points", "label": "Clan points", "path": "data.Battles.{battle}.Points" }

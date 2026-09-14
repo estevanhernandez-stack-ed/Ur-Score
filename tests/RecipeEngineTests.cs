@@ -661,4 +661,133 @@ public class RecipeEngineTests
         Assert.Equal(ReadingOutcome.KeyRejected, reading.Outcome);
         Assert.Equal("api.tracker.example rejected your Tracker key. Change it to try again.", reading.Detail);
     }
+
+    private const string BattleWithTimes = """
+        { "status": "ok", "data": { "configName": "B", "configData": { "StartTime": 1756490400, "FinishTime": 1757611800 } } }
+        """;
+
+    private const string ClanWithHistory = """
+        { "status": "ok", "data": { "Icon": "rbxassetid://1", "Battles": {
+            "A": { "Place": 40, "Points": 500, "PointContributions": [ { "UserID": 111, "Points": 300 }, { "UserID": 222, "Points": 200 } ] },
+            "Empty": { "Place": 900, "Points": 10 },
+            "123456": { "Place": 1, "Points": 1 },
+            "B": { "Place": 3, "Points": 999, "PointContributions": [ { "UserID": 111, "Points": 4200 }, { "UserID": 222, "Points": 10 } ] }
+        } } }
+        """;
+
+    [Fact]
+    public async Task HeadlineValuesCarryTheirIdAndNumber()
+    {
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanResponse);
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(("clan-place", 3d), (reading.Headline[0].Id, reading.Headline[0].Number!.Value));
+        Assert.Equal(("clan-points", 999d), (reading.Headline[1].Id, reading.Headline[1].Number!.Value));
+        Assert.Equal("3", reading.Headline[0].Text);
+    }
+
+    [Fact]
+    public async Task ThePeriodComesFromTheTakesWithItsTimes()
+    {
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, BattleWithTimes)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanResponse);
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(new ReadingPeriod("B", DateTimeOffset.FromUnixTimeSeconds(1756490400), DateTimeOffset.FromUnixTimeSeconds(1757611800)), reading.Period);
+    }
+
+    [Fact]
+    public async Task AMissingStartOrEndStillReads()
+    {
+        // Ruling R2: a take named only by the period's starts or ends is optional.
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanResponse);
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(new ReadingPeriod("B", null, null), reading.Period);
+    }
+
+    [Fact]
+    public async Task EveryPastPeriodIsReadFromTheSameResponse()
+    {
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanWithHistory);
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(2, transport.Requests.Count);
+        Assert.Equal(new[] { "A", "Empty", "B" }, reading.Past.Select(p => p.Value).ToArray());
+
+        var a = reading.Past[0];
+        Assert.True(a.RowsReadable);
+        Assert.Equal(new[] { Row(111, 300), Row(222, 200) }, a.Rows);
+        Assert.Equal(new double?[] { 40, 500 }, a.Headline.Select(h => h.Number).ToArray());
+
+        var empty = reading.Past[1];
+        Assert.False(empty.RowsReadable);
+        Assert.Empty(empty.Rows);
+        Assert.Equal(new double?[] { 900, 10 }, empty.Headline.Select(h => h.Number).ToArray());
+    }
+
+    [Fact]
+    public async Task APastKeyMadeOfDigitsIsNeverAPeriod()
+    {
+        // Ruling R3: an object keyed by user ids must not become period values in the book.
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanWithHistory);
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.DoesNotContain(reading.Past, p => p.Value == "123456");
+    }
+
+    [Fact]
+    public async Task APerAccountAsOfIsReadForEachAccount()
+    {
+        const string stamped = """
+            { "status": "ok", "data": { "views": { "profile": { "available": true, "isStale": true, "fetchedAt": "2026-09-14T20:11:47.320Z",
+              "data": { "Currency": { "Diamonds": { "_am": 5 } }, "EggsHatched": 1, "Rank": 2 } } } } }
+            """;
+        var transport = new FakeTransport().On(ProfileUrl1, 200, stamped);
+
+        var reading = await Read(transport, Profile, NoInputs, [1], tracked: ProfileStats);
+
+        Assert.Equal(new AsOfStamp(new DateTimeOffset(2026, 9, 14, 20, 11, 47, 320, TimeSpan.Zero), true), reading.AccountAsOf[1]);
+        Assert.Null(reading.ListAsOf);
+    }
+
+    [Fact]
+    public async Task AGroupListReadsEveryGroupWhateverIsTicked()
+    {
+        const string top = """
+            { "status": "ok", "data": { "topClans": [
+                { "rank": 1, "name": "Aurelian", "points": 412000000 },
+                { "rank": 2, "name": "SkyHarbor", "points": 388500000 },
+                { "rank": 3, "points": 5 }
+            ] } }
+            """;
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/v1/clans/battles/B", 200, top);
+        var recipe = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+
+        var reading = await Read(transport, recipe, NoInputs, tracked: new HashSet<string>());
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Empty(reading.Rows);
+        Assert.Equal(new[] { ("Aurelian", 412000000d, (int?)1), ("SkyHarbor", 388500000d, (int?)2) },
+            reading.Groups.Select(g => (g.Name, g.Values["value"], g.Rank)).ToArray());
+        Assert.Equal(3, reading.RowsSeen);
+    }
 }

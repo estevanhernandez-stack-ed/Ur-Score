@@ -38,7 +38,29 @@ public sealed record RecipeRow(long UserId, IReadOnlyDictionary<string, double> 
         $"RecipeRow {{ UserId = {UserId}, Values = {string.Join(", ", Values.Select(kv => $"{kv.Key}={kv.Value.ToString(CultureInfo.InvariantCulture)}"))} }}";
 }
 
-public sealed record HeadlineValue(string Label, string? Text);
+/// <summary>A headline as read: its text for display, and its id and number for the score book.</summary>
+public sealed record HeadlineValue(string Label, string? Text)
+{
+    public string Id { get; init; } = "";
+
+    /// <summary>The value when it is a finite number, else null. The book keeps only this.</summary>
+    public double? Number { get; init; }
+}
+
+/// <summary>What this reading belongs to, and when it starts and ends when the source says.</summary>
+public sealed record ReadingPeriod(string Value, DateTimeOffset? Starts, DateTimeOffset? Ends);
+
+/// <summary>The source's own snapshot time for what was read.</summary>
+public sealed record AsOfStamp(DateTimeOffset Time, bool? Stale);
+
+/// <summary>One group (a clan) from a group-list step. Never matched to an account.</summary>
+public sealed record GroupRow(string Name, IReadOnlyDictionary<string, double> Values, int? Rank);
+
+/// <summary>
+/// One key under the recipe's <c>period.past</c>, read with the live paths. <see cref="Rows"/> is every
+/// row, the user's and everyone else's; the score book keeps only the user's.
+/// </summary>
+public sealed record PastPeriodReading(string Value, IReadOnlyList<RecipeRow> Rows, IReadOnlyList<HeadlineValue> Headline, bool RowsReadable);
 
 /// <summary>
 /// What one run of a recipe found. <see cref="Rows"/> is every readable row, the user's own and
@@ -72,6 +94,20 @@ public sealed record RecipeReading(
 
     /// <summary>The recipe's <c>icon</c> path read from the last step's response, as text, or null.</summary>
     public string? IconText { get; init; }
+
+    public ReadingPeriod? Period { get; init; }
+
+    /// <summary>A list step's <c>asOf</c>.</summary>
+    public AsOfStamp? ListAsOf { get; init; }
+
+    /// <summary>A per-account step's <c>asOf</c>, by user id.</summary>
+    public IReadOnlyDictionary<long, AsOfStamp> AccountAsOf { get; init; } = new Dictionary<long, AsOfStamp>();
+
+    /// <summary>A group-list step's rows.</summary>
+    public IReadOnlyList<GroupRow> Groups { get; init; } = [];
+
+    /// <summary>Every readable key under <c>period.past</c>, in the source's order.</summary>
+    public IReadOnlyList<PastPeriodReading> Past { get; init; } = [];
 
     public static RecipeReading Stop(ReadingOutcome outcome, string detail) => new(outcome, detail, [], [], null, 0);
 }
@@ -111,7 +147,10 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         }
 
         // Recipe order, so "the first miss" means the same thing every cycle.
-        var stats = RecipeStats.Offered(recipe, trackedStats).Where(stat => trackedStats.Contains(stat.Key)).ToList();
+        // A group list has nothing to tick: it reads every value it declares.
+        var stats = recipe.IsGroupList
+            ? RecipeStats.Offered(recipe, []).ToList()
+            : RecipeStats.Offered(recipe, trackedStats).Where(stat => trackedStats.Contains(stat.Key)).ToList();
         if (stats.Count == 0)
         {
             return RecipeReading.Stop(ReadingOutcome.NeedsInput, NothingTracked);
@@ -128,8 +167,8 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
 
             if (isLast && step.PerAccount)
             {
-                return await ReadPerAccountAsync(recipe, step, stats, values, accountUserIds, label, Context(values, taken), cancellationToken)
-                    .ConfigureAwait(false);
+                return (await ReadPerAccountAsync(recipe, step, stats, values, accountUserIds, label, Context(values, taken), cancellationToken)
+                    .ConfigureAwait(false)) with { Period = PeriodOf(recipe, values) };
             }
 
             var (document, stop, _) = await FetchJsonAsync(recipe, step, values, label, cancellationToken).ConfigureAwait(false);
@@ -139,7 +178,8 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             {
                 if (isLast)
                 {
-                    return ReadList(recipe, step, stats, document!.RootElement, values, number, Context(values, taken));
+                    return ReadList(recipe, step, stats, document!.RootElement, values, number, Context(values, taken))
+                        with { Period = PeriodOf(recipe, values) };
                 }
 
                 foreach (var (name, pathTemplate) in step.Take)
@@ -151,6 +191,12 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                     {
                         values[name] = text;
                         taken.Add(name);
+                        continue;
+                    }
+
+                    // Ruling R2: a take named only by the period's start or end is optional.
+                    if (recipe.Period is { } optional && (name == optional.Starts || name == optional.Ends))
+                    {
                         continue;
                     }
 
@@ -301,6 +347,8 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         // Read first, so a clan that sits out a battle still shows its icon beside the idle message.
         var icon = recipe.Icon is null ? null : TextAt(root, recipe.Icon, values);
 
+        if (step.GroupName is not null) return ReadGroups(step, stats, root, values, number, context);
+
         var rowsPath = Placeholders.Fill(step.Rows!, values, encode: false);
         var rowsResult = RecipePath.Resolve(root, step.Rows!, values);
 
@@ -370,9 +418,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                 with { IconText = icon };
         }
 
-        var headline = recipe.Headline
-            .Select(h => new HeadlineValue(h.Label, TextAt(root, h.Path, values)))
-            .ToList();
+        var headline = HeadlineAt(recipe, root, values);
 
         return new RecipeReading(ReadingOutcome.Read, null, rows, headline, context, total)
         {
@@ -380,6 +426,8 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             CellMisses = tally.CellMisses(rows.Count),
             CounterNames = counterNames ?? [],
             IconText = icon,
+            ListAsOf = step.AsOf is null ? null : AsOfAt(root, step.AsOf, values),
+            Past = PastAt(recipe, step, stats, root, values),
         };
     }
 
@@ -391,6 +439,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         var tally = new StatTally(stats);
         var rows = new List<RecipeRow>();
         var unavailable = new Dictionary<long, string>();
+        var asOf = new Dictionary<long, AsOfStamp>();
         IReadOnlyList<string>? counterNames = null;
         string? firstMiss = null;
         string? firstUnavailable = null;
@@ -454,6 +503,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                 }
 
                 rows.Add(new RecipeRow(userId, found));
+                if (step.AsOf is not null && AsOfAt(root, step.AsOf, perRequest) is { } stamp) asOf[userId] = stamp;
                 if (step.Counters is not null) counterNames ??= CounterNamesAt(root, step.Counters, perRequest);
             }
         }
@@ -473,7 +523,131 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             StatMisses = tally.StatMisses(rows.Count),
             CellMisses = tally.CellMisses(rows.Count),
             CounterNames = counterNames ?? [],
+            AccountAsOf = asOf,
         };
+    }
+
+    private static List<HeadlineValue> HeadlineAt(Recipe recipe, JsonElement root, IReadOnlyDictionary<string, string> values) =>
+        [.. recipe.Headline.Select(h =>
+        {
+            var result = RecipePath.Resolve(root, h.Path, values);
+            var found = result.Outcome == PathOutcome.Found;
+            double? number = found && JsonNav.TryNumber(result.Value, out var n) ? n : null;
+            return new HeadlineValue(h.Label, found ? RecipePath.AsText(result.Value) : null) { Id = h.Id, Number = number };
+        })];
+
+    private static AsOfStamp? AsOfAt(JsonElement root, RecipeAsOf asOf, IReadOnlyDictionary<string, string> values)
+    {
+        if (TimeText.Parse(TextAt(root, asOf.Time, values)) is not { } time) return null;
+
+        bool? stale = null;
+        if (asOf.Stale is not null && RecipePath.Resolve(root, asOf.Stale, values) is { Outcome: PathOutcome.Found } said
+            && said.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            stale = said.Value.GetBoolean();
+        }
+
+        return new AsOfStamp(time, stale);
+    }
+
+    private static ReadingPeriod? PeriodOf(Recipe recipe, IReadOnlyDictionary<string, string> values)
+    {
+        if (recipe.Period is not { } period || !values.TryGetValue(period.Value, out var value)) return null;
+
+        DateTimeOffset? At(string? take) => take is not null && values.TryGetValue(take, out var text) ? TimeText.Parse(text) : null;
+        return new ReadingPeriod(value, At(period.Starts), At(period.Ends));
+    }
+
+    /// <summary>
+    /// Score book spec §6.2: each key under <c>period.past</c>, read with the live rows, value and headline
+    /// paths and the period placeholder set to that key. No miss here stops anything; a key whose rows
+    /// can't be read still has its headline.
+    /// </summary>
+    private static IReadOnlyList<PastPeriodReading> PastAt(
+        Recipe recipe, RecipeStep step, IReadOnlyList<RecipeStat> stats, JsonElement root, IReadOnlyDictionary<string, string> values)
+    {
+        if (recipe.Period is not { Past: { } pastPath } period) return [];
+
+        var past = RecipePath.Resolve(root, pastPath, values);
+        if (past.Outcome != PathOutcome.Found || past.Value.ValueKind != JsonValueKind.Object) return [];
+
+        var readings = new List<PastPeriodReading>();
+        foreach (var property in past.Value.EnumerateObject())
+        {
+            // Ruling R3: an all-digit key is far likelier a player's id than a period's name.
+            if (property.Name.Length == 0 || property.Name.All(char.IsAsciiDigit)) continue;
+
+            var keyed = new Dictionary<string, string>(values, StringComparer.Ordinal) { [period.Value] = property.Name };
+            var rowsResult = RecipePath.Resolve(root, step.Rows!, keyed);
+            var readable = rowsResult.Outcome == PathOutcome.Found && rowsResult.Value.ValueKind == JsonValueKind.Array;
+
+            var rows = new List<RecipeRow>();
+            if (readable)
+            {
+                foreach (var row in rowsResult.Value.EnumerateArray())
+                {
+                    var id = RecipePath.Resolve(row, Placeholders.Fill(step.UserId!, keyed, encode: false), "this row");
+                    if (id.Outcome != PathOutcome.Found || !JsonNav.TryUserId(id.Value, out var userId)) continue;
+
+                    var found = new Dictionary<string, double>(StringComparer.Ordinal);
+                    foreach (var stat in stats)
+                    {
+                        if (NumberAt(RecipePath.Resolve(row, stat.Path, keyed, "this row"), stat.Path, "in this row", out var value) is null)
+                        {
+                            found[stat.Key] = value;
+                        }
+                    }
+
+                    rows.Add(new RecipeRow(userId, found));
+                }
+            }
+
+            readings.Add(new PastPeriodReading(property.Name, rows, HeadlineAt(recipe, root, keyed), readable));
+        }
+
+        return readings;
+    }
+
+    private static RecipeReading ReadGroups(
+        RecipeStep step, IReadOnlyList<RecipeStat> stats, JsonElement root, IReadOnlyDictionary<string, string> values, int number, string? context)
+    {
+        var rowsPath = Placeholders.Fill(step.Rows!, values, encode: false);
+        var rowsResult = RecipePath.Resolve(root, step.Rows!, values);
+        if (rowsResult.Outcome != PathOutcome.Found || rowsResult.Value.ValueKind != JsonValueKind.Array)
+        {
+            return RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"Step {number}: '{rowsPath}' is not a list, so there are no groups to read.");
+        }
+
+        var groups = new List<GroupRow>();
+        var total = 0;
+        foreach (var row in rowsResult.Value.EnumerateArray())
+        {
+            total++;
+            if (TextAt(row, step.GroupName!, values) is not { Length: > 0 } name) continue;
+
+            var found = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var stat in stats)
+            {
+                if (NumberAt(RecipePath.Resolve(row, stat.Path, values, "this row"), stat.Path, "in this row", out var value) is null)
+                {
+                    found[stat.Key] = value;
+                }
+            }
+
+            int? rank = step.Rank is not null
+                        && NumberAt(RecipePath.Resolve(row, step.Rank, values, "this row"), step.Rank, "in this row", out var r) is null
+                ? (int)r
+                : null;
+
+            groups.Add(new GroupRow(name, found, rank));
+        }
+
+        if (total > 0 && groups.Count == 0)
+        {
+            return RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"None of the {total} groups had a name at '{step.GroupName}'.");
+        }
+
+        return new RecipeReading(ReadingOutcome.Read, null, [], [], context, total) { Groups = groups };
     }
 
     /// <summary>Why a stat has no number here, or null with the number.</summary>
