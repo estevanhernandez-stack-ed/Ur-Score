@@ -160,6 +160,24 @@ public class RecipeStoreTests : IDisposable
     }
 
     [Fact]
+    public void SavingDropsTicksForAStatTheRecipeNoLongerOffers()
+    {
+        // Stats design §7.2 and §5.2: a tick kept for an orphaned stat would come back unasked when a
+        // later update offers the stat again, under a metric id another recipe may have claimed since.
+        var store = new RecipeStore(_dir);
+        store.Save(PetSim, PetSimText, new RecipeState(Stats: new Dictionary<string, StatChoice>
+        {
+            ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points"),
+            ["rank"] = new(Show: true, Send: true, MetricId: "ps99.rank"),
+        }));
+
+        var saved = store.Find(PetSim.Slug)!.State.StatChoices;
+
+        Assert.Equal(new StatChoice(Show: false, Send: false, MetricId: "ps99.rank"), saved["rank"]);
+        Assert.Equal(new StatChoice(Show: true, Send: true, MetricId: "clan.battle.points"), saved["value"]);
+    }
+
+    [Fact]
     public void ARecipeUpdateNeverMovesAPinnedMetricId()
     {
         var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Send: true, MetricId: "clan.battle.points") });

@@ -210,6 +210,35 @@ public class ImportReviewTests
     }
 
     [Fact]
+    public void AStatOfferedAgainComesBackUnticked()
+    {
+        // v2 drops rank, the user accepts, and the save normalizes it. v3 offers rank again: listed, unticked, no ask.
+        var dir = Path.Combine(Path.GetTempPath(), "urscore-recipes-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var v2 = WithValues(Profile, Profile.LastStep.Values[0], Profile.LastStep.Values[1]);
+            var store = new RecipeStore(dir);
+            store.Save(v2, RecipeParserTests.Fixture("petsim99-profile.recipe.json"), new RecipeState(Stats: new Dictionary<string, StatChoice>
+            {
+                ["diamonds"] = new(Send: true, MetricId: "ps99.diamonds"),
+                ["rank"] = new(Send: true, MetricId: "ps99.rank"),
+            }));
+            var saved = store.Find(v2.Slug)!.State;
+            var v3 = Profile;
+
+            var comparison = ImportReview.CompareToInstalled(v2, v3, new FakeKeys(), saved);
+
+            Assert.False(comparison.AsksAgain);
+            Assert.Equal(new[] { "New stat: Player rank." }, comparison.Changes);
+            Assert.DoesNotContain("rank", saved.SentStats(v3).Select(s => s.Key));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void AnIconAddedAsksAgainBecauseItContactsRobloxsPictureHosts()
     {
         var incoming = Load("petsim99-clan-battle.recipe.json");

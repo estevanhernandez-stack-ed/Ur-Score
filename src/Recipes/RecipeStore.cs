@@ -116,10 +116,31 @@ public sealed class RecipeStore(string directory)
         SaveState(recipe, state);
     }
 
+    /// <summary><see cref="Save"/> comes through here too, so no saved state skips <see cref="Normalized"/>.</summary>
     public void SaveState(Recipe recipe, RecipeState state)
     {
         Directory.CreateDirectory(directory);
-        File.WriteAllText(StatePath(recipe.Slug), JsonSerializer.Serialize(state, Options));
+        File.WriteAllText(StatePath(recipe.Slug), JsonSerializer.Serialize(Normalized(recipe, state), Options));
+    }
+
+    /// <summary>
+    /// A saved state never keeps a tick for a stat this recipe doesn't offer. The entry keeps its pinned
+    /// metric id with Show and Send off, so when a later update offers the stat again it comes back
+    /// listed and unticked (stats design §7.2), and any Send goes back through the budget and the
+    /// collision rules. Offered entries are untouched.
+    /// </summary>
+    private static RecipeState Normalized(Recipe recipe, RecipeState state)
+    {
+        if (state.Stats is not { Count: > 0 } stats) return state;
+
+        var offered = RecipeStats.Offered(recipe, stats.Keys).Select(stat => stat.Key).ToHashSet(StringComparer.Ordinal);
+        return state with
+        {
+            Stats = stats.ToDictionary(
+                kv => kv.Key,
+                kv => offered.Contains(kv.Key) ? kv.Value : kv.Value with { Show = false, Send = false },
+                StringComparer.Ordinal),
+        };
     }
 
     public bool Remove(string slug)
