@@ -41,7 +41,7 @@ public partial class MainWindow : Window
 
         private bool _send = true;
         private string _position = StatText.Dash;
-        private IReadOnlyList<string> _cells = [];
+        private IReadOnlyList<string> _cells = Array.Empty<string>();
         private string _ratePerMinute = StatText.Dash;
         private string _lastValue = StatText.Dash;
         private string _lastSent = StatText.Dash;
@@ -79,7 +79,7 @@ public partial class MainWindow : Window
     {
         public string Position { get; set; } = "";
         public string Name { get; set; } = "";
-        public IReadOnlyList<string> Cells { get; set; } = [];
+        public IReadOnlyList<string> Cells { get; set; } = Array.Empty<string>();
         public string Yours { get; set; } = "";
     }
 
@@ -230,7 +230,11 @@ public partial class MainWindow : Window
     /// <summary>The sent stat the rule helper has selected, or null when nothing is sent.</summary>
     private string? RuleMetricId => (RuleStatBox.SelectedItem as RuleChoice)?.MetricId;
 
-    private IReadOnlyList<string> Dashes() => [.. Enumerable.Repeat(StatText.Dash, _shownStats.Count)];
+    /// <summary>
+    /// A plain array, like every <c>Cells</c> value: a collection expression typed as a read-only list
+    /// can be a compiler-made wrapper, and <c>Cells[i]</c> should always index an array.
+    /// </summary>
+    private string[] Dashes() => Enumerable.Repeat(StatText.Dash, _shownStats.Count).ToArray();
 
     /// <summary>
     /// Place, cells, rate and note, back to dash or empty together. Three call sites once reset these
@@ -775,7 +779,7 @@ public partial class MainWindow : Window
                 Name = r.IsMine
                     ? mineNames.GetValueOrDefault(r.UserId, $"You ({r.UserId})")
                     : resolved.GetValueOrDefault(r.UserId, $"Member {r.UserId}"),
-                Cells = [.. _shownStats.Select(stat => r.Values.TryGetValue(stat.Key, out var value) ? StatText.Number(value) : StatText.Dash)],
+                Cells = _shownStats.Select(stat => r.Values.TryGetValue(stat.Key, out var value) ? StatText.Number(value) : StatText.Dash).ToArray(),
                 Yours = r.IsMine ? "You" : "",
             });
         }
