@@ -329,6 +329,30 @@ public class RecipeWatchTests
     }
 
     [Fact]
+    public async Task ARecipeChangedDuringTheReadSendsNothing()
+    {
+        // Single-value recipes all use the stat key "value", so an old reading would otherwise go out
+        // under the new recipe's metric id.
+        var followers = RecipeParser.Parse(RecipeParserTests.Fixture("roblox-followers.recipe.json")).Recipe!;
+        var host = new FakeHost(true, [MyAccount]);
+        RecipeWatch? watch = null;
+        var engine = new FakeEngine(() =>
+        {
+            watch!.UpdateRecipe(followers, new Dictionary<string, string>(), ValueOnly);
+            watch.UpdatePolicy([new SentStat("value", "Followers", "roblox.followers")], new HashSet<Guid> { Mine });
+            return Reading("battle=A", Row(111, 4200));
+        });
+        watch = Watch(engine, host);
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Empty(host.Reported);
+        Assert.Equal("The recipe changed while it was being read, so nothing was sent this time.", snapshot.Detail);
+        Assert.Equal(PetSim.Slug, snapshot.RecipeSlug);
+        Assert.Null(snapshot.Rows);
+    }
+
+    [Fact]
     public void TheWindowConstructsExactlyOneRecipeWatch()
     {
         // F2: a watch built per cycle gets a fresh serialization guard, and a timer tick and a Test

@@ -550,25 +550,29 @@ public partial class MainWindow : Window
             var seedProblem = await SeedRowsAsync();
 
             var watch = EnsureWatch(_active ?? active);
-            var readSlug = watch.Recipe.Slug;
             var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+            if (seedProblem is not null)
+            {
+                _trail.Add(Stamp($"SEED REJECTED: {seedProblem}"));
+            }
+
+            _trail.Add(Stamp($"{snapshot.State}: {snapshot.Detail}"));
+
+            // A recipe switched while this cycle read the old one: nothing it read belongs under the new
+            // heading, not its state, its icon, its names or its rows.
+            if (_active is null || !string.Equals(snapshot.RecipeSlug, _active.Recipe.Slug, StringComparison.Ordinal)) return;
+
             Render(snapshot);
 
             if (seedProblem is not null)
             {
                 StateLine.Text = "RoRoRo refused this.";
                 DetailLine.Text = seedProblem;
-                _trail.Add(Stamp($"SEED REJECTED: {seedProblem}"));
             }
 
-            _trail.Add(Stamp($"{snapshot.State}: {snapshot.Detail}"));
-
-            // A recipe switched while this cycle read the old one: its icon and names belong to the old one.
-            if (_active is not null && string.Equals(_active.Recipe.Slug, readSlug, StringComparison.Ordinal))
-            {
-                if (snapshot.IconText is { } iconText) _ = ApplyIconAsync(iconText, _active.Recipe);
-                if (snapshot.CounterNames.Count > 0) SaveCounterNames(snapshot.CounterNames);
-            }
+            if (snapshot.IconText is { } iconText) _ = ApplyIconAsync(iconText, _active.Recipe);
+            if (snapshot.CounterNames.Count > 0) SaveCounterNames(snapshot.CounterNames);
 
             await RenderDashboardAsync(snapshot);
         }
@@ -660,7 +664,12 @@ public partial class MainWindow : Window
         var mine = _rows.Where(r => r.RobloxUserId != 0).Select(r => r.RobloxUserId).ToHashSet();
         var ranked = Leaderboard.Rank(snapshot.Rows, mine, _shownStats.FirstOrDefault()?.Key ?? "");
 
+        var drawing = _active;
         await RenderLeaderboardAsync(ranked);
+
+        // The recipe changed while names were being looked up: these rows belong to the one before.
+        if (!ReferenceEquals(_active, drawing)) return;
+
         RenderAccountDashboardRows(snapshot, ranked, DateTimeOffset.UtcNow);
     }
 
@@ -682,7 +691,9 @@ public partial class MainWindow : Window
             var others = ranked.Where(r => !r.IsMine).Select(r => r.UserId).Distinct().ToList();
             if (others.Count > 0)
             {
+                var drawing = _active;
                 resolved = await _nameClient.ResolveAsync(others, CancellationToken.None);
+                if (!ReferenceEquals(_active, drawing)) return;
             }
         }
 
