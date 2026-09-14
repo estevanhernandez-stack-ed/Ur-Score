@@ -1215,6 +1215,9 @@ public partial class MainWindow : Window
     {
         var switching = !string.Equals(_active?.Recipe.Slug, installed.Recipe.Slug, StringComparison.Ordinal);
 
+        // An update of the same recipe that removes or moves its icon must not keep showing the old picture.
+        var iconChanged = !string.Equals(_active?.Recipe.Icon, installed.Recipe.Icon, StringComparison.Ordinal);
+
         _settings = _settings with { ActiveRecipe = installed.Recipe.Slug };
         try
         {
@@ -1225,12 +1228,16 @@ public partial class MainWindow : Window
             // Remembering which recipe was active is a convenience; failing to save it costs only that.
         }
 
+        if (switching || iconChanged)
+        {
+            _iconText = null;
+            ResetIcon();
+        }
+
         if (switching)
         {
             _history.Clear();
             _leaderboardRows.Clear();
-            _iconText = null;
-            ResetIcon();
             foreach (var row in _rows)
             {
                 ClearDashboard(row);
