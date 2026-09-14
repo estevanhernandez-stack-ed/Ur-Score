@@ -744,7 +744,7 @@ public partial class MainWindow : Window
         await RenderLeaderboardAsync(ranked);
 
         // The recipe changed while names were being looked up: these rows belong to the one before.
-        if (!ReferenceEquals(_active, drawing)) return;
+        if (!ReferenceEquals(_active?.Recipe, drawing?.Recipe)) return;
 
         RenderAccountDashboardRows(snapshot, ranked, DateTimeOffset.UtcNow);
     }
@@ -769,7 +769,7 @@ public partial class MainWindow : Window
             {
                 var drawing = _active;
                 resolved = await _nameClient.ResolveAsync(others, CancellationToken.None);
-                if (!ReferenceEquals(_active, drawing)) return;
+                if (!ReferenceEquals(_active?.Recipe, drawing?.Recipe)) return;
             }
         }
 
