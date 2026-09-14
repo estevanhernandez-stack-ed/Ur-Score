@@ -112,6 +112,9 @@ public partial class MainWindow : Window
     /// <summary>The stat-wide misses last written to the trail, so a miss that repeats every cycle is written once.</summary>
     private readonly Dictionary<string, string> _statMissesInTrail = new(StringComparer.Ordinal);
 
+    /// <summary>The per-account misses last written to the trail, by account, stat and reason, so each is written once.</summary>
+    private readonly HashSet<(Guid AccountId, string Stat, string Reason)> _cellMissesInTrail = [];
+
     private IReadOnlyList<RecipeStat> _shownStats = [];
     private string? _iconText;
     private string? _lastDashboardContext;
@@ -338,6 +341,7 @@ public partial class MainWindow : Window
         _accountStatColumns.Clear();
         _leaderboardStatColumns.Clear();
         _statMissesInTrail.Clear();
+        _cellMissesInTrail.Clear();
         _shownStats = shown;
 
         for (var index = 0; index < shown.Count; index++)
@@ -391,6 +395,30 @@ public partial class MainWindow : Window
         {
             _statMissesInTrail.Remove(key);
         }
+    }
+
+    /// <summary>
+    /// Why one of your accounts' cells missed, naming what was present (spec §4 row 1), goes to the trail
+    /// once per miss. The Note only says "can't read". Named by the account's display name, never its
+    /// Roblox user id; the snapshot holds only your own accounts' misses.
+    /// </summary>
+    private void RenderCellMisses(IReadOnlyDictionary<(long UserId, string Stat), string> cellMisses)
+    {
+        var current = new HashSet<(Guid AccountId, string Stat, string Reason)>();
+
+        foreach (var ((userId, statKey), reason) in cellMisses)
+        {
+            if (_rows.FirstOrDefault(r => r.RobloxUserId == userId) is not { } row) continue;
+
+            var miss = (row.AccountId, statKey, reason);
+            current.Add(miss);
+            if (!_cellMissesInTrail.Add(miss)) continue;
+
+            var label = RecipeStats.Find(_active!.Recipe, statKey)?.Label ?? statKey;
+            _trail.Add(Stamp($"CELL NOT READ: {row.DisplayName} · {label}: {reason}"));
+        }
+
+        _cellMissesInTrail.RemoveWhere(miss => !current.Contains(miss));
     }
 
     /// <summary>
@@ -694,6 +722,7 @@ public partial class MainWindow : Window
             : "";
 
         RenderStatMisses(snapshot.StatMisses);
+        RenderCellMisses(snapshot.CellMisses);
 
         var mine = _rows.Where(r => r.RobloxUserId != 0).Select(r => r.RobloxUserId).ToHashSet();
         var ranked = Leaderboard.Rank(snapshot.Rows, mine, _shownStats.FirstOrDefault()?.Key ?? "");
