@@ -779,7 +779,7 @@ public partial class MainWindow : Window
         }
 
         var review = ImportReview.Review(recipe, _keys);
-        var comparison = ImportReview.CompareToInstalled(installed?.Recipe, recipe, _keys);
+        var comparison = ImportReview.CompareToInstalled(installed?.Recipe, recipe, _keys, installed?.State);
 
         try
         {

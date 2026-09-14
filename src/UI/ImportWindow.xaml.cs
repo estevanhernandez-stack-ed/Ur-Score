@@ -41,7 +41,7 @@ public partial class ImportWindow : Window
             : $"Says it is from {recipe.Author}. This is not verified.";
 
         HostsList.ItemsSource = review.Hosts
-            .Select(h => new HostItem(h.Host, $"Receives {string.Join(", ", h.Sends)}."))
+            .Select(h => new HostItem(h.Host, ImportReview.SendsText(h)))
             .ToList();
 
         PollLine.Text = $"Asks every {recipe.EffectiveEverySeconds} seconds.";
