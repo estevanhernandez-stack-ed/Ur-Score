@@ -6,6 +6,9 @@ using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Grpc.Core;
 using Labs626.UrScore.Core;
@@ -18,7 +21,7 @@ namespace Labs626.UrScore.UI;
 
 /// <summary>
 /// Runs the active recipe: the dashboard (headline, leaderboard, your accounts) above, the alert
-/// pipeline's diagnostics below. Part 1 runs one recipe; part 2 adds the recipe list.
+/// pipeline's diagnostics below. Part 2a shows a column per shown stat; part 2b redesigns the board.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -28,18 +31,21 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// One row of the accounts grid. Raises change notifications so rows update in place: calling
-    /// <c>Items.Refresh()</c> throws while the Send checkbox is mid-edit (F10).
+    /// <c>Items.Refresh()</c> throws while the Send checkbox is mid-edit (F10). Stat values are bound
+    /// by column position (<c>Cells[0]</c>, <c>Cells[1]</c>…), because a stat key such as
+    /// <c>counter:Huge Pets Opened</c> is not something a binding path can hold unescaped.
     /// </summary>
     public sealed class Row : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
 
         private bool _send = true;
-        private string _position = "—";
-        private string _value = "—";
-        private string _ratePerMinute = "—";
-        private string _lastValue = "—";
-        private string _lastSent = "—";
+        private string _position = StatText.Dash;
+        private IReadOnlyList<string> _cells = [];
+        private string _ratePerMinute = StatText.Dash;
+        private string _lastValue = StatText.Dash;
+        private string _lastSent = StatText.Dash;
+        private string _note = "";
 
         public bool Send { get => _send; set => SetField(ref _send, value); }
 
@@ -51,13 +57,15 @@ public partial class MainWindow : Window
 
         public string Position { get => _position; set => SetField(ref _position, value); }
 
-        public string Value { get => _value; set => SetField(ref _value, value); }
+        public IReadOnlyList<string> Cells { get => _cells; set => SetField(ref _cells, value); }
 
         public string RatePerMinute { get => _ratePerMinute; set => SetField(ref _ratePerMinute, value); }
 
         public string LastValue { get => _lastValue; set => SetField(ref _lastValue, value); }
 
         public string LastSent { get => _lastSent; set => SetField(ref _lastSent, value); }
+
+        public string Note { get => _note; set => SetField(ref _note, value); }
 
         private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
         {
@@ -71,9 +79,12 @@ public partial class MainWindow : Window
     {
         public string Position { get; set; } = "";
         public string Name { get; set; } = "";
-        public string Value { get; set; } = "";
+        public IReadOnlyList<string> Cells { get; set; } = [];
         public string Yours { get; set; } = "";
     }
+
+    /// <summary>One sent stat in the rule helper's list: label, then the metric id the rule matches.</summary>
+    public sealed record RuleChoice(string MetricId, string Text);
 
     private readonly ObservableCollection<Row> _rows = [];
     private readonly ObservableCollection<LeaderboardRow> _leaderboardRows = [];
@@ -86,14 +97,23 @@ public partial class MainWindow : Window
     private readonly HostClient _themeHost = new(PluginId);
     private readonly CancellationTokenSource _closing = new();
     private readonly NameClient _nameClient;
+    private readonly IconClient _icons = new(HttpRecipeTransport.CreateHandler(), IconClient.DefaultCacheDirectory, () => DateTimeOffset.UtcNow);
     private readonly RecipeStore _store = new(RecipeStore.DefaultDirectory);
     private readonly KeyStore _keys = new(KeyStore.DefaultPath);
     private readonly Redactor _redactor;
     private readonly List<string> _trail = [];
 
-    /// <summary>This window's own rate samples, cleared when the context changes, never taken from a report.</summary>
-    private readonly Dictionary<Guid, PointsSample> _previousSamples = [];
+    /// <summary>This window's own last reads per account and stat, cleared when the context changes, never taken from a report.</summary>
+    private readonly StatHistory _history = new();
 
+    private readonly List<DataGridTextColumn> _accountStatColumns = [];
+    private readonly List<DataGridTextColumn> _leaderboardStatColumns = [];
+
+    /// <summary>The stat-wide misses last written to the trail, so a miss that repeats every cycle is written once.</summary>
+    private readonly Dictionary<string, string> _statMissesInTrail = new(StringComparer.Ordinal);
+
+    private IReadOnlyList<RecipeStat> _shownStats = [];
+    private string? _iconText;
     private string? _lastDashboardContext;
     private IReadOnlyList<string> _storeProblems = [];
     private string? _recipeFileNote;
@@ -187,12 +207,6 @@ public partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "626labs.ur-score", "last-response");
 
-    /// <summary>Until the rule helper picks a sent stat (Task 13), it writes a rule for the first one.</summary>
-    private string MetricId => SentStats().FirstOrDefault()?.MetricId ?? "";
-
-    /// <summary>Until the window shows a column per stat (Task 13), it ranks and shows the recipe's first value.</summary>
-    private string FirstStatKey => _active?.Recipe.LastStep.Values[0].Id ?? "";
-
     private IReadOnlySet<string> TrackedStats() => _active?.State.TrackedStats(_active.Recipe) ?? new HashSet<string>();
 
     private IReadOnlyList<SentStat> SentStats() => _active?.State.SentStats(_active.Recipe) ?? [];
@@ -200,6 +214,11 @@ public partial class MainWindow : Window
     private IReadOnlyCollection<Guid> AccountIds() => [.. _rows.Select(r => r.AccountId)];
 
     private HashSet<Guid> CurrentAllowedSubjects() => _rows.Where(r => r.Send).Select(r => r.AccountId).ToHashSet();
+
+    /// <summary>The sent stat the rule helper has selected, or null when nothing is sent.</summary>
+    private string? RuleMetricId => (RuleStatBox.SelectedItem as RuleChoice)?.MetricId;
+
+    private IReadOnlyList<string> Dashes() => [.. Enumerable.Repeat(StatText.Dash, _shownStats.Count)];
 
     private string Stamp(string text) => $"{DateTimeOffset.UtcNow:O} {_redactor.Redact(text)}";
 
@@ -237,9 +256,9 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// The one place a recipe becomes the running one: the missing-file note clears, the Send
-    /// checkboxes follow its state, the watch takes its recipe and inputs, and the heading re-renders.
-    /// Both <see cref="ReloadActive"/> and <see cref="Activate"/> go through here, so a recipe swap
-    /// cannot update the watch in one place and forget it in the other.
+    /// checkboxes follow its state, the watch takes its recipe, inputs and tracked stats, and the
+    /// heading and columns re-render. Both <see cref="ReloadActive"/> and <see cref="Activate"/> go
+    /// through here, so a recipe swap cannot update the watch in one place and forget it in the other.
     /// </summary>
     private void ApplyActive(InstalledRecipe installed)
     {
@@ -259,11 +278,14 @@ public partial class MainWindow : Window
 
     private void RenderRecipe()
     {
+        RebuildStatColumns();
+        RenderRuleChoices();
+
         if (_active is null)
         {
             HeadingLine.Text = "No recipe yet";
             ClanLine.Text = "Import a recipe to start.";
-            ClanDetailLine.Text = "A recipe says where a number is. Ur Score reads it and hands your accounts' values to RoRoRo.";
+            ClanDetailLine.Text = "A recipe says where numbers are. Ur Score reads them and hands the ones you choose to RoRoRo.";
             AttributionLine.Text = "";
             DetailLine.Text = _storeProblems.Count > 0
                 ? _redactor.Redact("Some recipe files could not be read: " + string.Join(" | ", _storeProblems))
@@ -272,13 +294,88 @@ public partial class MainWindow : Window
         }
 
         var recipe = _active.Recipe;
+        var listForm = !recipe.LastStep.PerAccount;
         HeadingLine.Text = recipe.Name;
         ClanLine.Text = "Not started.";
         ClanDetailLine.Text = "";
         AttributionLine.Text = recipe.Credit;
-        LeaderboardValueColumn.Header = recipe.LastStep.Values[0].Label;
-        AccountsValueColumn.Header = recipe.LastStep.Values[0].Label;
-        DetailLine.Text = $"Reads {recipe.Name} when started.";
+
+        // A position among the rows, and a rate between polls, only mean something for a list.
+        AccountsPlaceColumn.Header = recipe.PlaceLabel;
+        AccountsPlaceColumn.Visibility = listForm ? Visibility.Visible : Visibility.Collapsed;
+        AccountsRateColumn.Visibility = listForm ? Visibility.Visible : Visibility.Collapsed;
+        RateDisclaimerLine.Visibility = listForm ? Visibility.Visible : Visibility.Collapsed;
+
+        DetailLine.Text = TrackedStats().Count == 0 ? RecipeEngine.NothingTracked : $"Reads {recipe.Name} when started.";
+    }
+
+    /// <summary>
+    /// One column per shown stat in both tables, rebuilt only when the shown stats change, so a
+    /// cycle's values are not blanked by an unrelated re-render.
+    /// </summary>
+    private void RebuildStatColumns()
+    {
+        var shown = _active?.State.ShownStats(_active.Recipe) ?? [];
+        if (shown.SequenceEqual(_shownStats) && _accountStatColumns.Count == shown.Count) return;
+
+        foreach (var column in _accountStatColumns) AccountsGrid.Columns.Remove(column);
+        foreach (var column in _leaderboardStatColumns) LeaderboardGrid.Columns.Remove(column);
+        _accountStatColumns.Clear();
+        _leaderboardStatColumns.Clear();
+        _statMissesInTrail.Clear();
+        _shownStats = shown;
+
+        for (var index = 0; index < shown.Count; index++)
+        {
+            var accountColumn = StatColumn(shown[index], index);
+            AccountsGrid.Columns.Insert(AccountsGrid.Columns.IndexOf(AccountsRateColumn), accountColumn);
+            _accountStatColumns.Add(accountColumn);
+
+            var boardColumn = StatColumn(shown[index], index);
+            LeaderboardGrid.Columns.Insert(LeaderboardGrid.Columns.IndexOf(LeaderboardYoursColumn), boardColumn);
+            _leaderboardStatColumns.Add(boardColumn);
+        }
+
+        _history.Clear();
+        _leaderboardRows.Clear();
+        foreach (var row in _rows)
+        {
+            row.Cells = Dashes();
+        }
+    }
+
+    private static DataGridTextColumn StatColumn(RecipeStat stat, int index) => new()
+    {
+        Header = stat.Label,
+        Binding = new Binding($"Cells[{index}]"),
+        Width = new DataGridLength(140),
+        IsReadOnly = true,
+    };
+
+    /// <summary>A stat that missed for every row says so in its header, and its reason goes to the trail once.</summary>
+    private void RenderStatMisses(IReadOnlyDictionary<string, string> statMisses)
+    {
+        for (var index = 0; index < _shownStats.Count; index++)
+        {
+            var stat = _shownStats[index];
+            var header = statMisses.ContainsKey(stat.Key) ? $"{stat.Label} (can't read)" : stat.Label;
+            _accountStatColumns[index].Header = header;
+            _leaderboardStatColumns[index].Header = header;
+        }
+
+        foreach (var (key, miss) in statMisses)
+        {
+            if (_statMissesInTrail.TryGetValue(key, out var written) && written == miss) continue;
+
+            _statMissesInTrail[key] = miss;
+            var label = RecipeStats.Find(_active!.Recipe, key)?.Label ?? key;
+            _trail.Add(Stamp($"STAT NOT READ: {label}: {miss}"));
+        }
+
+        foreach (var key in _statMissesInTrail.Keys.Where(key => !statMisses.ContainsKey(key)).ToList())
+        {
+            _statMissesInTrail.Remove(key);
+        }
     }
 
     /// <summary>
@@ -334,6 +431,7 @@ public partial class MainWindow : Window
                 DisplayName = account.DisplayName,
                 RobloxUserId = account.RobloxUserId,
                 Send = !excluded.Contains(account.AccountId),
+                Cells = Dashes(),
             });
         }
 
@@ -342,14 +440,31 @@ public partial class MainWindow : Window
         return null;
     }
 
-    private void OnSendToggled(object? sender, System.Windows.Controls.DataGridCellEditEndingEventArgs e)
+    private void OnSendToggled(object? sender, DataGridCellEditEndingEventArgs e)
     {
+        var toggled = e.Row.Item as Row;
+
         Dispatcher.BeginInvoke(() =>
         {
             if (_active is null) return;
 
             try
             {
+                // Stats design §5.3: an account's Send tick that would pass RoRoRo's history limit is undone.
+                var ids = AccountIds();
+                var sentStats = _active.State.SentStats(_active.Recipe).Count;
+                var before = ids.Count(id => !_active.State.Excluded.Contains(id));
+                var budget = HistoryBudget.Check(
+                    HistoryBudget.Installed(_store.LoadAll().Recipes, ids, exceptSlug: _active.Recipe.Slug),
+                    (before, sentStats), (_rows.Count(r => r.Send), sentStats), accountsKnown: true);
+
+                if (!budget.Allowed && toggled is { Send: true })
+                {
+                    toggled.Send = false;
+                    DetailLine.Text = budget.Line;
+                    return;
+                }
+
                 var excluded = _rows.Where(r => !r.Send).Select(r => r.AccountId.ToString()).ToList();
                 var state = _active.State with { ExcludedAccountIds = excluded };
                 _store.SaveState(_active.Recipe, state);
@@ -422,7 +537,9 @@ public partial class MainWindow : Window
         {
             var seedProblem = await SeedRowsAsync();
 
-            var snapshot = await EnsureWatch(_active ?? active).RunOnceAsync(CancellationToken.None);
+            var watch = EnsureWatch(_active ?? active);
+            var readSlug = watch.Recipe.Slug;
+            var snapshot = await watch.RunOnceAsync(CancellationToken.None);
             Render(snapshot);
 
             if (seedProblem is not null)
@@ -433,6 +550,14 @@ public partial class MainWindow : Window
             }
 
             _trail.Add(Stamp($"{snapshot.State}: {snapshot.Detail}"));
+
+            // A recipe switched while this cycle read the old one: its icon and names belong to the old one.
+            if (_active is not null && string.Equals(_active.Recipe.Slug, readSlug, StringComparison.Ordinal))
+            {
+                if (snapshot.IconText is { } iconText) _ = ApplyIconAsync(iconText, _active.Recipe);
+                if (snapshot.CounterNames.Count > 0) SaveCounterNames(snapshot.CounterNames);
+            }
+
             await RenderDashboardAsync(snapshot);
         }
         catch (Exception ex)
@@ -478,13 +603,14 @@ public partial class MainWindow : Window
             DetailLine.Text += "  " + _recipeFileNote;
         }
 
+        var sent = SentStats();
         foreach (var line in snapshot.Accounts)
         {
             var row = _rows.FirstOrDefault(r => r.AccountId == line.AccountId);
             if (row is null) continue;
 
-            row.LastValue = line.LastValues.TryGetValue(FirstStatKey, out var last) ? last.ToString("0.##") : "—";
-            row.LastSent = line.LastReportedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "—";
+            row.LastValue = StatText.LastSent(sent, line.LastValues);
+            row.LastSent = line.LastReportedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? StatText.Dash;
         }
 
         RenderPolicy();
@@ -509,7 +635,7 @@ public partial class MainWindow : Window
 
         if (_lastDashboardContext != snapshot.Context)
         {
-            _previousSamples.Clear();
+            _history.Clear();
             _lastDashboardContext = snapshot.Context;
         }
 
@@ -517,16 +643,18 @@ public partial class MainWindow : Window
             ? string.Join(" · ", headline.Select(h => $"{h.Label} {FormatNumber(h.Text)}"))
             : "";
 
+        RenderStatMisses(snapshot.StatMisses);
+
         var mine = _rows.Where(r => r.RobloxUserId != 0).Select(r => r.RobloxUserId).ToHashSet();
-        var ranked = Leaderboard.Rank(snapshot.Rows, mine, FirstStatKey);
+        var ranked = Leaderboard.Rank(snapshot.Rows, mine, _shownStats.FirstOrDefault()?.Key ?? "");
 
         await RenderLeaderboardAsync(ranked);
-        RenderAccountDashboardRows(ranked, DateTimeOffset.UtcNow);
+        RenderAccountDashboardRows(snapshot, ranked, DateTimeOffset.UtcNow);
     }
 
     private static string FormatNumber(string? text) =>
         text is null ? "unknown"
-        : double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number.ToString("N0")
+        : double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? StatText.Number(number)
         : text;
 
     /// <summary>Names from Roblox in one batched call, only when resolveNames allows. Your own names are already known.</summary>
@@ -555,40 +683,136 @@ public partial class MainWindow : Window
                 Name = r.IsMine
                     ? mineNames.GetValueOrDefault(r.UserId, $"You ({r.UserId})")
                     : resolved.GetValueOrDefault(r.UserId, $"Member {r.UserId}"),
-                Value = r.Values.TryGetValue(FirstStatKey, out var value) ? value.ToString("N0") : "—",
+                Cells = [.. _shownStats.Select(stat => r.Values.TryGetValue(stat.Key, out var value) ? StatText.Number(value) : StatText.Dash)],
                 Yours = r.IsMine ? "You" : "",
             });
         }
     }
 
-    /// <summary>Position, value and rate per account, from what was read, not what was sent.</summary>
-    private void RenderAccountDashboardRows(IReadOnlyList<RankedRow> ranked, DateTimeOffset observedAt)
+    /// <summary>
+    /// Place, each shown stat with its change since the last read, the rate for the first shown stat,
+    /// and a note, per account, from what was read, not what was sent.
+    /// </summary>
+    private void RenderAccountDashboardRows(RecipeSnapshot snapshot, IReadOnlyList<RankedRow> ranked, DateTimeOffset observedAt)
     {
         var byUserId = ranked.GroupBy(r => r.UserId).ToDictionary(g => g.Key, g => g.First());
 
         foreach (var row in _rows)
         {
+            var unavailable = row.RobloxUserId == 0 ? null : snapshot.Unavailable.GetValueOrDefault(row.RobloxUserId);
+
             if (row.RobloxUserId == 0 || !byUserId.TryGetValue(row.RobloxUserId, out var r))
             {
-                row.Position = "—";
-                row.Value = "—";
+                row.Position = StatText.Dash;
+                row.Cells = Dashes();
+                row.RatePerMinute = StatText.Dash;
+                row.Note = StatText.Note(unavailable, []);
                 continue;
             }
 
             row.Position = $"#{r.Position}";
-            if (!r.Values.TryGetValue(FirstStatKey, out var value))
+            row.RatePerMinute = StatText.Dash;
+
+            var cells = new string[_shownStats.Count];
+            var missed = new List<string>();
+            for (var index = 0; index < _shownStats.Count; index++)
             {
-                row.Value = "—";
-                continue;
+                var stat = _shownStats[index];
+                if (!r.Values.TryGetValue(stat.Key, out var value))
+                {
+                    cells[index] = StatText.Dash;
+                    if (snapshot.CellMisses.ContainsKey((r.UserId, stat.Key))) missed.Add(stat.Label);
+                    continue;
+                }
+
+                var previous = _history.Record(row.AccountId, stat.Key, value, observedAt);
+                cells[index] = StatText.Cell(value, previous);
+
+                if (index == 0)
+                {
+                    var rate = PointsRate.PerMinute(previous, new PointsSample(value, observedAt));
+                    row.RatePerMinute = rate is double perMinute ? $"{perMinute:+0.#;-0.#;0}/min" : StatText.Dash;
+                }
             }
 
-            row.Value = value.ToString("N0");
-
-            var current = new PointsSample(value, observedAt);
-            var rate = PointsRate.PerMinute(_previousSamples.GetValueOrDefault(row.AccountId), current);
-            row.RatePerMinute = rate is double perMinute ? $"{perMinute:+0.#;-0.#;0}/min" : "—";
-            _previousSamples[row.AccountId] = current;
+            row.Cells = cells;
+            row.Note = StatText.Note(unavailable, missed);
         }
+    }
+
+    /// <summary>Counter names from a successful read, kept in the recipe's state for the settings screen's search.</summary>
+    private void SaveCounterNames(IReadOnlyList<string> names)
+    {
+        if (_active is null || _active.Recipe.LastStep.Counters is null) return;
+        if (names.SequenceEqual(_active.State.SavedCounterNames, StringComparer.Ordinal)) return;
+
+        try
+        {
+            var state = _active.State with { CounterNames = [.. names] };
+            _store.SaveState(_active.Recipe, state);
+            _active = _active with { State = state };
+        }
+        catch (Exception ex)
+        {
+            _trail.Add(Stamp($"COUNTER NAMES NOT SAVED: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// The recipe's icon on the window, the taskbar and beside the heading, fetched once per icon text.
+    /// Anything that fails keeps Ur Score's own icon (stats design §3.3).
+    /// </summary>
+    private async Task ApplyIconAsync(string iconText, Recipe recipe)
+    {
+        if (string.Equals(iconText, _iconText, StringComparison.Ordinal)) return;
+        _iconText = iconText;
+
+        string? file;
+        try
+        {
+            file = await _icons.ResolveAsync(iconText, RecipeHosts.ContactedBy(recipe), _closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        // Switched recipes, or a newer icon text, while this one was fetching.
+        if (!string.Equals(_active?.Recipe.Slug, recipe.Slug, StringComparison.Ordinal) || !string.Equals(_iconText, iconText, StringComparison.Ordinal)) return;
+
+        if (file is null)
+        {
+            ResetIcon();
+            _trail.Add(Stamp("ICON: the recipe's icon could not be fetched, so the window keeps Ur Score's."));
+            return;
+        }
+
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            image.UriSource = new Uri(file);
+            image.EndInit();
+            image.Freeze();
+
+            Icon = image;
+            HeadingIcon.Source = image;
+            HeadingIcon.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            ResetIcon();
+            _trail.Add(Stamp($"ICON: the picture did not decode ({ex.GetType().Name}), so the window keeps Ur Score's."));
+        }
+    }
+
+    private void ResetIcon()
+    {
+        ClearValue(IconProperty);
+        HeadingIcon.Source = null;
+        HeadingIcon.Visibility = Visibility.Collapsed;
     }
 
     private void RenderPolicy()
@@ -605,6 +829,19 @@ public partial class MainWindow : Window
         PolicyCounts.Text = _watch is null ? "" : $"Sent {_watch.Policy.Sent}, dropped {_watch.Policy.Dropped}.";
     }
 
+    /// <summary>The sent stats the rule helper can pick from, keeping the current pick when it is still sent.</summary>
+    private void RenderRuleChoices()
+    {
+        var picked = RuleMetricId;
+        var choices = SentStats().Select(stat => new RuleChoice(stat.MetricId, $"{stat.Label} ({stat.MetricId})")).ToList();
+
+        RuleStatBox.ItemsSource = choices;
+        RuleStatBox.SelectedItem = choices.FirstOrDefault(c => c.MetricId == picked) ?? choices.FirstOrDefault();
+        RuleStatBox.IsEnabled = choices.Count > 0;
+    }
+
+    private void OnRuleStatChanged(object sender, SelectionChangedEventArgs e) => RenderRule();
+
     private void RenderRule()
     {
         if (_active is null)
@@ -615,7 +852,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(MetricId))
+        if (RuleMetricId is not { } metricId)
         {
             RuleLine.Text = "No stat is set to send. Tick Send on a stat in Recipe settings, then add its rule here.";
             AddRuleButton.IsEnabled = false;
@@ -623,7 +860,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        (RuleLine.Text, AddRuleButton.IsEnabled) = RuleSentence(MetricId);
+        (RuleLine.Text, AddRuleButton.IsEnabled) = RuleSentence(metricId);
         RulePreview.Text = AddRuleButton.IsEnabled
             ? $"Rate, below {DefaultThreshold} per minute over {DefaultWindowMinutes} minutes"
             : "";
@@ -658,10 +895,8 @@ public partial class MainWindow : Window
 
     private void OnAddRuleClick(object sender, RoutedEventArgs e)
     {
-        if (_active is null) return;
-        if (string.IsNullOrWhiteSpace(MetricId)) return;
+        if (_active is null || RuleMetricId is not { } metricId) return;
 
-        var metricId = MetricId;
         var preview = RulesFile.Preview(metricId, DefaultThreshold, DefaultWindowMinutes);
         var answer = MessageBox.Show(this,
             $"Add this rule to RoRoRo's metric-rules.json?\n\n{preview}\n\n"
@@ -692,10 +927,14 @@ public partial class MainWindow : Window
             ? "(none)"
             : string.Join(", ", _active.State.InputValues.Select(kv => $"{kv.Key}={kv.Value}"));
 
+        var sent = string.Join(", ", SentStats().Select(stat => $"{stat.Key}->{stat.MetricId}"));
+        var shown = string.Join(", ", _shownStats.Select(stat => stat.Key));
+
         var text = new StringBuilder()
             .AppendLine($"Ur Score diagnostics {DateTimeOffset.UtcNow:O}")
-            .AppendLine($"recipe={_active?.Recipe.Slug ?? "(none)"} metric={MetricId} "
+            .AppendLine($"recipe={_active?.Recipe.Slug ?? "(none)"} "
                 + $"poll={_active?.Recipe.EffectiveEverySeconds}s resolveNames={_settings.ResolveNames}")
+            .AppendLine($"sent={(sent.Length == 0 ? "(none)" : sent)} shown={(shown.Length == 0 ? "(none)" : shown)}")
             .AppendLine($"inputs={inputs}")
             .AppendLine($"host={_host.HostVersion ?? "(not connected)"} reject={_host.RejectReason ?? "(none)"}")
             .AppendLine($"user-agent={UrScoreIdentity.UserAgent}")
@@ -873,8 +1112,8 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Makes a recipe the one this window runs. A different recipe clears what the dashboard drew
-    /// for the old one; <see cref="RecipeWatch.UpdateRecipe"/> clears remembered values when the
-    /// recipe or its inputs changed.
+    /// for the old one, and its icon; <see cref="RecipeWatch.UpdateRecipe"/> clears remembered values
+    /// when the recipe or its inputs changed.
     /// </summary>
     private void Activate(InstalledRecipe installed)
     {
@@ -892,13 +1131,16 @@ public partial class MainWindow : Window
 
         if (switching)
         {
-            _previousSamples.Clear();
+            _history.Clear();
             _leaderboardRows.Clear();
+            _iconText = null;
+            ResetIcon();
             foreach (var row in _rows)
             {
-                row.Position = "—";
-                row.Value = "—";
-                row.RatePerMinute = "—";
+                row.Position = StatText.Dash;
+                row.Cells = Dashes();
+                row.RatePerMinute = StatText.Dash;
+                row.Note = "";
             }
         }
 
