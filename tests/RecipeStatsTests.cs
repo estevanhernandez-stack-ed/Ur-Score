@@ -64,4 +64,16 @@ public class RecipeStatsTests
         string[] names = ["Pets.Huge", "123456", "Pets Hatched"];
         Assert.Equal(new[] { "Pets Hatched" }, RecipeStats.MatchCounterNames(names, "e", []).ToArray());
     }
+
+    [Fact]
+    public void ANameWithABraceCanNeverBePicked()
+    {
+        Assert.False(RecipeStats.CanPick("Pets {Rare}"));
+        Assert.False(RecipeStats.CanPick("{userId}"));
+
+        string[] names = ["Pets {Rare}", "Pets Hatched"];
+        Assert.Equal(new[] { "Pets Hatched" }, RecipeStats.MatchCounterNames(names, "Pets", []).ToArray());
+
+        Assert.Null(RecipeStats.Find(Profile, "counter:{battle}"));
+    }
 }

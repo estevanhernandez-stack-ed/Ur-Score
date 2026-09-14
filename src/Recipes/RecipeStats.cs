@@ -29,11 +29,13 @@ public static class RecipeStats
     }
 
     /// <summary>
-    /// A counter name that can become a stat. A dot would split its path in two (spec §3.2), and an
-    /// all-digit name is more likely someone's user id than a statistic, so neither is offered.
+    /// A counter name that can become a stat. A dot would split its path in two (spec §3.2), a brace
+    /// would be filled as a placeholder when the path is read, and an all-digit name is more likely
+    /// someone's user id than a statistic, so none of them is offered.
     /// </summary>
     public static bool CanPick(string name) =>
-        !string.IsNullOrWhiteSpace(name) && !name.Contains('.') && !name.All(char.IsAsciiDigit);
+        !string.IsNullOrWhiteSpace(name) && !name.Contains('.') && !name.Contains('{') && !name.Contains('}')
+        && !name.All(char.IsAsciiDigit);
 
     /// <summary>Spec §3.2: lowercase, spaces to hyphens, anything outside a-z, 0-9 and hyphen dropped.</summary>
     public static string Slug(string name)
