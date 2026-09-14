@@ -9248,6 +9248,9 @@ Parked (can wait):
 - `ReportPolicy` `Sent`/`Dropped` increments can be lost across `With()` and aren't synchronized (diagnostic counters only).
 - `ReloadActive` on Start re-parses the recipe into a new instance, so a draw in flight across a Start click is still skipped once.
 - When no row carries a sent stat, or a recipe change lands during the last send's await, no later per-send check runs, so the cycle returns Reporting with the replaced recipe's rows; display only, since nothing is sent or remembered.
+- `Remember` skips on any recipe or input instance change, so a same-recipe reload (a settings save, or Start) leaves one account's "Last sent" a cycle behind; a counter bumped only when `_lines` is cleared would refine it.
+- A same-slug update that changes (rather than removes) `icon` can show the old picture until the next cycle; carrying the read `Icon` in the snapshot would close it.
+- Watch tests: the stop-branch recipe check has no test, and in `ARecipeChangedWhileSendingSendsNoMore` only the detail assertion (not the count) distinguishes the per-send check from the fixed stats copy.
 
 Minor (deferred):
 - Recipes: `ParseSteps` reads `usesValues` after its loop; `RecipeUnavailable.IsText` is unused for true/false; `CounterKey`/`IsCounterKey` lack summaries; `Offered` and `Find` parse a counter key twice.
