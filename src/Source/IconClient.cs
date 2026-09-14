@@ -41,17 +41,23 @@ public sealed class IconClient
 
     public static readonly TimeSpan CacheFor = TimeSpan.FromDays(7);
 
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(30);
 
     private readonly HttpClient _http;
     private readonly string _cacheDirectory;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly TimeSpan _requestTimeout;
 
-    public IconClient(HttpMessageHandler handler, string cacheDirectory, Func<DateTimeOffset> clock)
+    /// <param name="requestTimeout">
+    /// Bounds one whole request — headers and body both — the same way <c>HttpRecipeTransport</c>
+    /// bounds a recipe fetch. Defaults to 30 seconds; a test may pass something shorter.
+    /// </param>
+    public IconClient(HttpMessageHandler handler, string cacheDirectory, Func<DateTimeOffset> clock, TimeSpan? requestTimeout = null)
     {
-        _http = new HttpClient(handler) { Timeout = RequestTimeout };
+        _http = new HttpClient(handler);
         _cacheDirectory = cacheDirectory;
         _clock = clock;
+        _requestTimeout = requestTimeout ?? DefaultRequestTimeout;
     }
 
     public static string DefaultCacheDirectory => Path.Combine(
@@ -114,11 +120,14 @@ public sealed class IconClient
 
         try
         {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(_requestTimeout);
+
             using var request = Get(address);
-            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            using var response = await _http.SendAsync(request, timeout.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return null;
 
-            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
             using var document = JsonDocument.Parse(body);
 
             if (!JsonNav.TryGet(document.RootElement, "data", out var data)
@@ -156,16 +165,22 @@ public sealed class IconClient
     {
         try
         {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(_requestTimeout);
+
             using var request = Get(url);
-            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return null;
             if (response.Content.Headers.ContentLength is > MaxBytes) return null;
 
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            // ResponseHeadersRead means HttpClient stops enforcing any timeout once headers land, so
+            // the same linked token that bounded SendAsync must bound every read of the body too —
+            // otherwise a body that never finishes holds this open forever.
+            await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
             using var buffer = new MemoryStream();
             var chunk = new byte[81920];
             int read;
-            while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+            while ((read = await stream.ReadAsync(chunk, timeout.Token).ConfigureAwait(false)) > 0)
             {
                 buffer.Write(chunk, 0, read);
                 if (buffer.Length > MaxBytes) return null;
@@ -176,7 +191,7 @@ public sealed class IconClient
 
             Directory.CreateDirectory(_cacheDirectory);
             var partial = file + ".partial";
-            await File.WriteAllBytesAsync(partial, bytes, cancellationToken).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(partial, bytes, timeout.Token).ConfigureAwait(false);
             File.Move(partial, file, overwrite: true);
             File.SetLastWriteTimeUtc(file, _clock().UtcDateTime);
             return file;

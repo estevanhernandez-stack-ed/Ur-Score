@@ -49,6 +49,98 @@ public class IconClientTests : IDisposable
         }
     }
 
+    /// <summary>A body stream whose read never completes on its own, honouring cancellation like a real network read would.</summary>
+    private sealed class NeverCompletingStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            return 0; // Unreachable: the delay above only ever ends by throwing.
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// A body stream that serves <paramref name="prefix"/> and then keeps serving bytes forever,
+    /// never signalling end of stream, non-seekable so <see cref="StreamContent"/> reports no
+    /// Content-Length. <see cref="TotalRead"/> proves how far the reader actually got.
+    /// </summary>
+    private sealed class CountingEndlessStream(byte[] prefix) : Stream
+    {
+        private int _prefixSent;
+
+        public long TotalRead { get; private set; }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            int written;
+            if (_prefixSent < prefix.Length)
+            {
+                written = Math.Min(count, prefix.Length - _prefixSent);
+                Array.Copy(prefix, _prefixSent, buffer, offset, written);
+                _prefixSent += written;
+            }
+            else
+            {
+                written = count;
+            }
+
+            TotalRead += written;
+            return Task.FromResult(written);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     private static HttpResponseMessage Json(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
@@ -139,6 +231,24 @@ public class IconClientTests : IDisposable
         Assert.False(Directory.Exists(_dir) && Directory.EnumerateFiles(_dir).Any());
     }
 
+    /// <summary>
+    /// <see cref="HttpCompletionOption.ResponseHeadersRead"/> means the body is read after
+    /// <c>HttpClient</c>'s own timeout has already been satisfied by the headers, so the picture fetch
+    /// must bound the body read itself — the same way <c>HttpRecipeTransport.GetAsync</c> bounds a
+    /// recipe fetch with a linked, cancel-after token.
+    /// </summary>
+    [Fact]
+    public async Task AFetchWhoseBodyNeverFinishesIsAbandonedAfterTheRequestTimeout()
+    {
+        var handler = new RouteHandler()
+            .On(ThumbnailsUrl, () => Json(Thumbnail("Completed", ImageUrl)))
+            .On(ImageUrl, () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new NeverCompletingStream()) });
+
+        var client = new IconClient(handler, _dir, () => Now, TimeSpan.FromMilliseconds(200));
+
+        Assert.Null(await client.ResolveAsync($"rbxassetid://{AssetId}", RecipeHostSet, CancellationToken.None));
+    }
+
     [Fact]
     public async Task AnHttpsIconOnOneOfTheRecipesHostsIsFetchedUnderAHashedName()
     {
@@ -178,6 +288,27 @@ public class IconClientTests : IDisposable
 
         Assert.Null(await Client(handler).ResolveAsync($"rbxassetid://{AssetId}", RecipeHostSet, CancellationToken.None));
         Assert.False(File.Exists(Path.Combine(_dir, $"{AssetId}.png")));
+    }
+
+    /// <summary>
+    /// The oversize test above uses <see cref="ByteArrayContent"/>, which always sets Content-Length,
+    /// so it never reaches the streaming cap in the read loop. A chunked body with no Content-Length —
+    /// this one never even ends — is the one that would slip past a Content-Length-only check.
+    /// </summary>
+    [Fact]
+    public async Task AStreamedBodyWithNoContentLengthIsStillCappedWhileReading()
+    {
+        var stream = new CountingEndlessStream(Png);
+        var handler = new RouteHandler()
+            .On(ThumbnailsUrl, () => Json(Thumbnail("Completed", ImageUrl)))
+            .On(ImageUrl, () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) });
+
+        var file = await Client(handler).ResolveAsync($"rbxassetid://{AssetId}", RecipeHostSet, CancellationToken.None);
+
+        Assert.Null(file);
+        Assert.False(File.Exists(Path.Combine(_dir, $"{AssetId}.png")));
+        Assert.False(File.Exists(Path.Combine(_dir, $"{AssetId}.png.partial")));
+        Assert.InRange(stream.TotalRead, IconClient.MaxBytes, IconClient.MaxBytes + 200_000);
     }
 
     [Fact]
