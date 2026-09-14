@@ -134,6 +134,9 @@ public partial class MainWindow : Window
     private RecipeWatch? _watch;
     private bool _running;
 
+    /// <summary>Import or Recipe settings is between its click and its screen closing; a second click is ignored.</summary>
+    private bool _dialogOpening;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -1051,129 +1054,166 @@ public partial class MainWindow : Window
 
     private async void OnImportRecipeClick(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Import a recipe",
-            Filter = "Ur Score recipe (*.recipe.json)|*.recipe.json|JSON file (*.json)|*.json",
-        };
-
-        if (dialog.ShowDialog(this) != true) return;
-
-        string text;
-        try
-        {
-            text = File.ReadAllText(dialog.FileName);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, $"Could not read that file: {ex.Message}", "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var parsed = RecipeParser.Parse(text);
-        if (!parsed.Ok)
-        {
-            MessageBox.Show(this,
-                "That recipe could not be imported:\n\n" + string.Join("\n", parsed.Problems.Select(p => "• " + p)),
-                "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var recipe = parsed.Recipe!;
-        var installed = _store.Find(recipe.Slug);
-
-        if (installed is not null
-            && (!string.Equals(installed.Recipe.Name, recipe.Name, StringComparison.Ordinal)
-                || !string.Equals(installed.Recipe.Author, recipe.Author, StringComparison.Ordinal)))
-        {
-            MessageBox.Show(this,
-                $"A different recipe, {installed.Recipe.Name}, is already installed under the same file name. "
-                + "Rename one of them before importing.",
-                "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        if (installed is not null && string.Equals(installed.Text, text, StringComparison.Ordinal))
-        {
-            // Spec §6.3: an identical file imports without asking.
-            Activate(installed);
-            DetailLine.Text = $"{recipe.Name} is already installed, and is the recipe this window runs.";
-            return;
-        }
-
-        var review = ImportReview.Review(recipe, _keys);
-        var comparison = ImportReview.CompareToInstalled(installed?.Recipe, recipe, _keys, installed?.State);
+        // The accounts wait below can last seconds with RoRoRo down. A second click during it would open
+        // a second screen, and whichever closed last would save over the other.
+        if (_dialogOpening) return;
+        _dialogOpening = true;
+        ImportRecipeButton.IsEnabled = false;
+        RecipeSettingsButton.IsEnabled = false;
 
         try
         {
-            if (installed is not null && review.CanImport && !comparison.AsksAgain)
+            var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                // An update that contacts the same hosts with the same things: listed, not asked.
-                _store.Save(recipe, text, installed.State);
+                Title = "Import a recipe",
+                Filter = "Ur Score recipe (*.recipe.json)|*.recipe.json|JSON file (*.json)|*.json",
+            };
+
+            if (dialog.ShowDialog(this) != true) return;
+
+            string text;
+            try
+            {
+                text = File.ReadAllText(dialog.FileName);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Could not read that file: {ex.Message}", "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var parsed = RecipeParser.Parse(text);
+            if (!parsed.Ok)
+            {
+                MessageBox.Show(this,
+                    "That recipe could not be imported:\n\n" + string.Join("\n", parsed.Problems.Select(p => "• " + p)),
+                    "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var recipe = parsed.Recipe!;
+            var installed = _store.Find(recipe.Slug);
+
+            if (installed is not null
+                && (!string.Equals(installed.Recipe.Name, recipe.Name, StringComparison.Ordinal)
+                    || !string.Equals(installed.Recipe.Author, recipe.Author, StringComparison.Ordinal)))
+            {
+                MessageBox.Show(this,
+                    $"A different recipe, {installed.Recipe.Name}, is already installed under the same file name. "
+                    + "Rename one of them before importing.",
+                    "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (installed is not null && string.Equals(installed.Text, text, StringComparison.Ordinal))
+            {
+                // Spec §6.3: an identical file imports without asking.
+                Activate(installed);
+                DetailLine.Text = $"{recipe.Name} is already installed, and is the recipe this window runs.";
+                return;
+            }
+
+            var review = ImportReview.Review(recipe, _keys);
+            var comparison = ImportReview.CompareToInstalled(installed?.Recipe, recipe, _keys, installed?.State);
+
+            try
+            {
+                if (installed is not null && review.CanImport && !comparison.AsksAgain)
+                {
+                    // An update that contacts the same hosts with the same things: listed, not asked.
+                    _store.Save(recipe, text, installed.State);
+                    Activate(_store.Find(recipe.Slug)!);
+                    DetailLine.Text = $"Updated {recipe.Name}. {string.Join(" ", comparison.Changes)}".Trim();
+                    return;
+                }
+
+                // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
+                var shown = DetailLine.Text;
+                DetailLine.Text = "Asking RoRoRo for your accounts…";
+                await SeedRowsAsync();
+                DetailLine.Text = shown;
+
+                var window = new ImportWindow(recipe, review, comparison, installed?.State, _store.LoadAll().Recipes, AccountIds,
+                    metricId => RuleSentence(metricId).Text, CounterLookupFor(recipe))
+                {
+                    Owner = this,
+                };
+
+                if (window.ShowDialog() != true) return;
+
+                var state = (installed?.State ?? new RecipeState()) with
+                {
+                    Inputs = window.Inputs,
+                    Stats = window.Stats,
+                    CounterNames = window.CounterNames,
+                };
+
+                _store.Save(recipe, text, state);
                 Activate(_store.Find(recipe.Slug)!);
-                DetailLine.Text = $"Updated {recipe.Name}. {string.Join(" ", comparison.Changes)}".Trim();
+                DetailLine.Text = $"Imported {recipe.Name}.";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Could not save that recipe: {ex.Message}", "Ur Score", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        finally
+        {
+            _dialogOpening = false;
+            ImportRecipeButton.IsEnabled = true;
+            RecipeSettingsButton.IsEnabled = true;
+        }
+    }
+
+    private async void OnRecipeSettingsClick(object sender, RoutedEventArgs e)
+    {
+        // The same guard as Import: one screen at a time, however long the accounts wait lasts.
+        if (_dialogOpening) return;
+        _dialogOpening = true;
+        ImportRecipeButton.IsEnabled = false;
+        RecipeSettingsButton.IsEnabled = false;
+
+        try
+        {
+            if (_active is null)
+            {
+                DetailLine.Text = "Import a recipe first.";
                 return;
             }
 
             // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
+            var shown = DetailLine.Text;
+            DetailLine.Text = "Asking RoRoRo for your accounts…";
             await SeedRowsAsync();
+            DetailLine.Text = shown;
 
-            var window = new ImportWindow(recipe, review, comparison, installed?.State, _store.LoadAll().Recipes, AccountIds,
-                metricId => RuleSentence(metricId).Text, CounterLookupFor(recipe))
+            var active = _active;
+            var window = new ImportWindow(active.Recipe, ImportReview.Review(active.Recipe, _keys),
+                new UpdateComparison(false, false, []), active.State, _store.LoadAll().Recipes, AccountIds,
+                metricId => RuleSentence(metricId).Text, CounterLookupFor(active.Recipe), settingsOnly: true)
             {
                 Owner = this,
             };
 
             if (window.ShowDialog() != true) return;
 
-            var state = (installed?.State ?? new RecipeState()) with
+            try
             {
-                Inputs = window.Inputs,
-                Stats = window.Stats,
-                CounterNames = window.CounterNames,
-            };
-
-            _store.Save(recipe, text, state);
-            Activate(_store.Find(recipe.Slug)!);
-            DetailLine.Text = $"Imported {recipe.Name}.";
+                var state = active.State with { Inputs = window.Inputs, Stats = window.Stats, CounterNames = window.CounterNames };
+                _store.SaveState(active.Recipe, state);
+                Activate(active with { State = state });
+                DetailLine.Text = $"Saved settings for {active.Recipe.Name}.";
+            }
+            catch (Exception ex)
+            {
+                DetailLine.Text = $"Could not save those settings: {ex.Message}";
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            MessageBox.Show(this, $"Could not save that recipe: {ex.Message}", "Ur Score", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private async void OnRecipeSettingsClick(object sender, RoutedEventArgs e)
-    {
-        if (_active is null)
-        {
-            DetailLine.Text = "Import a recipe first.";
-            return;
-        }
-
-        // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
-        await SeedRowsAsync();
-
-        var active = _active;
-        var window = new ImportWindow(active.Recipe, ImportReview.Review(active.Recipe, _keys),
-            new UpdateComparison(false, false, []), active.State, _store.LoadAll().Recipes, AccountIds,
-            metricId => RuleSentence(metricId).Text, CounterLookupFor(active.Recipe), settingsOnly: true)
-        {
-            Owner = this,
-        };
-
-        if (window.ShowDialog() != true) return;
-
-        try
-        {
-            var state = active.State with { Inputs = window.Inputs, Stats = window.Stats, CounterNames = window.CounterNames };
-            _store.SaveState(active.Recipe, state);
-            Activate(active with { State = state });
-            DetailLine.Text = $"Saved settings for {active.Recipe.Name}.";
-        }
-        catch (Exception ex)
-        {
-            DetailLine.Text = $"Could not save those settings: {ex.Message}";
+            _dialogOpening = false;
+            ImportRecipeButton.IsEnabled = true;
+            RecipeSettingsButton.IsEnabled = true;
         }
     }
 
