@@ -7,6 +7,12 @@ internal static class RecipeHosts
 
     public static string HostOf(string url) => Authority(url).Host;
 
+    /// <summary>Every host a recipe contacts on its own: each step's, and each search list's.</summary>
+    public static IReadOnlySet<string> ContactedBy(Recipe recipe) =>
+        recipe.Steps.Select(step => HostOf(step.Url))
+            .Concat(recipe.Inputs.Where(input => input.Search is not null).Select(input => HostOf(input.Search!.Url)))
+            .ToHashSet(StringComparer.Ordinal);
+
     /// <summary>The authority split into host and whether it carried user info.</summary>
     public static (string Host, bool HasUserInfo) Authority(string url)
     {
