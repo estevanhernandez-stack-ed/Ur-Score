@@ -1,0 +1,55 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      # The tag, manifest.json and the csproj must agree, or RoRoRo would offer an update that
+      # installs a different version than it names.
+      - name: Tag matches manifest and csproj
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          $manifest = (Get-Content manifest.json -Raw | ConvertFrom-Json).version
+          $csproj = ([xml](Get-Content Ur-Score.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ($manifest -ne $tag -or $csproj -ne $tag) { throw "tag $tag, manifest.json $manifest, csproj $csproj must match" }
+
+      - name: Test
+        shell: pwsh
+        run: dotnet test tests/Ur-Score.Tests.csproj -c Release
+
+      - name: Build plugin artifacts
+        shell: pwsh
+        run: ./build/build-plugin.ps1
+
+      - name: Show artifacts
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts -File
+          Get-Content artifacts/manifest.sha256
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            artifacts/manifest.json
+            artifacts/manifest.sha256
+            artifacts/plugin.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') }}
