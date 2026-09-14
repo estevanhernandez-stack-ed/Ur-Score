@@ -9232,3 +9232,32 @@ docs: stats part 2a live acceptance and window smoke
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
 ```
+
+## Execution record
+
+Tasks 1–13 were executed with subagent-driven development: a review after each task, a whole-branch review, one fix wave from that review, and a residual fix for the two load-bearing items its re-check found (a recipe replaced mid-send, stacked import and settings dialogs) plus three small window items. The suite finished at 329 tests, with the Release build at 0 warnings. Task 14, the live acceptance, is pending for Este.
+
+### Carried into part 2b and the backlog
+
+Parked (can wait):
+- `absentMessage` inside a stat loop idles the whole recipe; the 2b spec should limit idle to paths read from the response itself (take, rows, headline).
+- The hostname fence's blind spots (split literals, case, a fixed TLD list, unscanned `*.xaml`); harden before part 3's builder.
+- Newly seen RoRoRo accounts join with Send on and bypass the history budget; Send off by default is a 2b decision with accounts-on-open.
+- The "(can't read)" header doesn't name the keys present (trail only), and the slot line shows a total, not what this import adds (§7.1); 2b board work.
+- Every `Activate`, even a tick-only save, discards the in-flight cycle, and a same-slug update shows a false "No stat is set to send" line for one cycle.
+- `ReportPolicy` `Sent`/`Dropped` increments can be lost across `With()` and aren't synchronized (diagnostic counters only).
+- `ReloadActive` on Start re-parses the recipe into a new instance, so a draw in flight across a Start click is still skipped once.
+
+Minor (deferred):
+- Recipes: `ParseSteps` reads `usesValues` after its loop; `RecipeUnavailable.IsText` is unused for true/false; `CounterKey`/`IsCounterKey` lack summaries; `Offered` and `Find` parse a counter key twice.
+- Engine: "None of your N accounts could be read" counts unavailable accounts and drops their messages; `RecipeEngine.cs` is ~550 lines.
+- Engine and watch tests: no list-form cell-miss or stat-miss test; `AStatWithNoNumberThisCycleIsNotReported` doesn't assert the cell miss.
+- `RecipeWatch` repeats the append-`reading.Detail` idiom three times.
+- Icon client: the thumbnails JSON read has no size cap; the recipe-host icon check ignores ports (a 2b decision); one failed icon fetch sticks for the session.
+- Icon client tests: lookalike cases (`tr.rbxcdn.com.evil.net`, `rbxcdn.com.evil.net`, `user@`) are missing; `ARedirectIsNeverFollowed` overclaims; the non-image test doesn't assert no file was left; the hashed-name test doesn't pin `url-` plus 32 hex; the body-timeout test relies on a real 200 ms `CancelAfter`.
+- `ARecipesOwnHostsAreItsStepsAndItsSearchLists` can't tell steps from search lists (the fixture shares one host).
+- Import review: no test for a path change on an untracked stat; the meaning-change test covers only `absentMessage` and `placeLabel`; `CompareToInstalled` is ~80 lines.
+- Window: `LookUpCounterNamesAsync`'s failure text is untested; the import and settings handlers call `_store.LoadAll()` on the UI thread for the budget; `RecipeEngine` construction is duplicated.
+- Window: the empty counter ListBox renders as a thin line; the themed ComboBox template ignores its setters (disabled looks enabled, IsSelected overrides hover); `MainWindow.xaml.cs` is ~1,300 lines.
+- `StatText.LastSent`'s several-sent, some-present branch is untested.
+- Commit 1542885's trailer names Claude Sonnet 5 (a squash merge rewrites it).
