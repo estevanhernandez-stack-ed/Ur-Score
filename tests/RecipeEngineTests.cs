@@ -790,4 +790,30 @@ public class RecipeEngineTests
             reading.Groups.Select(g => (g.Name, g.Values["value"], g.Rank)).ToArray());
         Assert.Equal(3, reading.RowsSeen);
     }
+
+    [Fact]
+    public async Task AGroupListsAsOfIsRead()
+    {
+        var recipe = Parse("""
+            {
+              "recipe": 1, "name": "Top clans as of", "credit": "Test data.", "everySeconds": 300,
+              "steps": [
+                { "url": "https://ps99.biggamesapi.io/v1/clans/battles/top",
+                  "rows": "data.topClans", "groupName": "name", "value": "points", "rank": "rank",
+                  "asOf": { "time": "data.meta.fetchedAt" } }
+              ]
+            }
+            """);
+        var transport = new FakeTransport().On("https://ps99.biggamesapi.io/v1/clans/battles/top", 200, """
+            { "status": "ok", "data": { "meta": { "fetchedAt": "2026-09-14T20:11:47.320Z" }, "topClans": [
+                { "rank": 1, "name": "Aurelian", "points": 412000000 },
+                { "rank": 2, "name": "SkyHarbor", "points": 388500000 }
+            ] } }
+            """);
+
+        var reading = await Read(transport, recipe, NoInputs, tracked: new HashSet<string>());
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(new AsOfStamp(new DateTimeOffset(2026, 9, 14, 20, 11, 47, 320, TimeSpan.Zero), null), reading.ListAsOf);
+    }
 }

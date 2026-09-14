@@ -589,16 +589,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                     var id = RecipePath.Resolve(row, Placeholders.Fill(step.UserId!, keyed, encode: false), "this row");
                     if (id.Outcome != PathOutcome.Found || !JsonNav.TryUserId(id.Value, out var userId)) continue;
 
-                    var found = new Dictionary<string, double>(StringComparer.Ordinal);
-                    foreach (var stat in stats)
-                    {
-                        if (NumberAt(RecipePath.Resolve(row, stat.Path, keyed, "this row"), stat.Path, "in this row", out var value) is null)
-                        {
-                            found[stat.Key] = value;
-                        }
-                    }
-
-                    rows.Add(new RecipeRow(userId, found));
+                    rows.Add(new RecipeRow(userId, ValuesAt(row, stats, keyed)));
                 }
             }
 
@@ -625,21 +616,12 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             total++;
             if (TextAt(row, step.GroupName!, values) is not { Length: > 0 } name) continue;
 
-            var found = new Dictionary<string, double>(StringComparer.Ordinal);
-            foreach (var stat in stats)
-            {
-                if (NumberAt(RecipePath.Resolve(row, stat.Path, values, "this row"), stat.Path, "in this row", out var value) is null)
-                {
-                    found[stat.Key] = value;
-                }
-            }
-
             int? rank = step.Rank is not null
                         && NumberAt(RecipePath.Resolve(row, step.Rank, values, "this row"), step.Rank, "in this row", out var r) is null
                 ? (int)r
                 : null;
 
-            groups.Add(new GroupRow(name, found, rank));
+            groups.Add(new GroupRow(name, ValuesAt(row, stats, values), rank));
         }
 
         if (total > 0 && groups.Count == 0)
@@ -647,7 +629,26 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             return RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"None of the {total} groups had a name at '{step.GroupName}'.");
         }
 
-        return new RecipeReading(ReadingOutcome.Read, null, [], [], context, total) { Groups = groups };
+        return new RecipeReading(ReadingOutcome.Read, null, [], [], context, total)
+        {
+            Groups = groups,
+            ListAsOf = step.AsOf is null ? null : AsOfAt(root, step.AsOf, values),
+        };
+    }
+
+    /// <summary>Every tracked stat this row or group has a number for (stats design §4): a miss just leaves the key out.</summary>
+    private static Dictionary<string, double> ValuesAt(JsonElement row, IReadOnlyList<RecipeStat> stats, IReadOnlyDictionary<string, string> values)
+    {
+        var found = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var stat in stats)
+        {
+            if (NumberAt(RecipePath.Resolve(row, stat.Path, values, "this row"), stat.Path, "in this row", out var value) is null)
+            {
+                found[stat.Key] = value;
+            }
+        }
+
+        return found;
     }
 
     /// <summary>Why a stat has no number here, or null with the number.</summary>
