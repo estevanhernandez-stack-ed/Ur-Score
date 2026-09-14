@@ -5,13 +5,22 @@ using System.Text.Json.Serialization;
 namespace Labs626.UrScore.Recipes;
 
 /// <summary>
-/// What the user chose for one recipe: input values, a metric id if they changed it, and accounts
-/// switched off. Never written into the recipe file (spec §3.3).
+/// One stat's two ticks and the name RoRoRo gets it under. Written to the state file as
+/// <c>{ "show": true, "send": false, "metricId": "ps99.diamonds" }</c>. The metric id is pinned when
+/// the entry is first written, so a recipe update can never move where reports go.
+/// </summary>
+public sealed record StatChoice(bool Show = false, bool Send = false, string MetricId = "");
+
+/// <summary>
+/// What the user chose for one recipe: input values, accounts switched off, which stats are shown and
+/// sent under which names, and the counter names last read from the source. Never written into the
+/// recipe file (spec §3.3). A state with no <see cref="Stats"/> ticks nothing (stats design §2).
 /// </summary>
 public sealed record RecipeState(
     IReadOnlyDictionary<string, string>? Inputs = null,
-    string? MetricIdOverride = null,
-    IReadOnlyList<string>? ExcludedAccountIds = null)
+    IReadOnlyList<string>? ExcludedAccountIds = null,
+    IReadOnlyDictionary<string, StatChoice>? Stats = null,
+    IReadOnlyList<string>? CounterNames = null)
 {
     [JsonIgnore]
     public IReadOnlyDictionary<string, string> InputValues => Inputs ?? new Dictionary<string, string>();
@@ -24,8 +33,34 @@ public sealed record RecipeState(
         .Select(x => x.Id)
         .ToHashSet();
 
-    public string MetricIdFor(Recipe recipe) =>
-        string.IsNullOrWhiteSpace(MetricIdOverride) ? recipe.MetricId : MetricIdOverride.Trim();
+    /// <summary>Keyed by stat key: a value's id, or <c>counter:</c> plus a counter's name.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, StatChoice> StatChoices => Stats ?? new Dictionary<string, StatChoice>();
+
+    [JsonIgnore]
+    public IReadOnlyList<string> SavedCounterNames => CounterNames ?? [];
+
+    /// <summary>Tracked means Show or Send: the stats a read asks for. Only stats this recipe still offers.</summary>
+    public IReadOnlySet<string> TrackedStats(Recipe recipe) =>
+        Chosen(recipe).Where(c => c.Choice.Show || c.Choice.Send).Select(c => c.Stat.Key).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>The stats with Show on, in recipe order: the window's columns.</summary>
+    public IReadOnlyList<RecipeStat> ShownStats(Recipe recipe) =>
+        [.. Chosen(recipe).Where(c => c.Choice.Show).Select(c => c.Stat)];
+
+    /// <summary>The stats with Send on and a name, in recipe order, each under its pinned metric id.</summary>
+    public IReadOnlyList<SentStat> SentStats(Recipe recipe) =>
+        [.. Chosen(recipe)
+            .Where(c => c.Choice.Send && !string.IsNullOrWhiteSpace(c.Choice.MetricId))
+            .Select(c => new SentStat(c.Stat.Key, c.Stat.Label, c.Choice.MetricId.Trim()))];
+
+    private IEnumerable<(RecipeStat Stat, StatChoice Choice)> Chosen(Recipe recipe)
+    {
+        var choices = StatChoices;
+        return RecipeStats.Offered(recipe, choices.Keys)
+            .Where(stat => choices.ContainsKey(stat.Key))
+            .Select(stat => (stat, choices[stat.Key]));
+    }
 }
 
 public sealed record InstalledRecipe(Recipe Recipe, string Text, RecipeState State);
@@ -81,10 +116,31 @@ public sealed class RecipeStore(string directory)
         SaveState(recipe, state);
     }
 
+    /// <summary><see cref="Save"/> comes through here too, so no saved state skips <see cref="Normalized"/>.</summary>
     public void SaveState(Recipe recipe, RecipeState state)
     {
         Directory.CreateDirectory(directory);
-        File.WriteAllText(StatePath(recipe.Slug), JsonSerializer.Serialize(state, Options));
+        File.WriteAllText(StatePath(recipe.Slug), JsonSerializer.Serialize(Normalized(recipe, state), Options));
+    }
+
+    /// <summary>
+    /// A saved state never keeps a tick for a stat this recipe doesn't offer. The entry keeps its pinned
+    /// metric id with Show and Send off, so when a later update offers the stat again it comes back
+    /// listed and unticked (stats design §7.2), and any Send goes back through the budget and the
+    /// collision rules. Offered entries are untouched.
+    /// </summary>
+    private static RecipeState Normalized(Recipe recipe, RecipeState state)
+    {
+        if (state.Stats is not { Count: > 0 } stats) return state;
+
+        var offered = RecipeStats.Offered(recipe, stats.Keys).Select(stat => stat.Key).ToHashSet(StringComparer.Ordinal);
+        return state with
+        {
+            Stats = stats.ToDictionary(
+                kv => kv.Key,
+                kv => offered.Contains(kv.Key) ? kv.Value : kv.Value with { Show = false, Send = false },
+                StringComparer.Ordinal),
+        };
     }
 
     public bool Remove(string slug)

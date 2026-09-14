@@ -101,4 +101,72 @@ public class RecipePathTests
         using var document = JsonDocument.Parse("""{ "a": 1 }""");
         Assert.Null(RecipePath.AsText(document.RootElement));
     }
+
+    private static PathResult ResolveTemplate(string json, string template, string name, string value)
+    {
+        using var document = JsonDocument.Parse(json);
+        return RecipePath.Resolve(document.RootElement.Clone(), template, new Dictionary<string, string> { [name] = value });
+    }
+
+    private const string BattlesPath = "data.Battles.{battle}.PointContributions";
+
+    [Fact]
+    public void AKeyThatCameWholeFromAPlaceholderMissingFromAnExistingObjectIsMarked()
+    {
+        // The clan that has not joined this battle: Battles exists, and has no entry for it.
+        var result = ResolveTemplate("""{ "data": { "Battles": { "Other": { } } } }""", BattlesPath, "battle", "ArcadeBattle2026");
+
+        Assert.Equal(PathOutcome.Missing, result.Outcome);
+        Assert.True(result.MissedAtPlaceholder);
+        Assert.Equal("No 'ArcadeBattle2026' in 'data.Battles'. Keys present: Other.", result.Miss);
+    }
+
+    [Fact]
+    public void AMissingLiteralKeyIsNotMarked()
+    {
+        // No Battles at all is a changed shape, never "not in this battle".
+        var result = ResolveTemplate("""{ "data": { } }""", BattlesPath, "battle", "ArcadeBattle2026");
+
+        Assert.Equal(PathOutcome.Missing, result.Outcome);
+        Assert.False(result.MissedAtPlaceholder);
+    }
+
+    [Fact]
+    public void AMissBelowAPlaceholderIsNotMarked()
+    {
+        var result = ResolveTemplate("""{ "data": { "Battles": { "A": { } } } }""", BattlesPath, "battle", "A");
+
+        Assert.Equal("No 'PointContributions' in 'data.Battles.A'. Keys present: none.", result.Miss);
+        Assert.False(result.MissedAtPlaceholder);
+    }
+
+    [Fact]
+    public void APlaceholderInsideLongerTextIsNotMarked() =>
+        Assert.False(ResolveTemplate("""{ "data": { } }""", "data.Stat_{name}", "name", "x").MissedAtPlaceholder);
+
+    [Fact]
+    public void AParentThatIsNotAnObjectIsNotMarked()
+    {
+        var result = ResolveTemplate("""{ "data": { "Battles": [1] } }""", BattlesPath, "battle", "A");
+
+        Assert.Equal("'data.Battles' is a list, not an object, so 'A' cannot be read from it.", result.Miss);
+        Assert.False(result.MissedAtPlaceholder);
+    }
+
+    [Fact]
+    public void ATemplateFindsWhatItsFilledPathFinds()
+    {
+        var result = ResolveTemplate("""{ "data": { "Battles": { "A": { "PointContributions": [] } } } }""", BattlesPath, "battle", "A");
+        Assert.Equal(PathOutcome.Found, result.Outcome);
+        Assert.Equal(JsonValueKind.Array, result.Value.ValueKind);
+    }
+
+    [Fact]
+    public void APlaceholderValueWithADotStillWalksAsTwoKeysAndIsNotMarked()
+    {
+        var result = ResolveTemplate("""{ "data": { "Battles": { "a": { } } } }""", "data.Battles.{battle}", "battle", "a.b");
+
+        Assert.Equal("No 'b' in 'data.Battles.a'. Keys present: none.", result.Miss);
+        Assert.False(result.MissedAtPlaceholder);
+    }
 }

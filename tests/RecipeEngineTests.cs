@@ -42,6 +42,8 @@ public class RecipeEngineTests
 
     private static Recipe Followers => RecipeParser.Parse(RecipeParserTests.Fixture("roblox-followers.recipe.json")).Recipe!;
 
+    private static Recipe Profile => RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-profile.recipe.json")).Recipe!;
+
     private static Recipe Parse(string json)
     {
         var result = RecipeParser.Parse(json);
@@ -49,21 +51,45 @@ public class RecipeEngineTests
         return result.Recipe!;
     }
 
+    /// <summary>A row holding one stat under the shorthand id, which is what a single-value recipe reads.</summary>
+    internal static RecipeRow Row(long userId, double value) => new(userId, new Dictionary<string, double> { ["value"] = value });
+
+    private static readonly HashSet<string> ValueOnly = ["value"];
+
+    private static readonly HashSet<string> ProfileStats = ["diamonds", "eggs", "rank"];
+
     private static readonly Dictionary<string, string> Clan = new() { ["clan"] = "Noodle Clan" };
+
+    private static readonly Dictionary<string, string> NoInputs = [];
 
     private const string Battle = """{ "status": "ok", "data": { "configName": "B" } }""";
 
     private const string ClanResponse = """
-        { "status": "ok", "data": { "Battles": { "B": {
+        { "status": "ok", "data": { "Icon": "rbxassetid://14976358748", "Battles": { "B": {
             "Place": 3, "Points": 999,
             "PointContributions": [ { "UserID": 111, "Points": 4200 }, { "UserID": 222, "Points": 10 } ]
         } } } }
         """;
 
+    private const string ProfileUrl1 = "https://ps99.biggamesapi.io/v1/players/1?";
+
+    private const string ProfileUrl2 = "https://ps99.biggamesapi.io/v1/players/2?";
+
+    private static string ProfileResponse(string profileData) =>
+        $$"""{ "status": "ok", "data": { "views": { "profile": { "available": true, "data": { {{profileData}} } } } } }""";
+
+    private const string FullProfile = """
+        "Currency": { "Diamonds": { "_am": 9169613101 } }, "EggsHatched": 5000, "Rank": 12,
+        "Statistics": { "Huge Pets Opened": 3, "Best Zone": "Tech", "Eggs Opened": "12", "Pets.Huge": 1 }
+        """;
+
+    private const string PrivateProfile = """{ "status": "ok", "data": { "views": { "profile": { "available": false, "reason": "not_public" } } } }""";
+
     private static Task<RecipeReading> Read(FakeTransport transport, Recipe recipe,
-        IReadOnlyDictionary<string, string>? inputs = null, IReadOnlyCollection<long>? ids = null, FakeKeys? keys = null) =>
+        IReadOnlyDictionary<string, string>? inputs = null, IReadOnlyCollection<long>? ids = null, FakeKeys? keys = null,
+        IReadOnlySet<string>? tracked = null) =>
         new RecipeEngine(transport, keys ?? new FakeKeys())
-            .ReadAsync(recipe, inputs ?? Clan, ids ?? [], CancellationToken.None);
+            .ReadAsync(recipe, inputs ?? Clan, ids ?? [], tracked ?? ValueOnly, CancellationToken.None);
 
     [Fact]
     public async Task ThePetSimRecipeReadsEveryContribution()
@@ -75,12 +101,14 @@ public class RecipeEngineTests
         var reading = await Read(transport, PetSim);
 
         Assert.Equal(ReadingOutcome.Read, reading.Outcome);
-        Assert.Equal(new[] { new RecipeRow(111, 4200), new RecipeRow(222, 10) }, reading.Rows);
+        Assert.Equal(new[] { Row(111, 4200), Row(222, 10) }, reading.Rows);
         Assert.Equal(2, reading.RowsSeen);
         Assert.Equal("battle=B", reading.Context);
         Assert.Equal("Clan place", reading.Headline[0].Label);
         Assert.Equal("3", reading.Headline[0].Text);
         Assert.Equal("999", reading.Headline[1].Text);
+        Assert.Equal("rbxassetid://14976358748", reading.IconText);
+        Assert.Empty(reading.StatMisses);
     }
 
     [Fact]
@@ -118,10 +146,23 @@ public class RecipeEngineTests
     {
         var transport = new FakeTransport();
 
-        var reading = await Read(transport, PetSim, inputs: new Dictionary<string, string>());
+        var reading = await Read(transport, PetSim, inputs: NoInputs);
 
         Assert.Equal(ReadingOutcome.NeedsInput, reading.Outcome);
         Assert.Equal("Set Your clan to start.", reading.Detail);
+        Assert.Empty(transport.Requests);
+    }
+
+    [Fact]
+    public async Task NothingTrackedMakesNoRequest()
+    {
+        // Nothing is ticked by default, so a recipe nobody has chosen stats for reads nothing.
+        var transport = new FakeTransport();
+
+        var reading = await Read(transport, PetSim, tracked: new HashSet<string>());
+
+        Assert.Equal(ReadingOutcome.NeedsInput, reading.Outcome);
+        Assert.Equal(RecipeEngine.NothingTracked, reading.Detail);
         Assert.Empty(transport.Requests);
     }
 
@@ -151,7 +192,7 @@ public class RecipeEngineTests
 
         var reading = await Read(transport, PetSim);
 
-        Assert.Equal(new[] { new RecipeRow(111, 5) }, reading.Rows);
+        Assert.Equal(new[] { Row(111, 5) }, reading.Rows);
         Assert.Equal(2, reading.RowsSeen);
     }
 
@@ -196,17 +237,261 @@ public class RecipeEngineTests
     }
 
     [Fact]
+    public async Task AClanNotInTheBattleIsIdleOnTheRecipesAbsentMessageAndKeepsItsIcon()
+    {
+        // The object that should hold the battle exists; the battle's name, which came from a
+        // placeholder, is not in it.
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200,
+                """{ "data": { "Icon": "rbxassetid://14976358748", "Battles": { "LastWeek": { "PointContributions": [] } } } }""");
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(ReadingOutcome.Idle, reading.Outcome);
+        Assert.Equal("Your clan hasn't joined this battle.", reading.Detail);
+        Assert.Equal("rbxassetid://14976358748", reading.IconText);
+    }
+
+    [Fact]
+    public async Task AMissingLiteralKeyStaysAShapeMissWhenTheStepHasAnAbsentMessage()
+    {
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, """{ "data": { "Name": "Noodle Clan" } }""");
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(ReadingOutcome.ShapeNotUnderstood, reading.Outcome);
+        Assert.Equal("Step 2: No 'Battles' in 'data'. Keys present: Name.", reading.Detail);
+    }
+
+    [Fact]
+    public async Task AnAbsentMessageAlsoAppliesToATakePath()
+    {
+        var recipe = Parse("""
+            {
+              "recipe": 1, "name": "Seasons", "credit": "Test.", "metricId": "t.v", "everySeconds": 60,
+              "inputs": [{ "id": "season", "label": "Season" }],
+              "steps": [
+                { "url": "https://example.com/seasons", "take": { "board": "data.{season}.board" }, "absentMessage": "That season has not started." },
+                { "url": "https://example.com/boards/{board}", "rows": "data", "userId": "id", "value": "score" }
+              ]
+            }
+            """);
+        var transport = new FakeTransport().On("https://example.com/seasons", 200, """{ "data": { "spring": { "board": "b1" } } }""");
+
+        var reading = await Read(transport, recipe, inputs: new Dictionary<string, string> { ["season"] = "summer" });
+
+        Assert.Equal(ReadingOutcome.Idle, reading.Outcome);
+        Assert.Equal("That season has not started.", reading.Detail);
+    }
+
+    [Fact]
+    public async Task SeveralStatsComeFromOneListResponse()
+    {
+        var recipe = Parse("""
+            {
+              "recipe": 1, "name": "League", "credit": "Test.", "everySeconds": 60,
+              "steps": [{ "url": "https://example.com/league", "rows": "data.rows", "userId": "UserID",
+                "values": [
+                  { "id": "points", "label": "Points", "path": "Points", "metricId": "l.points" },
+                  { "id": "level", "label": "Level", "path": "Level", "metricId": "l.level", "sum": false }
+                ] }]
+            }
+            """);
+        var transport = new FakeTransport().On("https://example.com/league", 200,
+            """{ "data": { "rows": [ { "UserID": 111, "Points": 50, "Level": 4 }, { "UserID": 222, "Points": 7, "Level": 1 } ] } }""");
+
+        var reading = await Read(transport, recipe, inputs: NoInputs, tracked: new HashSet<string> { "points", "level" });
+
+        Assert.Single(transport.Requests);
+        Assert.Equal(new[]
+        {
+            new RecipeRow(111, new Dictionary<string, double> { ["points"] = 50, ["level"] = 4 }),
+            new RecipeRow(222, new Dictionary<string, double> { ["points"] = 7, ["level"] = 1 }),
+        }, reading.Rows);
+    }
+
+    [Fact]
+    public async Task SeveralStatsComeFromOneResponsePerAccount()
+    {
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 200, ProfileResponse(FullProfile))
+            .On(ProfileUrl2, 200, ProfileResponse("""
+                "Currency": { "Diamonds": { "_am": 40 } }, "EggsHatched": 7, "Rank": 3
+                """));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(new[] { "https://ps99.biggamesapi.io/v1/players/1?include=profile", "https://ps99.biggamesapi.io/v1/players/2?include=profile" },
+            transport.Requests.Select(r => r.Url.AbsoluteUri));
+        Assert.Equal(new[]
+        {
+            new RecipeRow(1, new Dictionary<string, double> { ["diamonds"] = 9169613101, ["eggs"] = 5000, ["rank"] = 12 }),
+            new RecipeRow(2, new Dictionary<string, double> { ["diamonds"] = 40, ["eggs"] = 7, ["rank"] = 3 }),
+        }, reading.Rows);
+        Assert.Null(reading.Detail);
+    }
+
+    [Fact]
+    public async Task UntrackedStatsAreNotRead()
+    {
+        // No EggsHatched and no Rank in this answer, and neither is tracked, so neither is a miss.
+        var transport = new FakeTransport().On(ProfileUrl1, 200, ProfileResponse("""
+            "Currency": { "Diamonds": { "_am": 40 } }
+            """));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1], tracked: new HashSet<string> { "diamonds" });
+
+        Assert.Equal(new[] { new RecipeRow(1, new Dictionary<string, double> { ["diamonds"] = 40 }) }, reading.Rows);
+        Assert.Empty(reading.StatMisses);
+        Assert.Empty(reading.CellMisses);
+    }
+
+    [Fact]
+    public async Task OneStatMissingForOneAccountCostsOnlyThatCell()
+    {
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 200, ProfileResponse(FullProfile))
+            .On(ProfileUrl2, 200, ProfileResponse("""
+                "Currency": { "Diamonds": { "_am": 40 } }, "Rank": 3
+                """));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(new RecipeRow(2, new Dictionary<string, double> { ["diamonds"] = 40, ["rank"] = 3 }), reading.Rows[1]);
+        Assert.Empty(reading.StatMisses);
+        var cell = Assert.Single(reading.CellMisses);
+        Assert.Equal((2L, "eggs"), cell.Key);
+        Assert.Equal("No 'EggsHatched' in 'data.views.profile.data'. Keys present: Currency, Rank.", cell.Value);
+    }
+
+    [Fact]
+    public async Task AStatMissingForEveryAccountIsOneStatWideMiss()
+    {
+        const string noRank = """
+            "Currency": { "Diamonds": { "_am": 40 } }, "EggsHatched": 7
+            """;
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 200, ProfileResponse(noRank))
+            .On(ProfileUrl2, 200, ProfileResponse(noRank));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        var miss = Assert.Single(reading.StatMisses);
+        Assert.Equal("rank", miss.Key);
+        Assert.Equal("No 'Rank' in 'data.views.profile.data'. Keys present: Currency, EggsHatched.", miss.Value);
+        Assert.Empty(reading.CellMisses);
+        Assert.Equal(40, reading.Rows[0].Values["diamonds"]);
+    }
+
+    [Fact]
+    public async Task EveryTrackedStatMissingIsAShapeMiss()
+    {
+        var transport = new FakeTransport().On(ProfileUrl1, 200, ProfileResponse(""" "Coins": 1 """));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1], tracked: new HashSet<string> { "rank" });
+
+        Assert.Equal(ReadingOutcome.ShapeNotUnderstood, reading.Outcome);
+        Assert.Equal("None of your 1 accounts could be read: No 'Rank' in 'data.views.profile.data'. Keys present: Coins.", reading.Detail);
+    }
+
+    [Fact]
+    public async Task AnAnswerMatchingUnavailableCostsOnlyThatAccountAndSaysTheRecipesMessage()
+    {
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 200, PrivateProfile)
+            .On(ProfileUrl2, 200, ProfileResponse(FullProfile));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(2, Assert.Single(reading.Rows).UserId);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", reading.Unavailable[1]);
+        Assert.Equal("1 of your accounts could not be read: Profile is private. Link this account on db.biggames.io and turn on its Profile view.", reading.Detail);
+        Assert.Empty(reading.StatMisses);
+    }
+
+    [Fact]
+    public async Task ANotFoundOnARecipeWithUnavailableSaysTheRecipesMessage()
+    {
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 404, """{ "error": "player_not_found" }""")
+            .On(ProfileUrl2, 200, ProfileResponse(FullProfile));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", Assert.Single(reading.Unavailable).Value);
+    }
+
+    [Fact]
+    public async Task ABadRequestOnARecipeWithUnavailableKeepsTheHostsTextNotTheRecipesMessage()
+    {
+        // A 400 is not the source saying "this account isn't there" the way a 404 is, so the
+        // recipe's own unavailable message would misdirect: only a 404 gets it (spec §3.2).
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 400, """{ "error": "bad" }""")
+            .On(ProfileUrl2, 200, ProfileResponse(FullProfile));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal("ps99.biggamesapi.io has nothing for user id 1.", Assert.Single(reading.Unavailable).Value);
+        Assert.Equal(2, Assert.Single(reading.Rows).UserId);
+    }
+
+    [Fact]
+    public async Task EveryAccountUnavailableIsStillAReading()
+    {
+        var transport = new FakeTransport().On("https://ps99.biggamesapi.io/v1/players/", 200, PrivateProfile);
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Empty(reading.Rows);
+        Assert.Equal(2, reading.Unavailable.Count);
+    }
+
+    [Fact]
+    public async Task CounterNamesComeFromTheFirstAccountThatHasThem()
+    {
+        // The first account is private, so its answer has no statistics to offer.
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 200, PrivateProfile)
+            .On(ProfileUrl2, 200, ProfileResponse(FullProfile));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1, 2], tracked: ProfileStats);
+
+        // Text values and names with a dot are not offered.
+        Assert.Equal(new[] { "Huge Pets Opened", "Eggs Opened" }, reading.CounterNames.ToArray());
+    }
+
+    [Fact]
+    public async Task APickedCounterIsReadUnderTheCountersPath()
+    {
+        var transport = new FakeTransport().On(ProfileUrl1, 200, ProfileResponse(FullProfile));
+
+        var reading = await Read(transport, Profile, inputs: NoInputs, ids: [1], tracked: new HashSet<string> { "counter:Huge Pets Opened" });
+
+        Assert.Equal(3, Assert.Single(reading.Rows).Values["counter:Huge Pets Opened"]);
+    }
+
+    [Fact]
     public async Task APerAccountRecipeAsksOncePerAccountInTurn()
     {
         var transport = new FakeTransport()
             .On("https://friends.roblox.com/v1/users/1/", 200, """{ "count": 17 }""")
             .On("https://friends.roblox.com/v1/users/2/", 200, """{ "count": 4 }""");
 
-        var reading = await Read(transport, Followers, inputs: new Dictionary<string, string>(), ids: [1, 2]);
+        var reading = await Read(transport, Followers, inputs: NoInputs, ids: [1, 2]);
 
         Assert.Equal(new[] { "https://friends.roblox.com/v1/users/1/followers/count", "https://friends.roblox.com/v1/users/2/followers/count" },
             transport.Requests.Select(r => r.Url.AbsoluteUri));
-        Assert.Equal(new[] { new RecipeRow(1, 17), new RecipeRow(2, 4) }, reading.Rows);
+        Assert.Equal(new[] { Row(1, 17), Row(2, 4) }, reading.Rows);
         Assert.Null(reading.Context);
     }
 
@@ -217,18 +502,19 @@ public class RecipeEngineTests
             .On("https://friends.roblox.com/v1/users/1/", 404, "{}")
             .On("https://friends.roblox.com/v1/users/2/", 200, """{ "count": 4 }""");
 
-        var reading = await Read(transport, Followers, inputs: new Dictionary<string, string>(), ids: [1, 2]);
+        var reading = await Read(transport, Followers, inputs: NoInputs, ids: [1, 2]);
 
         Assert.Equal(ReadingOutcome.Read, reading.Outcome);
-        Assert.Equal(new[] { new RecipeRow(2, 4) }, reading.Rows);
+        Assert.Equal(new[] { Row(2, 4) }, reading.Rows);
         Assert.Equal("1 of your accounts could not be read: friends.roblox.com has nothing for user id 1.", reading.Detail);
+        Assert.Equal("friends.roblox.com has nothing for user id 1.", reading.Unavailable[1]);
     }
 
     [Fact]
     public async Task NoAccountsMeansAReadingWithNoRowsAndNoRequest()
     {
         var transport = new FakeTransport();
-        var reading = await Read(transport, Followers, inputs: new Dictionary<string, string>(), ids: []);
+        var reading = await Read(transport, Followers, inputs: NoInputs, ids: []);
 
         Assert.Equal(ReadingOutcome.Read, reading.Outcome);
         Assert.Empty(transport.Requests);
@@ -265,7 +551,7 @@ public class RecipeEngineTests
     public async Task AnUnauthorisedStepWithNoKeyNeedsSigningIn()
     {
         var transport = new FakeTransport().On("https://friends.roblox.com/", 401, "{}");
-        var reading = await Read(transport, Followers, inputs: new Dictionary<string, string>(), ids: [1]);
+        var reading = await Read(transport, Followers, inputs: NoInputs, ids: [1]);
 
         Assert.Equal(ReadingOutcome.SignInRequired, reading.Outcome);
         Assert.Equal("friends.roblox.com requires signing in, which recipes cannot do.", reading.Detail);
@@ -320,7 +606,7 @@ public class RecipeEngineTests
     public async Task AMissingKeyNamesItAndWhereToGetOne()
     {
         var transport = new FakeTransport();
-        var reading = await Read(transport, KeyedRecipe("header"), inputs: new Dictionary<string, string>());
+        var reading = await Read(transport, KeyedRecipe("header"), inputs: NoInputs);
 
         Assert.Equal(ReadingOutcome.KeyMissing, reading.Outcome);
         Assert.Equal("This recipe needs your Tracker key. Get one at tracker.example.", reading.Detail);
@@ -333,7 +619,7 @@ public class RecipeEngineTests
         var transport = new FakeTransport();
         var keys = new FakeKeys(new SavedKey("tracker", "somewhere.else.example", "abc123secret"));
 
-        var reading = await Read(transport, KeyedRecipe("header"), inputs: new Dictionary<string, string>(), keys: keys);
+        var reading = await Read(transport, KeyedRecipe("header"), inputs: NoInputs, keys: keys);
 
         Assert.Equal(ReadingOutcome.KeyMissing, reading.Outcome);
         Assert.Equal("Your Tracker key is saved for somewhere.else.example, and this recipe would send it to api.tracker.example. It was not sent.", reading.Detail);
@@ -346,7 +632,7 @@ public class RecipeEngineTests
         var transport = new FakeTransport().On("https://api.tracker.example/", 200, """{ "data": [] }""");
         var keys = new FakeKeys(new SavedKey("tracker", "api.tracker.example", "abc123secret"));
 
-        await Read(transport, KeyedRecipe("header"), inputs: new Dictionary<string, string>(), keys: keys);
+        await Read(transport, KeyedRecipe("header"), inputs: NoInputs, keys: keys);
 
         Assert.Equal("abc123secret", transport.Requests[0].Headers["api_key"]);
         Assert.DoesNotContain("abc123secret", transport.Requests[0].Url.AbsoluteUri);
@@ -358,7 +644,7 @@ public class RecipeEngineTests
         var transport = new FakeTransport().On("https://api.tracker.example/", 200, """{ "data": [] }""");
         var keys = new FakeKeys(new SavedKey("tracker", "api.tracker.example", "abc/123secret"));
 
-        await Read(transport, KeyedRecipe("query"), inputs: new Dictionary<string, string>(), keys: keys);
+        await Read(transport, KeyedRecipe("query"), inputs: NoInputs, keys: keys);
 
         Assert.Equal("https://api.tracker.example/rows?season=1&api_key=abc%2F123secret", transport.Requests[0].Url.AbsoluteUri);
         Assert.Empty(transport.Requests[0].Headers);
@@ -370,7 +656,7 @@ public class RecipeEngineTests
         var transport = new FakeTransport().On("https://api.tracker.example/", 403, "{}");
         var keys = new FakeKeys(new SavedKey("tracker", "api.tracker.example", "abc123secret"));
 
-        var reading = await Read(transport, KeyedRecipe("header"), inputs: new Dictionary<string, string>(), keys: keys);
+        var reading = await Read(transport, KeyedRecipe("header"), inputs: NoInputs, keys: keys);
 
         Assert.Equal(ReadingOutcome.KeyRejected, reading.Outcome);
         Assert.Equal("api.tracker.example rejected your Tracker key. Change it to try again.", reading.Detail);

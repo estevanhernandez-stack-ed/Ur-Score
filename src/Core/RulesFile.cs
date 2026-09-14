@@ -114,10 +114,13 @@ public static class RulesFile
 
     /// <summary>
     /// Adds our rule. Returns false, having changed nothing, when there is already a rule for this
-    /// metric id or the file cannot be read.
+    /// metric id or the file cannot be read. Also returns false, touching no file at all, when
+    /// <paramref name="metricId"/> is null, empty or whitespace.
     /// </summary>
     public static bool AddRule(string? path, string metricId, double threshold, int windowMinutes)
     {
+        if (string.IsNullOrWhiteSpace(metricId)) return false;
+
         var file = path ?? DefaultPath;
 
         JsonArray rules;

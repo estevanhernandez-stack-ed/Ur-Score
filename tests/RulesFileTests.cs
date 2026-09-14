@@ -189,6 +189,20 @@ public class RulesFileTests
     }
 
     [Fact]
+    public void AddRuleWithABlankMetricIdTouchesNoFile()
+    {
+        // A blank metric id means no stat is set to send. Writing a rule keyed on "" into RoRoRo's
+        // real shared file would be silent junk nobody asked for.
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var path = Path.Combine(dir, "metric-rules.json");
+
+        Assert.False(RulesFile.AddRule(path, "   ", threshold: 100, windowMinutes: 10));
+
+        Assert.False(File.Exists(path));
+        Assert.False(File.Exists(path + ".ur-score-backup"));
+    }
+
+    [Fact]
     public void AnUnreadableFileIsNeverOverwritten()
     {
         // Invalid JSON here probably means a half-finished hand edit. Replacing it would destroy

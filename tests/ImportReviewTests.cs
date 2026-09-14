@@ -16,6 +16,12 @@ public class ImportReviewTests
 
     private static Recipe Parse(string json) => RecipeParser.Parse(json).Recipe!;
 
+    private static Recipe Profile => Load("petsim99-profile.recipe.json");
+
+    /// <summary>The same recipe with its last step's values replaced.</summary>
+    private static Recipe WithValues(Recipe recipe, params RecipeValue[] values) =>
+        recipe with { Steps = [.. recipe.Steps.Take(recipe.Steps.Count - 1), recipe.LastStep with { Values = values }] };
+
     private const string Keyed = """
         {
           "recipe": 1, "name": "Keyed", "credit": "Test.", "metricId": "k.v", "everySeconds": 60,
@@ -25,25 +31,34 @@ public class ImportReviewTests
         """;
 
     [Fact]
-    public void PetSimContactsOneHostAndSendsOnlyTheClanYouEnter()
+    public void PetSimSendsOnlyTheClanYouEnterToItsSource()
     {
         // A list recipe never sends your user ids anywhere: it finds your rows in what comes back.
         var review = ImportReview.Review(Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
 
-        var host = Assert.Single(review.Hosts);
-        Assert.Equal("ps99.biggamesapi.io", host.Host);
+        var host = review.Hosts.Single(h => h.Host == "ps99.biggamesapi.io");
         Assert.Equal(new[] { "the value you enter for Your clan" }, host.Sends);
         Assert.True(review.CanImport);
     }
 
     [Fact]
-    public void APerAccountRecipeSaysItSendsYourUserIds()
+    public void AnIconNamesRobloxsTwoPictureHostsAndWhatEach()
+    {
+        var review = ImportReview.Review(Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
+
+        Assert.Equal(new[] { "ps99.biggamesapi.io", "thumbnails.roblox.com", "tr.rbxcdn.com" }, review.Hosts.Select(h => h.Host).ToArray());
+        Assert.Equal("Receives the picture's id, to find the icon.", ImportReview.SendsText(review.Hosts[1]));
+        Assert.Equal("Sends the picture.", ImportReview.SendsText(review.Hosts[2]));
+    }
+
+    [Fact]
+    public void APerAccountRecipeSaysItSendsTheUserIdOfEveryAccount()
     {
         var review = ImportReview.Review(Load("roblox-followers.recipe.json"), new FakeKeys());
 
         var host = Assert.Single(review.Hosts);
         Assert.Equal("friends.roblox.com", host.Host);
-        Assert.Equal(new[] { ImportReview.SendsUserIds }, host.Sends);
+        Assert.Equal("Receives the Roblox user id of every account in your RoRoRo list.", ImportReview.SendsText(host));
     }
 
     [Fact]
@@ -115,16 +130,16 @@ public class ImportReviewTests
     }
 
     [Fact]
-    public void AMetricIdChangeIsListed()
+    public void ASuggestedMetricIdChangeIsListed()
     {
         var installed = Load("petsim99-clan-battle.recipe.json");
-        var incoming = installed with { MetricId = "clan.points" };
+        var incoming = WithValues(installed, installed.LastStep.Values[0] with { MetricId = "clan.points" });
 
         var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.True(comparison.IsUpdate);
         Assert.False(comparison.AsksAgain);
-        Assert.Contains("Suggests metric id clan.points instead of clan.battle.points.", comparison.Changes);
+        Assert.Equal(new[] { "Suggests clan.points for Points instead of clan.battle.points." }, comparison.Changes);
     }
 
     [Fact]
@@ -141,5 +156,113 @@ public class ImportReviewTests
         Assert.True(comparison.AsksAgain);
         Assert.Contains("New: mirror.example receives the value you enter for Your clan", comparison.Changes);
         Assert.Contains("No longer: ps99.biggamesapi.io receives the value you enter for Your clan", comparison.Changes);
+    }
+
+    // Stats design §7.2, one test per row of its table.
+
+    [Fact]
+    public void ANewStatIsListedWithoutAsking()
+    {
+        var installed = WithValues(Profile, Profile.LastStep.Values[0]);
+
+        var comparison = ImportReview.CompareToInstalled(installed, Profile, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "New stat: Eggs hatched.", "New stat: Player rank." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void RemovingAStatYouDoNotSendIsListedWithoutAsking()
+    {
+        var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["rank"] = new(Show: true, MetricId: "ps99.rank") });
+        var incoming = WithValues(Profile, Profile.LastStep.Values[0], Profile.LastStep.Values[1]);
+
+        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Removed stat: Player rank." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void ATrackedStatReadFromADifferentPlaceIsListedWithoutAsking()
+    {
+        var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["rank"] = new(Show: true, Send: true, MetricId: "ps99.rank") });
+        var values = Profile.LastStep.Values;
+        var incoming = WithValues(Profile, values[0], values[1], values[2] with { Path = "data.views.profile.data.PlayerRank" });
+
+        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Player rank is read from a different place." }, comparison.Changes);
+        Assert.Equal("ps99.rank", Assert.Single(state.SentStats(incoming)).MetricId);
+    }
+
+    [Fact]
+    public void RemovingAStatYouSendAsksAgainAndNamesWhatRoRoRoStopsGetting()
+    {
+        var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["rank"] = new(Send: true, MetricId: "ps99.rank") });
+        var incoming = WithValues(Profile, Profile.LastStep.Values[0], Profile.LastStep.Values[1]);
+
+        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
+
+        Assert.True(comparison.AsksAgain);
+        Assert.Equal(new[] { "Player rank will no longer be read, so RoRoRo stops getting ps99.rank." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void AStatOfferedAgainComesBackUnticked()
+    {
+        // v2 drops rank, the user accepts, and the save normalizes it. v3 offers rank again: listed, unticked, no ask.
+        var dir = Path.Combine(Path.GetTempPath(), "urscore-recipes-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var v2 = WithValues(Profile, Profile.LastStep.Values[0], Profile.LastStep.Values[1]);
+            var store = new RecipeStore(dir);
+            store.Save(v2, RecipeParserTests.Fixture("petsim99-profile.recipe.json"), new RecipeState(Stats: new Dictionary<string, StatChoice>
+            {
+                ["diamonds"] = new(Send: true, MetricId: "ps99.diamonds"),
+                ["rank"] = new(Send: true, MetricId: "ps99.rank"),
+            }));
+            var saved = store.Find(v2.Slug)!.State;
+            var v3 = Profile;
+
+            var comparison = ImportReview.CompareToInstalled(v2, v3, new FakeKeys(), saved);
+
+            Assert.False(comparison.AsksAgain);
+            Assert.Equal(new[] { "New stat: Player rank." }, comparison.Changes);
+            Assert.DoesNotContain("rank", saved.SentStats(v3).Select(s => s.Key));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AnIconAddedAsksAgainBecauseItContactsRobloxsPictureHosts()
+    {
+        var incoming = Load("petsim99-clan-battle.recipe.json");
+        var installed = incoming with { Icon = null };
+
+        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.True(comparison.AsksAgain);
+        Assert.Equal(new[] { "Adds an icon, which asks Roblox for the picture." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void AChangeInWhatAnAnswerMeansIsListedOnceWithoutAsking()
+    {
+        var installed = Load("petsim99-clan-battle.recipe.json");
+        var incoming = installed with
+        {
+            PlaceLabel = "Rank in clan",
+            Steps = [installed.Steps[0], installed.LastStep with { AbsentMessage = "Not in this one." }],
+        };
+
+        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Changes what an empty answer means." }, comparison.Changes);
     }
 }

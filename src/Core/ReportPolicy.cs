@@ -1,4 +1,5 @@
 using Labs626.UrScore.Host;
+using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Core;
 
@@ -14,8 +15,10 @@ public sealed record PolicyDecision(bool Allowed, string? Reason);
 /// anyone. Here it is one gate, three checks, stated in the window.
 /// </para>
 /// <para>
-/// Everything that fails a check is dropped and counted. Other members' ids and points are read,
-/// compared, and dropped: never reported, never written, never logged.
+/// A report needs both of the user's ticks: the account's Send (the subject is on the allow list)
+/// and the stat's Send (the metric id is one of <see cref="SentStats"/>). Everything that fails a
+/// check is dropped and counted. Other members' ids and numbers are read, compared, and dropped:
+/// never reported, never written, never logged.
 /// </para>
 /// <para>
 /// WHAT THE FENCE ACTUALLY BUYS. It catches an ACCIDENT — a later change that wires the client
@@ -28,9 +31,10 @@ public sealed record PolicyDecision(bool Allowed, string? Reason);
 /// </para>
 /// </summary>
 public sealed class ReportPolicy(
-    string metricId, IReadOnlySet<Guid> allowedSubjects, int sent = 0, int dropped = 0)
+    IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects, int sent = 0, int dropped = 0)
 {
-    public string MetricId { get; } = metricId;
+    /// <summary>The stats with Send on, each with the metric id the user pinned. A copy, like the allow list.</summary>
+    public IReadOnlyList<SentStat> SentStats { get; } = [.. sentStats];
 
     /// <summary>
     /// A COPY, deliberately. Held by reference, a caller mutating the set afterwards would widen
@@ -46,7 +50,7 @@ public sealed class ReportPolicy(
     public int Dropped { get; private set; } = dropped;
 
     /// <summary>
-    /// A policy for a changed metric id or allow list, carrying the running <see cref="Sent"/> and
+    /// A policy for changed sent stats or allow list, carrying the running <see cref="Sent"/> and
     /// <see cref="Dropped"/> counts forward rather than resetting them to zero.
     /// <para>
     /// Exists so <see cref="RecipeWatch"/> can be updated in place instead of reconstructed (F2): a
@@ -55,15 +59,15 @@ public sealed class ReportPolicy(
     /// never rise. <see cref="RecipeWatch.UpdatePolicy"/> is the only caller.
     /// </para>
     /// </summary>
-    public ReportPolicy With(string metricId, IReadOnlySet<Guid> allowedSubjects) =>
-        new(metricId, allowedSubjects, Sent, Dropped);
+    public ReportPolicy With(IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects) =>
+        new(sentStats, allowedSubjects, Sent, Dropped);
 
     public PolicyDecision Evaluate(Guid subject, string candidateMetricId, double value)
     {
-        if (!string.Equals(candidateMetricId, MetricId, StringComparison.Ordinal))
+        if (!SentStats.Any(stat => string.Equals(stat.MetricId, candidateMetricId, StringComparison.Ordinal)))
         {
             return new PolicyDecision(false,
-                $"Metric id '{candidateMetricId}' is not the configured '{MetricId}'.");
+                $"Metric id '{candidateMetricId}' is not one of the stats set to send.");
         }
 
         if (!AllowedSubjects.Contains(subject))
@@ -104,7 +108,8 @@ public sealed class ReportPolicy(
 
     /// <summary>
     /// Rendered verbatim in the window (<c>MainWindow.RenderPolicy</c>), so what leaves is readable
-    /// without reading code.
+    /// without reading code. Names every sent stat by its label and the metric id RoRoRo gets it
+    /// under; it never assumes the number is points.
     /// <para>
     /// The "of your N" half is dropped when the numbers cannot both be right. A caller passing a
     /// total smaller than the allow list is a bug somewhere else, and "3 of your 2 accounts" would
@@ -118,10 +123,8 @@ public sealed class ReportPolicy(
     /// <c>NameClient</c> contradicts every poll whenever <paramref name="resolveNames"/> is true —
     /// it POSTs other members' Roblox ids to Roblox to resolve usernames. The claim now covers only
     /// the report policy's real job (the pipe to RoRoRo), and a second sentence states plainly
-    /// whether name lookups are currently on. For a time, the window built its own copy of this
-    /// sentence independently instead of calling this method — the two drifted, this one carrying
-    /// the old wording while `MainWindow` had already been fixed to say something true. Calling
-    /// this from the one place it is shown is what keeps that from happening again.
+    /// whether name lookups are currently on. Calling this from the one place it is shown is what
+    /// keeps the window's copy of this sentence from drifting again.
     /// </para>
     /// </summary>
     public string Describe(int totalAccounts, bool resolveNames = true)
@@ -135,7 +138,20 @@ public sealed class ReportPolicy(
               + "usernames for the leaderboard. Set resolveNames to false in settings.json to stop it."
             : "Name lookups are off: no other member's Roblox id leaves this machine for any reason.";
 
-        return $"Ur Score sends points for {scope}, as {MetricId}. Nothing else reaches RoRoRo. "
-            + nameLookups;
+        if (SentStats.Count == 0)
+        {
+            return "Ur Score sends nothing to RoRoRo: no stat is set to send. " + nameLookups;
+        }
+
+        var labels = JoinWithAnd([.. SentStats.Select(stat => stat.Label)]);
+        var metricIds = JoinWithAnd([.. SentStats.Select(stat => stat.MetricId)]);
+        return $"Ur Score sends {labels} for {scope}, as {metricIds}. Nothing else reaches RoRoRo. " + nameLookups;
     }
+
+    private static string JoinWithAnd(IReadOnlyList<string> items) => items.Count switch
+    {
+        0 => "",
+        1 => items[0],
+        _ => $"{string.Join(", ", items.Take(items.Count - 1))} and {items[^1]}",
+    };
 }

@@ -72,13 +72,13 @@ number. Consequences here:
 {
   "recipe": 1,
   "name": "Pet Sim 99 profile",
-  "credit": "Data from Big Games' public Pet Simulator 99 API. Each account must make its profile public in-game.",
+  "credit": "Data from Big Games' public Pet Simulator 99 API. Each account must be linked on db.biggames.io with its Profile view public.",
   "everySeconds": 1800,
   "steps": [
     { "url": "https://ps99.biggamesapi.io/v1/players/{userId}?include=profile",
       "perAccount": true,
       "unavailable": { "path": "data.views.profile.available", "is": false,
-                       "message": "Profile is private. Make it public in Pet Sim 99's dashboard." },
+                       "message": "Profile is private. Link this account on db.biggames.io and turn on its Profile view." },
       "values": [
         { "id": "diamonds", "label": "Diamonds", "path": "data.views.profile.data.Currency.Diamonds._am", "metricId": "ps99.diamonds" },
         { "id": "eggs", "label": "Eggs hatched", "path": "data.views.profile.data.EggsHatched", "metricId": "ps99.eggs-hatched" },
@@ -413,8 +413,10 @@ Replaces §13 of the recipes design.
 
 ## §11 Risks
 
-- **Profiles are opt-in.** Every account must be made public in-game. The `unavailable` message says
-  exactly that, and the recipe credit line says it at import.
+- **Profiles are opt-in.** Every account must be linked on Big Games' site (db.biggames.io) with its
+  Profile view public; Pet Sim 99's in-game "Player Profiles" setting is a different switch and is not
+  enough (verified live 2026-09-13). The `unavailable` message says so, and the recipe credit line says
+  it at import.
 - **The stalled mark can be wrong,** for example when one account is deliberately idle. It is
   display only and costs nothing but a glance.
 - **The history budget is shared with other plugins** that Ur Score can't see. The warning from 200

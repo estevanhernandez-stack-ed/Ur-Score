@@ -9,9 +9,9 @@ public sealed record RecipeParseResult(Recipe? Recipe, IReadOnlyList<string> Pro
 }
 
 /// <summary>
-/// Recipe text to a <see cref="Recipe"/>, or every problem in it named (spec §6.5). Reads by hand
-/// rather than deserializing, because a deserializer's exception names a byte offset and a person
-/// sharing a recipe file needs "step 2 has no url".
+/// Recipe text to a <see cref="Recipe"/>, or every problem in it named (spec §6.5, stats design §7.3).
+/// Reads by hand rather than deserializing, because a deserializer's exception names a byte offset
+/// and a person sharing a recipe file needs "step 2 has no url".
 /// </summary>
 public static class RecipeParser
 {
@@ -58,9 +58,11 @@ public static class RecipeParser
             var problems = new List<string>();
             var name = RequiredString(root, "name", "the recipe", problems);
             var credit = RequiredString(root, "credit", "the recipe", problems);
-            var metricId = RequiredString(root, "metricId", "the recipe", problems);
             var author = OptionalString(root, "author");
+            var metricId = OptionalString(root, "metricId");
             var valueLabel = OptionalString(root, "valueLabel") ?? "Value";
+            var icon = OptionalString(root, "icon");
+            var placeLabel = OptionalString(root, "placeLabel");
 
             if (!TryInt(root, "everySeconds", out var everySeconds) || everySeconds <= 0)
             {
@@ -69,21 +71,27 @@ public static class RecipeParser
 
             var inputs = ParseInputs(root, problems);
             var keys = ParseKeys(root, problems);
-            var steps = ParseSteps(root, problems);
+            var (steps, lastUsesValues) = ParseSteps(root, metricId, valueLabel, problems);
             var headline = ParseHeadline(root, problems);
+
+            // The top-level metricId only names a single 'value'. A 'values' list names each of its own.
+            if (metricId is null && !lastUsesValues)
+            {
+                problems.Add("The recipe has no 'metricId'.");
+            }
 
             // Cross-field checks only on a structurally complete recipe, so one missing url does not
             // cascade into three confusing follow-on complaints.
             if (problems.Count == 0)
             {
-                Validate(inputs, keys, steps, headline, problems);
+                Validate(inputs, keys, steps, headline, icon, placeLabel, problems);
             }
 
             return problems.Count > 0
                 ? new RecipeParseResult(null, problems)
                 : new RecipeParseResult(
-                    new Recipe(version, name!, credit!, author, metricId!, valueLabel, everySeconds,
-                        inputs, keys, steps, headline),
+                    new Recipe(version, name!, credit!, author, everySeconds, inputs, keys, steps, headline,
+                        icon, placeLabel ?? Recipe.DefaultPlaceLabel),
                     []);
         }
     }
@@ -111,6 +119,20 @@ public static class RecipeParser
         if (value is null) problems.Add($"{Capitalize(where)} has no '{name}'.");
         return value;
     }
+
+    /// <summary>Absent or null takes the fallback; anything but true or false is a named problem.</summary>
+    private static bool OptionalBool(JsonElement obj, string name, bool fallback, string where, List<string> problems)
+    {
+        if (!JsonNav.TryGet(obj, name, out var element) || element.ValueKind == JsonValueKind.Null) return fallback;
+        if (element.ValueKind is JsonValueKind.True or JsonValueKind.False) return element.GetBoolean();
+
+        problems.Add($"'{name}' in {where} must be true or false.");
+        return fallback;
+    }
+
+    /// <summary>Present and not JSON null: the field was written, so it must be written correctly.</summary>
+    private static bool Present(JsonElement obj, string name, out JsonElement element) =>
+        JsonNav.TryGet(obj, name, out element) && element.ValueKind != JsonValueKind.Null;
 
     private static string Capitalize(string text) => char.ToUpperInvariant(text[0]) + text[1..];
 
@@ -216,7 +238,9 @@ public static class RecipeParser
         return keys;
     }
 
-    private static List<RecipeStep> ParseSteps(JsonElement root, List<string> problems)
+    /// <returns>The steps, and whether the last one lists its stats under 'values'.</returns>
+    private static (List<RecipeStep> Steps, bool LastUsesValues) ParseSteps(
+        JsonElement root, string? metricId, string valueLabel, List<string> problems)
     {
         var steps = new List<RecipeStep>();
         if (!JsonNav.TryGet(root, "steps", out var array)
@@ -224,13 +248,15 @@ public static class RecipeParser
             || array.GetArrayLength() == 0)
         {
             problems.Add("The recipe has no steps. It needs at least one request to make.");
-            return steps;
+            return (steps, false);
         }
 
         var number = 0;
+        var usesValues = false;
         foreach (var item in array.EnumerateArray())
         {
             var where = $"step {++number}";
+            usesValues = false;
             if (item.ValueKind != JsonValueKind.Object)
             {
                 problems.Add($"{Capitalize(where)} is not an object.");
@@ -271,16 +297,134 @@ public static class RecipeParser
             var perAccount = JsonNav.TryGet(item, "perAccount", out var perAccountElement)
                              && perAccountElement.ValueKind == JsonValueKind.True;
 
+            var value = OptionalString(item, "value");
+            usesValues = Present(item, "values", out var valuesElement);
+            if (usesValues && value is not null)
+            {
+                problems.Add($"{Capitalize(where)} has both 'value' and 'values'. Use 'values' for several stats, or 'value' for one.");
+            }
+
+            var values = usesValues
+                ? ParseValues(valuesElement, where, problems)
+                : value is not null
+                    ? [new RecipeValue(RecipeValue.ShorthandId, valueLabel, value, metricId ?? "")]
+                    : new List<RecipeValue>();
+
             if (url is not null)
             {
                 steps.Add(new RecipeStep(url, useKeys, take,
                     OptionalString(item, "idleWithout"), OptionalString(item, "idleMessage"),
                     OptionalString(item, "rows"), OptionalString(item, "userId"),
-                    perAccount, OptionalString(item, "value")));
+                    perAccount, values,
+                    ParseCounters(item, where, problems),
+                    ParseUnavailable(item, where, problems),
+                    ParseAbsentMessage(item, where, problems)));
             }
         }
 
-        return steps;
+        return (steps, usesValues);
+    }
+
+    private static List<RecipeValue> ParseValues(JsonElement array, string where, List<string> problems)
+    {
+        var values = new List<RecipeValue>();
+        if (array.ValueKind != JsonValueKind.Array)
+        {
+            problems.Add($"{Capitalize(where)}'s 'values' must be a list.");
+            return values;
+        }
+
+        if (array.GetArrayLength() == 0)
+        {
+            problems.Add($"{Capitalize(where)}'s 'values' is empty. List at least one stat.");
+            return values;
+        }
+
+        var number = 0;
+        foreach (var item in array.EnumerateArray())
+        {
+            var valueWhere = $"{where}'s value {++number}";
+            var id = RequiredString(item, "id", valueWhere, problems);
+            var label = RequiredString(item, "label", valueWhere, problems);
+            var path = RequiredString(item, "path", valueWhere, problems);
+            var metricId = RequiredString(item, "metricId", valueWhere, problems);
+            var sum = OptionalBool(item, "sum", true, valueWhere, problems);
+
+            if (id is not null && label is not null && path is not null && metricId is not null)
+            {
+                values.Add(new RecipeValue(id, label, path, metricId, sum));
+            }
+        }
+
+        return values;
+    }
+
+    private static RecipeCounters? ParseCounters(JsonElement step, string where, List<string> problems)
+    {
+        if (!Present(step, "counters", out var counters)) return null;
+
+        if (counters.ValueKind != JsonValueKind.Object)
+        {
+            problems.Add($"{Capitalize(where)}'s 'counters' must be an object with a label, a path and a metricIdPrefix.");
+            return null;
+        }
+
+        var label = RequiredString(counters, "label", $"{where}'s counters", problems);
+        var path = RequiredString(counters, "path", $"{where}'s counters", problems);
+        var prefix = RequiredString(counters, "metricIdPrefix", $"{where}'s counters", problems);
+
+        return label is not null && path is not null && prefix is not null ? new RecipeCounters(label, path, prefix) : null;
+    }
+
+    private static RecipeUnavailable? ParseUnavailable(JsonElement step, string where, List<string> problems)
+    {
+        if (!Present(step, "unavailable", out var unavailable)) return null;
+
+        if (unavailable.ValueKind != JsonValueKind.Object)
+        {
+            problems.Add($"{Capitalize(where)}'s 'unavailable' must be an object with a path, an 'is' and a message.");
+            return null;
+        }
+
+        var path = RequiredString(unavailable, "path", $"{where}'s unavailable", problems);
+        var message = RequiredString(unavailable, "message", $"{where}'s unavailable", problems);
+
+        string? isText = null;
+        var isKind = JsonValueKind.Undefined;
+        if (JsonNav.TryGet(unavailable, "is", out var isElement))
+        {
+            isKind = isElement.ValueKind;
+            isText = isKind switch
+            {
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                JsonValueKind.Number => isElement.GetRawText(),
+                JsonValueKind.String => isElement.GetString(),
+                _ => null,
+            };
+        }
+
+        if (isText is null)
+        {
+            problems.Add($"{Capitalize(where)}'s unavailable has no 'is'. It must be true, false, a number or text.");
+        }
+
+        return path is not null && message is not null && isText is not null
+            ? new RecipeUnavailable(path, isKind, isText, message)
+            : null;
+    }
+
+    private static string? ParseAbsentMessage(JsonElement step, string where, List<string> problems)
+    {
+        if (!Present(step, "absentMessage", out var element)) return null;
+
+        if (element.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(element.GetString()))
+        {
+            problems.Add($"{Capitalize(where)}'s 'absentMessage' must be text.");
+            return null;
+        }
+
+        return element.GetString()!.Trim();
     }
 
     private static List<RecipeHeadline> ParseHeadline(JsonElement root, List<string> problems)
@@ -290,7 +434,8 @@ public static class RecipeParser
         {
             var label = RequiredString(item, "label", $"headline {number}", problems);
             var path = RequiredString(item, "path", $"headline {number}", problems);
-            if (label is not null && path is not null) headline.Add(new RecipeHeadline(label, path));
+            var sum = OptionalBool(item, "sum", true, $"headline {number}", problems);
+            if (label is not null && path is not null) headline.Add(new RecipeHeadline(label, path, sum));
         }
 
         if (headline.Count > 2)
@@ -303,7 +448,7 @@ public static class RecipeParser
 
     private static void Validate(
         List<RecipeInput> inputs, List<RecipeKey> keys, List<RecipeStep> steps,
-        List<RecipeHeadline> headline, List<string> problems)
+        List<RecipeHeadline> headline, string? icon, string? placeLabel, List<string> problems)
     {
         Duplicates(inputs.Select(i => i.Id), "input id", problems);
         Duplicates(keys.Select(k => k.Id), "key id", problems);
@@ -317,6 +462,7 @@ public static class RecipeParser
         var declaredKeys = keys.GroupBy(k => k.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var keyHosts = new Dictionary<string, string>(StringComparer.Ordinal);
         var taken = new HashSet<string>(StringComparer.Ordinal);
+        var listForm = false;
 
         for (var index = 0; index < steps.Count; index++)
         {
@@ -377,7 +523,13 @@ public static class RecipeParser
                 problems.Add($"{Capitalize(where)} is idle without '{step.IdleWithout}', which it does not take.");
             }
 
-            var reads = step.Rows is not null || step.UserId is not null || step.Value is not null || step.PerAccount;
+            if (step.Unavailable is not null && !step.PerAccount)
+            {
+                problems.Add($"{Capitalize(where)} has 'unavailable', but only a perAccount step can.");
+            }
+
+            var reads = step.Rows is not null || step.UserId is not null || step.Values.Count > 0
+                        || step.Counters is not null || step.PerAccount;
             if (!isLast && reads)
             {
                 problems.Add($"{Capitalize(where)} reads a value, but only the last step can.");
@@ -385,8 +537,8 @@ public static class RecipeParser
 
             if (isLast)
             {
-                var listForm = step.Rows is not null && step.UserId is not null && step.Value is not null && !step.PerAccount;
-                var perAccountForm = step.PerAccount && step.Value is not null && step.Rows is null && step.UserId is null;
+                listForm = step.Rows is not null && step.UserId is not null && step.Values.Count > 0 && !step.PerAccount;
+                var perAccountForm = step.PerAccount && step.Values.Count > 0 && step.Rows is null && step.UserId is null;
 
                 if (!listForm && !perAccountForm)
                 {
@@ -404,6 +556,16 @@ public static class RecipeParser
                 }
             }
 
+            foreach (var id in step.Values.GroupBy(v => v.Id, StringComparer.Ordinal).Where(g => g.Count() > 1).Select(g => g.Key))
+            {
+                problems.Add($"{Capitalize(where)} uses the value id '{id}' more than once.");
+            }
+
+            foreach (var id in step.Values.Select(v => v.Id).Where(id => id.StartsWith(RecipeCounters.KeyPrefix, StringComparison.Ordinal)))
+            {
+                problems.Add($"{Capitalize(where)}'s value id '{id}' starts with '{RecipeCounters.KeyPrefix}', which is kept for statistics picked from counters.");
+            }
+
             foreach (var name in step.Take.Keys)
             {
                 if (name == Placeholders.UserId)
@@ -419,6 +581,22 @@ public static class RecipeParser
             }
         }
 
+        foreach (var metricId in steps.SelectMany(s => s.Values).GroupBy(v => v.MetricId, StringComparer.Ordinal)
+                     .Where(g => g.Count() > 1).Select(g => g.Key))
+        {
+            problems.Add($"The metricId '{metricId}' is suggested for more than one value. Each stat needs its own.");
+        }
+
+        if (icon is not null && !listForm)
+        {
+            problems.Add("An icon can only be read from a list-form last step.");
+        }
+
+        if (placeLabel is not null && !listForm)
+        {
+            problems.Add("A placeLabel only applies to a list-form last step.");
+        }
+
         var allKnown = new HashSet<string>(inputIds, StringComparer.Ordinal);
         allKnown.UnionWith(taken);
         for (var index = 0; index < headline.Count; index++)
@@ -427,6 +605,11 @@ public static class RecipeParser
             {
                 problems.Add($"Unknown placeholder {{{name}}} in headline {index + 1}'s path.");
             }
+        }
+
+        foreach (var name in Placeholders.Names(icon ?? "").Where(n => !allKnown.Contains(n)))
+        {
+            problems.Add($"Unknown placeholder {{{name}}} in the icon path.");
         }
 
         foreach (var input in inputs.Where(i => i.Search is not null))
@@ -443,7 +626,9 @@ public static class RecipeParser
         foreach (var (name, path) in step.Take) yield return ($"take path '{name}'", path);
         if (step.Rows is not null) yield return ("rows", step.Rows);
         if (step.UserId is not null) yield return ("userId", step.UserId);
-        if (step.Value is not null) yield return ("value", step.Value);
+        foreach (var value in step.Values) yield return ($"value '{value.Id}'", value.Path);
+        if (step.Counters is not null) yield return ("counters path", step.Counters.Path);
+        if (step.Unavailable is not null) yield return ("unavailable path", step.Unavailable.Path);
     }
 
     private static void Duplicates(IEnumerable<string> ids, string what, List<string> problems)
