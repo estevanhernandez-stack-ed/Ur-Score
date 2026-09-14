@@ -69,6 +69,41 @@ public class HistoryBudgetTests
     public void LoweringACountThatIsAlreadyTooHighIsAllowed() =>
         Assert.True(HistoryBudget.Check([(10, 20)], before: (10, 8), after: (10, 7), accountsKnown: true).Allowed);
 
+    /// <summary>The profile fixture sending diamonds, eggs and rank (3 stats), and the clan fixture sending its points (1).</summary>
+    private static InstalledRecipe[] FourStatsPerAccount()
+    {
+        var profileText = RecipeParserTests.Fixture("petsim99-profile.recipe.json");
+        var profile = new InstalledRecipe(RecipeParser.Parse(profileText).Recipe!, profileText, new RecipeState(
+            Stats: new Dictionary<string, StatChoice>
+            {
+                ["diamonds"] = new(Send: true, MetricId: "ps99.diamonds"),
+                ["eggs"] = new(Send: true, MetricId: "ps99.eggs-hatched"),
+                ["rank"] = new(Send: true, MetricId: "ps99.rank"),
+            }));
+        var clanText = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
+        var clan = new InstalledRecipe(RecipeParser.Parse(clanText).Recipe!, clanText, new RecipeState(
+            Stats: new Dictionary<string, StatChoice> { ["value"] = new(Send: true, MetricId: "clan.battle.points") }));
+
+        return [profile, clan];
+    }
+
+    private static Guid[] Accounts(int count) => [.. Enumerable.Range(0, count).Select(_ => Guid.NewGuid())];
+
+    [Fact]
+    public void AfterSeedIsQuietWithinTheLimit() =>
+        Assert.Null(HistoryBudget.AfterSeed(FourStatsPerAccount(), Accounts(64)));
+
+    [Fact]
+    public void AfterSeedSaysSoPastTheLimit()
+    {
+        var check = HistoryBudget.AfterSeed(FourStatsPerAccount(), Accounts(65));
+
+        Assert.NotNull(check);
+        Assert.False(check.Allowed);
+        Assert.Equal(260, check.Count);
+        Assert.Equal("260 of RoRoRo's 256 history slots are in use, so RoRoRo will ignore the newest. Untick Send on some stats or accounts.", check.Line);
+    }
+
     [Fact]
     public void WithNoAccountsKnownYetTheLineSaysSo()
     {

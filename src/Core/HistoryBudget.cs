@@ -28,6 +28,19 @@ public static class HistoryBudget
             .Select(r => (accountIds.Count(id => !r.State.Excluded.Contains(id)), r.State.SentStats(r.Recipe).Count))];
 
     /// <summary>
+    /// The count once RoRoRo's accounts are known, which no tick was checked against: accounts that
+    /// arrive with Send on can take it past <see cref="Limit"/> by themselves. Null within the limit.
+    /// </summary>
+    public static BudgetCheck? AfterSeed(IEnumerable<InstalledRecipe> recipes, IReadOnlyCollection<Guid> accountIds)
+    {
+        var count = Count(Installed(recipes, accountIds));
+        return count <= Limit
+            ? null
+            : new BudgetCheck(false, count,
+                $"{count} of RoRoRo's {Limit} history slots are in use, so RoRoRo will ignore the newest. Untick Send on some stats or accounts.");
+    }
+
+    /// <summary>
     /// A change is refused only when it raises the count past <see cref="Limit"/>. A change that lowers
     /// an already-too-high count is always allowed, so the way back under is never blocked.
     /// </summary>

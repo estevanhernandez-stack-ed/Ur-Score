@@ -68,7 +68,8 @@ public partial class ImportWindow : Window
     private readonly ImportReviewResult _review;
     private readonly RecipeState _existing;
     private readonly IReadOnlyList<InstalledRecipe> _installed;
-    private readonly IReadOnlyCollection<Guid> _accountIds;
+    /// <summary>Asked each time the budget is worked out, so accounts a Look up seeds are counted.</summary>
+    private readonly Func<IReadOnlyCollection<Guid>> _accountIds;
     private readonly Func<string, string> _ruleSentence;
     private readonly Func<IReadOnlyDictionary<string, string>, Task<CounterLookup>>? _lookUpCounters;
     private readonly List<InputItem> _inputs;
@@ -82,7 +83,7 @@ public partial class ImportWindow : Window
 
     public ImportWindow(
         Recipe recipe, ImportReviewResult review, UpdateComparison comparison, RecipeState? existing,
-        IReadOnlyList<InstalledRecipe> installed, IReadOnlyCollection<Guid> accountIds,
+        IReadOnlyList<InstalledRecipe> installed, Func<IReadOnlyCollection<Guid>> accountIds,
         Func<string, string> ruleSentence,
         Func<IReadOnlyDictionary<string, string>, Task<CounterLookup>>? lookUpCounters,
         bool settingsOnly = false)
@@ -185,11 +186,12 @@ public partial class ImportWindow : Window
 
     private BudgetCheck Budget()
     {
-        var sending = _accountIds.Count(id => !_existing.Excluded.Contains(id));
-        var others = HistoryBudget.Installed(_installed, _accountIds, exceptSlug: _recipe.Slug);
+        var accountIds = _accountIds();
+        var sending = accountIds.Count(id => !_existing.Excluded.Contains(id));
+        var others = HistoryBudget.Installed(_installed, accountIds, exceptSlug: _recipe.Slug);
         var before = (sending, _existing.SentStats(_recipe).Count);
         var after = (sending, new RecipeState(Stats: Choices()).SentStats(_recipe).Count);
-        return HistoryBudget.Check(others, before, after, accountsKnown: _accountIds.Count > 0);
+        return HistoryBudget.Check(others, before, after, accountsKnown: accountIds.Count > 0);
     }
 
     private void OnStatChanged(object? sender, PropertyChangedEventArgs e)
@@ -246,6 +248,9 @@ public partial class ImportWindow : Window
                 ? $"Found {found.Names.Count} statistic names. Type to search them."
                 : found.Problem ?? "No statistic names came back.");
             UpdateMatches();
+
+            // The read seeds RoRoRo's accounts, so the slot line may count more of them now.
+            Refresh();
         }
         catch (Exception ex)
         {

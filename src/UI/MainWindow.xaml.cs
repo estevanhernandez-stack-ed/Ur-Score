@@ -115,6 +115,9 @@ public partial class MainWindow : Window
     private IReadOnlyList<RecipeStat> _shownStats = [];
     private string? _iconText;
     private string? _lastDashboardContext;
+
+    /// <summary>The count the last past-the-limit warning named, so the trail says it once per count.</summary>
+    private int? _budgetWarnedCount;
     private IReadOnlyList<string> _storeProblems = [];
     private string? _recipeFileNote;
     private Settings _settings = Settings.Load();
@@ -427,6 +430,7 @@ public partial class MainWindow : Window
         }
 
         var excluded = _active?.State.Excluded ?? new HashSet<Guid>();
+        var added = false;
 
         foreach (var account in accounts)
         {
@@ -445,11 +449,36 @@ public partial class MainWindow : Window
                 Send = !excluded.Contains(account.AccountId),
                 Cells = Dashes(),
             });
+            added = true;
         }
 
         _watch?.UpdatePolicy(SentStats(), CurrentAllowedSubjects());
         RenderPolicy();
+        if (added) WarnPastBudget();
         return null;
+    }
+
+    /// <summary>
+    /// Accounts that arrive with Send on were never checked against RoRoRo's history limit, and can
+    /// take the count past it by themselves. Says so on the detail line, and in the trail once per count.
+    /// </summary>
+    private void WarnPastBudget()
+    {
+        try
+        {
+            if (HistoryBudget.AfterSeed(_store.LoadAll().Recipes, AccountIds()) is not { } over) return;
+
+            DetailLine.Text = over.Line;
+            if (_budgetWarnedCount == over.Count) return;
+
+            _budgetWarnedCount = over.Count;
+            _trail.Add(Stamp($"BUDGET: {over.Line}"));
+        }
+        catch (Exception ex)
+        {
+            // The seed never costs its caller anything; an unreadable recipe folder costs only this warning.
+            _trail.Add(Stamp($"BUDGET NOT CHECKED: {ex.Message}"));
+        }
     }
 
     private void OnSendToggled(object? sender, DataGridCellEditEndingEventArgs e)
@@ -981,7 +1010,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnImportRecipeClick(object sender, RoutedEventArgs e)
+    private async void OnImportRecipeClick(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
@@ -1047,7 +1076,10 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var window = new ImportWindow(recipe, review, comparison, installed?.State, _store.LoadAll().Recipes, AccountIds(),
+            // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
+            await SeedRowsAsync();
+
+            var window = new ImportWindow(recipe, review, comparison, installed?.State, _store.LoadAll().Recipes, AccountIds,
                 metricId => RuleSentence(metricId).Text, CounterLookupFor(recipe))
             {
                 Owner = this,
@@ -1072,7 +1104,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnRecipeSettingsClick(object sender, RoutedEventArgs e)
+    private async void OnRecipeSettingsClick(object sender, RoutedEventArgs e)
     {
         if (_active is null)
         {
@@ -1080,9 +1112,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
+        await SeedRowsAsync();
+
         var active = _active;
         var window = new ImportWindow(active.Recipe, ImportReview.Review(active.Recipe, _keys),
-            new UpdateComparison(false, false, []), active.State, _store.LoadAll().Recipes, AccountIds(),
+            new UpdateComparison(false, false, []), active.State, _store.LoadAll().Recipes, AccountIds,
             metricId => RuleSentence(metricId).Text, CounterLookupFor(active.Recipe), settingsOnly: true)
         {
             Owner = this,
