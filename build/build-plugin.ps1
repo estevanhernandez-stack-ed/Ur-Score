@@ -13,18 +13,27 @@
     contains the runnable EXE + manifest.json + icon.png + all deps. RoRoRo's installer refuses to
     extract if the actual SHA does not match the .sha256 file.
 
-    This script also refuses to produce a plugin.zip with no real icon inside it. Ur Score does
-    not have one yet — icon.png is owed through the 626labs-design skill and has not been made —
-    and RoRoRo's own Store build already treats a placeholder logo as a build-blocking defect, not
-    a warning. Fabricating one here so this script "completes" would ship a made-up icon, which is
-    worse than a build that stops and says why. See the icon check below.
+    The .NET runtime is bundled by default, the same as Ur Task: clan members can't be assumed to
+    have the .NET 10 desktop runtime installed, and a plugin that won't start without it is a
+    support message in Discord, not a working install.
+
+    The script refuses to build without icon.png at the repo root rather than packaging a
+    placeholder; RoRoRo's own Store build treats a placeholder logo as a build-blocking defect.
 
 .PARAMETER Configuration
     Build configuration. Default: Release.
+
+.PARAMETER Runtime
+    Target runtime identifier. Default: win-x64 (runs under emulation on Windows on Arm).
+
+.PARAMETER SelfContained
+    Bundle the .NET runtime into the plugin. Default: true.
 #>
 [CmdletBinding()]
 param(
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [string]$Runtime = "win-x64",
+    [bool]$SelfContained = $true
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,19 +42,11 @@ $artifacts = Join-Path $root "artifacts"
 $publish = Join-Path $artifacts "publish"
 
 Write-Host "[build-plugin] root: $root"
-Write-Host "[build-plugin] configuration: $Configuration"
+Write-Host "[build-plugin] configuration: $Configuration | runtime: $Runtime | self-contained: $SelfContained"
 
-# Fail before spending time on a publish that would only fail later at the copy step. No
-# placeholder is generated here on purpose — see the .DESCRIPTION above.
 $iconPath = Join-Path $root "icon.png"
 if (-not (Test-Path $iconPath)) {
-    throw (
-        "icon.png is missing at $iconPath. Ur Score has no icon yet: it is owed through the " +
-        "626labs-design skill and has not been made. This script will NOT fabricate a " +
-        "placeholder — RoRoRo's own build refuses placeholder logos, and a made-up icon that " +
-        "ships is worse than a build that stops here. Produce the real icon.png via the " +
-        "626labs-design skill, place it at the repo root ($root\icon.png), and re-run this script."
-    )
+    throw "icon.png is missing at $iconPath. Restore it (build/make-icon.py) rather than packaging a placeholder."
 }
 
 if (Test-Path $artifacts) {
@@ -57,16 +58,27 @@ New-Item $artifacts -ItemType Directory -Force | Out-Null
 Write-Host "[build-plugin] publishing..."
 dotnet publish "$root/Ur-Score.csproj" `
     -c $Configuration `
-    -r win-x64 `
-    --self-contained false `
+    -r $Runtime `
+    --self-contained $SelfContained `
     -p:PublishSingleFile=false `
+    -p:PublishReadyToRun=false `
+    -p:DebugType=none `
+    -p:DebugSymbols=false `
     -o $publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }
+
+# A bundled runtime must actually be in the folder, or the zip only works on PCs that already have .NET.
+if ($SelfContained -and -not (Test-Path (Join-Path $publish "hostfxr.dll"))) {
+    throw "Self-contained publish produced no hostfxr.dll in $publish; the runtime was not bundled."
+}
 
 # Drop the manifest + icon inside the zip so RoRoRo's installer finds them at the install root
 # after extraction.
 Copy-Item "$root/manifest.json" "$publish/manifest.json" -Force
 Copy-Item $iconPath "$publish/icon.png" -Force
+
+# Debug symbols aren't needed at runtime.
+Get-ChildItem -Path $publish -Filter "*.pdb" -Recurse | Remove-Item -Force
 
 Write-Host "[build-plugin] creating plugin.zip..."
 $zip = Join-Path $artifacts "plugin.zip"
