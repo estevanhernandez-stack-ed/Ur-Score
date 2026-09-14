@@ -1,63 +1,19 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Labs626.UrScore.Source;
 
 /// <summary>
-/// Finds a property on an object or inside one known wrapper, case-insensitively.
-/// <para>
-/// This exists because we do not actually know the shape. It was verified once, on 2026-09-09,
-/// and the vendor's own published example disagreed with what came back. So rather than hardcode
-/// a path and return nothing when it changes, every lookup checks the root and a short list of
-/// wrapper keys this API is known to use, and reports what it saw when it fails.
-/// </para>
+/// Case-insensitive property lookup and forgiving number reading, shared by the recipe reader and
+/// the username lookup. A casing change in a response must not read as a missing field.
 /// </summary>
 internal static class JsonNav
 {
-    /// <summary>Wrappers checked after the object itself. Ordered by how often this API uses them.</summary>
-    private static readonly string[] Wrappers = ["data", "result", "response"];
-
     /// <summary>Every property name on an object, in document order. Empty for a non-object.</summary>
     public static IReadOnlyList<string> Keys(JsonElement element) =>
         element.ValueKind == JsonValueKind.Object
             ? [.. element.EnumerateObject().Select(p => p.Name)]
             : [];
-
-    /// <summary>
-    /// The object a lookup should be performed against: the root, or its wrapper when the root is
-    /// only an envelope. Returns the root unchanged when no wrapper is present, so the caller's
-    /// error message names the keys a human would see at the top of the response.
-    /// <para>
-    /// A wrapper whose value is explicitly <c>null</c> (e.g. <c>"data": null</c>) is still the
-    /// unwrap target, not a reason to fall back to the root: that shape is this API's way of
-    /// saying "nothing here," and the caller needs to see a null body to tell that apart from a
-    /// response it failed to understand.
-    /// </para>
-    /// </summary>
-    public static JsonElement Unwrap(JsonElement root)
-    {
-        if (root.ValueKind != JsonValueKind.Object) return root;
-
-        // An object wrapper wins over a null one. Returning on the first wrapper that is EITHER
-        // would let a response carrying both `data: null` and a populated `result` report "no
-        // battle running" while the payload sat unread one key over.
-        foreach (var wrapper in Wrappers)
-        {
-            if (TryGet(root, wrapper, out var inner) && inner.ValueKind == JsonValueKind.Object)
-            {
-                return inner;
-            }
-        }
-
-        foreach (var wrapper in Wrappers)
-        {
-            if (TryGet(root, wrapper, out var inner) && inner.ValueKind == JsonValueKind.Null)
-            {
-                return inner;
-            }
-        }
-
-        return root;
-    }
 
     /// <summary>Case-insensitive single-level property lookup.</summary>
     public static bool TryGet(JsonElement element, string name, out JsonElement value)
@@ -92,7 +48,7 @@ internal static class JsonNav
             value = n;
         }
         else if (element.ValueKind == JsonValueKind.String
-                 && double.TryParse(element.GetString(), out var parsed))
+                 && double.TryParse(element.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
         {
             value = parsed;
         }

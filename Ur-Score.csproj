@@ -10,9 +10,12 @@
     <Version>0.1.0</Version>
     <Company>626 Labs LLC</Company>
     <Product>RoRoRo Ur Score</Product>
-    <Description>Watches clan battle scores for your own accounts and hands each number to RoRoRo.</Description>
+    <Description>Reads a number for your own accounts from wherever a recipe says, and hands it to RoRoRo.</Description>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
+    <!-- Made by build/make-icon.py from the same art as icon.png. WPF windows with no Icon of their
+         own use the EXE's, so this one line gives the title bar, taskbar and Alt+Tab the icon. -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

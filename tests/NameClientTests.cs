@@ -204,7 +204,7 @@ public class NameClientTests
     public async Task IdentifiesItselfInTheUserAgentOnTheActualRequest()
     {
         // Asserted against the header the handler RECEIVED, not against the constant. A version of
-        // this test that read ClanClient.UserAgent directly would pass with the header never set.
+        // this test that read UrScoreIdentity.UserAgent directly would pass with the header never set.
         var handler = new StubHandler(Echo);
         var client = new NameClient(new HttpClient(handler));
 

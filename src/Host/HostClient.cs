@@ -136,6 +136,39 @@ public sealed class HostClient(string pluginId) : IHostClient, IDisposable
         }
     }
 
+    /// <summary>
+    /// Hands <paramref name="onPalette"/> RoRoRo's current palette, then every palette RoRoRo applies
+    /// after it, until the stream ends or <paramref name="cancellationToken"/> fires. Both calls are
+    /// ungated, so following the theme needs no capability and changes nothing on the consent sheet.
+    /// <para>
+    /// The initial read matters as much as the stream: the stream only carries changes, and most
+    /// sessions never touch RoRoRo's theme picker. Throws when RoRoRo is not there; the caller retries.
+    /// Use a HostClient of its own for this, so a dropped theme stream can never reset the channel a
+    /// report is travelling on.
+    /// </para>
+    /// </summary>
+    public async Task FollowThemeAsync(Action<ThemePalette> onPalette, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = Connect();
+            onPalette(await client.GetThemeAsync(new Empty(), Options(cancellationToken)).ConfigureAwait(false));
+
+            // No deadline: this stream is meant to stay open for as long as the window does.
+            using var call = client.SubscribeThemeChanged(new SubscriptionRequest(),
+                new CallOptions(headers: _headers, cancellationToken: cancellationToken));
+            await foreach (var palette in call.ResponseStream.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
+                onPalette(palette);
+            }
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            Reset();
+            throw;
+        }
+    }
+
     private async Task HandshakeAsync(CancellationToken cancellationToken)
     {
         // The first call after the pipe connects, and worth being accurate about: the host does

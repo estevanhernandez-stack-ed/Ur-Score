@@ -16,4 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Ur-Score.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

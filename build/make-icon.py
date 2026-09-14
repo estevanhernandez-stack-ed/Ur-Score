@@ -121,8 +121,15 @@ def main() -> None:
     a = ap.parse_args()
 
     out = Path(__file__).resolve().parent.parent / 'icon.png'
-    draw_icon(threshold=not a.no_threshold).save(out)
+    icon = draw_icon(threshold=not a.no_threshold)
+    icon.save(out)
     print(f'wrote {out}')
+
+    # The same art as the EXE and window icon. Windows picks the nearest size for the title bar,
+    # taskbar and Alt+Tab, so every size it asks for is in the file rather than scaled at runtime.
+    ico = out.with_suffix('.ico')
+    icon.save(ico, sizes=[(16, 16), (20, 20), (24, 24), (32, 32), (40, 40), (48, 48), (64, 64), (256, 256)])
+    print(f'wrote {ico}')
     if a.preview:
         preview(a.preview)
         print(f'wrote {a.preview}')
