@@ -6,6 +6,7 @@
   "steps": [
     { "url": "https://ps99.biggamesapi.io/v1/players/{userId}?include=profile",
       "perAccount": true,
+      "asOf": { "time": "data.views.profile.fetchedAt", "stale": "data.views.profile.isStale" },
       "unavailable": { "path": "data.views.profile.available", "is": false,
                        "message": "Profile is private. Link this account on db.biggames.io and turn on its Profile view." },
       "values": [

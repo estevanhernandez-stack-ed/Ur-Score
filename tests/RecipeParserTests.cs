@@ -365,4 +365,109 @@ public class RecipeParserTests
         var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score", "absentMessage": true }]""";
         Assert.Contains("Step 1's 'absentMessage' must be text.", Problems(With(steps)));
     }
+
+    private const string TwoSteps = """
+        [ { "url": "https://example.com/active", "take": { "season": "data.name", "seasonEnds": "data.ends" } },
+          { "url": "https://example.com/rows/{season}", "rows": "data.rows", "userId": "id", "value": "score" } ]
+        """;
+
+    [Fact]
+    public void APeriodNamesTakesAndAPastPath()
+    {
+        var result = RecipeParser.Parse(With(TwoSteps, """, "period": { "value": "season", "ends": "seasonEnds", "past": "data.seasons" }"""));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        Assert.Equal(new RecipePeriod("season", null, "seasonEnds", "data.seasons"), result.Recipe!.Period);
+    }
+
+    [Theory]
+    [InlineData("""{ "ends": "seasonEnds" }""", "The period has no 'value'.")]
+    [InlineData("""{ "value": "nope" }""", "The period's value 'nope' is not something an earlier step takes.")]
+    [InlineData("""{ "value": "season", "starts": "nope" }""", "The period's starts 'nope' is not something an earlier step takes.")]
+    public void APeriodMustNameRealTakes(string period, string problem) =>
+        Assert.Contains(problem, Problems(With(TwoSteps, $$""", "period": {{period}}""")));
+
+    [Fact]
+    public void APastPathNeedsAListOfPlayers()
+    {
+        var perAccount = """
+            [ { "url": "https://example.com/active", "take": { "season": "data.name" } },
+              { "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count" } ]
+            """;
+
+        Assert.Contains("A period's 'past' needs a last step with rows and userId.",
+            Problems(With(perAccount, """, "period": { "value": "season", "past": "data.seasons" }""")));
+    }
+
+    [Fact]
+    public void AsOfIsReadOnlyOnTheLastStep()
+    {
+        var result = RecipeParser.Parse(With(
+            """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "asOf": { "time": "data.fetchedAt", "stale": "data.isStale" } }]"""));
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        Assert.Equal(new RecipeAsOf("data.fetchedAt", "data.isStale"), result.Recipe!.LastStep.AsOf);
+
+        var early = """
+            [ { "url": "https://example.com/active", "take": { "season": "data.name" }, "asOf": { "time": "data.t" } },
+              { "url": "https://example.com/rows/{season}", "rows": "data.rows", "userId": "id", "value": "score" } ]
+            """;
+        Assert.Contains("Step 1 has 'asOf', but only the last step can.", Problems(With(early)));
+    }
+
+    [Fact]
+    public void HeadlineIdsDefaultToTheLabelsSlugAndMustBeUnique()
+    {
+        var ok = RecipeParser.Parse(With(OneListStep,
+            """, "headline": [ { "label": "Clan place", "path": "data.place" }, { "id": "total", "label": "Clan points", "path": "data.points" } ]"""));
+        Assert.True(ok.Ok, string.Join(" | ", ok.Problems));
+        Assert.Equal(new[] { "clan-place", "total" }, ok.Recipe!.Headline.Select(h => h.Id).ToArray());
+
+        Assert.Contains("The headline id 'same' is used more than once.", Problems(With(OneListStep,
+            """, "headline": [ { "id": "same", "label": "A", "path": "data.a" }, { "id": "same", "label": "B", "path": "data.b" } ]""")));
+    }
+
+    [Fact]
+    public void AGroupListReadsGroupsAndNeedsNoMetricId()
+    {
+        var result = RecipeParser.Parse(Fixture("petsim99-top-clans.recipe.json"));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        Assert.True(result.Recipe!.IsGroupList);
+        Assert.Equal("name", result.Recipe.LastStep.GroupName);
+        Assert.Equal("rank", result.Recipe.LastStep.Rank);
+        Assert.Null(result.Recipe.LastStep.UserId);
+    }
+
+    [Fact]
+    public void AGroupListCannotAlsoReadPlayers()
+    {
+        Assert.Contains("Step 1 has both 'userId' and 'groupName'. A row is a player or a group, not both.",
+            Problems(With("""[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "groupName": "name", "value": "score" }]""")));
+
+        Assert.Contains("Step 1 has 'rank', which only a groupName step can use.",
+            Problems(With("""[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "rank": "rank", "value": "score" }]""")));
+    }
+
+    [Theory]
+    [InlineData("""[{ "url": "https://example.com/rows", "rows": "data.1234567", "userId": "id", "value": "score" }]""", "", "Step 1: 'data.1234567' names a number.")]
+    [InlineData("""[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "stats.99" }]""", "", "Step 1: 'stats.99' names a number.")]
+    [InlineData("""[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score" }]""", """, "headline": [ { "label": "Owner", "path": "data.members.42.name" } ]""", "Headline 1: 'data.members.42.name' names a number.")]
+    [InlineData("""[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score" }]""", """, "icon": "data.7.icon" """, "The icon path: 'data.7.icon' names a number.")]
+    public void RecipesCannotPointAtAParticularPlayer(string steps, string extra, string start)
+    {
+        var problems = Problems(With(steps, extra));
+        Assert.Contains(problems, p => p.StartsWith(start, StringComparison.Ordinal)
+            && p.EndsWith("Recipes can't point at a particular player; use a placeholder instead.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheWorkedRecipesCarryTheirNewFields()
+    {
+        var clan = RecipeParser.Parse(Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+        Assert.Equal("Clans", clan.Inputs[0].PluralLabel);
+        Assert.Equal(new[] { "clan-place", "clan-points" }, clan.Headline.Select(h => h.Id).ToArray());
+
+        var profile = RecipeParser.Parse(Fixture("petsim99-profile.recipe.json")).Recipe!;
+        Assert.Equal(new RecipeAsOf("data.views.profile.fetchedAt", "data.views.profile.isStale"), profile.LastStep.AsOf);
+    }
 }
