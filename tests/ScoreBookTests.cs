@@ -175,4 +175,61 @@ public class ScoreBookTests
 
         Assert.Single(BookFiles.ReadAll(dir.Path, Slug));
     }
+
+    [Fact]
+    public void AThrowingWrittenSubscriberDoesNotStopTheNextLineFromBeingWritten()
+    {
+        using var dir = TempDir.Create("urscore-book");
+        using var book = new ScoreBook(dir.Path, background: false);
+        book.Written += _ => throw new InvalidOperationException("boom");
+
+        book.Append(Line(T), "recipe text");
+        book.Append(Line(T.AddMinutes(3)), "recipe text");
+
+        Assert.Equal(2, BookFiles.ReadAll(dir.Path, Slug).Count());
+    }
+
+    [Fact]
+    public void ALineWithANonFiniteHeadlineValueIsDroppedAndTheNextLineIsStillWritten()
+    {
+        using var dir = TempDir.Create("urscore-book");
+        using var book = new ScoreBook(dir.Path, background: false);
+
+        var broken = Line(T) with { Headline = new Dictionary<string, double> { ["clan-points"] = double.NaN } };
+        book.Append(broken, "recipe text");
+        Assert.Equal(1, book.Dropped);
+        Assert.Equal(0, book.Pending);
+
+        book.Append(Line(T.AddMinutes(3)), "recipe text");
+
+        Assert.Single(BookFiles.ReadAll(dir.Path, Slug));
+    }
+
+    [Fact]
+    public void ALineWithANullTimeIsSkippedAndReadAllKeepsTheLinesAroundIt()
+    {
+        var broken = BookJson.Serialize(Line(T)).Replace("\"t\":\"2026-09-19T18:03:00.412Z\"", "\"t\":null");
+        Assert.Null(BookJson.TryParse(broken));
+
+        using var dir = TempDir.Create("urscore-book");
+        var file = BookFiles.MonthFile(dir.Path, Slug, T);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(
+            file,
+            BookJson.Serialize(Line(T.AddMinutes(-3))) + "\n" + broken + "\n" + BookJson.Serialize(Line(T.AddMinutes(3))) + "\n",
+            new UTF8Encoding(false));
+
+        Assert.Equal(new[] { T.AddMinutes(-3), T.AddMinutes(3) }, BookFiles.ReadAll(dir.Path, Slug).Select(l => l.T).ToArray());
+    }
+
+    [Fact]
+    public void DisposingTwiceDoesNotThrow()
+    {
+        using var dir = TempDir.Create("urscore-book");
+        var book = new ScoreBook(dir.Path, background: false);
+        book.Append(Line(T), "recipe text");
+
+        book.Dispose();
+        book.Dispose();
+    }
 }

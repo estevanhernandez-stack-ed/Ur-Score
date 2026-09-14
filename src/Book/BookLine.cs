@@ -80,8 +80,13 @@ public static class BookJson
     /// <summary>Always UTC with a Z and milliseconds, so lines sort and compare as text.</summary>
     private sealed class UtcTimeConverter : JsonConverter<DateTimeOffset>
     {
-        public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-            DateTimeOffset.Parse(reader.GetString()!, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+        /// <summary>A null token (a hand-edited or corrupted line) is a format problem, not a framework crash: throwing
+        /// <see cref="JsonException"/> here lets <see cref="BookJson.TryParse"/> skip the line like any other bad one.</summary>
+        public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Null) throw new JsonException("expected a date-time, not null");
+            return DateTimeOffset.Parse(reader.GetString()!, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+        }
 
         public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options) =>
             writer.WriteStringValue(value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture));

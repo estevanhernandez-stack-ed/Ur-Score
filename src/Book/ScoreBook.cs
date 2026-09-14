@@ -39,7 +39,10 @@ public sealed class ScoreBook : IScoreBook, IDisposable
     private readonly AutoResetEvent _signal = new(false);
     private readonly Thread? _thread;
     private volatile bool _stopping;
+    private volatile bool _hasFailed;
+    private long _lastFailureTicks;
     private int _dropped;
+    private int _disposed;
 
     public ScoreBook(string root, bool background = true)
     {
@@ -83,13 +86,19 @@ public sealed class ScoreBook : IScoreBook, IDisposable
         }
 
         if (_background) _signal.Set();
-        else Drain();
+        // Synchronous mode drains on every append, except right after a failed write: a locked file or a
+        // denied handle doesn't clear up between one append and the next, so retrying on every single call
+        // (each a real, and expensive, failed I/O attempt) only burns time until RetryDelay has passed.
+        // Flush() below is the escape hatch that ignores this backoff.
+        else if (!_hasFailed || Environment.TickCount64 - _lastFailureTicks >= RetryDelay.TotalMilliseconds) Drain();
     }
 
     public void Flush() => Drain();
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return; // a second Dispose is a no-op
+
         _stopping = true;
         _signal.Set();
         _thread?.Join(TimeSpan.FromSeconds(5));
@@ -102,7 +111,16 @@ public sealed class ScoreBook : IScoreBook, IDisposable
         while (!_stopping)
         {
             _signal.WaitOne(RetryDelay);
-            Drain();
+            try
+            {
+                Drain();
+            }
+            catch (Exception)
+            {
+                // The writer thread must never die from this loop; whatever happened, the next signal or
+                // timeout tries again. Drain() itself already contains every failure it knows how to handle;
+                // this is the last-resort backstop for one it doesn't.
+            }
         }
     }
 
@@ -119,10 +137,27 @@ public sealed class ScoreBook : IScoreBook, IDisposable
                 try
                 {
                     Write(node.Value.Line, node.Value.RecipeText);
+                    _hasFailed = false;
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    _lastFailureTicks = Environment.TickCount64;
+                    _hasFailed = true;
                     return; // stays pending; the next append, flush or retry tries again
+                }
+                catch (Exception)
+                {
+                    // Not a locked file or a denied handle: this line can never be written (for example a
+                    // non-finite headline value JSON can't serialize). It can't sit in the queue forever
+                    // either, so it's dropped like an overflowed reading, and the rest of the queue still
+                    // gets a turn.
+                    lock (_gate)
+                    {
+                        if (node.List is not null) _pending.Remove(node);
+                    }
+
+                    Interlocked.Increment(ref _dropped);
+                    continue;
                 }
 
                 lock (_gate)
@@ -130,7 +165,14 @@ public sealed class ScoreBook : IScoreBook, IDisposable
                     if (node.List is not null) _pending.Remove(node);
                 }
 
-                Written?.Invoke(node.Value.Line);
+                try
+                {
+                    Written?.Invoke(node.Value.Line);
+                }
+                catch (Exception)
+                {
+                    // A throwing subscriber must not stop the writer: the line already reached disk.
+                }
             }
         }
     }
