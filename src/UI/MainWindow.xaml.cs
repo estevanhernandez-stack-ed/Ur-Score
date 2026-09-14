@@ -473,6 +473,11 @@ public partial class MainWindow : Window
                 if (!budget.Allowed && toggled is { Send: true })
                 {
                     toggled.Send = false;
+
+                    // A seed that ran while the tick stood may have handed the watch a policy with this
+                    // account allowed; the undo must reach the watch too, not only the checkbox.
+                    _watch?.UpdatePolicy(SentStats(), CurrentAllowedSubjects());
+                    RenderPolicy();
                     DetailLine.Text = budget.Line;
                     return;
                 }
