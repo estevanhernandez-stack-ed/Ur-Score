@@ -220,6 +220,18 @@ public partial class MainWindow : Window
 
     private IReadOnlyList<string> Dashes() => [.. Enumerable.Repeat(StatText.Dash, _shownStats.Count)];
 
+    /// <summary>
+    /// Place, cells, rate and note, back to dash or empty together. Three call sites once reset these
+    /// one field at a time and drifted apart, leaving a rate or a note stale beside dashed cells.
+    /// </summary>
+    private void ClearDashboard(Row row)
+    {
+        row.Position = StatText.Dash;
+        row.Cells = Dashes();
+        row.RatePerMinute = StatText.Dash;
+        row.Note = "";
+    }
+
     private string Stamp(string text) => $"{DateTimeOffset.UtcNow:O} {_redactor.Redact(text)}";
 
     /// <summary>The recipe named in settings, else the first installed.</summary>
@@ -340,7 +352,7 @@ public partial class MainWindow : Window
         _leaderboardRows.Clear();
         foreach (var row in _rows)
         {
-            row.Cells = Dashes();
+            ClearDashboard(row);
         }
     }
 
@@ -703,9 +715,7 @@ public partial class MainWindow : Window
 
             if (row.RobloxUserId == 0 || !byUserId.TryGetValue(row.RobloxUserId, out var r))
             {
-                row.Position = StatText.Dash;
-                row.Cells = Dashes();
-                row.RatePerMinute = StatText.Dash;
+                ClearDashboard(row);
                 row.Note = StatText.Note(unavailable, []);
                 continue;
             }
@@ -1137,10 +1147,7 @@ public partial class MainWindow : Window
             ResetIcon();
             foreach (var row in _rows)
             {
-                row.Position = StatText.Dash;
-                row.Cells = Dashes();
-                row.RatePerMinute = StatText.Dash;
-                row.Note = "";
+                ClearDashboard(row);
             }
         }
 
