@@ -27,8 +27,10 @@ public sealed class AccountPickEventArgs(RoutedEvent routedEvent, long userId) :
 /// <summary>
 /// Your accounts side by side (D14). It decides nothing: a heading click and a row pick are raised for the board, which
 /// keeps them for the session and draws the table again from <see cref="PanelModels.AccountsTable"/>, after the grid's
-/// own handler has returned. A redraw replaces every row, so keyboard focus that was in the table goes back to the same
-/// row and column once the new rows are laid out, and the arrow keys carry on from there.
+/// own handler has returned. A redraw replaces every row; when it answers the table's own sort or pick, keyboard focus
+/// that was in the table goes back to the same row and column once the new rows are laid out, so the arrow keys carry on
+/// from there. A data refresh keeps the selection and the sort and leaves focus and scrolling alone
+/// (<see cref="AccountsTableFocus"/>).
 /// </summary>
 public partial class AccountsTablePanel : UserControl
 {
@@ -43,12 +45,19 @@ public partial class AccountsTablePanel : UserControl
     /// <summary>Set while a model is drawn, so selecting its picked row isn't taken for a new pick.</summary>
     private bool _rendering;
 
+    /// <summary>
+    /// Set as the table raises a sort or a pick, until the dispatcher is idle again: after the board's queued redraw
+    /// (Background), which is the redraw that answers it, and after any input already waiting. A pick the board already
+    /// had queues no redraw, and the flag lapses with nothing restored.
+    /// </summary>
+    private bool _answering;
+
     public AccountsTablePanel() => InitializeComponent();
 
     public void Render(AccountsTableModel model)
     {
         // Read before the rows go: the cell with focus is torn down with them.
-        FocusPlace? focus = AccountsGrid.IsKeyboardFocusWithin ? CurrentPlace() : null;
+        FocusPlace? focus = AccountsTableFocus.RestoresFocus(_answering, AccountsGrid.IsKeyboardFocusWithin) ? CurrentPlace() : null;
         var onTotal = AccountsGrid.SelectedItem is TableRow { IsTotal: true };
 
         _rendering = true;
@@ -68,8 +77,7 @@ public partial class AccountsTablePanel : UserControl
                     : null;
             }
 
-            // The picked account, unless the keyboard is on the totals row, which picks nothing and stays selected.
-            AccountsGrid.SelectedItem = model.Rows.FirstOrDefault(r => onTotal ? r.IsTotal : r.Picked);
+            AccountsGrid.SelectedItem = AccountsTableFocus.SelectedRow(model, onTotal);
         }
         finally
         {
@@ -118,6 +126,7 @@ public partial class AccountsTablePanel : UserControl
         e.Handled = true;
         if (int.TryParse(e.Column.SortMemberPath, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && index < _columns.Count)
         {
+            Answering();
             RaiseEvent(new AccountSortEventArgs(SortEvent, _columns[index]));
         }
     }
@@ -128,7 +137,17 @@ public partial class AccountsTablePanel : UserControl
         e.Handled = true;
         if (_rendering || AccountsGrid.SelectedItem is not TableRow { IsTotal: false } row) return;
 
+        Answering();
         RaiseEvent(new AccountPickEventArgs(PickEvent, row.UserId));
+    }
+
+    /// <summary>The redraws until the dispatcher is idle answer this sort or pick (<see cref="_answering"/>).</summary>
+    private void Answering()
+    {
+        if (_answering) return;
+
+        _answering = true;
+        Dispatcher.BeginInvoke(() => { _answering = false; }, DispatcherPriority.ContextIdle);
     }
 
     /// <summary>The table grows to all its rows and never scrolls up or down itself, so the wheel scrolls the board.</summary>
@@ -140,30 +159,27 @@ public partial class AccountsTablePanel : UserControl
         RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta) { RoutedEvent = MouseWheelEvent, Source = this });
     }
 
-    /// <summary>Where keyboard focus is in the table: the row, by account (the totals row by itself), and the column's position.</summary>
-    private readonly record struct FocusPlace(long UserId, bool IsTotal, int Column);
+    /// <summary>Where keyboard focus is in the table: the row, by account (the totals row by itself), and the column, by what it holds and where it was.</summary>
+    private readonly record struct FocusPlace(long UserId, bool IsTotal, AccountColumn? Column, int ColumnIndex);
 
     private FocusPlace CurrentPlace()
     {
         var cell = AccountsGrid.CurrentCell;
         var row = cell.Item as TableRow ?? AccountsGrid.SelectedItem as TableRow;
-        var column = cell.Column is { } current ? AccountsGrid.Columns.IndexOf(current) : 0;
-        return new FocusPlace(row?.UserId ?? 0, row?.IsTotal ?? false, Math.Max(column, 0));
+        var index = cell.Column is { } current ? AccountsGrid.Columns.IndexOf(current) : 0;
+        var column = index >= 0 && index < _columns.Count ? _columns[index] : null;
+        return new FocusPlace(row?.UserId ?? 0, row?.IsTotal ?? false, column, Math.Max(index, 0));
     }
 
-    /// <summary>
-    /// After a redraw has laid the new rows out: focus on the same account's row (else the picked one, else the first)
-    /// in the same column, as far as the table still has it.
-    /// </summary>
+    /// <summary>After a redraw has laid the new rows out: focus on the row and column <see cref="AccountsTableFocus"/> names.</summary>
     private void RestoreFocus(FocusPlace place)
     {
-        if (!IsVisible || DataContext is not AccountsTableModel model || model.Rows.Count == 0 || AccountsGrid.Columns.Count == 0) return;
+        if (!IsVisible || DataContext is not AccountsTableModel model || AccountsTableFocus.FocusRow(model, place.UserId, place.IsTotal) is not { } row) return;
 
-        var row = model.Rows.FirstOrDefault(r => r.IsTotal == place.IsTotal && (place.IsTotal || r.UserId == place.UserId))
-            ?? model.Rows.FirstOrDefault(r => r.Picked)
-            ?? model.Rows[0];
-        var column = AccountsGrid.Columns[Math.Min(place.Column, AccountsGrid.Columns.Count - 1)];
+        var at = AccountsTableFocus.FocusColumn(_columns, place.Column, place.ColumnIndex);
+        if (at < 0 || at >= AccountsGrid.Columns.Count) return;
 
+        var column = AccountsGrid.Columns[at];
         AccountsGrid.CurrentCell = new DataGridCellInfo(row, column);
         AccountsGrid.ScrollIntoView(row, column);
         AccountsGrid.UpdateLayout();
