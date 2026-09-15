@@ -1,13 +1,15 @@
-# The starter board on a clean data folder: a main clan, a clan your accounts are in, a watched clan and (when
-# the fixture exists) the top list, then every Battle panel with its title, Start, Test now and Stop.
+# The starter board on a clean data folder: a main clan, a clan your accounts are in, a watched clan, (when
+# the fixture exists) the top list and the profile recipe with its suggestions, then every Battle panel with its
+# title and no account card or table on it, Start, Test now and Stop.
 param(
     [string]$Main = 'CCGP',
     [string]$Alt = 'K0i2'
 )
 
-. (Join-Path $PSScriptRoot 'uia-import.ps1')
+. (Join-Path $PSScriptRoot 'uia-board.ps1')
 $ErrorActionPreference = 'Stop'
 $clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
+$profileFixture = Join-Path $UrFixtures 'petsim99-profile.recipe.json'
 $topFixture = Get-ChildItem $UrFixtures -Filter *.recipe.json | Where-Object { (Get-Content $_.FullName -Raw) -match '"groupName"' } | Select-Object -First 1
 $rororo = [bool](Get-Process -Name 'ROROROblox.App' -ErrorAction SilentlyContinue)
 $backup = $null
@@ -36,6 +38,11 @@ try {
         Start-Sleep -Seconds 2
     }
 
+    Start-Import $profileFixture
+    $screen = Wait-UrWindow '^Import recipe$' 30
+    Invoke-Element (Find-ByAutomationId $screen 'ImportButton')
+    Start-Sleep -Seconds 2
+
     Close-UrWindow (Get-SetupWindow)
     $board = Get-BoardWindow
 
@@ -43,26 +50,26 @@ try {
         'StandingPanel1'       = 'Clan standing'
         'StandingPanel2'       = 'Clan standing'
         'RacePanel1'           = 'Battle race'
-        'MyAccountsPanel1'     = 'My accounts'
         'PromotionCheckPanel1' = 'Promotion check'
-        'AccountCardPanel1'    = 'Account card'
+        'MyAccountsPanel1'     = 'My accounts'
         'PastPeriodsPanel1'    = 'Past battles'
+        'RecordsPanel1'        = 'Records'
     }
     if ($topFixture) { $expected['TopPanel1'] = 'Top of the battle' }
 
-    # PastPeriods is the last panel StarterBoards adds, so waiting for its bound title is a proxy for the
+    # Records is the last panel the Battle starter adds, so waiting for its bound title is a proxy for the
     # whole board having finished rendering -- reading a panel's text right after it merely appears in the
     # tree can race its data binding.
     Wait-Until {
-        $past = Find-ByAutomationId (Get-BoardWindow) 'PastPeriodsPanel1'
-        $past -and (Line $past 'PanelTitle') -eq 'Past battles'
+        $records = Find-ByAutomationId (Get-BoardWindow) 'RecordsPanel1'
+        $records -and (Line $records 'PanelTitle') -eq 'Records'
     } 20 | Out-Null
     $board = Get-BoardWindow
     foreach ($id in $expected.Keys) {
         $panel = Find-ByAutomationId $board $id
         Check "1 $id is on the board" ($panel -and (Line $panel 'PanelTitle') -eq $expected[$id]) "title='$(Line $panel 'PanelTitle')'"
     }
-    Check '1b The board has no Grind panels' (-not (Find-ByAutomationId $board 'ProfileStatPanel1')) 'ProfileStatPanel1 absent'
+    Check '1d Battle has no account card or table' (-not (Find-ByAutomationId $board 'AccountCardPanel1') -and -not (Find-ByAutomationId $board 'AccountsTablePanel1')) (@(Get-PanelIds $board) -join ',')
     Check '1c The promotion check names both clans' ((Line (Find-ByAutomationId $board 'PromotionCheckPanel1') 'PanelSubtitle') -match "^$Alt .+ $Main$") (Line (Find-ByAutomationId $board 'PromotionCheckPanel1') 'PanelSubtitle')
 
     Invoke-Element (Find-ByAutomationId $board 'StartStopButton')

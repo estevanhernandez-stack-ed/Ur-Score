@@ -14,41 +14,60 @@ public enum BoardEmpty { None, NoRecipes, NoStats, NoSources, NoPanels }
 public sealed record StarterBoard(string Name, BoardEmpty Empty, IReadOnlyList<PanelSpec> Panels, string? RecipeSlug);
 
 /// <summary>
-/// Stage 1's one fixed board (spec §8): Battle when a recipe with a period has ticked stats, else Grind. Pure,
-/// so which panels appear for which sources is testable.
+/// The default tabs (default views design): Battle, the tab you watch on battle day, and Alts, your accounts side by
+/// side. Each is built from your recipes and sources as they are now, in rows that fill the 12 columns and close up
+/// when a panel can't be built (D6). Pure, so which panels appear for which sources is testable.
 /// </summary>
 public static class StarterBoards
 {
     public const string Battle = "Battle";
-    public const string Grind = "Grind";
+    public const string Alts = "Alts";
+
+    /// <summary>Every starter, in tab order.</summary>
+    public static IReadOnlyList<string> Names { get; } = [Battle, Alts];
+
+    /// <summary>A starter's name in ids and in <c>boards.json</c>'s <c>follows</c>: "battle", "alts".</summary>
+    public static string KeyOf(string name) => name.ToLowerInvariant();
+
+    /// <summary>Every starter as your sources build it now, in tab order. Any of them may be an empty state.</summary>
+    public static IReadOnlyList<StarterBoard> All(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources) =>
+        [.. Names.Select(name => Build(installed, sources, name))];
+
+    /// <summary>The starter a key names ("alts", in any letter case), or null.</summary>
+    public static StarterBoard? Named(IReadOnlyList<StarterBoard> starters, string? key) =>
+        key is null ? null : starters.FirstOrDefault(s => string.Equals(KeyOf(s.Name), key.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Stage 1's board, or a named starter for + Board (spec §9.2). With no name, Battle when a recipe with a
-    /// period has ticked stats, else Grind. A named starter that can't be built has no panels.
+    /// The empty state shown when no starter has a panel (D4): import a recipe first, then choose the source a starter
+    /// needs, else the first starter's own.
     /// </summary>
-    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string? name = null)
+    public static StarterBoard EmptyState(IReadOnlyList<StarterBoard> starters) =>
+        starters.FirstOrDefault(s => s.Empty == BoardEmpty.NoRecipes)
+        ?? starters.FirstOrDefault(s => s.Empty == BoardEmpty.NoSources)
+        ?? starters[0];
+
+    /// <summary>
+    /// One starter: Battle from a recipe with a period, Alts from one without (your accounts one by one first). A
+    /// starter whose kind of recipe has no ticked stat is empty. Any name but Alts builds Battle.
+    /// </summary>
+    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string name = Battle)
     {
-        if (installed.Count == 0) return new StarterBoard(name ?? Battle, BoardEmpty.NoRecipes, [], null);
+        var alts = string.Equals(name, Alts, StringComparison.Ordinal);
+        var named = alts ? Alts : Battle;
+        if (installed.Count == 0) return new StarterBoard(named, BoardEmpty.NoRecipes, [], null);
 
         var ticked = installed.Where(i => !i.Recipe.IsGroupList && i.State.TrackedStats(i.Recipe).Count > 0).ToList();
         if (ticked.Count == 0)
         {
             var first = installed.FirstOrDefault(i => !i.Recipe.IsGroupList) ?? installed[0];
-            return new StarterBoard(name ?? Battle, BoardEmpty.NoStats, [], first.Recipe.Slug);
+            return new StarterBoard(named, BoardEmpty.NoStats, [], first.Recipe.Slug);
         }
 
         var enabled = sources.Where(s => s.Enabled).ToList();
-        var withPeriod = ticked.Where(i => i.Recipe.Period is not null).ToList();
-        var withoutPeriod = ticked.Where(i => i.Recipe.Period is null).ToList();
+        var kind = ticked.Where(i => (i.Recipe.Period is null) == alts).ToList();
+        if (kind.Count == 0) return new StarterBoard(named, BoardEmpty.NoStats, [], ticked[0].Recipe.Slug);
 
-        return name switch
-        {
-            Battle when withPeriod.Count == 0 => new StarterBoard(Battle, BoardEmpty.NoStats, [], ticked[0].Recipe.Slug),
-            Battle => BattleBoard(installed, withPeriod, enabled),
-            Grind when withoutPeriod.Count == 0 => new StarterBoard(Grind, BoardEmpty.NoStats, [], ticked[0].Recipe.Slug),
-            Grind => GrindBoard(withoutPeriod, enabled),
-            _ => withPeriod.Count > 0 ? BattleBoard(installed, withPeriod, enabled) : GrindBoard(ticked, enabled),
-        };
+        return alts ? AltsBoard(kind, enabled) : BattleBoard(installed, kind, enabled);
     }
 
     /// <summary>The first shown stat in recipe order, else the first sent one.</summary>
@@ -79,59 +98,70 @@ public static class StarterBoards
 
         var stat = FirstStat(recipe);
         var otherMine = mine.FirstOrDefault(s => s.Id != anchor?.Id);
-        var panels = new List<PanelSpec>();
-
-        // 1–2. Standing for the main (or leading) source and the first other clan your accounts are in.
-        if (anchor is not null) panels.Add(new PanelSpec(PanelType.Standing, 3, new PanelSettings(slug, SourceId: anchor.Id)));
-        if (otherMine is not null) panels.Add(new PanelSpec(PanelType.Standing, 3, new PanelSettings(slug, SourceId: otherMine.Id)));
-
-        // 3. The race: main, mine and watch sources, up to five, when there are two to race.
+        var top = enabled.FirstOrDefault(s => installed.Any(i => Of(s, i) && i.Recipe.IsGroupList));
         var race = new[] { main }.OfType<Source>().Concat(mine).Concat(watch)
             .DistinctBy(s => s.Id).Take(PanelModels.MaxRace).Select(s => s.Id).ToList();
-        if (race.Count >= 2) panels.Add(new PanelSpec(PanelType.Race, 6, new PanelSettings(slug, SourceIds: race)));
 
-        // 4. My accounts by the first shown stat.
-        if (stat is not null) panels.Add(new PanelSpec(PanelType.MyAccounts, 5, new PanelSettings(slug, Stat: stat)));
+        var panels = new List<PanelSpec>();
 
-        // 5. Promotion check: the first other clan -> main, when both exist.
-        if (main is not null && otherMine is not null && stat is not null)
-        {
-            panels.Add(new PanelSpec(PanelType.PromotionCheck, 4, new PanelSettings(slug, SourceId: otherMine.Id, ToSourceId: main.Id, Stat: stat)));
-        }
+        // 1. Your main clan's standing, a clan your accounts are in, and the top of the battle.
+        panels.AddRange(Row(
+            (PanelType.Standing, 4, anchor is null ? null : new PanelSettings(slug, SourceId: anchor.Id)),
+            (PanelType.Standing, 4, otherMine is null ? null : new PanelSettings(slug, SourceId: otherMine.Id)),
+            (PanelType.Top, 4, top is null ? null : new PanelSettings(top.Recipe, SourceId: top.Id))));
 
-        // 6. Account card for the top account.
-        if (stat is not null) panels.Add(new PanelSpec(PanelType.AccountCard, 3, new PanelSettings(slug, Stat: stat)));
+        // 2. The race, wide, and the promotion check from that clan to the main.
+        panels.AddRange(Row(
+            (PanelType.Race, 8, race.Count >= 2 ? new PanelSettings(slug, SourceIds: race) : null),
+            (PanelType.PromotionCheck, 4, main is not null && otherMine is not null && stat is not null
+                ? new PanelSettings(slug, SourceId: otherMine.Id, ToSourceId: main.Id, Stat: stat)
+                : null)));
 
-        // 7. Top of the period, when its group-list source is on.
-        var top = enabled.FirstOrDefault(s => installed.Any(i => Of(s, i) && i.Recipe.IsGroupList));
-        if (top is not null) panels.Add(new PanelSpec(PanelType.Top, 4, new PanelSettings(top.Recipe, SourceId: top.Id)));
+        // 3. My accounts, full width.
+        panels.AddRange(Row((PanelType.MyAccounts, 12, stat is null ? null : new PanelSettings(slug, Stat: stat))));
 
-        // 8. Past periods for the main source, when the recipe reads them.
-        if (anchor is not null && recipe.Recipe.Period?.Past is not null)
-        {
-            panels.Add(new PanelSpec(PanelType.PastPeriods, 4, new PanelSettings(slug, SourceId: anchor.Id, Stat: stat)));
-        }
+        // 4. Past battles of the main clan, and records.
+        panels.AddRange(Row(
+            (PanelType.PastPeriods, 7, anchor is not null && recipe.Recipe.Period?.Past is not null ? new PanelSettings(slug, SourceId: anchor.Id, Stat: stat) : null),
+            (PanelType.Records, 5, stat is null ? null : new PanelSettings(slug, Stat: stat))));
 
         return new StarterBoard(Battle, BoardEmpty.None, panels, slug);
     }
 
-    private static StarterBoard GrindBoard(IReadOnlyList<InstalledRecipe> ticked, IReadOnlyList<Source> enabled)
+    private static StarterBoard AltsBoard(IReadOnlyList<InstalledRecipe> withoutPeriod, IReadOnlyList<Source> enabled)
     {
-        var recipe = ticked.FirstOrDefault(r => enabled.Any(s => string.Equals(s.Recipe, r.Recipe.Slug, StringComparison.Ordinal))) ?? ticked[0];
+        bool Of(Source s, InstalledRecipe r) => string.Equals(s.Recipe, r.Recipe.Slug, StringComparison.Ordinal);
+
+        // A recipe that reads your accounts one by one first, then any other without a period; one with a source on first.
+        var ordered = withoutPeriod.OrderBy(r => r.Recipe.LastStep.PerAccount ? 0 : 1).ToList();
+        var recipe = ordered.FirstOrDefault(r => enabled.Any(s => Of(s, r))) ?? ordered[0];
         var slug = recipe.Recipe.Slug;
-        var source = enabled.FirstOrDefault(s => string.Equals(s.Recipe, slug, StringComparison.Ordinal));
+        var source = enabled.FirstOrDefault(s => Of(s, recipe));
 
-        if (source is null && recipe.Recipe.Inputs.Count > 0) return new StarterBoard(Grind, BoardEmpty.NoSources, [], slug);
+        if (source is null && recipe.Recipe.Inputs.Count > 0) return new StarterBoard(Alts, BoardEmpty.NoSources, [], slug);
 
-        var stats = recipe.State.ShownStats(recipe.Recipe).Select(s => s.Key).Take(2).ToList();
-        if (stats.Count == 0 && FirstStat(recipe) is { } only) stats.Add(only);
+        var stat = FirstStat(recipe);
+        var panels = new List<PanelSpec>();
 
-        var panels = stats
-            .Select(stat => new PanelSpec(PanelType.ProfileStat, 6, new PanelSettings(slug, SourceId: source?.Id, Stat: stat)))
-            .ToList();
-        panels.Add(new PanelSpec(PanelType.Records, 3, new PanelSettings(slug, Stat: stats[0])));
-        panels.Add(new PanelSpec(PanelType.AccountCard, 3, new PanelSettings(slug, Stat: stats[0])));
+        // 1. The accounts table, full width.
+        panels.AddRange(Row((PanelType.AccountsTable, 12, new PanelSettings(slug, SourceId: source?.Id))));
 
-        return new StarterBoard(Grind, BoardEmpty.None, panels, slug);
+        // 2. Records and the account card, which shows the account picked in the table.
+        panels.AddRange(Row(
+            (PanelType.Records, 5, stat is null ? null : new PanelSettings(slug, Stat: stat)),
+            (PanelType.AccountCard, 7, stat is null ? null : new PanelSettings(slug, Stat: stat))));
+
+        return new StarterBoard(Alts, BoardEmpty.None, panels, slug);
+    }
+
+    /// <summary>
+    /// One row (D6): the panels that could be built keep the row's spans when all of them could, else share the
+    /// 12 columns equally, so a missing panel never leaves a hole.
+    /// </summary>
+    private static IEnumerable<PanelSpec> Row(params (PanelType Type, int Span, PanelSettings? Settings)[] slots)
+    {
+        var present = slots.Where(s => s.Settings is not null).ToList();
+        var share = BoardLayout.Columns / Math.Max(1, present.Count);
+        return present.Select(s => new PanelSpec(s.Type, present.Count == slots.Length ? s.Span : share, s.Settings!));
     }
 }

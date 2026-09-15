@@ -60,6 +60,16 @@ public class BoardLayoutTests
         Assert.Equal(new[] { 200.0, 150.0 }, BoardLayout.RowHeights(placed, [100, 200, 150], 12).ToArray());
     }
 
+    [Fact]
+    public void APanelIsArrangedAsTallAsItsRowsAndTheGapsBetweenThem()
+    {
+        IReadOnlyList<double> rows = [120, 80];
+
+        Assert.Equal(120, BoardLayout.CellHeight(new PanelPlacement(0, 0, 0, 6), rows, 12));
+        Assert.Equal(80, BoardLayout.CellHeight(new PanelPlacement(1, 1, 0, 12), rows, 12));
+        Assert.Equal(212, BoardLayout.CellHeight(new PanelPlacement(2, 0, 6, 6, Rows: 2), rows, 12));
+    }
+
     private static readonly CellRect[] Cells =
     [
         new(0, 0, 300, 200), new(312, 0, 300, 200), new(624, 0, 600, 200),

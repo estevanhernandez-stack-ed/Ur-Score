@@ -35,8 +35,8 @@ try {
     Check '1e A pop-out has no tools of its own' (-not (Find-ByAutomationId $out 'PopOutButton') -and -not (Find-ByAutomationId $out 'PanelSettingsButton')) 'no pop out or settings button inside'
 
     # 2. A second one.
-    Invoke-PanelTool (Get-BoardWindow) 'AccountCardPanel1' 'PopOutButton'
-    Wait-Until { Get-PopOutFor 'AccountCardPanel1' } 15 | Out-Null
+    Invoke-PanelTool (Get-BoardWindow) 'RecordsPanel1' 'PopOutButton'
+    Wait-Until { Get-PopOutFor 'RecordsPanel1' } 15 | Out-Null
     Check '2 Two pop-outs at once' ((Get-PopOutWindows).Count -eq 2) "count=$((Get-PopOutWindows).Count)"
 
     # 3. It updates live. Only a running battle has numbers to show: with none, the step needs a live battle and is
@@ -82,7 +82,7 @@ try {
     Check '6b ...and boards.json forgets its place' ($null -eq (Get-SavedPanel 'standing').popout) 'no popout'
 
     # 7. Bring back returns the other.
-    Invoke-Element (Get-Button (Get-BoardWindow) 'Bring back Account card')
+    Invoke-Element (Get-Button (Get-BoardWindow) 'Bring back Records')
     Start-Sleep -Seconds 1
     Check '7 Bring back closes its window' ((Get-PopOutWindows).Count -eq 0) "count=$((Get-PopOutWindows).Count)"
 

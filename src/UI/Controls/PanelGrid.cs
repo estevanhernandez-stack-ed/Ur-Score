@@ -62,9 +62,7 @@ public sealed class PanelGrid : Panel
         foreach (var placement in placements)
         {
             var child = children[placement.Index];
-            var height = placement.Rows == 1
-                ? child.DesiredSize.Height
-                : Enumerable.Range(placement.Row, placement.Rows).Sum(r => rows[r]) + Gap * (placement.Rows - 1);
+            var height = BoardLayout.CellHeight(placement, rows, Gap);
             var rect = new Rect(placement.Column * (column + Gap), tops[placement.Row], CellWidth(finalSize.Width, placement.Span), height);
 
             child.Arrange(rect);

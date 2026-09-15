@@ -15,7 +15,7 @@
         <Button x:Name="EmptyBoardButton" Content="An empty board" HorizontalContentAlignment="Left" Click="OnEmptyClick"
                 AutomationProperties.Name="Empty board" />
         <Button x:Name="BattleBoardButton" Margin="0,8,0,0" Click="OnBattleClick" />
-        <Button x:Name="GrindBoardButton" Margin="0,8,0,0" Click="OnGrindClick" />
+        <Button x:Name="AltsBoardButton" Margin="0,8,0,0" Click="OnAltsClick" />
         <TextBlock x:Name="StarterLine" Style="{StaticResource Muted}" Margin="0,8,0,0" />
 
         <Button Content="Cancel" IsCancel="True" HorizontalAlignment="Right" Margin="0,18,0,0" />

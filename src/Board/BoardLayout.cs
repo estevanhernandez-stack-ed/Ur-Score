@@ -86,6 +86,10 @@ public static class BoardLayout
         return rows;
     }
 
+    /// <summary>How tall a panel is arranged: its rows and the gaps between them, so a short panel fills its row (D7).</summary>
+    public static double CellHeight(PanelPlacement placement, IReadOnlyList<double> rows, double gap) =>
+        Enumerable.Range(placement.Row, placement.Rows).Sum(r => rows[r]) + gap * (placement.Rows - 1);
+
     /// <summary>
     /// The insertion index for a drop at (x, y), counting the dragged panel itself (<see cref="BoardEdits.MoveTo"/>).
     /// Over a panel: before it on its left half, after it on its right half. Elsewhere: after every panel that ends
