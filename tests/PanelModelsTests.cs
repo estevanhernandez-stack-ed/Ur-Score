@@ -17,6 +17,17 @@ public class PanelModelsTests
     private static Dictionary<string, RecipeSnapshot> Snaps(params RecipeSnapshot[] snapshots) =>
         snapshots.ToDictionary(s => s.SourceId, s => s, StringComparer.Ordinal);
 
+    [Fact]
+    public void YourUserIdsAreYourAccountsIdsLessAnyWithout()
+    {
+        var noId = new HostAccount(Guid.Parse("55555555-5555-5555-5555-555555555555"), 0, "NotSignedIn");
+
+        var ids = LiveBoard.UserIdsOf([Main, noId, AltOne, Main]);
+
+        Assert.Equal(new long[] { 101, 201 }, ids.OrderBy(id => id).ToArray());
+        Assert.Equal(ids, Live([], [], Snaps(), accounts: [Main, noId, AltOne]).MyUserIds);
+    }
+
     // ---- Standing ----
 
     [Fact]

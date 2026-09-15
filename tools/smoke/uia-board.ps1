@@ -1,0 +1,165 @@
+# Board helpers for the stage 2 walks: tabs and their menu, edit mode, panel tools, the gallery, the panel
+# form, pop-outs and boards.json. Dot-source this file; it only defines things.
+# ASCII only on purpose: Windows PowerShell 5.1 reads a BOM-less file as ANSI.
+. (Join-Path $PSScriptRoot 'uia-import.ps1')
+
+Add-Type -AssemblyName System.Windows.Forms
+
+$script:IsListItem = New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, $CT::ListItem)
+
+# An element by automation id in any Ur Score window, the windows themselves included (menus and pop-outs are top-level).
+function Find-InUrWindows([string]$id) {
+    foreach ($w in Get-UrWindows) {
+        if ($w.Current.AutomationId -eq $id) { return $w }
+        $e = Find-ByAutomationId $w $id
+        if ($e) { return $e }
+    }
+    return $null
+}
+
+# Every panel in a window, in board order: "StandingPanel1", "RacePanel1", "AccountCardPanel1PoppedOut".
+function Get-PanelIds($root) {
+    @($root.FindAll($TS::Descendants, $Cond::TrueCondition) |
+        ForEach-Object { $_.Current.AutomationId } |
+        Where-Object { $_ -match '^[A-Za-z]+Panel[0-9]+(PoppedOut)?$' })
+}
+
+function Get-TabItems($board) {
+    $tabs = Find-ByAutomationId $board 'BoardTabs'
+    if (-not $tabs) { return @() }
+    @($tabs.FindAll($TS::Children, $IsListItem))
+}
+
+function Get-TabNames($board) { @(Get-TabItems $board | ForEach-Object { $_.Current.Name }) }
+
+function Get-SelectedTabName($board) {
+    $selected = Get-TabItems $board |
+        Where-Object { $_.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected } |
+        Select-Object -First 1
+    if ($selected) { $selected.Current.Name } else { '(none)' }
+}
+
+# Opens the selected tab's right-click menu with Shift+F10 and invokes one item by automation id.
+# Returns $false (and closes the menu) when that item is disabled.
+function Invoke-TabMenu($board, [string]$itemId) {
+    $selected = Get-TabItems $board |
+        Where-Object { $_.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected } |
+        Select-Object -First 1
+    if (-not $selected) { throw 'no tab is selected' }
+    $selected.SetFocus()
+    Start-Sleep -Milliseconds 400
+    [System.Windows.Forms.SendKeys]::SendWait('+{F10}')
+
+    $item = $null
+    $deadline = (Get-Date).AddSeconds(6)
+    do {
+        $item = Find-InUrWindows $itemId
+        if ($item) { break }
+        Start-Sleep -Milliseconds 300
+    } while ((Get-Date) -lt $deadline)
+    if (-not $item) { throw "the tab menu has no $itemId" }
+
+    if (-not $item.Current.IsEnabled) {
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Start-Sleep -Milliseconds 300
+        return $false
+    }
+    Invoke-Element $item
+    Start-Sleep -Milliseconds 700
+    return $true
+}
+
+function Enter-EditMode($board) {
+    Invoke-Element (Find-ByAutomationId $board 'EditBoardButton')
+    Start-Sleep -Milliseconds 800
+}
+
+function Complete-EditMode($board) {
+    Invoke-Element (Find-ByAutomationId $board 'DoneButton')
+    Start-Sleep -Milliseconds 1000
+}
+
+# Invokes a tool button inside one panel, found by the panel's automation id.
+function Invoke-PanelTool($root, [string]$panelId, [string]$toolId) {
+    $panel = Find-ByAutomationId $root $panelId
+    if (-not $panel) { throw "no panel $panelId" }
+    $tool = Find-ByAutomationId $panel $toolId
+    if (-not $tool) { throw "$panelId shows no $toolId" }
+    Invoke-Element $tool
+    Start-Sleep -Milliseconds 800
+}
+
+# Picks the first item whose name matches a wildcard pattern in a combo box.
+function Select-ComboItem($box, [string]$like) {
+    if (-not $box) { throw 'combo box not found' }
+    $box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    Start-Sleep -Milliseconds 500
+    $item = Find-All $box $CT::ListItem | Where-Object { $_.Current.Name -like $like } | Select-Object -First 1
+    if (-not $item) { throw "no item like '$like'" }
+    $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Start-Sleep -Milliseconds 300
+    # Picking can rebuild the panel, which takes the box with it.
+    try { $box.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse() } catch { }
+    Start-Sleep -Milliseconds 800
+}
+
+# Small, Half or Wide in one panel's size box.
+function Set-PanelSize($board, [string]$panelId, [string]$size) {
+    Select-ComboItem (Find-ByAutomationId (Find-ByAutomationId $board $panelId) 'SizeBox') $size
+}
+
+# With the gallery about to open: picks a card by title, then saves its form with the defaults it offers.
+function Add-PanelFromGallery([string]$title) {
+    $gallery = Wait-UrWindow '^Add a panel$' 15
+    if (-not $gallery) { throw 'the gallery did not open' }
+    $add = Get-Button $gallery "Add $title"
+    if (-not $add) { throw "the gallery has no card '$title'" }
+    Invoke-Element $add
+    $form = Wait-UrWindow "^Add $title$" 15
+    if (-not $form) { throw "no form for '$title'" }
+    Invoke-Element (Find-ByAutomationId $form 'SaveSettingsButton')
+    Start-Sleep -Milliseconds 1000
+}
+
+# boards.json, one board per item (see Read-Sources for why this unrolls with foreach).
+function Read-Boards {
+    $file = Join-Path $UrData 'boards.json'
+    if (-not (Test-Path $file)) { return @() }
+    $text = Get-Content $file -Raw
+    if (-not $text.Trim()) { return @() }
+    foreach ($b in ($text | ConvertFrom-Json)) { $b }
+}
+
+function Get-PopOutWindows { @(Get-UrWindows | Where-Object { $_.Current.AutomationId -eq 'PopOutWindow' }) }
+
+# Quits by closing the board window, so a pop-out is never mistaken for the main window.
+function Stop-UrScoreFromBoard([int]$seconds = 20) {
+    $board = Get-BoardWindow
+    if ($board) { Close-UrWindow $board }
+    $deadline = (Get-Date).AddSeconds($seconds)
+    while ((Get-UrProcessId) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 400 }
+    Stop-UrScore
+}
+
+# A clean start with the clan fixture imported (Points shown and sent), the main clan, and optionally a clan
+# your accounts are in. Returns the board once its first Clan standing panel has drawn.
+function Initialize-ClanBoard([string]$Main, [string]$Alt) {
+    Start-UrScore | Out-Null
+    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'SetupButton')
+    Wait-UrWindow '^Setup$' 15 | Out-Null
+    Complete-ClanImport (Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json') @('Points') @('Points') | Out-Null
+    $setup = Wait-UrWindow '^Setup$' 30
+    Select-SearchName $setup 'Your main clan' $Main
+    Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
+    if ($Alt) {
+        Invoke-Element (Find-ByAutomationId $setup 'AddMineButton')
+        Select-SearchName $setup 'Add a clan your accounts are in' $Alt
+        Wait-Line $setup 'MineFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
+    }
+    Close-UrWindow (Get-SetupWindow)
+    Wait-Until {
+        $p = Find-ByAutomationId (Get-BoardWindow) 'StandingPanel1'
+        $p -and (Line $p 'PanelTitle') -eq 'Clan standing'
+    } 30 | Out-Null
+    return Get-BoardWindow
+}

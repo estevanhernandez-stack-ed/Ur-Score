@@ -49,7 +49,6 @@ public class StarterBoardsTests
 
         Assert.Equal(StarterBoards.Battle, board.Name);
         Assert.Equal(BoardEmpty.None, board.Empty);
-        Assert.Equal(MainClan.Id, board.AnchorSourceId);
         Assert.Equal(
             new[]
             {
@@ -72,7 +71,7 @@ public class StarterBoardsTests
     {
         var board = StarterBoards.Build([Installed(Clan, "value")], [AltClan, SecondAltClan]);
 
-        Assert.Equal(AltClan.Id, board.AnchorSourceId);
+        Assert.Equal(AltClan.Id, board.Panels[0].Settings.SourceId);
         Assert.Equal(SecondAltClan.Id, board.Panels[1].Settings.SourceId);
         Assert.Contains(board.Panels, p => p.Type == PanelType.Race);
         Assert.DoesNotContain(board.Panels, p => p.Type == PanelType.PromotionCheck);
@@ -111,13 +110,20 @@ public class StarterBoardsTests
     }
 
     [Fact]
-    public void TheKeyChangesOnlyWhenThePanelsDo()
+    public void AStarterCanBeAskedForByName()
     {
-        var one = StarterBoards.Build([Installed(Clan, "value")], [MainClan]);
-        var same = StarterBoards.Build([Installed(Clan, "value")], [MainClan]);
-        var more = StarterBoards.Build([Installed(Clan, "value")], [MainClan, AltClan]);
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        InstalledRecipe[] installed = [Installed(Clan, "value"), Installed(Profile, "diamonds")];
+        Source[] sources = [MainClan, profile];
 
-        Assert.Equal(one.Key, same.Key);
-        Assert.NotEqual(one.Key, more.Key);
+        Assert.Equal(StarterBoards.Battle, StarterBoards.Build(installed, sources).Name);
+
+        var grind = StarterBoards.Build(installed, sources, StarterBoards.Grind);
+        Assert.Equal(StarterBoards.Grind, grind.Name);
+        Assert.Equal(PanelType.ProfileStat, grind.Panels[0].Type);
+        Assert.Equal(Profile.Slug, grind.Panels[0].Settings.Recipe);
+
+        Assert.Empty(StarterBoards.Build([Installed(Clan, "value")], [MainClan], StarterBoards.Grind).Panels);
+        Assert.Empty(StarterBoards.Build([Installed(Profile, "diamonds")], [profile], StarterBoards.Battle).Panels);
     }
 }

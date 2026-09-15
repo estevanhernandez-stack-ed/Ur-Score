@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
@@ -10,23 +11,52 @@ namespace Labs626.UrScore.UI;
 
 using Source = Labs626.UrScore.Core.Source;
 
+/// <summary>One tab. Its text is the board's name, so a screen reader and UI Automation read the name.</summary>
+public sealed record BoardTabItem(string Id, string Name)
+{
+    public override string ToString() => Name;
+}
+
 /// <summary>
-/// The starter board (spec §8): the top bar, the fixed panels in a 12-column grid, and the first-run states.
-/// Everything it shows comes from <see cref="AppServices"/>; everything that is setup is in the Setup window.
+/// The board (spec §8, §9.2): tabs and the top bar, the selected board's panels in a 12-column grid, and the
+/// empty states. Everything it shows comes from <see cref="AppServices"/>; every board change goes through
+/// <see cref="BoardEdits"/> and <see cref="AppServices.SaveBoards"/>; everything that is setup is in the Setup window.
 /// </summary>
 public partial class BoardWindow : Window
 {
+    /// <summary>The most of the top bar's left side the tabs take before they scroll, leaving room for + Board and the period line.</summary>
+    private const double TabStripShare = 0.6;
+
     private readonly AppServices _services;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(20) };
-    private readonly List<(PanelSpec Spec, FrameworkElement View)> _panels = [];
+
+    /// <summary>What is on the grid now, in order: each panel's definition, its view and its automation id.</summary>
+    private readonly List<(PanelDef Def, FrameworkElement View, string AutomationId)> _panels = [];
 
     /// <summary>Other members' names for a Live leaderboard panel, in memory only, each id asked once.</summary>
     private readonly Dictionary<long, string> _names = [];
     private readonly HashSet<long> _askedNames = [];
 
     private SetupWindow? _setup;
-    private StarterBoard? _board;
-    private string? _boardKey;
+
+    /// <summary>The board on screen; null until the first draw, and a board that is gone falls back to the first (R12).</summary>
+    private string? _boardId;
+
+    private string? _renderedKey;
+    private string? _tabsKey;
+    private string? _anchorSourceId;
+    private string? _emptyRecipe;
+
+    /// <summary>Why a board change couldn't be saved, only while its message box is open; the box is the notification.</summary>
+    private string? _boardsNote;
+
+    /// <summary>Why the score book couldn't be read at start, or null. It keeps the detail line until the book loads.</summary>
+    private string? _bookProblem;
+
+    private BoardEmpty _empty;
+
+    /// <summary>The tabs are being set from the boards, not by a click.</summary>
+    private bool _selectingTab;
 
     /// <summary>Start is asking RoRoRo for accounts before the loops begin.</summary>
     private bool _starting;
@@ -42,6 +72,13 @@ public partial class BoardWindow : Window
         InitializeComponent();
         ThemeService.Attach(this);
         _services = services;
+
+        // Panel tools raise one routed event; each concern handles its own tools (Tasks 6-8).
+        PanelFrame.SetShowSettings(BoardPanels, true);
+        BoardPanels.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnSettingsTool));
+        HookEditing();
+        HookPopOuts();
+
         _services.Changed += Render;
         _services.IconChanged += ApplyIcon;
         _clock.Tick += (_, _) => RenderLines();
@@ -70,7 +107,8 @@ public partial class BoardWindow : Window
         catch (Exception ex)
         {
             StateLine.Text = "Your score book could not be read.";
-            DetailLine.Text = _services.Redactor.Redact(ex.Message);
+            _bookProblem = _services.Redactor.Redact(ex.Message);
+            DetailLine.Text = _bookProblem;
             _services.AddTrail($"BOOK NOT LOADED: {ex}");
             return;
         }
@@ -97,49 +135,121 @@ public partial class BoardWindow : Window
 
     private void RenderBoard()
     {
-        var board = StarterBoards.Build(_services.Installed, _services.Sources);
-        _board = board;
+        var boards = _services.Boards;
+        var board = ShownBoard(boards);
+        _boardId = board.Id;
+
+        RenderTabs(boards, board);
         RenderEmpty(board);
 
-        if (board.Key != _boardKey)
+        var key = ViewKey(board);
+        if (key != _renderedKey)
         {
-            _boardKey = board.Key;
-            BoardPanels.Children.Clear();
-            _panels.Clear();
-
-            var counts = new Dictionary<PanelType, int>();
-            foreach (var spec in board.Panels)
-            {
-                counts[spec.Type] = counts.GetValueOrDefault(spec.Type) + 1;
-                var view = PanelViews.Create(spec.Type);
-                AutomationProperties.SetAutomationId(view, $"{spec.Type}Panel{counts[spec.Type]}");
-                PanelGrid.SetSpan(view, spec.Span);
-                BoardPanels.Children.Add(view);
-                _panels.Add((spec, view));
-            }
+            _renderedKey = key;
+            BuildPanels(board);
         }
 
+        // Only once shown: the constructor's first draw must not open windows ahead of the board.
+        if (IsLoaded) SyncPopOuts();
+
+        _anchorSourceId = BoardEdits.AnchorSourceId(board, _services.Sources);
         var live = _services.CurrentBoard();
 
         // The reader is filled on a worker thread until the book has loaded; nothing may read it before then.
         if (_services.ReaderLoaded)
         {
-            foreach (var (spec, view) in _panels)
-            {
-                try
-                {
-                    PanelViews.Render(view, spec.Settings, live, _services.Reader, _names);
-                }
-                catch (Exception ex)
-                {
-                    // A panel never takes the window down. The type only: a message could name another player's id.
-                    _services.AddTrail($"PANEL NOT DRAWN: {spec.Type}: {ex.GetType().Name}");
-                }
-            }
+            foreach (var (def, view, _) in _panels) RenderPanel(def, view, live);
+            RenderPopOuts(live);
         }
 
         _ = ResolveNamesAsync(live);
         RenderLines(live);
+    }
+
+    /// <summary>The board on screen: the draft while editing, else the selected tab's, else the first (R12).</summary>
+    private BoardDef ShownBoard(IReadOnlyList<BoardDef> boards) =>
+        _draft ?? boards.FirstOrDefault(b => b.Id == _boardId) ?? boards[0];
+
+    /// <summary>The panels are rebuilt only when this changes.</summary>
+    private string ViewKey(BoardDef board) => BoardDefs.Key(board);
+
+    private void BuildPanels(BoardDef board)
+    {
+        BoardPanels.Children.Clear();
+        _panels.Clear();
+
+        var ids = BoardEdits.AutomationIds(board);
+        for (var i = 0; i < board.Panels.Count; i++)
+        {
+            var def = board.Panels[i];
+            var view = CreatePanelView(def, ids[i]);
+            PanelGrid.SetSpan(view, def.Size.Span);
+            PanelGrid.SetTall(view, def.Size.Tall);
+            PanelFrame.SetCurrentSize(view, def.Size);
+            BoardPanels.Children.Add(view);
+            _panels.Add((def, view, ids[i]));
+        }
+    }
+
+    /// <summary>The control for one panel on the board, named by its automation id; a popped-out panel's slot holds a placeholder (R19).</summary>
+    private FrameworkElement CreatePanelView(PanelDef def, string automationId)
+    {
+        if (def.PopOut is not null) return PoppedOutPlaceholder(def, automationId);
+
+        var view = PanelViews.Create(def.Type);
+        AutomationProperties.SetAutomationId(view, automationId);
+        return view;
+    }
+
+    private void RenderPanel(PanelDef def, FrameworkElement view, LiveBoard live)
+    {
+        try
+        {
+            PanelViews.Render(view, def.Settings, live, _services.Reader, _names);
+        }
+        catch (Exception ex)
+        {
+            // A panel never takes the window down. The type only: a message could name another player's id.
+            _services.AddTrail($"PANEL NOT DRAWN: {def.Type}: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>Every panel showing anywhere, on the board or popped out, for looking up Live leaderboard names.</summary>
+    private IEnumerable<PanelDef> ShownPanels()
+    {
+        foreach (var (def, _, _) in _panels)
+        {
+            if (def.PopOut is null) yield return def;
+        }
+
+        foreach (var id in _popOuts.Keys.ToList())
+        {
+            if (BoardEdits.Find(_services.Boards, id) is { } found) yield return found.Panel;
+        }
+    }
+
+    private void RenderTabs(IReadOnlyList<BoardDef> boards, BoardDef shown)
+    {
+        var key = string.Join("|", boards.Select(b => $"{b.Id}={b.Name}"));
+        _selectingTab = true;
+        try
+        {
+            if (key != _tabsKey)
+            {
+                _tabsKey = key;
+                BoardTabs.ItemsSource = boards.Select(b => new BoardTabItem(b.Id, b.Name)).ToList();
+            }
+
+            if ((BoardTabs.SelectedItem as BoardTabItem)?.Id != shown.Id)
+            {
+                BoardTabs.SelectedItem = BoardTabs.Items.OfType<BoardTabItem>().FirstOrDefault(t => t.Id == shown.Id);
+                if (BoardTabs.SelectedItem is { } selected) BoardTabs.ScrollIntoView(selected);
+            }
+        }
+        finally
+        {
+            _selectingTab = false;
+        }
     }
 
     private void RenderLines(LiveBoard? live = null)
@@ -158,39 +268,178 @@ public partial class BoardWindow : Window
 
     private void RenderLinesCore(LiveBoard live)
     {
-        PeriodLine.Text = BoardText.TopLine(live, _board?.AnchorSourceId);
+        PeriodLine.Text = BoardText.TopLine(live, _anchorSourceId);
         LiveDot.Visibility = live.Running ? Visibility.Visible : Visibility.Collapsed;
         StartStopButton.Content = live.Running ? "Stop" : "Start";
         AttributionLine.Text = BoardText.Attribution(live);
 
-        if (!_services.ReaderLoaded) return;
+        var boardsProblem = _boardsNote ?? _services.BoardsProblem;
+        if (!_services.ReaderLoaded)
+        {
+            // Why your boards aren't showing is said from the first draw (R3), unless the score book's own failure is on the line.
+            if (boardsProblem is not null && _bookProblem is null) DetailLine.Text = boardsProblem;
+            return;
+        }
+
         StateLine.Text = BoardText.StateLine(live, _services.EverStarted);
-        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning);
+        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem);
     }
 
-    private void RenderEmpty(StarterBoard board)
+    private void RenderEmpty(BoardDef board)
     {
-        var recipe = _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, board.RecipeSlug, StringComparison.Ordinal))?.Recipe;
-        var (line, detail, button) = BoardText.EmptyState(board.Empty, recipe);
-        var empty = board.Empty != BoardEmpty.None;
+        var starter = StarterBoards.Build(_services.Installed, _services.Sources);
+        // A draft is a board being shaped, not the starter following your sources: with no panels it says so and
+        // offers Add panel, and a panel added to it shows at once.
+        _empty = BoardText.EmptyFor(starter, _services.BoardsFollowStarter && !Editing, board);
+        _emptyRecipe = starter.RecipeSlug;
+
+        var recipe = _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _emptyRecipe, StringComparison.Ordinal))?.Recipe;
+        var (line, detail, button) = BoardText.EmptyState(_empty, recipe, Editing);
+        var empty = _empty != BoardEmpty.None;
 
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         BoardScroll.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
         EmptyStateLine.Text = line;
         EmptyStateDetail.Text = detail;
         EmptyStateButton.Content = button;
+
+        // Only BoardEmpty.None has no button.
+        EmptyStateButton.Visibility = button.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         AutomationProperties.SetName(EmptyStateButton, button);
     }
 
-    /// <summary>Names for Live leaderboard panels only, and only when resolveNames allows; the stage 1 starter boards have none.</summary>
+    // ---- tabs ----
+
+    private void OnTabChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_selectingTab || !ButtonStates().Tabs || BoardTabs.SelectedItem is not BoardTabItem tab || tab.Id == _boardId) return;
+
+        ShowBoard(tab.Id);
+    }
+
+    /// <summary>The menu opens on what is true now, e.g. a board deleted since the last redraw.</summary>
+    private void OnTabMenuOpened(object sender, RoutedEventArgs e) => ApplyButtons();
+
+    // Each handler that opens a dialog reads the boards again once it closes, and edits that list: something
+    // else (a pop-out coming back, later) may have changed them while it was open. While editing they are all
+    // disabled (R8); each guard only catches a press already on its way.
+
+    private void OnAddBoardClick(object sender, RoutedEventArgs e)
+    {
+        if (!ButtonStates().AddBoard) return;
+
+        var dialog = new AddBoardWindow(_services.Installed, _services.Sources, BoardEdits.NextName(_services.Boards)) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } board) return;
+
+        if (SaveBoards(BoardEdits.Add(_services.Boards, board))) ShowBoard(board.Id);
+    }
+
+    private void OnRenameBoardClick(object sender, RoutedEventArgs e)
+    {
+        if (!ButtonStates().RenameBoard) return;
+
+        var board = ShownBoard(_services.Boards);
+        var dialog = new BoardNameWindow(board.Name) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        // The name it already has changes nothing, so nothing is written (R1).
+        var boards = _services.Boards;
+        var renamed = BoardEdits.Rename(boards, board.Id, dialog.BoardName);
+        if (ReferenceEquals(renamed, boards) || !SaveBoards(renamed)) return;
+
+        ShowBoard(board.Id);
+        FocusShownTab();
+    }
+
+    private void OnDuplicateBoardClick(object sender, RoutedEventArgs e)
+    {
+        if (!ButtonStates().DuplicateBoard) return;
+
+        var boards = _services.Boards;
+        var duplicated = BoardEdits.Duplicate(boards, ShownBoard(boards).Id);
+        if (ReferenceEquals(duplicated, boards)) return;
+
+        var copy = duplicated.First(b => boards.All(old => old.Id != b.Id));
+        if (!SaveBoards(duplicated)) return;
+
+        ShowBoard(copy.Id);
+        FocusShownTab();
+    }
+
+    private void OnDeleteBoardClick(object sender, RoutedEventArgs e)
+    {
+        var board = ShownBoard(_services.Boards);
+
+        // The item is disabled for the last board and while editing; this only catches a press already on its way.
+        if (!ButtonStates().DeleteBoard) return;
+
+        var answer = MessageBox.Show(this,
+            $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",
+            "Ur Score", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+        if (answer != MessageBoxResult.OK) return;
+
+        var boards = _services.Boards;
+        var remaining = BoardEdits.Delete(boards, board.Id);
+        if (ReferenceEquals(remaining, boards) || !SaveBoards(remaining)) return;
+
+        ShowBoard(remaining[0].Id);
+        FocusShownTab();
+    }
+
+    private void ShowBoard(string boardId)
+    {
+        _boardId = boardId;
+        Render();
+    }
+
+    /// <summary>A tab menu action rebuilds the tabs, which drops keyboard focus; it goes back to the tab on screen.</summary>
+    private void FocusShownTab()
+    {
+        BoardTabs.UpdateLayout();
+        if (BoardTabs.SelectedItem is { } item && BoardTabs.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem tab) tab.Focus();
+    }
+
+    /// <summary>
+    /// Saves through the services. A file that can't be written is never silent: a message box says the change
+    /// wasn't saved and why, and the board stays as it was. Once the box closes the detail line goes back to what
+    /// it was saying, so "RoRoRo is not running" or the budget line isn't hidden behind an old note.
+    /// </summary>
+    private bool SaveBoards(IReadOnlyList<BoardDef> boards)
+    {
+        try
+        {
+            _services.SaveBoards(boards);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Any failure, not only IO: a save that silently did nothing is the one thing this must never be.
+            _boardsNote = _services.Redactor.Redact(BoardText.BoardsNotSaved(ex));
+            _services.AddTrail($"BOARDS NOT SAVED: {ex.GetType().Name}");
+            RenderLines();
+            MessageBox.Show(this, _boardsNote, "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+            _boardsNote = null;
+            RenderLines();
+            return false;
+        }
+    }
+
+    /// <summary>The tabs never take more than their share of what the top bar's buttons leave (<see cref="TabStripShare"/>).</summary>
+    private void OnTopBarSizeChanged(object sender, SizeChangedEventArgs e) =>
+        BoardTabs.MaxWidth = Math.Max(0, (TopBar.ActualWidth - TopButtons.ActualWidth) * TabStripShare);
+
+    // ---- names, the top bar, Setup ----
+
+    /// <summary>Names for Live leaderboard panels only, and only when resolveNames allows. In memory only.</summary>
     private async Task ResolveNamesAsync(LiveBoard live)
     {
         if (!_services.Settings.ResolveNames) return;
 
         var mine = live.MyUserIds;
-        var ids = _panels
-            .Where(p => p.Spec.Type == PanelType.LiveLeaderboard)
-            .Select(p => live.FindSource(p.Spec.Settings.SourceId))
+        var ids = ShownPanels()
+            .Where(p => p.Type == PanelType.LiveLeaderboard)
+            .Select(p => live.FindSource(p.Settings.SourceId))
             .OfType<Source>()
             .SelectMany(s => live.SnapshotOf(s.Id)?.Rows ?? [])
             .Select(r => r.UserId)
@@ -282,31 +531,49 @@ public partial class BoardWindow : Window
     /// <summary>The one place the board's buttons are enabled or disabled, called after every change to what they depend on.</summary>
     private void ApplyButtons()
     {
-        var states = BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing);
+        var states = ButtonStates();
         StartStopButton.IsEnabled = states.StartStop;
         TestNowButton.IsEnabled = states.TestNow;
         EmptyStateButton.IsEnabled = states.EmptyState;
+        BoardTabs.IsEnabled = states.Tabs;
+        AddBoardButton.IsEnabled = states.AddBoard;
+        RenameBoardItem.IsEnabled = states.RenameBoard;
+        DuplicateBoardItem.IsEnabled = states.DuplicateBoard;
+        DeleteBoardItem.IsEnabled = states.DeleteBoard;
+        EditBoardButton.IsEnabled = states.EditBoard;
+        AddPanelButton.IsEnabled = states.AddPanel;
+        DoneButton.IsEnabled = states.Done;
     }
+
+    /// <summary>What every button, tab and tab menu item takes right now, for <see cref="ApplyButtons"/> and the press guards.</summary>
+    private BoardButtonStates ButtonStates() =>
+        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing, _services.Boards.Count, Editing);
 
     private void OnSetupClick(object sender, RoutedEventArgs e) => OpenSetup(null);
 
     private async void OnEmptyStateClick(object sender, RoutedEventArgs e)
     {
-        if (_board is null || _importing) return;
+        if (_importing) return;
 
-        if (_board.Empty == BoardEmpty.NoStats)
+        if (_empty == BoardEmpty.NoPanels)
+        {
+            AddPanelFromGallery();
+            return;
+        }
+
+        if (_empty == BoardEmpty.NoStats)
         {
             OpenSetup(SetupPages.Stats);
             return;
         }
 
-        if (_board.Empty == BoardEmpty.NoSources && _board.RecipeSlug is { } slug)
+        if (_empty == BoardEmpty.NoSources && _emptyRecipe is { } slug)
         {
             OpenSetup(SetupPages.ClansId(slug));
             return;
         }
 
-        if (_board.Empty != BoardEmpty.NoRecipes) return;
+        if (_empty != BoardEmpty.NoRecipes) return;
 
         _importing = true;
         ApplyButtons();

@@ -1,3 +1,4 @@
+using System.IO;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
@@ -46,6 +47,33 @@ public static class BoardText
     public static string DetailLine(LiveBoard live, string? budgetWarning) =>
         live.Snapshots.Values.Any(s => s.State == WatchState.HostDown) ? HostDown : budgetWarning ?? "";
 
+    /// <summary>
+    /// The detail line on the board: why your boards aren't saved or aren't showing comes first (R3), since a
+    /// change that silently didn't happen is worse; then RoRoRo being down, then the budget warning.
+    /// </summary>
+    public static string DetailLine(LiveBoard live, string? budgetWarning, string? boardsProblem) =>
+        boardsProblem ?? DetailLine(live, budgetWarning);
+
+    /// <summary>
+    /// A board change that couldn't be written, in plain words. No stack; an unknown IO reason is Windows' own
+    /// sentence. Anything that isn't IO says only that it was unexpected: its message was never meant for you.
+    /// </summary>
+    public static string BoardsNotSaved(Exception ex)
+    {
+        const string NotSaved = "Your change to the boards wasn't saved: ";
+        const int SharingViolation = unchecked((int)0x80070020), LockViolation = unchecked((int)0x80070021);
+        const int DiskFull = unchecked((int)0x80070070), HandleDiskFull = unchecked((int)0x80070027);
+
+        return ex switch
+        {
+            UnauthorizedAccessException => NotSaved + "Windows didn't let Ur Score write to its data folder.",
+            IOException { HResult: SharingViolation or LockViolation } => NotSaved + "another program has your boards file open. Close it, then try again.",
+            IOException { HResult: DiskFull or HandleDiskFull } => NotSaved + "the disk is full.",
+            IOException => NotSaved + ex.Message,
+            _ => NotSaved + "something unexpected went wrong.",
+        };
+    }
+
     /// <summary>Each recipe being read credits its data (spec §6.1 of the first design).</summary>
     public static string Attribution(LiveBoard live) =>
         string.Join(" ", live.Installed
@@ -53,7 +81,18 @@ public static class BoardText
             .Select(i => i.Recipe.Credit)
             .Distinct(StringComparer.Ordinal));
 
-    public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe)
+    /// <summary>
+    /// Which empty state a board shows (R1): no recipes over every board; the starter's own states while the
+    /// board still follows your sources; a saved board with no panels; else none.
+    /// </summary>
+    public static BoardEmpty EmptyFor(StarterBoard starter, bool followsStarter, BoardDef board) =>
+        starter.Empty == BoardEmpty.NoRecipes ? BoardEmpty.NoRecipes
+        : followsStarter ? starter.Empty
+        : board.Panels.Count == 0 ? BoardEmpty.NoPanels
+        : BoardEmpty.None;
+
+    /// <param name="editing">In edit mode an empty board is told to press Done, not Edit board, which is where you are.</param>
+    public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe, bool editing = false)
     {
         var group = recipe is null ? "source" : RecipeWords.Group(recipe);
         return empty switch
@@ -67,6 +106,9 @@ public static class BoardText
             BoardEmpty.NoSources => ($"Choose your main {group}",
                 "Type a few letters of its name in Setup, and Ur Score finds which of your accounts are in it.",
                 $"Choose your main {group}"),
+            BoardEmpty.NoPanels => ("This board has no panels yet",
+                editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Edit board.",
+                "Add panel"),
             _ => ("", "", ""),
         };
     }

@@ -1,7 +1,18 @@
 namespace Labs626.UrScore.UI;
 
-/// <summary>Which of the board's buttons take a press right now.</summary>
-public readonly record struct BoardButtonStates(bool StartStop, bool TestNow, bool EmptyState);
+/// <summary>Which of the board's buttons, tabs and tab menu items take a press right now.</summary>
+public readonly record struct BoardButtonStates(
+    bool StartStop,
+    bool TestNow,
+    bool EmptyState,
+    bool DeleteBoard = false,
+    bool Tabs = true,
+    bool AddBoard = true,
+    bool RenameBoard = true,
+    bool DuplicateBoard = true,
+    bool EditBoard = true,
+    bool AddPanel = false,
+    bool Done = false);
 
 /// <summary>
 /// The board's buttons are disabled for exactly the time a press would be ignored, and never longer. Stop is
@@ -14,8 +25,24 @@ public static class BoardButtons
     /// <param name="starting">Start was pressed and is still asking RoRoRo for accounts.</param>
     /// <param name="testing">A Test now read is in flight.</param>
     /// <param name="importing">The empty state's Import recipe… is in flight.</param>
-    public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing) => new(
+    /// <param name="boards">
+    /// How many boards there are; the last one can't be deleted (R11). The default of 1 is for a press guard that
+    /// only asks about Start/Stop or Test now, and it leaves Delete off; anything that reads DeleteBoard passes the real count.
+    /// </param>
+    /// <param name="editing">
+    /// Edit mode is on (R8): one draft at a time, so the tabs, + Board and the tab menu wait for Done, and Edit board
+    /// gives way to + Add panel and Done. Reading, Stop and the empty state don't wait.
+    /// </param>
+    public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing, int boards = 1, bool editing = false) => new(
         StartStop: loaded && !starting && (running || !testing),
         TestNow: loaded && !starting && !testing,
-        EmptyState: !importing);
+        EmptyState: !importing,
+        DeleteBoard: boards > 1 && !editing,
+        Tabs: !editing,
+        AddBoard: !editing,
+        RenameBoard: !editing,
+        DuplicateBoard: !editing,
+        EditBoard: !editing,
+        AddPanel: editing,
+        Done: editing);
 }

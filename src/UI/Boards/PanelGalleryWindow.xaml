@@ -1,0 +1,48 @@
+<Window x:Class="Labs626.UrScore.UI.PanelGalleryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:Labs626.UrScore.UI"
+        Title="Add a panel" Width="760" Height="680" MinWidth="440" MinHeight="380"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
+        FontFamily="{StaticResource BodyFont}">
+    <DockPanel Margin="20,18,20,18">
+        <TextBlock DockPanel.Dock="Top" Text="Add a panel" Style="{StaticResource Heading}" />
+        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,4,0,12"
+                   Text="Each panel asks only for what it needs. Any panel can be added more than once." />
+        <Button DockPanel.Dock="Bottom" Content="Cancel" IsCancel="True" HorizontalAlignment="Right" Margin="0,12,0,0" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ui:RowList x:Name="GalleryCards" AutomationProperties.Name="Panels you can add">
+                <ui:RowList.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ui:RowList.ItemsPanel>
+                <ui:RowList.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource PanelCard}" Margin="0,0,10,10">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" Style="{StaticResource SectionLabel}" />
+                                <TextBlock Text="{Binding Shows}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Needs}" Style="{StaticResource Muted}" Margin="0,6,0,0" />
+                                <TextBlock x:Name="WhyNot" Text="{Binding WhyNot}" Margin="0,6,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Refusal}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding CanAdd}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <Button Content="Add" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="{Binding CanAdd}" Click="OnAddClick"
+                                        AutomationProperties.Name="{Binding Title, StringFormat='Add {0}'}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ui:RowList.ItemTemplate>
+            </ui:RowList>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

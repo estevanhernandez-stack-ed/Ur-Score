@@ -59,6 +59,24 @@ public class PanelTextTests
     }
 
     [Fact]
+    public void SourcesAreLabelledByRole()
+    {
+        Assert.Equal("★ CCGP", PanelText.SourceLabel("CCGP", SourceRole.Main));
+        Assert.Equal("K0i2", PanelText.SourceLabel("K0i2", SourceRole.Mine));
+        Assert.Equal("NovaForge · watching", PanelText.SourceLabel("NovaForge", SourceRole.Watch));
+    }
+
+    [Fact]
+    public void WithoutARecipeTitlesStayGeneric()
+    {
+        Assert.Equal("Standing", PanelText.Title(PanelType.Standing, null, []));
+        Assert.Equal("Race", PanelText.Title(PanelType.Race, null, []));
+        Assert.Equal("Past periods", PanelText.Title(PanelType.PastPeriods, null, []));
+        Assert.Equal("Top of the list", PanelText.Title(PanelType.Top, null, []));
+        Assert.Equal("Top of the battle", PanelText.Title(PanelType.Top, null, [BoardFixtures.Installed(BoardFixtures.Clan)]));
+    }
+
+    [Fact]
     public void AgoAndStaleTexts()
     {
         Assert.Equal($"{StatText.Span(TimeSpan.FromMinutes(5))} ago", PanelText.Ago(Now.AddMinutes(-5), Now));

@@ -1,0 +1,17 @@
+<Window x:Class="Labs626.UrScore.UI.BoardNameWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Rename board" Width="400" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
+        FontFamily="{StaticResource BodyFont}">
+    <StackPanel Margin="20,18,20,18">
+        <TextBlock Text="NAME" Style="{StaticResource SectionLabel}" />
+        <TextBox x:Name="BoardNameBox" AutomationProperties.Name="Board name" />
+        <TextBlock x:Name="NameProblemLine" Style="{StaticResource Refusal}" Margin="0,6,0,0" Visibility="Collapsed" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+            <Button x:Name="SaveNameButton" Content="Save" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnSaveClick" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -16,6 +16,7 @@ $script:UrFixtures = Join-Path $UrRepo 'tests\Fixtures'
 $script:UrData = Join-Path $env:LOCALAPPDATA '626labs.ur-score'
 $script:UrShots = Join-Path $UrRepo 'artifacts\smoke'
 $script:Results = [System.Collections.Generic.List[object]]::new()
+$script:SkipReasons = [System.Collections.Generic.List[string]]::new()
 
 function Get-UrProcessId {
     (Get-Process | Where-Object { $_.ProcessName -match 'ur-score' } | Select-Object -First 1).Id
@@ -255,10 +256,20 @@ function Check([string]$step, [bool]$ok, [string]$seen) {
     $script:Results.Add([pscustomobject]@{ Step = $step; Result = $(if ($ok) { 'PASS' } else { 'FAIL' }); Seen = $seen })
 }
 
+# A step this run couldn't judge, and why ('needs a live battle'). It is neither a pass nor a failure: Seen leads with
+# the reason, the summary counts it by reason, and it doesn't change the exit code.
+function Skip([string]$step, [string]$why, [string]$seen) {
+    $script:Results.Add([pscustomobject]@{ Step = $step; Result = 'SKIP'; Seen = "[$why] $seen" })
+    $script:SkipReasons.Add($why)
+}
+
 function Show-Results {
     $script:Results | Format-Table -AutoSize -Wrap | Out-String -Width 240
     $failed = @($script:Results | Where-Object { $_.Result -eq 'FAIL' }).Count
-    "$($script:Results.Count - $failed) passed, $failed failed"
+    $skipped = @($script:Results | Where-Object { $_.Result -eq 'SKIP' }).Count
+    $summary = "$($script:Results.Count - $failed - $skipped) passed, $failed failed"
+    foreach ($reason in @($script:SkipReasons | Group-Object | Sort-Object Name)) { $summary += ", $($reason.Count) $($reason.Name)" }
+    $summary
     if ($failed -gt 0) { $global:LASTEXITCODE = 1 } else { $global:LASTEXITCODE = 0 }
 }
 

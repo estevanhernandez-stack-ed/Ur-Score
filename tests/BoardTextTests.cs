@@ -76,4 +76,66 @@ public class BoardTextTests
     [Fact]
     public void TheAttributionCreditsRecipesThatAreRead() =>
         Assert.Equal(Clan.Credit, BoardText.Attribution(Live([MainClan], [Installed(Clan, "value"), Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>())));
+
+    [Fact]
+    public void NoRecipesShowsOverEveryBoardAndTheStartersStatesOnlyWhileItFollows()
+    {
+        var noStats = StarterBoards.Build([Installed(Clan)], [MainClan]);
+        var saved = new BoardDef("b-00000001", "Rivals", []);
+        var withPanel = saved with
+        {
+            Panels = [new PanelDef("p-00000001", PanelType.Standing, new PanelSize(3), new PanelSettings(Clan.Slug, SourceId: MainClan.Id))],
+        };
+
+        Assert.Equal(BoardEmpty.NoRecipes, BoardText.EmptyFor(StarterBoards.Build([], []), followsStarter: false, withPanel));
+        Assert.Equal(BoardEmpty.NoStats, BoardText.EmptyFor(noStats, followsStarter: true, withPanel));
+        Assert.Equal(BoardEmpty.NoPanels, BoardText.EmptyFor(noStats, followsStarter: false, saved));
+        Assert.Equal(BoardEmpty.None, BoardText.EmptyFor(noStats, followsStarter: false, withPanel));
+    }
+
+    [Fact]
+    public void WhyYourBoardsArentSavedComesBeforeRoRoRoBeingDownAndTheBudget()
+    {
+        var down = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>
+        {
+            [MainClan.Id] = new RecipeSnapshot(WatchState.HostDown, null, [], [], 0) { SourceId = MainClan.Id },
+        });
+        var up = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>());
+
+        Assert.Equal("Your boards file couldn't be read.", BoardText.DetailLine(down, "over budget", "Your boards file couldn't be read."));
+        Assert.Equal("Your boards file couldn't be read.", BoardText.DetailLine(up, "over budget", "Your boards file couldn't be read."));
+        Assert.Equal(BoardText.HostDown, BoardText.DetailLine(down, "over budget", boardsProblem: null));
+        Assert.Equal("over budget", BoardText.DetailLine(up, "over budget", boardsProblem: null));
+        Assert.Equal("", BoardText.DetailLine(up, null, boardsProblem: null));
+    }
+
+    [Fact]
+    public void ABoardChangeThatWasntSavedSaysWhyInPlainWords()
+    {
+        Assert.Equal("Your change to the boards wasn't saved: another program has your boards file open. Close it, then try again.",
+            BoardText.BoardsNotSaved(new IOException("sharing", unchecked((int)0x80070020))));
+        Assert.Equal("Your change to the boards wasn't saved: the disk is full.",
+            BoardText.BoardsNotSaved(new IOException("full", unchecked((int)0x80070070))));
+        Assert.Equal("Your change to the boards wasn't saved: Windows didn't let Ur Score write to its data folder.",
+            BoardText.BoardsNotSaved(new UnauthorizedAccessException("denied")));
+        Assert.Equal("Your change to the boards wasn't saved: The device is not ready.",
+            BoardText.BoardsNotSaved(new IOException("The device is not ready.")));
+    }
+
+    [Fact]
+    public void ASavedBoardWithNoPanelsSaysSo() =>
+        Assert.Equal(
+            ("This board has no panels yet", "Add panels from the gallery, then arrange them with Edit board.", "Add panel"),
+            BoardText.EmptyState(BoardEmpty.NoPanels, Clan));
+
+    [Fact]
+    public void InEditModeAnEmptyBoardSaysWhatToDoFromThere() =>
+        Assert.Equal(
+            ("This board has no panels yet", "Add panels from the gallery with Add panel, then press Done.", "Add panel"),
+            BoardText.EmptyState(BoardEmpty.NoPanels, Clan, editing: true));
+
+    [Fact]
+    public void AnUnexpectedSaveFailureSaysSoWithoutItsMessage() =>
+        Assert.Equal("Your change to the boards wasn't saved: something unexpected went wrong.",
+            BoardText.BoardsNotSaved(new InvalidOperationException("p-1 at C:\\somewhere")));
 }

@@ -8,14 +8,10 @@ using Source = Labs626.UrScore.Core.Source;
 /// <summary>One panel on a board: its type, how many of the 12 columns it spans, and what it shows.</summary>
 public sealed record PanelSpec(PanelType Type, int Span, PanelSettings Settings);
 
-public enum BoardEmpty { None, NoRecipes, NoStats, NoSources }
+public enum BoardEmpty { None, NoRecipes, NoStats, NoSources, NoPanels }
 
-public sealed record StarterBoard(string Name, BoardEmpty Empty, IReadOnlyList<PanelSpec> Panels, string? AnchorSourceId, string? RecipeSlug)
-{
-    /// <summary>Changes exactly when the panels or their settings change, so the window rebuilds only then.</summary>
-    public string Key => string.Join("|", Panels.Select(p =>
-        $"{p.Type}:{p.Span}:{p.Settings.Recipe}:{p.Settings.SourceId}:{string.Join(",", p.Settings.SourceIds ?? [])}:{p.Settings.ToSourceId}:{p.Settings.Stat}:{p.Settings.UserId}"));
-}
+/// <summary>A starter board's panels, or the empty state it shows instead, and the recipe that empty state names.</summary>
+public sealed record StarterBoard(string Name, BoardEmpty Empty, IReadOnlyList<PanelSpec> Panels, string? RecipeSlug);
 
 /// <summary>
 /// Stage 1's one fixed board (spec §8): Battle when a recipe with a period has ticked stats, else Grind. Pure,
@@ -26,20 +22,33 @@ public static class StarterBoards
     public const string Battle = "Battle";
     public const string Grind = "Grind";
 
-    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources)
+    /// <summary>
+    /// Stage 1's board, or a named starter for + Board (spec §9.2). With no name, Battle when a recipe with a
+    /// period has ticked stats, else Grind. A named starter that can't be built has no panels.
+    /// </summary>
+    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string? name = null)
     {
-        if (installed.Count == 0) return new StarterBoard(Battle, BoardEmpty.NoRecipes, [], null, null);
+        if (installed.Count == 0) return new StarterBoard(name ?? Battle, BoardEmpty.NoRecipes, [], null);
 
         var ticked = installed.Where(i => !i.Recipe.IsGroupList && i.State.TrackedStats(i.Recipe).Count > 0).ToList();
         if (ticked.Count == 0)
         {
             var first = installed.FirstOrDefault(i => !i.Recipe.IsGroupList) ?? installed[0];
-            return new StarterBoard(Battle, BoardEmpty.NoStats, [], null, first.Recipe.Slug);
+            return new StarterBoard(name ?? Battle, BoardEmpty.NoStats, [], first.Recipe.Slug);
         }
 
         var enabled = sources.Where(s => s.Enabled).ToList();
         var withPeriod = ticked.Where(i => i.Recipe.Period is not null).ToList();
-        return withPeriod.Count > 0 ? BattleBoard(installed, withPeriod, enabled) : GrindBoard(ticked, enabled);
+        var withoutPeriod = ticked.Where(i => i.Recipe.Period is null).ToList();
+
+        return name switch
+        {
+            Battle when withPeriod.Count == 0 => new StarterBoard(Battle, BoardEmpty.NoStats, [], ticked[0].Recipe.Slug),
+            Battle => BattleBoard(installed, withPeriod, enabled),
+            Grind when withoutPeriod.Count == 0 => new StarterBoard(Grind, BoardEmpty.NoStats, [], ticked[0].Recipe.Slug),
+            Grind => GrindBoard(withoutPeriod, enabled),
+            _ => withPeriod.Count > 0 ? BattleBoard(installed, withPeriod, enabled) : GrindBoard(ticked, enabled),
+        };
     }
 
     /// <summary>The first shown stat in recipe order, else the first sent one.</summary>
@@ -66,7 +75,7 @@ public static class StarterBoards
         var watch = enabled.Where(s => Of(s, recipe) && s.Role == SourceRole.Watch).ToList();
         var anchor = main ?? mine.FirstOrDefault() ?? watch.FirstOrDefault();
 
-        if (anchor is null && recipe.Recipe.Inputs.Count > 0) return new StarterBoard(Battle, BoardEmpty.NoSources, [], null, slug);
+        if (anchor is null && recipe.Recipe.Inputs.Count > 0) return new StarterBoard(Battle, BoardEmpty.NoSources, [], slug);
 
         var stat = FirstStat(recipe);
         var otherMine = mine.FirstOrDefault(s => s.Id != anchor?.Id);
@@ -103,7 +112,7 @@ public static class StarterBoards
             panels.Add(new PanelSpec(PanelType.PastPeriods, 4, new PanelSettings(slug, SourceId: anchor.Id, Stat: stat)));
         }
 
-        return new StarterBoard(Battle, BoardEmpty.None, panels, anchor?.Id, slug);
+        return new StarterBoard(Battle, BoardEmpty.None, panels, slug);
     }
 
     private static StarterBoard GrindBoard(IReadOnlyList<InstalledRecipe> ticked, IReadOnlyList<Source> enabled)
@@ -112,7 +121,7 @@ public static class StarterBoards
         var slug = recipe.Recipe.Slug;
         var source = enabled.FirstOrDefault(s => string.Equals(s.Recipe, slug, StringComparison.Ordinal));
 
-        if (source is null && recipe.Recipe.Inputs.Count > 0) return new StarterBoard(Grind, BoardEmpty.NoSources, [], null, slug);
+        if (source is null && recipe.Recipe.Inputs.Count > 0) return new StarterBoard(Grind, BoardEmpty.NoSources, [], slug);
 
         var stats = recipe.State.ShownStats(recipe.Recipe).Select(s => s.Key).Take(2).ToList();
         if (stats.Count == 0 && FirstStat(recipe) is { } only) stats.Add(only);
@@ -123,6 +132,6 @@ public static class StarterBoards
         panels.Add(new PanelSpec(PanelType.Records, 3, new PanelSettings(slug, Stat: stats[0])));
         panels.Add(new PanelSpec(PanelType.AccountCard, 3, new PanelSettings(slug, Stat: stats[0])));
 
-        return new StarterBoard(Grind, BoardEmpty.None, panels, source?.Id, slug);
+        return new StarterBoard(Grind, BoardEmpty.None, panels, slug);
     }
 }
