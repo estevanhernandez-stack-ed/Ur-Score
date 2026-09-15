@@ -18,7 +18,7 @@ public sealed class SendTick : INotifyPropertyChanged
 
     public required Guid AccountId { get; init; }
 
-    /// <summary>The accessible name: "Send estehernandez for Pet Sim 99 profile".</summary>
+    /// <summary>The accessible name: "Send &lt;account&gt; for &lt;recipe&gt;".</summary>
     public required string Name { get; init; }
 
     public bool On
