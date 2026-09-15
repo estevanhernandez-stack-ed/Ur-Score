@@ -16,8 +16,8 @@
                     <TextBlock Grid.Column="1" Text="{Binding NameColumn}" Style="{StaticResource ColumnHeader}" />
                     <TextBlock Grid.Column="2" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                 </Grid>
-                <ItemsControl ItemsSource="{Binding Rows}" AutomationProperties.Name="The leading groups, with yours placed">
-                    <ItemsControl.ItemTemplate>
+                <ui:RowList ItemsSource="{Binding Rows}" AutomationProperties.Name="The leading groups, with yours placed">
+                    <ui:RowList.ItemTemplate>
                         <DataTemplate>
                             <Border Padding="0,2" CornerRadius="3">
                                 <Border.Style>
@@ -42,8 +42,8 @@
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
             </StackPanel>
             <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
                        Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />

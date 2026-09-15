@@ -20,8 +20,8 @@
                     <TextBlock Grid.Column="1" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                     <TextBlock Grid.Column="2" Text="Would place" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                 </Grid>
-                <ItemsControl ItemsSource="{Binding Rows}" AutomationProperties.Name="Where each account would place">
-                    <ItemsControl.ItemTemplate>
+                <ui:RowList ItemsSource="{Binding Rows}" AutomationProperties.Name="Where each account would place">
+                    <ui:RowList.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="0,2">
                                 <Grid.ColumnDefinitions>
@@ -44,8 +44,8 @@
                                 </TextBlock>
                             </Grid>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
             </StackPanel>
             <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
                        Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />

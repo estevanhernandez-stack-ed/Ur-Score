@@ -13,8 +13,8 @@
             <TextBlock x:Name="AuthorLine" Margin="0,2,0,0" Style="{StaticResource Muted}" FontStyle="Italic" />
 
             <TextBlock Text="YOUR PC WILL CONTACT" Style="{StaticResource SectionLabel}" Margin="0,18,0,6" />
-            <ItemsControl x:Name="HostsList" AutomationProperties.Name="Every host this recipe contacts and what each receives">
-                <ItemsControl.ItemTemplate>
+            <ui:RowList x:Name="HostsList" AutomationProperties.Name="Every host this recipe contacts and what each receives">
+                <ui:RowList.ItemTemplate>
                     <DataTemplate>
                         <Border Style="{StaticResource Card}" Padding="12,8" Margin="0,0,0,6">
                             <StackPanel>
@@ -23,8 +23,8 @@
                             </StackPanel>
                         </Border>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ui:RowList.ItemTemplate>
+            </ui:RowList>
             <TextBlock x:Name="PollLine" Margin="0,4,0,0" TextWrapping="Wrap" />
             <TextBlock x:Name="ReusedLine" Margin="0,4,0,0" TextWrapping="Wrap" />
             <TextBlock x:Name="ChangesLine" Margin="0,4,0,0" TextWrapping="Wrap" />
@@ -33,13 +33,13 @@
             <!-- Spec §7.3 and §14: what every successful read writes to the score book. -->
             <TextBlock Text="KEPT IN YOUR SCORE BOOK" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
             <TextBlock x:Name="KeptNote" Style="{StaticResource Muted}" />
-            <ItemsControl x:Name="KeptList" Margin="0,4,0,0" AutomationProperties.Name="Kept in your score book">
-                <ItemsControl.ItemTemplate>
+            <ui:RowList x:Name="KeptList" Margin="0,4,0,0" AutomationProperties.Name="Kept in your score book">
+                <ui:RowList.ItemTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding}" Margin="0,2,0,0" />
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ui:RowList.ItemTemplate>
+            </ui:RowList>
 
             <!-- Nothing is ticked for the user: a recipe that pre-ticked a stat would be deciding what gets
                  sent. A group list has no stats to tick at all. -->

@@ -32,8 +32,8 @@
         <Border Style="{StaticResource Card}" Padding="12,10">
             <StackPanel>
                 <TextBlock Text="REPORT POLICY" Style="{StaticResource SectionLabel}" />
-                <ItemsControl x:Name="PolicyList" AutomationProperties.Name="What each recipe sends to RoRoRo">
-                    <ItemsControl.ItemTemplate>
+                <ui:RowList x:Name="PolicyList" AutomationProperties.Name="What each recipe sends to RoRoRo">
+                    <ui:RowList.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Margin="0,0,0,10">
                                 <TextBlock Text="{Binding RecipeName}" FontWeight="SemiBold" />
@@ -41,8 +41,8 @@
                                 <TextBlock Text="{Binding Counts}" Style="{StaticResource Muted}" Margin="0,2,0,0" />
                             </StackPanel>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
                 <TextBlock x:Name="PolicyEmptyLine" Style="{StaticResource Muted}" Visibility="Collapsed"
                            Text="No recipe, so nothing is sent to RoRoRo." />
             </StackPanel>

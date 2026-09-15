@@ -18,13 +18,13 @@
                     <TextBlock Grid.Column="2" Text="{Binding GroupColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                     <TextBlock Grid.Column="3" Text="Change" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                 </Grid>
-                <ItemsControl ItemsSource="{Binding Groups}" AutomationProperties.Name="Your accounts by this stat">
-                    <ItemsControl.ItemTemplate>
+                <ui:RowList ItemsSource="{Binding Groups}" AutomationProperties.Name="Your accounts by this stat">
+                    <ui:RowList.ItemTemplate>
                         <DataTemplate>
                             <StackPanel>
                                 <TextBlock Text="{Binding Heading}" Style="{StaticResource ColumnHeader}" Margin="0,8,0,2" />
-                                <ItemsControl ItemsSource="{Binding Rows}">
-                                    <ItemsControl.ItemTemplate>
+                                <ui:RowList ItemsSource="{Binding Rows}">
+                                    <ui:RowList.ItemTemplate>
                                         <DataTemplate>
                                             <Grid Margin="0,2">
                                                 <Grid.ColumnDefinitions>
@@ -49,12 +49,12 @@
                                                 </StackPanel>
                                             </Grid>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                    </ui:RowList.ItemTemplate>
+                                </ui:RowList>
                             </StackPanel>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
             </StackPanel>
             <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
                        Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />

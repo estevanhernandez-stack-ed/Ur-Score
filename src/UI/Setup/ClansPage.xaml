@@ -45,7 +45,7 @@
                 Visibility="Collapsed" Click="OnWatchInsteadClick" />
 
         <TextBlock x:Name="MineLabel" FontWeight="SemiBold" Margin="0,26,0,8" />
-        <ItemsControl x:Name="MineList" ItemTemplate="{StaticResource ClanRowTemplate}"
+        <ui:RowList x:Name="MineList" ItemTemplate="{StaticResource ClanRowTemplate}"
                       AutomationProperties.Name="Sources your accounts are in" />
         <TextBlock x:Name="MineEmptyLine" Style="{StaticResource Muted}" Margin="0,0,0,8" Visibility="Collapsed" />
         <Button x:Name="AddMineButton" HorizontalAlignment="Left" Click="OnAddMineClick" />
@@ -55,7 +55,7 @@
                 Visibility="Collapsed" Click="OnWatchInsteadClick" />
 
         <TextBlock x:Name="WatchLabel" FontWeight="SemiBold" Margin="0,26,0,8" />
-        <ItemsControl x:Name="WatchList" ItemTemplate="{StaticResource ClanRowTemplate}"
+        <ui:RowList x:Name="WatchList" ItemTemplate="{StaticResource ClanRowTemplate}"
                       AutomationProperties.Name="Sources you're watching" />
         <TextBlock x:Name="WatchEmptyLine" Style="{StaticResource Muted}" Margin="0,0,0,8" Visibility="Collapsed" />
         <Button x:Name="WatchClanButton" HorizontalAlignment="Left" Click="OnWatchClanClick" />

@@ -10,26 +10,26 @@
                 <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" />
                 <ui:LineChart Height="48" Margin="0,6,0,0" Series="{Binding Line}" FromZero="False" ShowLabels="False"
                               AutomationProperties.Name="{Binding ChartName}" />
-                <ItemsControl ItemsSource="{Binding Numbers}" Margin="0,6,0,0">
-                    <ItemsControl.ItemTemplate>
+                <ui:RowList ItemsSource="{Binding Numbers}" Margin="0,6,0,0">
+                    <ui:RowList.ItemTemplate>
                         <DataTemplate>
                             <DockPanel Margin="0,3,0,0">
                                 <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
                             </DockPanel>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <ItemsControl ItemsSource="{Binding Facts}" Margin="0,6,0,0">
-                    <ItemsControl.ItemTemplate>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
+                <ui:RowList ItemsSource="{Binding Facts}" Margin="0,6,0,0">
+                    <ui:RowList.ItemTemplate>
                         <DataTemplate>
                             <DockPanel Margin="0,3,0,0">
                                 <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" TextWrapping="Wrap" MaxWidth="220" TextAlignment="Right" />
                                 <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
                             </DockPanel>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
             </StackPanel>
             <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
                        Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />
