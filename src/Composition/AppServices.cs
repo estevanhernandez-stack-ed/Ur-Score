@@ -56,6 +56,10 @@ public sealed class AppServices : ISetupServices, IDisposable
     private readonly IconClient _icons;
     private readonly SearchLists _searchLists;
     private readonly SourceStore _sourceStore = new(SourceStore.DefaultPath);
+    private readonly BoardsFile _boardsFile = new(BoardsFile.DefaultPath, TimeProvider.System);
+
+    /// <summary>What <c>boards.json</c> holds, or null while there is no file (R1) or it couldn't be read (R3).</summary>
+    private IReadOnlyList<BoardDef>? _savedBoards;
     private readonly List<string> _trail = [];
     private readonly Dictionary<string, RecipeSnapshot> _latest = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _lastRead = new(StringComparer.Ordinal);
@@ -108,6 +112,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         Runner.SnapshotReady += OnSnapshotReady;
 
         LoadAtStart();
+        LoadBoards();
     }
 
     // ---- ISetupServices ----
@@ -198,6 +203,38 @@ public sealed class AppServices : ISetupServices, IDisposable
         new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
         new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
         KnownAccounts, _time, Runner.Running);
+
+    /// <summary>
+    /// The saved boards, or, while nothing is saved, the starter board rebuilt from your sources with fixed ids
+    /// (R1, R2). Never empty.
+    /// </summary>
+    public IReadOnlyList<BoardDef> Boards =>
+        _savedBoards ?? [BoardDefs.FromStarter(StarterBoards.Build(Installed, Sources), freshIds: false)];
+
+    /// <summary>True until the first board change writes <c>boards.json</c>.</summary>
+    public bool BoardsFollowStarter => _savedBoards is null;
+
+    /// <summary>Why the saved boards aren't showing, or null.</summary>
+    public string? BoardsProblem { get; private set; }
+
+    /// <summary>
+    /// Writes <c>boards.json</c> with only your own account ids (R17), keeps an unreadable old file beside it
+    /// (R3), and redraws. Throws when the file can't be written; nothing changes then.
+    /// </summary>
+    public void SaveBoards(IReadOnlyList<BoardDef> boards)
+    {
+        var mine = KnownAccounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
+        var clean = BoardDefs.Sanitize(boards, mine);
+
+        var kept = _boardsFile.Save(clean);
+
+        // An empty list loads as no file (R4), so it follows the starter now as it would after a restart.
+        _savedBoards = clean.Count > 0 ? clean : null;
+        BoardsProblem = null;
+        if (kept is not null) AddTrail($"BOARDS: the unreadable boards file was kept as {Path.GetFileName(kept)}.");
+
+        RaiseChanged();
+    }
 
     /// <summary>
     /// Reads the finals index and the book on a worker thread, before any watch exists, then applies the
@@ -721,6 +758,23 @@ public sealed class AppServices : ISetupServices, IDisposable
         var sources = SourceRules.ForNewRecipes(load.Sources, [], Installed);
         Sources = sources;
         if (!ReferenceEquals(sources, load.Sources)) TrySaveSources(sources);
+    }
+
+    /// <summary>
+    /// No file, or an empty list, leaves the starter following your sources (R1). A file that can't be read shows
+    /// the starter too, and says why until the next save keeps a copy of it (R3).
+    /// </summary>
+    private void LoadBoards()
+    {
+        var load = _boardsFile.Load();
+        if (!load.Readable)
+        {
+            BoardsProblem = "Your boards file couldn't be read, so the starter board is showing. The next change to a board keeps a copy of the old file beside the new one.";
+            AddTrail("BOARDS NOT READ: showing the starter board.");
+            return;
+        }
+
+        if (load.Boards.Count > 0) _savedBoards = load.Boards;
     }
 
     /// <summary>Saves what changed without an import or reload failing over it; a file that couldn't be read is left alone.</summary>

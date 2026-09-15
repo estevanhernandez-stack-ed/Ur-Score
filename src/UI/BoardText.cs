@@ -53,6 +53,16 @@ public static class BoardText
             .Select(i => i.Recipe.Credit)
             .Distinct(StringComparer.Ordinal));
 
+    /// <summary>
+    /// Which empty state a board shows (R1): no recipes over every board; the starter's own states while the
+    /// board still follows your sources; a saved board with no panels; else none.
+    /// </summary>
+    public static BoardEmpty EmptyFor(StarterBoard starter, bool followsStarter, BoardDef board) =>
+        starter.Empty == BoardEmpty.NoRecipes ? BoardEmpty.NoRecipes
+        : followsStarter ? starter.Empty
+        : board.Panels.Count == 0 ? BoardEmpty.NoPanels
+        : BoardEmpty.None;
+
     public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe)
     {
         var group = recipe is null ? "source" : RecipeWords.Group(recipe);
@@ -67,6 +77,9 @@ public static class BoardText
             BoardEmpty.NoSources => ($"Choose your main {group}",
                 "Type a few letters of its name in Setup, and Ur Score finds which of your accounts are in it.",
                 $"Choose your main {group}"),
+            BoardEmpty.NoPanels => ("This board has no panels yet",
+                "Add panels from the gallery, then arrange them with Edit board.",
+                ""),
             _ => ("", "", ""),
         };
     }

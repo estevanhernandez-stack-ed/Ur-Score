@@ -5,11 +5,44 @@
         Title="RoRoRo Ur Score" Height="900" Width="1280" MinHeight="560" MinWidth="720"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
         FontFamily="{StaticResource BodyFont}">
+    <Window.Resources>
+        <!-- A tab reads like Setup's list: no fill until hovered, and a cyan bar under the board on screen. -->
+        <Style x:Key="BoardTab" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid>
+                            <Border x:Name="Item" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter />
+                            </Border>
+                            <Border x:Name="Bar" Height="2" VerticalAlignment="Bottom" Margin="8,0"
+                                    Background="{DynamicResource CyanBrush}" Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+                                <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <DockPanel>
-        <!-- The top bar (spec §8). Stage 2 adds tabs on the left and Edit board beside Setup. -->
-        <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,10">
+        <!-- The top bar (spec §8): tabs and the period line on the left; Start, Test now and Setup on the right. -->
+        <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,8">
             <DockPanel LastChildFill="True">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <StackPanel x:Name="TopButtons" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="StartStopButton" Content="Start" Style="{StaticResource PrimaryButton}" Click="OnStartStopClick"
                             AutomationProperties.Name="Start or stop reading" />
                     <Button x:Name="TestNowButton" Content="Test now" Margin="8,0,0,0" Click="OnTestNowClick"
@@ -21,9 +54,29 @@
                         </StackPanel>
                     </Button>
                 </StackPanel>
+                <Image x:Name="BoardIcon" DockPanel.Dock="Left" Width="22" Height="22" Margin="0,0,10,0" Visibility="Collapsed"
+                       VerticalAlignment="Center" AutomationProperties.Name="Main source icon" />
+                <ListBox x:Name="BoardTabs" DockPanel.Dock="Left" ItemContainerStyle="{StaticResource BoardTab}" DisplayMemberPath="Name"
+                         Background="Transparent" BorderThickness="0" VerticalAlignment="Center" SelectionChanged="OnTabChanged"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Boards">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ContextMenu>
+                        <ContextMenu x:Name="TabMenu" Opened="OnTabMenuOpened" Background="{DynamicResource RowBgBrush}"
+                                     Foreground="{DynamicResource WhiteBrush}" BorderBrush="{DynamicResource EdgeBrush}">
+                            <MenuItem x:Name="RenameBoardItem" Header="Rename…" Click="OnRenameBoardClick" />
+                            <MenuItem x:Name="DuplicateBoardItem" Header="Duplicate" Click="OnDuplicateBoardClick" />
+                            <MenuItem x:Name="DeleteBoardItem" Header="Delete…" Click="OnDeleteBoardClick" />
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                </ListBox>
+                <Button x:Name="AddBoardButton" DockPanel.Dock="Left" Content="+ Board" Style="{StaticResource FlatButton}"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" Margin="4,0,14,0" Click="OnAddBoardClick"
+                        AutomationProperties.Name="Add a board" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image x:Name="BoardIcon" Width="22" Height="22" Margin="0,0,10,0" Visibility="Collapsed"
-                           AutomationProperties.Name="Main source icon" />
                     <Ellipse x:Name="LiveDot" Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource CyanBrush}" Visibility="Collapsed" />
                     <TextBlock x:Name="PeriodLine" Style="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="NoWrap"
                                TextTrimming="CharacterEllipsis" />

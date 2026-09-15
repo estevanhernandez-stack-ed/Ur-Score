@@ -1,7 +1,7 @@
 namespace Labs626.UrScore.UI;
 
 /// <summary>Which of the board's buttons take a press right now.</summary>
-public readonly record struct BoardButtonStates(bool StartStop, bool TestNow, bool EmptyState);
+public readonly record struct BoardButtonStates(bool StartStop, bool TestNow, bool EmptyState, bool DeleteBoard = false);
 
 /// <summary>
 /// The board's buttons are disabled for exactly the time a press would be ignored, and never longer. Stop is
@@ -14,8 +14,10 @@ public static class BoardButtons
     /// <param name="starting">Start was pressed and is still asking RoRoRo for accounts.</param>
     /// <param name="testing">A Test now read is in flight.</param>
     /// <param name="importing">The empty state's Import recipe… is in flight.</param>
-    public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing) => new(
+    /// <param name="boards">How many boards there are; the last one can't be deleted (R11).</param>
+    public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing, int boards = 1) => new(
         StartStop: loaded && !starting && (running || !testing),
         TestNow: loaded && !starting && !testing,
-        EmptyState: !importing);
+        EmptyState: !importing,
+        DeleteBoard: boards > 1);
 }

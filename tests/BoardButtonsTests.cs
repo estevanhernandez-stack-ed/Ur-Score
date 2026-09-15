@@ -71,4 +71,14 @@ public class BoardButtonsTests
         Assert.Equal(new BoardButtonStates(StartStop: true, TestNow: true, EmptyState: false), importing);
         Assert.True(testing.EmptyState);
     }
+
+    [Fact]
+    public void TheLastBoardCantBeDeleted()
+    {
+        var one = BoardButtons.For(loaded: true, running: false, starting: false, testing: false, importing: false, boards: 1);
+        var two = BoardButtons.For(loaded: false, running: true, starting: true, testing: true, importing: true, boards: 2);
+
+        Assert.False(one.DeleteBoard);
+        Assert.True(two.DeleteBoard);
+    }
 }
