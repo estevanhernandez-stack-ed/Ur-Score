@@ -23,26 +23,61 @@
             <Button x:Name="RemovePanelButton" Content="✕" Tag="Remove" Style="{StaticResource FlatButton}" Padding="6,2"
                     Click="OnToolClick" AutomationProperties.Name="Remove panel" />
         </WrapPanel>
+        <!-- The title line (the mock's .p-head): title, chip and tools centred on one line; the tools in the muted text colour. -->
         <DockPanel LastChildFill="False">
-            <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal">
+            <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="PopOutButton" Content="⧉" Tag="PopOut" Style="{StaticResource FlatButton}" Padding="6,2" Visibility="Collapsed"
-                        Click="OnToolClick" AutomationProperties.Name="Pop out" />
+                        Foreground="{DynamicResource MutedTextBrush}" Click="OnToolClick" AutomationProperties.Name="Pop out" />
                 <Button x:Name="PanelSettingsButton" Content="⋯" Tag="Settings" Style="{StaticResource FlatButton}" Padding="6,2" Visibility="Collapsed"
-                        Click="OnToolClick" AutomationProperties.Name="Panel settings" />
+                        Foreground="{DynamicResource MutedTextBrush}" Click="OnToolClick" AutomationProperties.Name="Panel settings" />
             </StackPanel>
-            <TextBlock x:Name="PanelTitle" DockPanel.Dock="Left" Text="{Binding Title}" Style="{StaticResource SectionLabel}"
-                       Margin="0" VerticalAlignment="Center" />
-            <Border DockPanel.Dock="Left" Margin="8,0,0,0" Padding="7,1" CornerRadius="9" BorderThickness="1"
-                    BorderBrush="{DynamicResource EdgeBrush}" VerticalAlignment="Center"
+            <TextBlock x:Name="PanelTitle" DockPanel.Dock="Left" Text="{Binding Title, Converter={StaticResource Upper}}"
+                       AutomationProperties.Name="{Binding Title}" Style="{StaticResource PanelTitleText}" />
+            <!-- The chip (the mock's .chip): a pill in the colour of the source's role. The chip's text is the role's
+                 (PanelText.Chip): your main in white on the interactive edge, a clan your accounts are in cyan, a watched
+                 one magenta; any other in muted text on the divider. -->
+            <Border DockPanel.Dock="Left" Margin="8,0,0,0" Padding="7,3" CornerRadius="999" BorderThickness="1" VerticalAlignment="Center"
                     Visibility="{Binding HasChip, Converter={StaticResource BoolToVisible}}">
-                <TextBlock Text="{Binding Chip}" FontFamily="{StaticResource MonoFont}" FontSize="10.5"
-                           Foreground="{DynamicResource MutedTextBrush}" />
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Chip}" Value="★ main">
+                                <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Chip}" Value="yours">
+                                <Setter Property="BorderBrush" Value="{DynamicResource CyanBrush}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Chip}" Value="watching">
+                                <Setter Property="BorderBrush" Value="{DynamicResource MagentaBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding Chip}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" FontWeight="SemiBold">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Chip}" Value="★ main">
+                                    <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Chip}" Value="yours">
+                                    <Setter Property="Foreground" Value="{DynamicResource CyanBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Chip}" Value="watching">
+                                    <Setter Property="Foreground" Value="{DynamicResource MagentaBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </Border>
             <TextBlock x:Name="PanelOverdue" DockPanel.Dock="Left" Text="overdue" Margin="8,0,0,0" FontSize="11"
                        VerticalAlignment="Center" Foreground="{DynamicResource MagentaBrush}"
                        Visibility="{Binding Overdue, Converter={StaticResource BoolToVisible}}" />
         </DockPanel>
-        <TextBlock x:Name="PanelSubtitle" Text="{Binding Subtitle}" Style="{StaticResource Muted}" Margin="0,4,0,0"
+        <TextBlock x:Name="PanelSubtitle" Text="{Binding Subtitle}" Style="{StaticResource Muted}" FontSize="12" Margin="0,10,0,0"
                    Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVisible}}" />
         <TextBlock x:Name="PanelStale" Text="{Binding Stale}" TextWrapping="Wrap" Margin="0,10,0,0"
                    Visibility="{Binding HasStale, Converter={StaticResource BoolToVisible}}" />

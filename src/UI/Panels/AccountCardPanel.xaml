@@ -7,20 +7,30 @@
             <ui:PanelFrame DataContext="{Binding Head}" />
             <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
                 <TextBlock Text="{Binding BigLabel}" Style="{StaticResource KeyLabel}" />
-                <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" />
-                <ui:LineChart Height="48" Margin="0,6,0,0" Series="{Binding Line}" FromZero="False" ShowLabels="False"
+                <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" Margin="0,5,0,-5" />
+                <ui:LineChart Height="48" Margin="0,10,0,0" Series="{Binding Line}" FromZero="False" ShowLabels="False"
                               AutomationProperties.Name="{Binding ChartName}" />
-                <ui:RowList ItemsSource="{Binding Sections}" Margin="0,6,0,0" AutomationProperties.Name="This account's stats">
+                <!-- Sections sit side by side when the card is wide enough: each at least 200 wide, 24 apart. The list's -24
+                     right margin takes the last section's trailing gap, so three fit where three widths and two gaps do. -->
+                <ui:RowList ItemsSource="{Binding Sections}" Margin="0,10,-24,0" AutomationProperties.Name="This account's stats">
+                    <ui:RowList.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ui:RowList.ItemsPanel>
                     <ui:RowList.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel>
-                                <TextBlock Text="{Binding Heading}" Style="{StaticResource ColumnHeader}" Margin="0,8,0,2"
-                                           Visibility="{Binding HasHeading, Converter={StaticResource BoolToVisible}}" />
+                            <StackPanel MinWidth="200" Margin="0,0,24,10">
+                                <!-- A section heading reads as a table heading, lined up with the facts under it. -->
+                                <Border Style="{StaticResource PanelTableHeadingRow}" Padding="0,5"
+                                        Visibility="{Binding HasHeading, Converter={StaticResource BoolToVisible}}">
+                                    <TextBlock Text="{Binding Heading}" Style="{StaticResource ColumnHeader}" />
+                                </Border>
                                 <ui:RowList ItemsSource="{Binding Facts}">
                                     <ui:RowList.ItemTemplate>
                                         <DataTemplate>
-                                            <DockPanel Margin="0,3,0,0">
-                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" FontWeight="SemiBold" />
+                                            <DockPanel Margin="0,10,0,0">
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" Style="{StaticResource KeyValue}" Margin="16,0,0,0" />
                                                 <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
                                             </DockPanel>
                                         </DataTemplate>
@@ -30,11 +40,12 @@
                         </DataTemplate>
                     </ui:RowList.ItemTemplate>
                 </ui:RowList>
-                <ui:RowList ItemsSource="{Binding Facts}" Margin="0,6,0,0">
+                <ui:RowList ItemsSource="{Binding Facts}">
                     <ui:RowList.ItemTemplate>
                         <DataTemplate>
-                            <DockPanel Margin="0,3,0,0">
-                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" TextWrapping="Wrap" MaxWidth="220" TextAlignment="Right" />
+                            <DockPanel Margin="0,12,0,0">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" Style="{StaticResource KeyValue}" TextWrapping="Wrap" MaxWidth="220"
+                                           TextAlignment="Right" />
                                 <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
                             </DockPanel>
                         </DataTemplate>

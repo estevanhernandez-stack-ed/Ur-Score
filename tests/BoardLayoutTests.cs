@@ -61,7 +61,7 @@ public class BoardLayoutTests
     }
 
     [Fact]
-    public void APanelIsArrangedAsTallAsItsRowsAndTheGapsBetweenThem()
+    public void APanelsSlotIsAsTallAsItsRowsAndTheGapsBetweenThem()
     {
         IReadOnlyList<double> rows = [120, 80];
 

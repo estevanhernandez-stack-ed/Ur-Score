@@ -6,22 +6,24 @@
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
             <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="44" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="90" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="#" Style="{StaticResource ColumnHeader}" />
-                    <TextBlock Grid.Column="1" Text="{Binding NameColumn}" Style="{StaticResource ColumnHeader}" />
-                    <TextBlock Grid.Column="2" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
-                </Grid>
+                <Border Style="{StaticResource PanelTableHeadingRow}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="90" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="#" Style="{StaticResource ColumnHeader}" />
+                        <TextBlock Grid.Column="1" Text="{Binding NameColumn}" Style="{StaticResource ColumnHeader}" />
+                        <TextBlock Grid.Column="2" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                    </Grid>
+                </Border>
                 <ui:RowList ItemsSource="{Binding Rows}" AutomationProperties.Name="The leading groups, with yours placed">
                     <ui:RowList.ItemTemplate>
                         <DataTemplate>
-                            <Border Padding="0,2" CornerRadius="3">
+                            <Border>
                                 <Border.Style>
-                                    <Style TargetType="Border">
+                                    <Style TargetType="Border" BasedOn="{StaticResource PanelTableRowLine}">
                                         <Setter Property="Background" Value="Transparent" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding Yours}" Value="True">
