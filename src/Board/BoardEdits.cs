@@ -141,16 +141,19 @@ public static class BoardEdits
             : [.. boards.Select(b => b.Id == boardId ? b with { Name = clean } : b)];
     }
 
-    /// <summary>R13: right after the original, "name copy", new panel ids, and nothing popped out.</summary>
+    /// <summary>R13: right after the original, "name copy", new panel ids, and nothing popped out. A long name is cut to leave room for " copy".</summary>
     public static IReadOnlyList<BoardDef> Duplicate(IReadOnlyList<BoardDef> boards, string boardId)
     {
         var index = IndexOf(boards, boardId);
         if (index < 0) return boards;
 
+        const string Copy = " copy";
         var original = boards[index];
+        var room = BoardDefs.MaxNameLength - Copy.Length;
+        var name = original.Name.Length > room ? original.Name[..room].TrimEnd() : original.Name;
         var copy = new BoardDef(
             BoardDefs.NewBoardId(),
-            BoardDefs.CleanName($"{original.Name} copy") ?? BoardEdits.NextName(boards),
+            BoardDefs.CleanName(name + Copy) ?? NextName(boards),
             [.. original.Panels.Select(p => p with { Id = BoardDefs.NewPanelId(), PopOut = null })]);
 
         var list = boards.ToList();

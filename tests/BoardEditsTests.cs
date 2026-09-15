@@ -71,6 +71,21 @@ public class BoardEditsTests
         Assert.Equal("b-2", result[2].Id);
     }
 
+    [Theory]
+    [InlineData("A name that is thirty-five letters!", "A name that is thirty-five letters! copy")]
+    [InlineData("A board name that is forty letters long", "A board name that is forty letters copy")]
+    [InlineData("Rivals and friends of the main clan ....", "Rivals and friends of the main clan copy")]
+    public void ADuplicateOfALongNameStillEndsInCopy(string name, string expected)
+    {
+        Assert.True(name.Length <= BoardDefs.MaxNameLength);
+        IReadOnlyList<BoardDef> boards = [BoardOf("b-1") with { Name = name }];
+
+        var copy = BoardEdits.Duplicate(boards, "b-1")[1];
+
+        Assert.Equal(expected, copy.Name);
+        Assert.True(copy.Name.Length <= BoardDefs.MaxNameLength);
+    }
+
     [Fact]
     public void TheLastBoardCantBeDeleted()
     {
