@@ -61,8 +61,51 @@ public class AvatarFenceTests
             new[] { Path.Combine("Composition", "AppServices.cs") },
             files.Where(f => f.Text.Contains(".AskAsync(", StringComparison.Ordinal)).Select(f => f.Relative).ToArray());
 
+        // The argument, not just the expression somewhere in the file: AvatarFileFor names it too, so "contains" alone
+        // would still pass if the ask were changed to send some other set.
         var app = files.Single(f => string.Equals(f.Relative, Path.Combine("Composition", "AppServices.cs"), StringComparison.Ordinal)).Text;
-        Assert.Contains("LiveBoard.UserIdsOf(KnownAccounts)", app, StringComparison.Ordinal);
+        Assert.Contains("var yours = LiveBoard.UserIdsOf(KnownAccounts);", app, StringComparison.Ordinal);
+        Assert.Contains("AskAsync(yours", app, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Plan A26. The avatar slot is laid out whether or not a picture is there, so a picture that arrives late, fails or
+    /// never comes doesn't move a single pixel of a row. <c>Collapsed</c> in that one style would reflow the name column
+    /// on all five surfaces the moment a fetch landed, and no other test reads that value.
+    /// </summary>
+    [Fact]
+    public void ThePictureSlotIsLaidOutWhetherOrNotAPictureIsThere()
+    {
+        var app = File.ReadAllText(Path.Combine(RepoRoot(), "src", "App.xaml"));
+        var opens = app.IndexOf("<Style x:Key=\"AccountAvatar\"", StringComparison.Ordinal);
+        Assert.True(opens >= 0, "App.xaml no longer holds the shared AccountAvatar style.");
+
+        var closes = app.IndexOf("</Style>", opens, StringComparison.Ordinal);
+        Assert.True(closes > opens, "The AccountAvatar style is not closed.");
+        var style = app[opens..closes];
+
+        Assert.Contains("Value=\"Hidden\"", style, StringComparison.Ordinal);
+        Assert.DoesNotContain("Collapsed", style, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EverySurfaceThatDrawsAPictureDrawsTheSharedOne()
+    {
+        // One style, so a change to the size, the ring or the Hidden above cannot reach four surfaces and miss the fifth.
+        string[] surfaces =
+        [
+            Path.Combine("Panels", "AccountsTablePanel.xaml"),
+            Path.Combine("Panels", "MyAccountsPanel.xaml"),
+            Path.Combine("Panels", "PromotionCheckPanel.xaml"),
+            Path.Combine("Panels", "AccountCardPanel.xaml"),
+            Path.Combine("Setup", "AccountsPage.xaml"),
+        ];
+
+        foreach (var surface in surfaces)
+        {
+            var text = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", surface));
+            Assert.Contains("{StaticResource AccountAvatar}", text, StringComparison.Ordinal);
+        }
     }
 
     private static string RepoRoot()

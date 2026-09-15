@@ -774,6 +774,7 @@ public class PanelModelsTests
 
         Assert.Equal(@"C:\cache\avatar-101.png", table.Rows.First(r => r.Name == Main.DisplayName).Avatar);
         Assert.Null(table.Rows.First(r => r.Name == AltOne.DisplayName).Avatar);
+        Assert.True(table.Rows[^1].IsTotal);
         Assert.Null(table.Rows[^1].Avatar);
         Assert.Equal(@"C:\cache\avatar-101.png", mine.Groups.SelectMany(g => g.Rows).First(r => r.UserId == Main.RobloxUserId).Avatar);
         Assert.Equal(@"C:\cache\avatar-101.png", card.Avatar);

@@ -749,9 +749,12 @@ public sealed class AppServices : ISetupServices, IDisposable
     private void AskForAvatars()
     {
         var yours = LiveBoard.UserIdsOf(KnownAccounts);
+
+        // Unconditional, and before the early return: an account that stops being yours is forgotten even when it was the
+        // last one RoRoRo listed (review Minor 5).
+        _avatars.Keep(yours);
         if (yours.Count == 0) return;
 
-        _avatars.Keep(yours);
         _ = AskForAvatarsAsync(yours);
     }
 

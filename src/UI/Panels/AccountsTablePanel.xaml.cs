@@ -120,6 +120,9 @@ public partial class AccountsTablePanel : UserControl
                     CellTemplate = (DataTemplate)FindResource("AccountNameCell"),
                     ClipboardContentBinding = new Binding(nameof(TableRow.Name)),
 
+                    // Indented to clear the avatar slot, so "Account" still sits over the names (review Minor 1).
+                    HeaderStyle = (Style)FindResource("PanelTableNameHeader"),
+
                     // The name takes the width the numbers leave, so the table spans its card as the mock's does.
                     Width = new DataGridLength(1, DataGridLengthUnitType.Star),
                     MinWidth = 160,

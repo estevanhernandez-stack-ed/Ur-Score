@@ -14,7 +14,8 @@
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="120" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Account" Style="{StaticResource ColumnHeader}" />
+                        <!-- Indented by the avatar slot's constant 28 px, so the heading sits over the names. -->
+                        <TextBlock Grid.Column="0" Text="Account" Style="{StaticResource ColumnHeader}" Margin="28,0,0,0" />
                         <TextBlock Grid.Column="1" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                         <TextBlock Grid.Column="2" Text="{Binding GroupColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                         <TextBlock Grid.Column="3" Text="Change" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />

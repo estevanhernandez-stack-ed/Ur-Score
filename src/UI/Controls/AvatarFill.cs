@@ -11,7 +11,8 @@ namespace Labs626.UrScore.UI;
 /// half-written or not a picture gives no brush, and the row shows what it showed before the picture arrived.
 /// <para>
 /// Brushes are kept by path and write time, so redrawing a board every three minutes doesn't decode the same twenty
-/// pictures again. The map holds one entry per account, so it cannot grow past your account list.
+/// pictures again. The key is the path and its write time together, so a picture fetched again after its seven days
+/// adds an entry rather than replacing one: one per account per refresh, which over a session is your account list.
 /// </para>
 /// </summary>
 public sealed class AvatarFill : IValueConverter

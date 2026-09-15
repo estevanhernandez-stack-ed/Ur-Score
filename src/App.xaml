@@ -141,7 +141,9 @@
                 <Setter Property="StrokeThickness" Value="1" />
                 <Setter Property="Fill" Value="{Binding Avatar, Converter={StaticResource Avatar}}" />
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding Avatar}" Value="{x:Null}">
+                    <!-- On the converted brush, not the path: a file that is gone by the time it is drawn, or that doesn't
+                         decode, hides the slot too instead of leaving an empty ring for the session (review Minor 3). -->
+                    <DataTrigger Binding="{Binding Avatar, Converter={StaticResource Avatar}}" Value="{x:Null}">
                         <Setter Property="Visibility" Value="Hidden" />
                     </DataTrigger>
                 </Style.Triggers>
@@ -551,6 +553,11 @@
             <!-- A number column's heading lines up with its numbers. -->
             <Style x:Key="PanelTableNumberHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource PanelTableHeader}">
                 <Setter Property="HorizontalContentAlignment" Value="Right" />
+            </Style>
+            <!-- The account column's heading lines up with the names, which the avatar slot (AccountAvatar: 20 px wide with
+                 8 px after it) indents by a constant 28 px whether or not a picture is there. -->
+            <Style x:Key="PanelTableNameHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource PanelTableHeader}">
+                <Setter Property="Padding" Value="34,5" />
             </Style>
             <!-- The cell the arrow keys are on: a thin cyan ring inside it, shown for the keyboard only. -->
             <Style x:Key="PanelTableCellFocus">

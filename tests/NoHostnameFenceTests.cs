@@ -13,17 +13,33 @@ public partial class NoHostnameFenceTests
     [GeneratedRegex(@"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|io|net|org|gg|dev|app)\b")]
     private static partial Regex Hostname();
 
+    /// <summary>
+    /// A XAML file's own dialect declarations. These are the XML namespace URIs every WPF file must carry, not a host
+    /// anything contacts, so they are removed before a window's text is swept. Nothing else in a XAML file is exempt.
+    /// </summary>
+    [GeneratedRegex(@"xmlns(?::[A-Za-z0-9_.-]+)?\s*=\s*""[^""]*""")]
+    private static partial Regex XamlNamespace();
+
     private static readonly string NameClientFile = Path.Combine("Source", "NameClient.cs");
 
     private static readonly string IconClientFile = Path.Combine("Source", "IconClient.cs");
 
+    /// <summary>
+    /// Code and windows both. A window's own copy is where a host could be written in prose — the standing line on
+    /// Setup &gt; Your accounts names Roblox's picture service in words, and must go on naming it in words.
+    /// </summary>
     [Fact]
     public void NoFileInSrcNamesAHostExceptTheUsernameAndIconLookups()
     {
         var src = Path.Combine(RepoRoot(), "src");
 
-        var offenders = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
-            .Select(f => (Relative: Path.GetRelativePath(src, f), Text: File.ReadAllText(f)))
+        var files = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(src, "*.xaml", SearchOption.AllDirectories))
+            .Select(f => (Relative: Path.GetRelativePath(src, f), Text: Sweepable(f)))
+            .ToList();
+        Assert.Contains(files, f => f.Relative.EndsWith(".xaml", StringComparison.Ordinal));
+
+        var offenders = files
             .Where(f => !string.Equals(f.Relative, NameClientFile, StringComparison.Ordinal)
                         && !string.Equals(f.Relative, IconClientFile, StringComparison.Ordinal))
             .SelectMany(f => Hostname().Matches(f.Text).Select(m => $"{f.Relative}: {m.Value}"))
@@ -58,6 +74,13 @@ public partial class NoHostnameFenceTests
         // Written in parts in IconClient.cs so the fence above cannot see it; pinned here instead.
         Assert.Equal("rbxcdn.com", IconClient.PictureDomain);
         Assert.Equal("tr.rbxcdn.com", IconClient.PictureHostShown);
+    }
+
+    /// <summary>A file's text as the fence reads it: a window's XAML without its own namespace declarations.</summary>
+    private static string Sweepable(string file)
+    {
+        var text = File.ReadAllText(file);
+        return file.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase) ? XamlNamespace().Replace(text, "") : text;
     }
 
     private static string RepoRoot()

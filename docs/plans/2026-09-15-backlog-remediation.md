@@ -4148,7 +4148,7 @@ Everything is in `%LOCALAPPDATA%\626labs.ur-score\`:
 | `scorebook\` | The score book |
 | `keys.dat` | Keys you saved for a recipe's host, encrypted for your Windows account |
 | `settings.json` | `resolveNames` (below) |
-| `icon-cache\` | Recipe icons |
+| `icon-cache\` | Recipe icons, and your own accounts' avatars (`avatar-<id>.png`); never another player's picture |
 
 A `boards.json` that can't be read is never lost: the starter board shows, and the next board change keeps a copy of the old file beside the new one.
 
