@@ -1,0 +1,63 @@
+<UserControl x:Class="Labs626.UrScore.UI.MyAccountsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <Border Style="{StaticResource PanelCard}">
+        <StackPanel>
+            <ui:PanelFrame DataContext="{Binding Head}" />
+            <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="120" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Account" Style="{StaticResource ColumnHeader}" />
+                    <TextBlock Grid.Column="1" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                    <TextBlock Grid.Column="2" Text="{Binding GroupColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                    <TextBlock Grid.Column="3" Text="Change" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Groups}" AutomationProperties.Name="Your accounts by this stat">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Heading}" Style="{StaticResource ColumnHeader}" Margin="0,8,0,2" />
+                                <ItemsControl ItemsSource="{Binding Rows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="110" />
+                                                    <ColumnDefinition Width="80" />
+                                                    <ColumnDefinition Width="120" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                    <Ellipse Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                             Fill="{DynamicResource CyanBrush}"
+                                                             Visibility="{Binding Sent, Converter={StaticResource BoolToVisible}}" />
+                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{Binding Value}" Style="{StaticResource NumberCell}" />
+                                                <TextBlock Grid.Column="2" Text="{Binding InGroup}" Style="{StaticResource NumberCell}" />
+                                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <TextBlock Text="{Binding Change}" Style="{StaticResource NumberCell}" />
+                                                    <TextBlock Text=" · stalled" FontSize="11" VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource MagentaBrush}"
+                                                               Visibility="{Binding Stalled, Converter={StaticResource BoolToVisible}}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+            <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
+                       Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />
+        </StackPanel>
+    </Border>
+</UserControl>

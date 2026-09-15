@@ -145,6 +145,52 @@
                 </Setter>
             </Style>
 
+            <!-- Board panels (spec §9.4 and the mock): a card, big numbers, key-value lines, column headers, notes. -->
+            <Style x:Key="PanelCard" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource RowBgBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="14,12,14,14" />
+            </Style>
+            <Style x:Key="BigNumber" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource DisplayFont}" />
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style x:Key="KeyLabel" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="ColumnHeader" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+                <Setter Property="FontSize" Value="10.5" />
+                <Setter Property="Margin" Value="0,0,0,4" />
+            </Style>
+            <Style x:Key="PanelNoteText" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource EdgeBrush}" />
+                <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,10,0,0" />
+            </Style>
+            <!-- A cell that greys out when its row has no value. -->
+            <Style x:Key="RowCell" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Missing}" Value="True">
+                        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="NumberCell" TargetType="TextBlock" BasedOn="{StaticResource RowCell}">
+                <Setter Property="TextAlignment" Value="Right" />
+            </Style>
+
             <Style TargetType="TextBox">
                 <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                 <Setter Property="Background" Value="{DynamicResource RowBgBrush}" />
