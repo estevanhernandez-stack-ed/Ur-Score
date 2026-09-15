@@ -227,6 +227,14 @@ public class BoardEditsTests
         Assert.Equal("p-b-2", BoardEdits.FocusAfterRemove(board, "p-b-3"));
         Assert.Null(BoardEdits.FocusAfterRemove(BoardOf("b", PanelType.Standing), "p-b-1"));
         Assert.Null(BoardEdits.FocusAfterRemove(board, "p-gone"));
+
+        // Focus goes to a panel's ⋯, never to another Remove: a popped-out panel's slot has no ⋯, so it is passed over.
+        var rect = new PopOutRect(10, 10, 360, 300);
+        var four = BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Top, PanelType.Records);
+        Assert.Equal("p-b-4", BoardEdits.FocusAfterRemove(BoardEdits.PopOut(four, "p-b-3", rect), "p-b-2"));
+        Assert.Equal("p-b-1", BoardEdits.FocusAfterRemove(BoardEdits.PopOut(BoardEdits.PopOut(four, "p-b-3", rect), "p-b-4", rect), "p-b-2"));
+        Assert.Equal("p-b-3", BoardEdits.FocusAfterRemove(BoardEdits.PopOut(board, "p-b-2", rect), "p-b-1"));
+        Assert.Null(BoardEdits.FocusAfterRemove(BoardEdits.PopOut(BoardOf("b", PanelType.Standing, PanelType.Race), "p-b-1", rect), "p-b-2"));
     }
 
     [Fact]

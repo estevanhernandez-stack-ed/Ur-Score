@@ -138,7 +138,9 @@ public partial class BoardWindow
                 e.Handled = true;
                 var next = _draft is { } shown ? BoardEdits.FocusAfterRemove(shown, def.Id) : null;
                 ChangeBoard(board => BoardEdits.RemovePanel(board, def.Id));
-                FocusToolLater(next, PanelTool.Remove);
+
+                // A neighbour's ⋯, never its Remove: a button clicks on every repeated Enter, and the draft is saved on close (R8).
+                FocusToolLater(next, PanelTool.Settings);
                 break;
             case PanelTool.DragStart:
                 e.Handled = true;

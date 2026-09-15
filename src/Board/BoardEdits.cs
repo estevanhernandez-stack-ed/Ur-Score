@@ -95,13 +95,19 @@ public static class BoardEdits
         return changed ? placed : boards;
     }
 
-    /// <summary>After a panel is removed in edit mode, whose tool takes keyboard focus (R7): the next panel's, else the previous one's, else none.</summary>
+    /// <summary>
+    /// After a panel is removed in edit mode, whose ⋯ takes keyboard focus (R7): the nearest later panel's, else the
+    /// nearest earlier one's, else none (the window then focuses + Add panel). Never a Remove, so holding Enter can't
+    /// remove panel after panel; a popped-out panel's slot has no ⋯, so it is passed over.
+    /// </summary>
     public static string? FocusAfterRemove(BoardDef board, string panelId)
     {
         var index = PanelIndex(board, panelId);
         if (index < 0) return null;
 
-        return index + 1 < board.Panels.Count ? board.Panels[index + 1].Id : index > 0 ? board.Panels[index - 1].Id : null;
+        var later = board.Panels.Skip(index + 1).FirstOrDefault(p => p.PopOut is null);
+        var earlier = board.Panels.Take(index).LastOrDefault(p => p.PopOut is null);
+        return (later ?? earlier)?.Id;
     }
 
     /// <summary>Which tool a resize came from, so focus goes back to it: Tall keeps the span and flips Tall; the size box picks a span.</summary>
