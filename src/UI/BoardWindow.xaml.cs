@@ -48,7 +48,7 @@ public partial class BoardWindow : Window
     private string? _anchorSourceId;
     private string? _emptyRecipe;
 
-    /// <summary>Why the last board change couldn't be saved, or null. Cleared by the next save that works.</summary>
+    /// <summary>Why a board change couldn't be saved, only while its message box is open; the box is the notification.</summary>
     private string? _boardsNote;
 
     /// <summary>Why the score book couldn't be read at start, or null. It keeps the detail line until the book loads.</summary>
@@ -367,15 +367,15 @@ public partial class BoardWindow : Window
     }
 
     /// <summary>
-    /// Saves through the services. A file that can't be written is never silent: a message says the change wasn't
-    /// saved and why, the detail line keeps saying so until a save works, and the board stays as it was.
+    /// Saves through the services. A file that can't be written is never silent: a message box says the change
+    /// wasn't saved and why, and the board stays as it was. Once the box closes the detail line goes back to what
+    /// it was saying, so "RoRoRo is not running" or the budget line isn't hidden behind an old note.
     /// </summary>
     private bool SaveBoards(IReadOnlyList<BoardDef> boards)
     {
         try
         {
             _services.SaveBoards(boards);
-            _boardsNote = null;
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -384,6 +384,9 @@ public partial class BoardWindow : Window
             _services.AddTrail($"BOARDS NOT SAVED: {ex.GetType().Name}");
             RenderLines();
             MessageBox.Show(this, _boardsNote, "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+            _boardsNote = null;
+            RenderLines();
             return false;
         }
     }
