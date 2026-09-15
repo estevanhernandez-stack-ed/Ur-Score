@@ -27,6 +27,41 @@ public static class PanelText
     public static string Signed(double? value) =>
         value is not { } v ? StatText.Dash : v < 0 ? "-" + StatText.Abbrev(-v) : "+" + StatText.Abbrev(v);
 
+    /// <summary>A value as its recipe says it reads (D10): a number with every digit, seconds as a duration, unix seconds as a date in your time zone.</summary>
+    public static string Value(double? value, StatFormat format, TimeZoneInfo zone) => value is not { } v ? StatText.Dash : format switch
+    {
+        StatFormat.Duration => Duration(v),
+        StatFormat.Date => Date(v, zone),
+        _ => StatText.Number(v),
+    };
+
+    /// <summary>A change as its recipe says it reads: "+220K", "+2h 0m". A date has no change.</summary>
+    public static string Change(double? value, StatFormat format) => value is not { } v ? StatText.Dash : format switch
+    {
+        StatFormat.Duration => (v < 0 ? "" : "+") + Duration(v),
+        StatFormat.Date => StatText.Dash,
+        _ => Signed(v),
+    };
+
+    /// <summary>Seconds as the two largest whole units: "586d 5h", "5h 12m", "12m".</summary>
+    public static string Duration(double seconds)
+    {
+        if (!double.IsFinite(seconds)) return StatText.Dash;
+
+        var minutes = (long)Math.Floor(Math.Abs(seconds) / 60);
+        var (days, hours, rest) = (minutes / 1440, minutes / 60 % 24, minutes % 60);
+        var text = days > 0 ? $"{days.ToString("N0", CultureInfo.InvariantCulture)}d {hours}h"
+            : hours > 0 ? $"{hours}h {rest}m"
+            : $"{rest}m";
+        return seconds < 0 ? "-" + text : text;
+    }
+
+    /// <summary>Unix seconds as "13 Sep 2020" in your time zone; a time outside years 1970 to 9999 is a dash.</summary>
+    private static string Date(double unixSeconds, TimeZoneInfo zone) =>
+        unixSeconds is > 0 and <= 253402300799
+            ? TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds((long)Math.Floor(unixSeconds)), zone).ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+            : StatText.Dash;
+
     public static string Chip(SourceRole role) => role switch
     {
         SourceRole.Main => "★ main",
@@ -57,8 +92,16 @@ public static class PanelText
         PanelType.Records => "Records",
         PanelType.Top => $"Top of the {(TopPeriodRecipe(recipe, installed) is { } periodRecipe ? RecipeWords.Period(periodRecipe) : "list")}",
         PanelType.ProfileStat => "Profile stat",
+        PanelType.AccountsTable => "Accounts table",
         _ => "Live leaderboard",
     };
+
+    /// <summary>Midnight today in this zone (D16): the boundary a "today" change measures from. Shared so a table and Profile stat agree.</summary>
+    public static DateTimeOffset Midnight(DateTimeOffset now, TimeZoneInfo zone)
+    {
+        var local = TimeZoneInfo.ConvertTime(now, zone);
+        return new DateTimeOffset(local.Date, local.Offset);
+    }
 
     public static string Ago(DateTimeOffset? then, DateTimeOffset now) =>
         then is { } at ? $"{StatText.Span(now - at)} ago" : "never";

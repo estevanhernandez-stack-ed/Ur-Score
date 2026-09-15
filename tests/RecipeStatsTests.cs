@@ -11,23 +11,39 @@ public class RecipeStatsTests
     [Fact]
     public void AValueIsFoundByItsId() =>
         Assert.Equal(
-            new RecipeStat("rank", "Player rank", "data.views.profile.data.Rank", "ps99.rank", Sum: false),
+            new RecipeStat("rank", "Player rank", "data.views.profile.data.Rank", "ps99.rank", Sum: false, Section: "Progression"),
             RecipeStats.Find(Profile, "rank"));
 
     [Fact]
     public void ACounterKeyReadsUnderTheCountersPath() =>
         Assert.Equal(
             new RecipeStat("counter:Huge Pets Opened", "Huge Pets Opened",
-                "data.views.profile.data.Statistics.Huge Pets Opened", "ps99.stat.huge-pets-opened", Sum: true),
+                "data.views.profile.data.Statistics.Huge Pets Opened", "ps99.stat.huge-pets-opened", Sum: true, Section: "Game statistics"),
             RecipeStats.Find(Profile, "counter:Huge Pets Opened"));
 
     [Fact]
     public void AKeyTheRecipeDoesNotOfferIsNoStat()
     {
-        Assert.Null(RecipeStats.Find(Profile, "rebirths"));
+        Assert.Null(RecipeStats.Find(Profile, "prestige"));
         Assert.Null(RecipeStats.Find(Clan, "counter:Huge Pets Opened"));
         Assert.Null(RecipeStats.Find(Profile, "counter:Pets.Huge"));
         Assert.Null(RecipeStats.Find(Profile, "counter:"));
+    }
+
+    [Fact]
+    public void TheSuggestedValuesAreTheOnesMarkedShowInRecipeOrderAndNoneForAGroupList()
+    {
+        Assert.Equal(new[] { "diamonds", "eggs", "rank", "rebirths", "pets", "goals", "playtime" }, RecipeStats.Suggested(Profile).Select(v => v.Id).ToArray());
+        Assert.Empty(RecipeStats.Suggested(Clan));
+
+        // A group list is never shown per account, so even a value marked show suggests nothing, to the ticks and the note alike.
+        var top = RecipeParser.Parse(BoardFixtures.TopListJson).Recipe!;
+        var marked = top with { Steps = [top.LastStep with { Values = [.. top.LastStep.Values.Select(v => v with { Show = true })] }] };
+
+        Assert.True(marked.IsGroupList);
+        Assert.Empty(RecipeStats.Suggested(marked));
+        Assert.Empty(Labs626.UrScore.UI.StatsTableModel.Suggested(marked));
+        Assert.Equal("", Labs626.UrScore.UI.ImportText.SuggestedNote(marked));
     }
 
     [Theory]
@@ -43,7 +59,8 @@ public class RecipeStatsTests
     {
         var offered = RecipeStats.Offered(Profile, ["counter:Zones", "diamonds", "counter:Eggs Opened", "counter:Zones"]);
 
-        Assert.Equal(new[] { "diamonds", "eggs", "rank", "counter:Eggs Opened", "counter:Zones" }, offered.Select(s => s.Key).ToArray());
+        string[] expected = [.. RecipeParserTests.ProfileIds, "counter:Eggs Opened", "counter:Zones"];
+        Assert.Equal(expected, offered.Select(s => s.Key).ToArray());
     }
 
     [Fact]

@@ -41,10 +41,11 @@
                 </ui:RowList.ItemTemplate>
             </ui:RowList>
 
-            <!-- Nothing is ticked for the user: a recipe that pre-ticked a stat would be deciding what gets
-                 sent. A group list has no stats to tick at all. -->
+            <!-- Nothing is sent for the user. A first import starts with Show ticked on what the recipe suggests (D11),
+                 and says so; a group list has no stats to tick at all. -->
             <StackPanel x:Name="StatsSection">
                 <TextBlock Text="STATS" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
+                <TextBlock x:Name="SuggestedLine" Style="{StaticResource Muted}" Margin="0,0,0,6" Visibility="Collapsed" />
                 <ui:StatsTable x:Name="StatsTable" />
             </StackPanel>
 

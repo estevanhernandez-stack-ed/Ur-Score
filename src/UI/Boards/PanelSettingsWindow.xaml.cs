@@ -54,7 +54,7 @@ public partial class PanelSettingsWindow : Window
         var sourceWord = type switch
         {
             PanelType.PromotionCheck => "from",
-            PanelType.Top or PanelType.ProfileStat => "source",
+            PanelType.Top or PanelType.ProfileStat or PanelType.AccountsTable => "source",
             _ => group,
         };
         SourceLabel.Text = sourceWord.ToUpperInvariant();

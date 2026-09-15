@@ -13,7 +13,7 @@ using Source = Labs626.UrScore.Core.Source;
 public partial class AddBoardWindow : Window
 {
     private readonly StarterBoard _battle;
-    private readonly StarterBoard _grind;
+    private readonly StarterBoard _alts;
     private readonly string _suggestedName;
 
     public AddBoardWindow(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string suggestedName)
@@ -23,13 +23,13 @@ public partial class AddBoardWindow : Window
 
         _suggestedName = suggestedName;
         _battle = StarterBoards.Build(installed, sources, StarterBoards.Battle);
-        _grind = StarterBoards.Build(installed, sources, StarterBoards.Grind);
+        _alts = StarterBoards.Build(installed, sources, StarterBoards.Alts);
 
         NewBoardNameBox.Text = suggestedName;
         NewBoardNameBox.MaxLength = BoardDefs.MaxNameLength;
         Describe(BattleBoardButton, _battle);
-        Describe(GrindBoardButton, _grind);
-        StarterLine.Text = _battle.Panels.Count == 0 && _grind.Panels.Count == 0
+        Describe(AltsBoardButton, _alts);
+        StarterLine.Text = _battle.Panels.Count == 0 && _alts.Panels.Count == 0
             ? "The starters fill in once a recipe has ticked stats and a source."
             : "A starter is built from your sources as they are now, and stays as you arrange it.";
 
@@ -59,7 +59,7 @@ public partial class AddBoardWindow : Window
 
     private void OnBattleClick(object sender, RoutedEventArgs e) => FinishStarter(_battle);
 
-    private void OnGrindClick(object sender, RoutedEventArgs e) => FinishStarter(_grind);
+    private void OnAltsClick(object sender, RoutedEventArgs e) => FinishStarter(_alts);
 
     private void FinishStarter(StarterBoard starter) =>
         Finish(BoardDefs.FromStarter(starter, freshIds: true) with { Name = NameFor(starter.Name) });

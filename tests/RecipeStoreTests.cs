@@ -151,7 +151,7 @@ public class RecipeStoreTests : IDisposable
     {
         var state = new RecipeState(Stats: new Dictionary<string, StatChoice>
         {
-            ["rebirths"] = new(Show: true, Send: true, MetricId: "ps99.rebirths"),
+            ["prestige"] = new(Show: true, Send: true, MetricId: "ps99.prestige"),
             ["diamonds"] = new(Send: true, MetricId: ""),
         });
 

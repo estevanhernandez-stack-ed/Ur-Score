@@ -26,8 +26,13 @@ public static class BoardEdits
     /// <summary>
     /// Done in edit mode: the boards with the draft in its board's place, when the draft is drawn differently from
     /// the board as editing began. Compared with that, not with the boards now, so an untouched draft writes nothing
-    /// even when the following starter was rebuilt meanwhile (R1). Nothing to write, or no board to replace, returns
-    /// <paramref name="boards"/> itself.
+    /// even when a following tab was rebuilt meanwhile (R1). Nothing to write returns <paramref name="boards"/> itself.
+    /// <para>
+    /// A changed draft is never dropped: a tab following a starter that went empty while you edited it isn't among the
+    /// boards any more, so the draft is added as a board of its own that follows nothing (D2, <see cref="Following.ToSave"/>
+    /// writes it as it is) and shows, with no panels saying so. Any other board that isn't there returns
+    /// <paramref name="boards"/>: nothing but a following tab can leave the boards while you edit.
+    /// </para>
     /// <para>
     /// Edit mode doesn't edit pop-outs (R19): both sides take every panel's pop-out as it is now
     /// (<see cref="CarryPopOuts"/>), so a pop-out returned, moved or opened while editing is neither undone nor
@@ -37,7 +42,10 @@ public static class BoardEdits
     public static IReadOnlyList<BoardDef> Finish(IReadOnlyList<BoardDef> boards, BoardDef atEdit, BoardDef draft)
     {
         var carried = CarryPopOuts(draft, boards);
-        return Changed(CarryPopOuts(atEdit, boards), carried) ? Replace(boards, carried) : boards;
+        if (!Changed(CarryPopOuts(atEdit, boards), carried)) return boards;
+        if (IndexOf(boards, carried.Id) >= 0) return Replace(boards, carried);
+
+        return carried.Follows is null ? boards : Add(boards, carried with { Follows = null });
     }
 
     /// <summary>
@@ -108,20 +116,6 @@ public static class BoardEdits
         var later = board.Panels.Skip(index + 1).FirstOrDefault(p => p.PopOut is null);
         var earlier = board.Panels.Take(index).LastOrDefault(p => p.PopOut is null);
         return (later ?? earlier)?.Id;
-    }
-
-    /// <summary>
-    /// What the first write of <c>boards.json</c> keeps while the boards still follow the starter (R1): everything, except
-    /// the following starter when it is an empty state (no recipe, stat or source yet) that nothing touched and another
-    /// board is being written. A + Board on first run then doesn't freeze "Import a recipe" as a board with no panels.
-    /// A starter renamed, given a panel, or left the only board is written. Nothing dropped returns <paramref name="boards"/>.
-    /// </summary>
-    public static IReadOnlyList<BoardDef> ForFirstSave(IReadOnlyList<BoardDef> boards, StarterBoard following)
-    {
-        if (following.Empty == BoardEmpty.None || boards.Count < 2) return boards;
-
-        bool Untouched(BoardDef b) => b.Id == BoardDefs.StarterBoardId && b.Panels.Count == 0 && b.Name == following.Name;
-        return boards.Any(Untouched) ? [.. boards.Where(b => !Untouched(b))] : boards;
     }
 
     /// <summary>Which tool a resize came from, so focus goes back to it: Tall keeps the span and flips Tall; the size box picks a span.</summary>

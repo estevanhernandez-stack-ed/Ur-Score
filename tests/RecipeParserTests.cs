@@ -23,6 +23,17 @@ public class RecipeParserTests
     private const string OnePerAccountStep =
         """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count" }]""";
 
+    /// <summary>The profile fixture's value ids, in recipe order (D13). Other tests use it so a new stat changes one list.</summary>
+    internal static readonly string[] ProfileIds =
+    [
+        "diamonds", "eggs", "rank", "rebirths", "rank-stars", "pets", "goals", "achievements", "zones",
+        "playtime", "sessions", "first-join", "booth-diamonds", "booth-slots", "egg-slots", "pet-slots",
+    ];
+
+    /// <summary>A valid per-account recipe whose last step lists these values.</summary>
+    private static string Values(string values) =>
+        With($$"""[{ "url": "https://example.com/u/{userId}", "perAccount": true, "values": [ {{values}} ] }]""");
+
     private static IReadOnlyList<string> Problems(string json) => RecipeParser.Parse(json).Problems;
 
     [Fact]
@@ -66,9 +77,21 @@ public class RecipeParserTests
 
         Assert.True(result.Ok, string.Join(" | ", result.Problems));
         var step = result.Recipe!.LastStep;
-        Assert.Equal(new[] { "diamonds", "eggs", "rank" }, step.Values.Select(v => v.Id).ToArray());
-        Assert.Equal(new[] { "ps99.diamonds", "ps99.eggs-hatched", "ps99.rank" }, step.Values.Select(v => v.MetricId).ToArray());
-        Assert.Equal(new[] { true, true, false }, step.Values.Select(v => v.Sum).ToArray());
+        Assert.Equal(ProfileIds, step.Values.Select(v => v.Id).ToArray());
+        Assert.Equal(
+            new[]
+            {
+                "ps99.diamonds", "ps99.eggs-hatched", "ps99.rank", "ps99.rebirths", "ps99.rank-stars", "ps99.pets-hatched", "ps99.goals-completed",
+                "ps99.achievements", "ps99.zones-unlocked", "ps99.playtime", "ps99.sessions", "ps99.first-join", "ps99.booth-diamonds-earned",
+                "ps99.booth-slots", "ps99.egg-slots", "ps99.pet-slots",
+            },
+            step.Values.Select(v => v.MetricId).ToArray());
+        Assert.Equal(new[] { "diamonds", "eggs", "rank", "rebirths", "pets", "goals", "playtime" }, step.Values.Where(v => v.Show).Select(v => v.Id).ToArray());
+        Assert.Equal(new[] { "diamonds", "eggs", "goals", "playtime", "sessions", "booth-diamonds" }, step.Values.Where(v => v.Sum).Select(v => v.Id).ToArray());
+        Assert.Equal(new[] { "pets", "achievements", "zones" }, step.Values.Where(v => v.Count).Select(v => v.Id).ToArray());
+        Assert.Equal(StatFormat.Duration, step.Values.Single(v => v.Id == "playtime").Format);
+        Assert.Equal(StatFormat.Date, step.Values.Single(v => v.Id == "first-join").Format);
+        Assert.Equal(new[] { "Account", "Progression", "Slots" }, step.Values.Select(v => v.Section).Distinct().ToArray());
         Assert.Equal(new RecipeCounters("Game statistics", "data.views.profile.data.Statistics", "ps99.stat."), step.Counters);
         Assert.Equal("data.views.profile.available", step.Unavailable!.Path);
         Assert.Equal(JsonValueKind.False, step.Unavailable.IsKind);
@@ -470,4 +493,38 @@ public class RecipeParserTests
         var profile = RecipeParser.Parse(Fixture("petsim99-profile.recipe.json")).Recipe!;
         Assert.Equal(new RecipeAsOf("data.views.profile.fetchedAt", "data.views.profile.isStale"), profile.LastStep.AsOf);
     }
+
+    [Fact]
+    public void AValueCanCountEntriesReadAsTimeSuggestShowAndNameItsSection()
+    {
+        var result = RecipeParser.Parse(Values("""
+            { "id": "pets", "label": "Pets", "path": "p", "metricId": "t.pets", "count": true, "sum": false, "show": true, "section": " Progression " },
+            { "id": "time", "label": "Time", "path": "t", "metricId": "t.time", "format": "duration" },
+            { "id": "joined", "label": "Joined", "path": "j", "metricId": "t.joined", "format": "date", "sum": false },
+            { "id": "plain", "label": "Plain", "path": "n", "metricId": "t.plain", "format": null, "section": null }
+            """));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        Assert.Equal(
+            new[]
+            {
+                new RecipeValue("pets", "Pets", "p", "t.pets", Sum: false, Count: true, Show: true, Section: "Progression"),
+                new RecipeValue("time", "Time", "t", "t.time", Format: StatFormat.Duration),
+                new RecipeValue("joined", "Joined", "j", "t.joined", Sum: false, Format: StatFormat.Date),
+                new RecipeValue("plain", "Plain", "n", "t.plain"),
+            },
+            result.Recipe!.LastStep.Values);
+    }
+
+    [Theory]
+    [InlineData("\"format\": \"minutes\"", "'format' in step 1's value 1 must be \"number\", \"duration\" or \"date\".")]
+    [InlineData("\"format\": 3", "'format' in step 1's value 1 must be \"number\", \"duration\" or \"date\".")]
+    [InlineData("\"count\": \"yes\"", "'count' in step 1's value 1 must be true or false.")]
+    [InlineData("\"show\": 1", "'show' in step 1's value 1 must be true or false.")]
+    [InlineData("\"section\": 4", "'section' in step 1's value 1 must be text.")]
+    [InlineData("\"section\": \"  \"", "'section' in step 1's value 1 must be text.")]
+    [InlineData("\"count\": true, \"format\": \"duration\"", "Step 1's value 1 counts entries, so its format can only be \"number\".")]
+    [InlineData("\"format\": \"date\"", "Step 1's value 1 is a date, and dates can't be added up. Give it \"sum\": false.")]
+    public void AValuesNewFieldsNameTheirProblem(string field, string problem) =>
+        Assert.Contains(problem, Problems(Values($$"""{ "id": "a", "label": "A", "path": "a", "metricId": "t.a", {{field}} }""")));
 }

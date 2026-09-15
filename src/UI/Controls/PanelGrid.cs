@@ -6,7 +6,8 @@ namespace Labs626.UrScore.UI;
 
 /// <summary>
 /// Lays panels out with <see cref="BoardLayout"/>: 12 columns, a gap between cells, each row as tall as its
-/// tallest panel, tall panels across two rows. Remembers where each child was arranged, for dragging.
+/// tallest panel, tall panels across two rows. A one-row panel keeps its own height, top-aligned in its row.
+/// Remembers each child's slot (its row's full height), for dragging.
 /// </summary>
 public sealed class PanelGrid : Panel
 {
@@ -62,13 +63,13 @@ public sealed class PanelGrid : Panel
         foreach (var placement in placements)
         {
             var child = children[placement.Index];
-            var height = placement.Rows == 1
-                ? child.DesiredSize.Height
-                : Enumerable.Range(placement.Row, placement.Rows).Sum(r => rows[r]) + Gap * (placement.Rows - 1);
-            var rect = new Rect(placement.Column * (column + Gap), tops[placement.Row], CellWidth(finalSize.Width, placement.Span), height);
+            var slot = new Rect(
+                placement.Column * (column + Gap), tops[placement.Row], CellWidth(finalSize.Width, placement.Span), BoardLayout.CellHeight(placement, rows, Gap));
 
-            child.Arrange(rect);
-            cells.Add(new CellRect(rect.X, rect.Y, rect.Width, rect.Height));
+            child.Arrange(new Rect(slot.X, slot.Y, slot.Width, BoardLayout.ArrangedHeight(placement, rows, Gap, child.DesiredSize.Height)));
+
+            // A drop is placed by the whole slot, so the space under a short panel still counts as that panel's.
+            cells.Add(new CellRect(slot.X, slot.Y, slot.Width, slot.Height));
         }
 
         _cells = cells;

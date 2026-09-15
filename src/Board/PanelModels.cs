@@ -7,7 +7,7 @@ namespace Labs626.UrScore.Board;
 
 using Source = Labs626.UrScore.Core.Source;
 
-public enum PanelType { Standing, Race, MyAccounts, PromotionCheck, AccountCard, PastPeriods, Records, Top, ProfileStat, LiveLeaderboard }
+public enum PanelType { Standing, Race, MyAccounts, PromotionCheck, AccountCard, PastPeriods, Records, Top, ProfileStat, LiveLeaderboard, AccountsTable }
 
 /// <summary>What a panel shows. Stage 1 fills these from the starter board; stage 2 saves them in boards.json.</summary>
 public sealed record PanelSettings(
@@ -18,14 +18,21 @@ public sealed record PanelSettings(
     string? Stat = null,
     long? UserId = null);
 
-/// <summary>Every panel's header: title, subtitle, role chip, overdue mark, and the stale message that replaces the body.</summary>
-public sealed record PanelHead(string Title, string Subtitle = "", string Chip = "", bool Overdue = false, string? Stale = null, string Note = "")
+/// <summary>
+/// Every panel's header: title, subtitle, role chip, overdue mark, and the stale message that replaces the body.
+/// The chip is its source's role: <see cref="Chip"/> is the role's words and the panel colours the chip by the role,
+/// so words and colour can never disagree.
+/// </summary>
+public sealed record PanelHead(
+    string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "")
 {
+    public string Chip => ChipRole is { } role ? PanelText.Chip(role) : "";
+
     public bool HasBody => Stale is null;
 
     public bool HasStale => Stale is not null;
 
-    public bool HasChip => Chip.Length > 0;
+    public bool HasChip => ChipRole is not null;
 
     public bool HasSubtitle => Subtitle.Length > 0;
 
@@ -102,9 +109,21 @@ public sealed record PromotionModel(PanelHead Head, string LowestLabel, string L
 
 public sealed record FactModel(string Label, string Value);
 
+/// <summary>One heading of an account card and its facts; the heading is the recipe's section name, empty for stats with none.</summary>
+public sealed record CardSection(string Heading, IReadOnlyList<FactModel> Facts)
+{
+    public bool HasHeading => Heading.Length > 0;
+}
+
 public sealed record AccountCardModel(
-    PanelHead Head, string BigLabel, string Big, IReadOnlyList<FactModel> Numbers, IReadOnlyList<ChartSeries> Line,
-    IReadOnlyList<FactModel> Facts, string ChartName);
+    PanelHead Head, string BigLabel, string Big, IReadOnlyList<CardSection> Sections, IReadOnlyList<ChartSeries> Line,
+    IReadOnlyList<FactModel> Facts, string ChartName)
+{
+    /// <summary>A line to draw: with none yet the card gives the chart no space.</summary>
+    public bool HasLine => Line.Count > 0;
+
+    public bool HasSections => Sections.Count > 0;
+}
 
 public sealed record PastRow(string Period, string Place, string Total, string YourBest);
 
@@ -167,7 +186,7 @@ public static class PanelModels
         var mine = rows?.Count(r => live.MyUserIds.Contains(r.UserId)) ?? 0;
 
         return new StandingModel(
-            new PanelHead(title, name, PanelText.Chip(source.Role), live.IsOverdue(source)),
+            new PanelHead(title, name, source.Role, live.IsOverdue(source)),
             place is { } p ? PanelText.Ordinal((int)p) : Dash,
             recipe.Period is null || place is null ? "" : $"in the {RecipeWords.Period(recipe)}",
             recipe.Headline.FirstOrDefault(h => h.Id == totalId)?.Label ?? "Total",
@@ -246,6 +265,7 @@ public static class PanelModels
         }
 
         var group = RecipeWords.Group(recipe);
+        var zone = live.Time.LocalTimeZone;
         var assigned = new HashSet<long>();
         var groups = new List<AccountGroupModel>();
         var overdue = false;
@@ -277,9 +297,9 @@ public static class PanelModels
                 lines.Add((value, new AccountLineModel(
                     account.RobloxUserId,
                     account.DisplayName,
-                    PanelText.Full(value),
+                    PanelText.Value(value, stat.Format, zone),
                     value is not null && ranks.TryGetValue(account.RobloxUserId, out var rank) ? $"#{rank} of {rows.Count}" : Dash,
-                    Records.Change(series[account.RobloxUserId], live.Now),
+                    RecentChange(series[account.RobloxUserId], stat.Format),
                     sent,
                     Records.Stalled(series[account.RobloxUserId], others),
                     value is null)));
@@ -360,7 +380,7 @@ public static class PanelModels
         return new PromotionModel(head, lowestLabel, PanelText.Full(lowest), stat.Label, MissingLast(rows));
     }
 
-    public static AccountCardModel AccountCard(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
+    public static AccountCardModel AccountCard(LiveBoard live, ScoreBookReader reader, PanelSettings settings, long? pickedUserId = null)
     {
         var title = PanelText.Title(PanelType.AccountCard, null, live.Installed);
         if (live.FindRecipe(settings.Recipe) is not { } installed) return EmptyCard(StaleSource(live, settings, title));
@@ -382,20 +402,32 @@ public static class PanelModels
             }
         }
 
-        var picked = settings.UserId is { } userId
+        // A card pinned to an account shows it; else the account picked in a table on its board while RoRoRo lists it (D18); else the top one.
+        var wanted = settings.UserId ?? (pickedUserId is { } asked && live.MyUserIds.Contains(asked) ? asked : (long?)null);
+        var picked = wanted is { } userId
             ? found.Where(f => f.Account.RobloxUserId == userId).ToList()
             : [.. found.OrderBy(f => ValueOf(f.Row, stat.Key) is null).ThenByDescending(f => ValueOf(f.Row, stat.Key) ?? 0)];
 
-        if (picked.Count == 0) return EmptyCard(new PanelHead(title, Note: "No reading of your accounts yet."));
+        if (picked.Count == 0)
+        {
+            if (settings.UserId is null && wanted is { } id)
+            {
+                var name = live.AccountName(id);
+                var why = SourcesYoursIn(live, recipe)
+                    .Select(s => live.SnapshotOf(s.Id)?.Unavailable.GetValueOrDefault(id))
+                    .FirstOrDefault(message => message is not null);
+                return EmptyCard(new PanelHead(title, name, Note: why ?? $"No reading of {name} yet."));
+            }
+
+            return EmptyCard(new PanelHead(title, Note: "No reading of your accounts yet."));
+        }
 
         var (pickedAccount, pickedSource, pickedRow) = picked[0];
         var snapshot = live.SnapshotOf(pickedSource.Id)!;
         var series = reader.Series(pickedSource.Id, pickedAccount.RobloxUserId, stat.Key, snapshot.Period?.Value, Since(recipe, live.Now));
+        var zone = live.Time.LocalTimeZone;
 
-        var numbers = installed.State.ShownStats(recipe)
-            .Where(s => s.Key != stat.Key)
-            .Select(s => new FactModel(s.Label, PanelText.Full(ValueOf(pickedRow, s.Key))))
-            .ToList();
+        var sections = Sections(recipe, installed.State.ShownStats(recipe).Where(s => s.Key != stat.Key), pickedRow, zone);
 
         var facts = new List<FactModel>();
         if (!recipe.LastStep.PerAccount && snapshot.Rows is { } listRows)
@@ -409,14 +441,14 @@ public static class PanelModels
         if (recipe.Period is not null)
         {
             facts.Add(new FactModel($"Best {RecipeWords.Period(recipe)}",
-                records.BestPeriodValue is { } best ? $"{StatText.Abbrev(best)} · {records.BestPeriod}" : Dash));
+                records.BestPeriodValue is { } best ? $"{ShortValue(best, stat.Format, zone)} · {records.BestPeriod}" : Dash));
             facts.Add(new FactModel("Best rank", records.BestRank is { } bestRank ? $"#{bestRank} · {records.BestRankPeriod}" : Dash));
             facts.Add(new FactModel($"{RecipeWords.Capital(RecipeWords.Periods(recipe))} played", records.PeriodsPlayed.ToString(CultureInfo.InvariantCulture)));
         }
         else
         {
-            facts.Add(new FactModel("Highest", PanelText.Short(records.Highest)));
-            facts.Add(new FactModel("Biggest day", PanelText.Signed(records.BiggestDay)));
+            facts.Add(new FactModel("Highest", records.Highest is { } highest ? ShortValue(highest, stat.Format, zone) : Dash));
+            facts.Add(new FactModel("Biggest day", PanelText.Change(records.BiggestDay, stat.Format)));
         }
 
         DateTimeOffset? lastRead = series.Count > 0 ? series[^1].T
@@ -431,7 +463,7 @@ public static class PanelModels
 
         return new AccountCardModel(
             new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}", Overdue: live.IsOverdue(pickedSource)),
-            stat.Label, PanelText.Full(ValueOf(pickedRow, stat.Key)), numbers, line, facts,
+            stat.Label, PanelText.Value(ValueOf(pickedRow, stat.Key), stat.Format, zone), sections, line, facts,
             $"{pickedAccount.DisplayName}'s {stat.Label} over time");
     }
 
@@ -486,7 +518,7 @@ public static class PanelModels
             : $"Filled in from the {RecipeWords.Group(recipe)}'s own record.";
 
         return new PastPeriodsModel(
-            new PanelHead(title, live.SourceName(source), PanelText.Chip(source.Role), Note: note),
+            new PanelHead(title, live.SourceName(source), source.Role, Note: note),
             RecipeWords.Capital(RecipeWords.Period(recipe)), rows);
     }
 
@@ -500,6 +532,8 @@ public static class PanelModels
         {
             return new RecordsModel(new PanelHead(title, Stale: PanelText.StaleStat), []);
         }
+
+        var zone = live.Time.LocalTimeZone;
 
         var all = (
             from account in live.Accounts
@@ -518,16 +552,16 @@ public static class PanelModels
         if (recipe.Period is not null)
         {
             facts.Add(new FactModel($"Best {RecipeWords.Period(recipe)}",
-                Highest(r => r.BestPeriodValue, (a, r, v) => $"{a.DisplayName} · {StatText.Abbrev(v)} · {r.BestPeriod}")));
+                Highest(r => r.BestPeriodValue, (a, r, v) => $"{a.DisplayName} · {ShortValue(v, stat.Format, zone)} · {r.BestPeriod}")));
 
             var bestRank = all.Where(x => x.Found.BestRank is not null).OrderBy(x => x.Found.BestRank).FirstOrDefault();
             facts.Add(new FactModel("Best rank",
                 bestRank.Found is null ? Dash : $"{bestRank.Account.DisplayName} · #{bestRank.Found.BestRank} · {bestRank.Found.BestRankPeriod}"));
         }
 
-        facts.Add(new FactModel("Highest", Highest(r => r.Highest, (a, _, v) => $"{a.DisplayName} · {StatText.Abbrev(v)}")));
-        facts.Add(new FactModel("Biggest day", Highest(r => r.BiggestDay, (a, _, v) => $"{a.DisplayName} · {PanelText.Signed(v)}")));
-        facts.Add(new FactModel("Fastest 7 days", Highest(r => r.FastestWeek, (a, _, v) => $"{a.DisplayName} · {PanelText.Signed(v)}")));
+        facts.Add(new FactModel("Highest", Highest(r => r.Highest, (a, _, v) => $"{a.DisplayName} · {ShortValue(v, stat.Format, zone)}")));
+        facts.Add(new FactModel("Biggest day", Highest(r => r.BiggestDay, (a, _, v) => $"{a.DisplayName} · {PanelText.Change(v, stat.Format)}")));
+        facts.Add(new FactModel("Fastest 7 days", Highest(r => r.FastestWeek, (a, _, v) => $"{a.DisplayName} · {PanelText.Change(v, stat.Format)}")));
 
         return new RecordsModel(new PanelHead(title, stat.Label), facts);
     }
@@ -612,14 +646,13 @@ public static class PanelModels
             return new ProfileStatModel(new PanelHead(title, Stale: PanelText.StaleStat), "", []);
         }
 
-        var source = live.FindSource(settings.SourceId)
-                     ?? live.Sources.FirstOrDefault(s => s.Enabled && string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal));
+        // The pinned source, else the recipe's first source that is on, else its first: the Accounts table's rule (D17).
+        var source = live.FindSource(settings.SourceId) ?? PanelForms.FirstSourceOfRecipe(live, recipe.Slug);
         if (source is null) return new ProfileStatModel(StaleSource(live, settings, title), "", []);
 
         var snapshot = live.SnapshotOf(source.Id);
         var now = live.Now;
-        var local = TimeZoneInfo.ConvertTime(now, live.Time.LocalTimeZone);
-        var midnight = new DateTimeOffset(local.Date, local.Offset);
+        var midnight = PanelText.Midnight(now, live.Time.LocalTimeZone);
 
         var rows = new List<(double? Value, ProfileRow Row)>();
         foreach (var account in live.Accounts.Where(a => a.RobloxUserId != 0))
@@ -633,14 +666,114 @@ public static class PanelModels
 
             rows.Add((value, new ProfileRow(
                 account.DisplayName,
-                PanelText.Full(value),
-                WindowGain(series, midnight),
-                WindowGain(series, now.AddDays(-7)),
+                PanelText.Value(value, stat.Format, live.Time.LocalTimeZone),
+                WindowGain(series, midnight, stat.Format),
+                WindowGain(series, now.AddDays(-7), stat.Format),
                 unavailable ?? (value is null && missed is not null ? "can't read" : ""),
                 value is null)));
         }
 
         return new ProfileStatModel(new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source)), stat.Label, MissingLast(rows));
+    }
+
+    /// <summary>
+    /// Your accounts side by side (the Alts tab): a column per shown stat sorted as this session asks (D15), the sorted
+    /// column's change today and over 7 days from the book (D16), a totals row and an account that couldn't be read
+    /// saying why (D17). Only your own accounts: other rows a list recipe read are never looked at.
+    /// </summary>
+    public static AccountsTableModel AccountsTable(
+        LiveBoard live, ScoreBookReader reader, PanelSettings settings, AccountSort? sort = null, long? pickedUserId = null)
+    {
+        var title = PanelText.Title(PanelType.AccountsTable, null, live.Installed);
+        if (live.FindRecipe(settings.Recipe) is not { } installed) return new AccountsTableModel(StaleSource(live, settings, title), [], []);
+
+        var recipe = installed.Recipe;
+
+        // A pinned source that's gone is stale; an unpinned table reads the recipe's first source that is on, else its first (D17).
+        var source = settings.SourceId is { } pinned ? live.FindSource(pinned) : PanelForms.FirstSourceOfRecipe(live, recipe.Slug);
+        if (source is null) return new AccountsTableModel(StaleSource(live, settings, title), [], []);
+
+        var stats = installed.State.ShownStats(recipe);
+        var snapshot = live.SnapshotOf(source.Id);
+        var zone = live.Time.LocalTimeZone;
+
+        var effective = sort is { } asked && (asked.Key == AccountSort.NameKey || stats.Any(s => s.Key == asked.Key))
+            ? asked
+            : stats.Count > 0 ? new AccountSort(stats[0].Key, Descending: true) : new AccountSort(AccountSort.NameKey, Descending: false);
+        var sorted = stats.FirstOrDefault(s => s.Key == effective.Key);
+        var withChange = sorted is { Format: not StatFormat.Date };
+        var byName = effective.Key == AccountSort.NameKey;
+
+        var columns = new List<AccountColumn> { new(AccountSort.NameKey, "Account", AccountColumnKind.Name, byName, byName && effective.Descending) };
+        foreach (var stat in stats)
+        {
+            var isSorted = stat.Key == effective.Key;
+            columns.Add(new AccountColumn(stat.Key, stat.Label, AccountColumnKind.Stat, isSorted, isSorted && effective.Descending));
+            if (!isSorted || !withChange) continue;
+
+            columns.Add(new AccountColumn(stat.Key, "Today", AccountColumnKind.Today));
+            columns.Add(new AccountColumn(stat.Key, "7 days", AccountColumnKind.Week));
+        }
+
+        var midnight = PanelText.Midnight(live.Now, zone);
+        var read = live.Accounts
+            .Where(a => a.RobloxUserId != 0)
+            .DistinctBy(a => a.RobloxUserId)
+            .Select(a => (Account: a, Row: snapshot?.Rows?.FirstOrDefault(r => r.UserId == a.RobloxUserId)))
+            .ToList();
+
+        var rows = new List<(double? Sort, AccountRow Row)>();
+        foreach (var (account, row) in read)
+        {
+            IReadOnlyList<SeriesPoint> series = sorted is not null && withChange
+                ? reader.Series(source.Id, account.RobloxUserId, sorted.Key, null, DateTimeOffset.MinValue)
+                : [];
+            var changeFormat = sorted?.Format ?? StatFormat.Number;
+
+            var cells = columns.Select(column => column.Kind switch
+            {
+                AccountColumnKind.Name => account.DisplayName,
+                AccountColumnKind.Today => WindowGain(series, midnight, changeFormat, Dash),
+                AccountColumnKind.Week => WindowGain(series, live.Now.AddDays(-7), changeFormat, Dash),
+                _ => PanelText.Value(row is null ? null : ValueOf(row, column.Key), StatOf(stats, column.Key).Format, zone),
+            }).ToList();
+
+            rows.Add((sorted is null || row is null ? null : ValueOf(row, sorted.Key), new AccountRow(
+                account.RobloxUserId,
+                account.DisplayName,
+                cells,
+                snapshot?.Unavailable.GetValueOrDefault(account.RobloxUserId) ?? "",
+                Missing: row is null,
+                Picked: account.RobloxUserId == pickedUserId)));
+        }
+
+        var names = StringComparer.OrdinalIgnoreCase;
+        IEnumerable<(double? Sort, AccountRow Row)> ordered = byName
+            ? effective.Descending ? rows.OrderByDescending(r => r.Row.Name, names) : rows.OrderBy(r => r.Row.Name, names)
+            : effective.Descending
+                ? rows.OrderBy(r => r.Sort is null).ThenByDescending(r => r.Sort ?? 0).ThenBy(r => r.Row.Name, names)
+                : rows.OrderBy(r => r.Sort is null).ThenBy(r => r.Sort ?? 0).ThenBy(r => r.Row.Name, names);
+        var list = ordered.Select(r => r.Row).ToList();
+
+        if (stats.Count > 0 && list.Count > 0)
+        {
+            var totals = columns.Select(column =>
+            {
+                if (column.Kind == AccountColumnKind.Name) return "Total";
+                if (column.Kind != AccountColumnKind.Stat || StatOf(stats, column.Key) is not { Sum: true, Format: not StatFormat.Date } stat) return "";
+
+                var values = read.Where(x => x.Row is not null).Select(x => ValueOf(x.Row!, stat.Key)).OfType<double>().ToList();
+                return values.Count == 0 ? Dash : PanelText.Value(values.Sum(), stat.Format, zone);
+            }).ToList();
+            list.Add(new AccountRow(0, "Total", totals, "", Missing: false, Picked: false, IsTotal: true));
+        }
+
+        // A source that is switched off is never read, so the table says so instead of waiting for a read that won't come.
+        var note = stats.Count == 0 ? "Tick Show on a stat to fill this panel."
+            : snapshot is not null ? ""
+            : source.Enabled ? "Waiting for the first read."
+            : $"{live.SourceName(source)} is switched off, so it isn't read.";
+        return new AccountsTableModel(new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note), columns, list);
     }
 
     /// <summary>Every row of a source live, your accounts marked (spec §9.4). Other members' names come from memory only.</summary>
@@ -654,17 +787,18 @@ public static class PanelModels
         }
 
         var shown = installed.State.ShownStats(installed.Recipe);
-        var head = new PanelHead(title, live.SourceName(source), PanelText.Chip(source.Role), live.IsOverdue(source), Note: "Live only. Never saved.");
+        var head = new PanelHead(title, live.SourceName(source), source.Role, live.IsOverdue(source), Note: "Live only. Never saved.");
         if (shown.Count == 0) return new LeaderboardModel(head with { Note = "Tick Show on a stat to fill this panel." }, [], []);
 
         IReadOnlyList<string> columns = [.. shown.Select(s => s.Label)];
         if (live.SnapshotOf(source.Id)?.Rows is not { } rows) return new LeaderboardModel(head, columns, []);
 
         var ranked = Leaderboard.Rank(rows, live.MyUserIds, shown[0].Key);
+        var zone = live.Time.LocalTimeZone;
         return new LeaderboardModel(head, columns, [.. ranked.Select(r => new LeaderRow(
             r.Position.ToString(CultureInfo.InvariantCulture),
             r.IsMine ? live.AccountName(r.UserId) : names.GetValueOrDefault(r.UserId) ?? $"Member {r.UserId}",
-            [.. shown.Select(s => r.Values.TryGetValue(s.Key, out var v) ? StatText.Number(v) : Dash)],
+            [.. shown.Select(s => PanelText.Value(r.Values.TryGetValue(s.Key, out var v) ? v : null, s.Format, zone))],
             r.IsMine))]);
     }
 
@@ -676,10 +810,12 @@ public static class PanelModels
     /// A window's gain: from the latest reading at or before <paramref name="since"/> to the last reading.
     /// When nothing was read that early, falls back to the series' own first reading and states the real
     /// span covered, rather than silently understating a shorter history as the full window (spec §9.4).
+    /// Written in the stat's format; a date has no gain, and fewer than two readings is <paramref name="none"/>.
     /// </summary>
-    private static string WindowGain(IReadOnlyList<SeriesPoint> series, DateTimeOffset since)
+    private static string WindowGain(IReadOnlyList<SeriesPoint> series, DateTimeOffset since, StatFormat format = StatFormat.Number, string none = "no earlier read")
     {
-        if (series.Count < 2) return "no earlier read";
+        if (format == StatFormat.Date) return Dash;
+        if (series.Count < 2) return none;
 
         var last = series[^1];
         SeriesPoint? baseline = null;
@@ -693,9 +829,18 @@ public static class PanelModels
         }
 
         var from = baseline ?? series[0];
-        var text = PanelText.Signed(last.Value - from.Value);
+        var text = PanelText.Change(last.Value - from.Value, format);
         return baseline is null ? $"{text} in {StatText.Span(last.T - from.T)}" : text;
     }
+
+    /// <summary>
+    /// <see cref="Records.Change"/>'s recent change ("+220K in 1h") written in the stat's format: a duration's rise reads
+    /// as time ("+2h 0m in 3h"), and a date has no change.
+    /// </summary>
+    private static string RecentChange(IReadOnlyList<SeriesPoint> series, StatFormat format) =>
+        format == StatFormat.Date ? Dash
+        : Records.Movement(series) is not { } moved ? Records.NoEarlierRead
+        : $"{PanelText.Change(moved.Delta, format)} in {StatText.Span(moved.Span)}";
 
     private sealed record RankedGroup(GroupRow Row, int Rank, double? Value);
 
@@ -703,6 +848,24 @@ public static class PanelModels
         new(title, Stale: PanelText.StaleSource(live.FindRecipe(settings.Recipe)?.Recipe is { } recipe ? RecipeWords.Group(recipe) : "source"));
 
     private static AccountCardModel EmptyCard(PanelHead head) => new(head, "", Dash, [], [], [], "");
+
+    /// <summary>
+    /// A card's other shown stats under the recipe's own section names (D12): stats with no section first, with no
+    /// heading; then sections in the order the recipe first names them; a picked counter's section (its counters'
+    /// label) last. Each value reads as its format says.
+    /// </summary>
+    private static IReadOnlyList<CardSection> Sections(Recipe recipe, IEnumerable<RecipeStat> stats, RecipeRow row, TimeZoneInfo zone)
+    {
+        var order = recipe.LastStep.Values.Select(v => v.Section ?? "").Prepend("").Distinct(StringComparer.Ordinal).ToList();
+        return [.. stats
+            .GroupBy(s => s.Section ?? "", StringComparer.Ordinal)
+            .OrderBy(g => order.IndexOf(g.Key) is var at && at >= 0 ? at : int.MaxValue)
+            .Select(g => new CardSection(g.Key, [.. g.Select(s => new FactModel(s.Label, PanelText.Value(ValueOf(row, s.Key), s.Format, zone)))]))];
+    }
+
+    /// <summary>A record's own reading: abbreviated for a number ("12.4M"), written out for a duration or date (a value fact, not a gain — those don't further abbreviate).</summary>
+    private static string ShortValue(double value, StatFormat format, TimeZoneInfo zone) =>
+        format == StatFormat.Number ? PanelText.Short(value) : PanelText.Value(value, format, zone);
 
     private static IEnumerable<Source> SourcesYoursIn(LiveBoard live, Recipe recipe) =>
         live.Sources
@@ -717,6 +880,8 @@ public static class PanelModels
         id is null ? null : snapshot?.Headline?.FirstOrDefault(h => h.Id == id)?.Number;
 
     private static double? ValueOf(RecipeRow row, string stat) => row.Values.TryGetValue(stat, out var value) ? value : null;
+
+    private static RecipeStat StatOf(IReadOnlyList<RecipeStat> stats, string key) => stats.First(s => s.Key == key);
 
     /// <summary>A recipe with a period shows the current period; one without shows the last 30 days (spec §9.1).</summary>
     private static DateTimeOffset Since(Recipe recipe, DateTimeOffset now) => recipe.Period is null ? now.AddDays(-30) : DateTimeOffset.MinValue;

@@ -6,33 +6,37 @@
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
             <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="70" />
-                        <ColumnDefinition Width="70" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding PeriodColumn}" Style="{StaticResource ColumnHeader}" />
-                    <TextBlock Grid.Column="1" Text="Place" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
-                    <TextBlock Grid.Column="2" Text="Total" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
-                    <TextBlock Grid.Column="3" Text="Your best" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
-                </Grid>
+                <Border Style="{StaticResource PanelTableHeadingRow}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="70" />
+                            <ColumnDefinition Width="70" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding PeriodColumn}" Style="{StaticResource ColumnHeader}" />
+                        <TextBlock Grid.Column="1" Text="Place" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                        <TextBlock Grid.Column="2" Text="Total" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                        <TextBlock Grid.Column="3" Text="Your best" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                    </Grid>
+                </Border>
                 <ui:RowList ItemsSource="{Binding Rows}" AutomationProperties.Name="Finished periods, newest first">
                     <ui:RowList.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="70" />
-                                    <ColumnDefinition Width="70" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Period}" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="1" Text="{Binding Place}" TextAlignment="Right" />
-                                <TextBlock Grid.Column="2" Text="{Binding Total}" TextAlignment="Right" />
-                                <TextBlock Grid.Column="3" Text="{Binding YourBest}" TextAlignment="Right" TextTrimming="CharacterEllipsis" />
-                            </Grid>
+                            <Border Style="{StaticResource PanelTableRowLine}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Period}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Place}" TextAlignment="Right" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Total}" TextAlignment="Right" />
+                                    <TextBlock Grid.Column="3" Text="{Binding YourBest}" TextAlignment="Right" TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ui:RowList.ItemTemplate>
                 </ui:RowList>

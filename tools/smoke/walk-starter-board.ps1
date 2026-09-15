@@ -1,13 +1,17 @@
-# The starter board on a clean data folder: a main clan, a clan your accounts are in, a watched clan and (when
-# the fixture exists) the top list, then every Battle panel with its title, Start, Test now and Stop.
+# The starter boards on a clean data folder: a main clan, a clan your accounts are in, a watched clan, (when
+# the fixture exists) the top list and the profile recipe with its suggestions, then two tabs, Battle first, and
+# every Battle panel with its title and no account card or table on it, Alts as its own tab, Start, Test now and
+# Stop, and a change to Alts that leaves Battle following.
 param(
     [string]$Main = 'CCGP',
     [string]$Alt = 'K0i2'
 )
 
-. (Join-Path $PSScriptRoot 'uia-import.ps1')
+. (Join-Path $PSScriptRoot 'uia-board.ps1')
 $ErrorActionPreference = 'Stop'
 $clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
+$profileFixture = Join-Path $UrFixtures 'petsim99-profile.recipe.json'
+$boardsFile = Join-Path $UrData 'boards.json'
 $topFixture = Get-ChildItem $UrFixtures -Filter *.recipe.json | Where-Object { (Get-Content $_.FullName -Raw) -match '"groupName"' } | Select-Object -First 1
 $rororo = [bool](Get-Process -Name 'ROROROblox.App' -ErrorAction SilentlyContinue)
 $backup = $null
@@ -23,18 +27,23 @@ try {
     $setup = Wait-UrWindow '^Setup$' 30
     Select-SearchName $setup 'Your main clan' $Main
     Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
-    Invoke-Element (Find-ByAutomationId $setup 'AddMineButton')
+    Invoke-WhenReady $setup 'AddMineButton'
     Select-SearchName $setup 'Add a clan your accounts are in' $Alt
     Wait-Line $setup 'MineFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
-    Invoke-Element (Find-ByAutomationId $setup 'WatchClanButton')
+    Invoke-WhenReady $setup 'WatchClanButton'
     Select-FirstSearchMatch $setup 'Watch a clan' 'an' @($Main, $Alt) | Out-Null
 
     if ($topFixture) {
         Start-Import $topFixture.FullName
         $screen = Wait-UrWindow '^Import recipe$' 30
-        Invoke-Element (Find-ByAutomationId $screen 'ImportButton')
+        Invoke-WhenReady $screen 'ImportButton'
         Start-Sleep -Seconds 2
     }
+
+    Start-Import $profileFixture
+    $screen = Wait-UrWindow '^Import recipe$' 30
+    Invoke-WhenReady $screen 'ImportButton'
+    Start-Sleep -Seconds 2
 
     Close-UrWindow (Get-SetupWindow)
     $board = Get-BoardWindow
@@ -43,26 +52,28 @@ try {
         'StandingPanel1'       = 'Clan standing'
         'StandingPanel2'       = 'Clan standing'
         'RacePanel1'           = 'Battle race'
-        'MyAccountsPanel1'     = 'My accounts'
         'PromotionCheckPanel1' = 'Promotion check'
-        'AccountCardPanel1'    = 'Account card'
+        'MyAccountsPanel1'     = 'My accounts'
         'PastPeriodsPanel1'    = 'Past battles'
+        'RecordsPanel1'        = 'Records'
     }
     if ($topFixture) { $expected['TopPanel1'] = 'Top of the battle' }
 
-    # PastPeriods is the last panel StarterBoards adds, so waiting for its bound title is a proxy for the
+    # Records is the last panel the Battle starter adds, so waiting for its bound title is a proxy for the
     # whole board having finished rendering -- reading a panel's text right after it merely appears in the
     # tree can race its data binding.
     Wait-Until {
-        $past = Find-ByAutomationId (Get-BoardWindow) 'PastPeriodsPanel1'
-        $past -and (Line $past 'PanelTitle') -eq 'Past battles'
+        $records = Find-ByAutomationId (Get-BoardWindow) 'RecordsPanel1'
+        $records -and (Line $records 'PanelTitle') -eq 'Records'
     } 20 | Out-Null
     $board = Get-BoardWindow
     foreach ($id in $expected.Keys) {
         $panel = Find-ByAutomationId $board $id
         Check "1 $id is on the board" ($panel -and (Line $panel 'PanelTitle') -eq $expected[$id]) "title='$(Line $panel 'PanelTitle')'"
     }
-    Check '1b The board has no Grind panels' (-not (Find-ByAutomationId $board 'ProfileStatPanel1')) 'ProfileStatPanel1 absent'
+    $tabs = @(Get-TabNames $board)
+    Check '1b Two tabs, Battle first' ($tabs.Count -eq 2 -and $tabs[0] -eq 'Battle' -and $tabs[1] -eq 'Alts') ($tabs -join ', ')
+    Check '1d Battle has no account card or table' (-not (Find-ByAutomationId $board 'AccountCardPanel1') -and -not (Find-ByAutomationId $board 'AccountsTablePanel1')) (@(Get-PanelIds $board) -join ',')
     Check '1c The promotion check names both clans' ((Line (Find-ByAutomationId $board 'PromotionCheckPanel1') 'PanelSubtitle') -match "^$Alt .+ $Main$") (Line (Find-ByAutomationId $board 'PromotionCheckPanel1') 'PanelSubtitle')
 
     Invoke-Element (Find-ByAutomationId $board 'StartStopButton')
@@ -83,6 +94,24 @@ try {
     Check '3 My accounts groups your accounts by clan' $grouped ($accounts -join ' | ')
 
     & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'starter-board.png') | Out-Null
+
+    # 5. Alts is a tab of its own.
+    Select-Tab (Get-BoardWindow) 'Alts'
+    Check '5 Alts shows the accounts table' ([bool](Find-ByAutomationId (Get-BoardWindow) 'AccountsTablePanel1')) (@(Get-PanelIds (Get-BoardWindow)) -join ',')
+    & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'alts-tab.png') | Out-Null
+    Check '5b No boards.json while both tabs follow' (-not (Test-Path $boardsFile)) "exists=$(Test-Path $boardsFile)"
+
+    # 6. Changing Alts writes Alts; Battle keeps following.
+    Enter-EditMode (Get-BoardWindow)
+    Invoke-PanelTool (Get-BoardWindow) 'RecordsPanel1' 'RemovePanelButton'
+    Complete-EditMode (Get-BoardWindow)
+    $saved = @(Read-Boards)
+    $battleEntry = $saved | Where-Object { $_.id -eq 'b-starter-battle' } | Select-Object -First 1
+    $altsEntry = $saved | Where-Object { $_.id -eq 'b-starter-alts' } | Select-Object -First 1
+    Check '6 boards.json keeps Battle following, with no panels' ($battleEntry -and $battleEntry.follows -eq 'battle' -and @($battleEntry.panels).Count -eq 0) ($saved | ConvertTo-Json -Depth 2 -Compress)
+    Check '6b ...and Alts as you left it' ($altsEntry -and -not $altsEntry.follows -and @($altsEntry.panels).Count -eq 2) "alts panels=$(@($altsEntry.panels).Count)"
+    Select-Tab (Get-BoardWindow) 'Battle'
+    Check '6c Battle still shows its panels' ([bool](Find-ByAutomationId (Get-BoardWindow) 'RacePanel1')) (@(Get-PanelIds (Get-BoardWindow)) -join ',')
 
     Invoke-Element (Find-ByAutomationId $board 'StartStopButton')
     $stopped = Wait-Line $board 'StateLine' '^Stopped\.$' 20

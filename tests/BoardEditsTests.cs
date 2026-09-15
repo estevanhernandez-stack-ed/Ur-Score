@@ -244,6 +244,36 @@ public class BoardEditsTests
     }
 
     [Fact]
+    public void DoneKeepsAChangedDraftOfAFollowingTabWhoseStarterWentEmptyWhileEditing()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var ticked = StarterBoards.All([Installed(Profile, "diamonds")], [profile]);
+        var atEdit = Assert.Single(Following.Shown(null, ticked));
+        var draft = BoardEdits.RemovePanel(atEdit, atEdit.Panels[1].Id);
+
+        // Every stat unticked in Setup while editing: Alts has nothing to show, so it isn't among the boards now.
+        var unticked = StarterBoards.All([Installed(Profile)], [profile]);
+        var boards = Following.Shown(null, unticked);
+        Assert.DoesNotContain(boards, b => b.Id == atEdit.Id);
+
+        // The change is kept as a board of its own, and shows once saved.
+        var finished = BoardEdits.Finish(boards, atEdit, draft);
+        var kept = Assert.Single(finished, b => b.Id == atEdit.Id);
+        Assert.Null(kept.Follows);
+        Assert.Equal(draft.Panels, kept.Panels);
+        var saved = Following.ToSave(null, unticked, finished);
+        Assert.Equal(draft.Panels.Count, Assert.Single(Following.Shown(saved, unticked), b => b.Id == atEdit.Id).Panels.Count);
+
+        // Every panel removed: still kept, a board that says it has no panels rather than a tab that vanishes.
+        var emptied = Following.ToSave(null, unticked, BoardEdits.Finish(boards, atEdit, draft with { Panels = [] }));
+        var shownEmpty = Assert.Single(Following.Shown(emptied, unticked), b => b.Id == atEdit.Id);
+        Assert.Equal(BoardEmpty.NoPanels, Labs626.UrScore.UI.BoardText.EmptyFor(unticked, shownEmpty));
+
+        // A draft with no change still writes nothing.
+        Assert.Same(boards, BoardEdits.Finish(boards, atEdit, atEdit with { Panels = [.. atEdit.Panels] }));
+    }
+
+    [Fact]
     public void AfterARemoveFocusGoesToTheNextPanelElseThePreviousElseNone()
     {
         var board = BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Top);
@@ -261,31 +291,6 @@ public class BoardEditsTests
         Assert.Equal("p-b-1", BoardEdits.FocusAfterRemove(BoardEdits.PopOut(BoardEdits.PopOut(four, "p-b-3", rect), "p-b-4", rect), "p-b-2"));
         Assert.Equal("p-b-3", BoardEdits.FocusAfterRemove(BoardEdits.PopOut(board, "p-b-2", rect), "p-b-1"));
         Assert.Null(BoardEdits.FocusAfterRemove(BoardEdits.PopOut(BoardOf("b", PanelType.Standing, PanelType.Race), "p-b-1", rect), "p-b-2"));
-    }
-
-    [Fact]
-    public void AnEmptyFollowingStarterIsNotWrittenByTheFirstChangeElsewhere()
-    {
-        // R1: first run, nothing to show yet, and + Board. The empty starter isn't frozen into boards.json.
-        var empty = StarterBoards.Build([], []);
-        var following = BoardDefs.FromStarter(empty, freshIds: false);
-        var added = new BoardDef("b-00000001", "Board 2", []);
-
-        Assert.Equal(new[] { added }, BoardEdits.ForFirstSave([following, added], empty));
-        Assert.Equal(new[] { added }, BoardEdits.ForFirstSave([added, following], StarterBoards.Build([Installed(Clan)], [])));
-
-        // A change to the starter itself is kept: renamed, or a panel added to it. So is the last board.
-        IReadOnlyList<BoardDef> renamed = [following with { Name = "Mine" }, added];
-        IReadOnlyList<BoardDef> built = [BoardEdits.AddPanel(following, PanelType.Records, new PanelSettings(Clan.Slug, Stat: "value")), added];
-        IReadOnlyList<BoardDef> alone = [following];
-        Assert.Same(renamed, BoardEdits.ForFirstSave(renamed, empty));
-        Assert.Same(built, BoardEdits.ForFirstSave(built, empty));
-        Assert.Same(alone, BoardEdits.ForFirstSave(alone, empty));
-
-        // A starter with panels is written like any board.
-        var filled = StarterBoards.Build([Installed(Clan, "value")], [SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main)]);
-        IReadOnlyList<BoardDef> materialized = [BoardDefs.FromStarter(filled, freshIds: false), added];
-        Assert.Same(materialized, BoardEdits.ForFirstSave(materialized, filled));
     }
 
     [Fact]

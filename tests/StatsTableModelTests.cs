@@ -16,17 +16,16 @@ public class StatsTableModelTests
     {
         var saved = Saved(
             ("counter:Zones Unlocked", new StatChoice(true, false, "ps99.stat.zones-unlocked")),
-            ("rebirths", new StatChoice(false, false, "ps99.rebirths")));
+            ("prestige", new StatChoice(false, false, "ps99.prestige")));
 
         var rows = StatsTableModel.Build(Profile, saved, ["Pets Hatched", "Coins Spent", "Pets Hatched", "123456", "Bad.Name"]);
 
-        Assert.Equal(
-            new[] { "diamonds", "eggs", "rank", "counter:Pets Hatched", "counter:Coins Spent", "counter:Zones Unlocked", "rebirths" },
-            rows.Select(r => r.Key).ToArray());
-        Assert.All(rows.Take(6), row => Assert.True(row.Offered));
+        string[] expected = [.. RecipeParserTests.ProfileIds, "counter:Pets Hatched", "counter:Coins Spent", "counter:Zones Unlocked", "prestige"];
+        Assert.Equal(expected, rows.Select(r => r.Key).ToArray());
+        Assert.All(rows.Take(rows.Count - 1), row => Assert.True(row.Offered));
         Assert.False(rows[^1].Offered);
-        Assert.Equal("rebirths (no longer offered)", rows[^1].DisplayLabel);
-        Assert.Equal("Coins Spent", rows[4].DisplayLabel);
+        Assert.Equal("prestige (no longer offered)", rows[^1].DisplayLabel);
+        Assert.Equal("Coins Spent", rows.Single(r => r.Key == "counter:Coins Spent").DisplayLabel);
     }
 
     [Fact]
@@ -46,9 +45,9 @@ public class StatsTableModelTests
     [Fact]
     public void AChoiceTheRecipeNoLongerOffersIsNeverTicked()
     {
-        var rows = StatsTableModel.Build(Profile, Saved(("rebirths", new StatChoice(true, true, "ps99.rebirths"))), []);
+        var rows = StatsTableModel.Build(Profile, Saved(("prestige", new StatChoice(true, true, "ps99.prestige"))), []);
 
-        var gone = rows.Single(r => r.Key == "rebirths");
+        var gone = rows.Single(r => r.Key == "prestige");
         Assert.False(gone.Show);
         Assert.False(gone.Send);
         Assert.False(StatsTableModel.AnyTicked(rows));
@@ -148,6 +147,24 @@ public class StatsTableModelTests
         rows[1].MetricId = " ";
 
         Assert.Equal("Diamonds: rule for ps99.diamonds", StatsTableModel.RuleLines(rows, id => $"rule for {id}"));
+    }
+
+    [Fact]
+    public void AFirstImportStartsWithShowTickedOnWhatTheRecipeSuggestsAndNothingSent()
+    {
+        var suggested = StatsTableModel.Suggested(Profile);
+
+        Assert.Equal(new[] { "diamonds", "eggs", "goals", "pets", "playtime", "rank", "rebirths" }, suggested.Keys.Order(StringComparer.Ordinal).ToArray());
+        Assert.All(suggested.Values, choice => Assert.True(choice.Show && !choice.Send));
+        Assert.Equal("ps99.playtime", suggested["playtime"].MetricId);
+
+        // Rows built from them are ticked, and what Import saves is exactly them: a fresh import has no saved choices.
+        var rows = StatsTableModel.Build(Profile, suggested, []);
+        Assert.True(StatsTableModel.AnyTicked(rows));
+        Assert.Equal(suggested.Keys.Order(StringComparer.Ordinal), StatsTableModel.Choices(new Dictionary<string, StatChoice>(), rows).Keys.Order(StringComparer.Ordinal));
+
+        var clan = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+        Assert.Empty(StatsTableModel.Suggested(clan));
     }
 
     [Fact]

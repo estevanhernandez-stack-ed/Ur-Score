@@ -12,6 +12,9 @@ public sealed record RecipePeriod(string Value, string? Starts, string? Ends, st
 /// <summary>The source's own snapshot time, and whether it says the data is stale (score book spec §3.2).</summary>
 public sealed record RecipeAsOf(string Time, string? Stale);
 
+/// <summary>How a value's number reads (D10): a plain number, seconds as a duration, or unix seconds as a date.</summary>
+public enum StatFormat { Number, Duration, Date }
+
 public static class TimeText
 {
     /// <summary>Latest instant a time can name: the last second of year 9999.</summary>

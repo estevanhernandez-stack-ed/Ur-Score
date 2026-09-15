@@ -31,6 +31,33 @@ public class PanelModelsTests
     // ---- Standing ----
 
     [Fact]
+    public void AChipsWordsComeFromItsRoleSoTheTwoCanNeverDisagree()
+    {
+        Assert.Equal((PanelText.Chip(SourceRole.Watch), true), (new PanelHead("Clan standing", ChipRole: SourceRole.Watch).Chip, new PanelHead("Clan standing", ChipRole: SourceRole.Watch).HasChip));
+        Assert.Equal(("", false), (new PanelHead("Account card").Chip, new PanelHead("Account card").HasChip));
+    }
+
+    [Theory]
+    [InlineData(SourceRole.Main)]
+    [InlineData(SourceRole.Mine)]
+    [InlineData(SourceRole.Watch)]
+    public void AChipCarriesItsSourcesRoleSoItsColourNeverHangsOnItsWords(SourceRole role)
+    {
+        var source = SourceOf("s-00000001", Clan, "CCGP", role);
+        var live = Live([source], [Installed(Clan, "value")], Snaps());
+
+        var standing = PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: source.Id));
+        var past = PanelModels.PastPeriods(live, Reader(), new PanelSettings(Clan.Slug, SourceId: source.Id, Stat: "value"));
+        var leaderboard = PanelModels.LiveLeaderboard(live, new PanelSettings(Clan.Slug, SourceId: source.Id), new Dictionary<long, string>());
+
+        Assert.All(new[] { standing.Head, past.Head, leaderboard.Head }, head => Assert.Equal((PanelText.Chip(role), role), (head.Chip, head.ChipRole)));
+
+        // A head with no source has no chip and no role.
+        var gone = PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: "s-gone0000"));
+        Assert.Equal(("", (SourceRole?)null), (gone.Head.Chip, gone.Head.ChipRole));
+    }
+
+    [Fact]
     public void StandingShowsPlaceTotalChangeAndTheRecipesWords()
     {
         var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
@@ -42,7 +69,7 @@ public class PanelModelsTests
 
         var model = PanelModels.Standing(live, reader, new PanelSettings(Clan.Slug, SourceId: main.Id));
 
-        Assert.Equal(new PanelHead("Clan standing", "CCGP", "★ main"), model.Head);
+        Assert.Equal(new PanelHead("Clan standing", "CCGP", SourceRole.Main), model.Head);
         Assert.Equal("14th", model.Place);
         Assert.Equal("in the battle", model.PlaceSuffix);
         Assert.Equal("Clan points", model.TotalLabel);
@@ -193,6 +220,41 @@ public class PanelModelsTests
     }
 
     [Fact]
+    public void MyAccountsReadsPlaytimeAsADurationAndADateWithNoChange()
+    {
+        // Final review Important 2, under the Task 3 ruling: My accounts fits the profile recipe too, so a duration's value
+        // and its change read as time ("+2h 0m in 2h 55m", not "+7.2K in 2h 55m"), and a date has no change.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id,
+        [
+            new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["playtime"] = 50_651_629, ["first-join"] = 1_600_000_000 }),
+            new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["playtime"] = 3_600, ["first-join"] = 1_700_000_000 }),
+        ]);
+        var live = Live([profile], [Installed(Profile, "playtime", "first-join")], Snaps(snapshot));
+        var playtimeBook = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "playtime", (Main.RobloxUserId, 50_644_429)),
+            Read(profile, Now.AddMinutes(-5), null, null, "playtime", (Main.RobloxUserId, 50_651_629)));
+        var dateBook = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "first-join", (Main.RobloxUserId, 1_600_000_000)),
+            Read(profile, Now.AddMinutes(-5), null, null, "first-join", (Main.RobloxUserId, 1_600_000_000)));
+
+        var playtime = PanelModels.MyAccounts(live, playtimeBook, new PanelSettings(Profile.Slug, Stat: "playtime"));
+        var main = playtime.Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId);
+        var alt = playtime.Groups.SelectMany(g => g.Rows).Single(r => r.UserId == AltOne.RobloxUserId);
+
+        Assert.Equal("586d 5h", main.Value);
+        Assert.Equal($"+2h 0m in {StatText.Span(TimeSpan.FromMinutes(175))}", main.Change);
+        Assert.Equal("1h 0m", alt.Value);
+        Assert.Equal("no earlier read", alt.Change);
+
+        var firstJoined = PanelModels.MyAccounts(live, dateBook, new PanelSettings(Profile.Slug, Stat: "first-join"));
+        var joined = firstJoined.Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId);
+
+        Assert.Equal("13 Sep 2020", joined.Value);
+        Assert.Equal(StatText.Dash, joined.Change);
+    }
+
+    [Fact]
     public void MyAccountsForAStatNoLongerOfferedIsStale()
     {
         var model = PanelModels.MyAccounts(Live([], [Installed(Clan, "value")], Snaps()), Reader(), new PanelSettings(Clan.Slug, Stat: "counter:Gone"));
@@ -264,6 +326,72 @@ public class PanelModelsTests
         Assert.Contains(new FactModel("Battles played", records.PeriodsPlayed.ToString()), model.Facts);
         Assert.Contains(new FactModel("Last read", PanelText.Ago(series[^1].T, Now)), model.Facts);
         Assert.Equal(series.Count, Assert.Single(model.Line).Points.Count);
+        Assert.True(model.HasLine);
+        Assert.False(model.HasSections);
+    }
+
+    [Fact]
+    public void TheAccountCardShowsThePickedAccountInTheRecipesSections()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id,
+        [
+            new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 215_850_364, ["rebirths"] = 9, ["playtime"] = 50_651_629, ["first-join"] = 1_600_000_000 }),
+            new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 3_957_873_882, ["rebirths"] = 11, ["playtime"] = 3_600 }),
+        ]) with
+        {
+            Unavailable = new Dictionary<long, string> { [AltTwo.RobloxUserId] = "Profile is private." },
+        };
+        var live = Live([profile], [Installed(Profile, "diamonds", "rebirths", "playtime", "first-join")], Snaps(snapshot));
+        var settings = new PanelSettings(Profile.Slug, Stat: "diamonds");
+
+        var top = PanelModels.AccountCard(live, Reader(), settings);
+        var picked = PanelModels.AccountCard(live, Reader(), settings, pickedUserId: Main.RobloxUserId);
+        var pinned = PanelModels.AccountCard(live, Reader(), settings with { UserId = AltOne.RobloxUserId }, pickedUserId: Main.RobloxUserId);
+        var unread = PanelModels.AccountCard(live, Reader(), settings, pickedUserId: AltTwo.RobloxUserId);
+        var gone = PanelModels.AccountCard(live, Reader(), settings, pickedUserId: 999);
+
+        // With nothing picked, the top account; a pick shows that account; a card pinned to an account stays on it.
+        Assert.StartsWith(AltOne.DisplayName, top.Head.Subtitle);
+        Assert.StartsWith(Main.DisplayName, picked.Head.Subtitle);
+        Assert.StartsWith(AltOne.DisplayName, pinned.Head.Subtitle);
+        Assert.StartsWith(AltOne.DisplayName, gone.Head.Subtitle);
+
+        // The big number is the card's stat; the other shown stats sit in the recipe's sections, in its order, read as time.
+        Assert.Equal("215,850,364", picked.Big);
+        Assert.Equal(new[] { "Account", "Progression" }, picked.Sections.Select(s => s.Heading).ToArray());
+        Assert.Equal(new[] { new FactModel("Playtime", "586d 5h"), new FactModel("First joined", "13 Sep 2020") }, picked.Sections[0].Facts);
+        Assert.Equal(new[] { new FactModel("Rebirths", "9") }, picked.Sections[1].Facts);
+        Assert.True(picked.HasSections);
+
+        // With no book yet there is no line, so the card draws no chart.
+        Assert.Empty(picked.Line);
+        Assert.False(picked.HasLine);
+
+        // A picked account the read couldn't reach says why, in the recipe's words.
+        Assert.Equal(AltTwo.DisplayName, unread.Head.Subtitle);
+        Assert.Equal("Profile is private.", unread.Head.Note);
+        Assert.Empty(unread.Sections);
+        Assert.False(unread.HasSections);
+    }
+
+    [Fact]
+    public void TheAccountCardsHighestAndBiggestDayFactsReadAsTime()
+    {
+        // Controller ruling: besides the sections, the card's own value facts (Highest, Biggest day) read
+        // through the stat's format too, and a duration's gain reads as a duration ("+3h 20m"), not seconds.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id, [Row(AltOne.RobloxUserId, 22_000, "playtime")]);
+        var reader = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "playtime", (AltOne.RobloxUserId, 10_000)),
+            Read(profile, Now.AddHours(-2), null, null, "playtime", (AltOne.RobloxUserId, 22_000)));
+        var live = Live([profile], [Installed(Profile, "playtime")], Snaps(snapshot));
+
+        var model = PanelModels.AccountCard(live, reader, new PanelSettings(Profile.Slug, Stat: "playtime"));
+
+        Assert.Equal(PanelText.Duration(22_000), model.Big);
+        Assert.Equal(new FactModel("Highest", PanelText.Duration(22_000)), model.Facts[0]);
+        Assert.Equal(new FactModel("Biggest day", "+3h 20m"), model.Facts[1]);
     }
 
     // ---- Past periods ----
@@ -327,6 +455,36 @@ public class PanelModelsTests
 
         Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · -1.5K"), model.Facts[1]);
         Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · -1.5K"), model.Facts[2]);
+    }
+
+    [Fact]
+    public void RecordsReadDurationsAndOmitAMeaninglessGainForADate()
+    {
+        // Controller ruling: RecordsPanel's values read through the stat's format too. A duration's own
+        // reading and its gains both read as a duration; a date's gain is meaningless, so it's a dash.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+
+        var durationReader = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "playtime", (201, 10_000)),
+            Read(profile, Now.AddHours(-2), null, null, "playtime", (201, 22_000)));
+        var durationLive = Live([profile], [Installed(Profile, "playtime")], Snaps());
+
+        var durations = PanelModels.RecordsPanel(durationLive, durationReader, new PanelSettings(Profile.Slug, Stat: "playtime"));
+
+        Assert.Equal(new FactModel("Highest", $"{AltOne.DisplayName} · {PanelText.Duration(22_000)}"), durations.Facts[0]);
+        Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · +3h 20m"), durations.Facts[1]);
+        Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · +3h 20m"), durations.Facts[2]);
+
+        var dateReader = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "first-join", (201, 1_600_000_000)),
+            Read(profile, Now.AddHours(-2), null, null, "first-join", (201, 1_600_003_600)));
+        var dateLive = Live([profile], [Installed(Profile, "first-join")], Snaps());
+
+        var dates = PanelModels.RecordsPanel(dateLive, dateReader, new PanelSettings(Profile.Slug, Stat: "first-join"));
+
+        Assert.Equal(new FactModel("Highest", $"{AltOne.DisplayName} · {PanelText.Value(1_600_003_600, StatFormat.Date, TimeZoneInfo.Utc)}"), dates.Facts[0]);
+        Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · {StatText.Dash}"), dates.Facts[1]);
+        Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · {StatText.Dash}"), dates.Facts[2]);
     }
 
     // ---- Top ----
@@ -407,11 +565,162 @@ public class PanelModelsTests
     }
 
     [Fact]
+    public void AProfileStatOfPlaytimeReadsAsADuration()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id, [Row(Main.RobloxUserId, 50_651_629, "playtime")]);
+        var reader = Reader(
+            Read(profile, Now.AddDays(-8), null, null, "playtime", (Main.RobloxUserId, 50_644_429)),
+            Read(profile, Now.AddMinutes(-5), null, null, "playtime", (Main.RobloxUserId, 50_651_629)));
+        var live = Live([profile], [Installed(Profile, "playtime")], Snaps(snapshot));
+
+        var row = PanelModels.ProfileStat(live, reader, new PanelSettings(Profile.Slug, SourceId: profile.Id, Stat: "playtime")).Rows[0];
+
+        Assert.Equal("586d 5h", row.Value);
+        Assert.Equal("+2h 0m", row.Today);
+    }
+
+    [Fact]
     public void AGainNeedsTwoReadings()
     {
         Assert.Null(PanelModels.Gain([]));
         Assert.Null(PanelModels.Gain([new SeriesPoint(Now, 5, null, false, 0)]));
         Assert.Equal(7, PanelModels.Gain([new SeriesPoint(Now.AddHours(-1), 5, null, false, 0), new SeriesPoint(Now, 12, null, false, 0)]));
+    }
+
+    // ---- Accounts table ----
+
+    private static readonly Source ProfileSource = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+
+    /// <summary>Your four accounts on the profile recipe: Main and AltOne read, Loose read without diamonds, AltTwo private.</summary>
+    private static LiveBoard ProfileLive(params string[] shown) => Live([ProfileSource], [Installed(Profile, shown)], Snaps(Snapshot(ProfileSource.Id,
+    [
+        new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 215_850_364, ["rank"] = 37, ["playtime"] = 50_651_629 }),
+        new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 3_957_873_882, ["rank"] = 12, ["playtime"] = 3_600 }),
+        new RecipeRow(Loose.RobloxUserId, new Dictionary<string, double> { ["rank"] = 5 }),
+    ]) with
+    {
+        Unavailable = new Dictionary<long, string> { [AltTwo.RobloxUserId] = "Profile is private." },
+    }));
+
+    private static ScoreBookReader DiamondsBook() => Reader(
+        Read(ProfileSource, Now.AddDays(-8), null, null, "diamonds", (Main.RobloxUserId, 200_000_000)),
+        Read(ProfileSource, Now.AddMinutes(-5), null, null, "diamonds", (Main.RobloxUserId, 215_850_364)));
+
+    private static readonly PanelSettings TableSettings = new(Profile.Slug, SourceId: "s-00000009");
+
+    [Fact]
+    public void TheAccountsTableHasAColumnPerShownStatSortedByTheFirstWithItsChangeAndATotal()
+    {
+        var model = PanelModels.AccountsTable(ProfileLive("diamonds", "rank", "playtime"), DiamondsBook(), TableSettings);
+
+        Assert.Equal(new[] { "Account", "Diamonds ↓", "Today", "7 days", "Player rank", "Playtime" }, model.Columns.Select(c => c.Heading).ToArray());
+        Assert.Equal(new[] { AltOne.DisplayName, Main.DisplayName, Loose.DisplayName, AltTwo.DisplayName, "Total" }, model.Rows.Select(r => r.Name).ToArray());
+
+        // Highest first; a missing value sorts last; the change comes from the book, a dash with fewer than two readings.
+        var main = model.Rows[1];
+        Assert.Equal(new[] { Main.DisplayName, "215,850,364", PanelText.Signed(15_850_364), PanelText.Signed(15_850_364), "37", "586d 5h" }, main.Cells);
+        Assert.Equal(new[] { AltOne.DisplayName, "3,957,873,882", StatText.Dash, StatText.Dash, "12", "1h 0m" }, model.Rows[0].Cells);
+        Assert.False(model.Rows[2].Missing);
+
+        // An account the read couldn't reach says why, plainly, with dashes.
+        var hidden = model.Rows[3];
+        Assert.Equal(("Profile is private.", true), (hidden.Note, hidden.Missing));
+        Assert.All(hidden.Cells.Skip(1), cell => Assert.Equal(StatText.Dash, cell));
+
+        // The total adds up what adds up (diamonds, playtime); a rank and the change columns stay blank.
+        var total = model.Rows[^1];
+        Assert.True(total.IsTotal);
+        Assert.Equal(new[] { "Total", "4,173,724,246", "", "", "", "586d 6h" }, total.Cells);
+        Assert.Equal("", model.Head.Note);
+    }
+
+    [Fact]
+    public void AClickedHeadingSortsItsColumnAndTheChangeFollowsIt()
+    {
+        var live = ProfileLive("diamonds", "rank", "playtime");
+
+        var byRank = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort("rank", Descending: false));
+        Assert.Equal(new[] { "Account", "Diamonds", "Player rank ↑", "Today", "7 days", "Playtime" }, byRank.Columns.Select(c => c.Heading).ToArray());
+        Assert.Equal(new[] { Loose.DisplayName, AltOne.DisplayName, Main.DisplayName, AltTwo.DisplayName, "Total" }, byRank.Rows.Select(r => r.Name).ToArray());
+
+        // The sorted heading flips; another stat sorts highest first; Account sorts A to Z; the change columns don't sort.
+        Assert.Equal(new AccountSort("rank", Descending: true), AccountSort.Clicked(byRank.Columns[2]));
+        Assert.Equal(new AccountSort("diamonds", Descending: true), AccountSort.Clicked(byRank.Columns[1]));
+        Assert.Equal(new AccountSort(AccountSort.NameKey, Descending: false), AccountSort.Clicked(byRank.Columns[0]));
+        Assert.False(byRank.Columns[3].CanSort);
+
+        var byName = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort(AccountSort.NameKey, Descending: false));
+        Assert.Equal(new[] { "Account ↑", "Diamonds", "Player rank", "Playtime" }, byName.Columns.Select(c => c.Heading).ToArray());
+        Assert.Equal(new[] { AltOne.DisplayName, Main.DisplayName, Loose.DisplayName, AltTwo.DisplayName, "Total" }, byName.Rows.Select(r => r.Name).ToArray());
+
+        // A sort on a stat you no longer show falls back to the first.
+        var stale = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort("eggs", Descending: false));
+        Assert.Equal("Diamonds ↓", stale.Columns[1].Heading);
+    }
+
+    [Fact]
+    public void TheAccountsTableMarksThePickAndSaysWhatItIsWaitingFor()
+    {
+        var picked = PanelModels.AccountsTable(ProfileLive("diamonds"), DiamondsBook(), TableSettings, pickedUserId: AltOne.RobloxUserId);
+        Assert.Equal(new[] { AltOne.RobloxUserId }, picked.Rows.Where(r => r.Picked).Select(r => r.UserId).ToArray());
+
+        var unread = PanelModels.AccountsTable(Live([ProfileSource], [Installed(Profile, "diamonds")], Snaps()), DiamondsBook(), TableSettings);
+        Assert.Equal("Waiting for the first read.", unread.Head.Note);
+        Assert.All(unread.Rows.Where(r => !r.IsTotal), row => Assert.True(row.Missing));
+
+        var nothingShown = PanelModels.AccountsTable(ProfileLive(), DiamondsBook(), TableSettings);
+        Assert.Equal("Tick Show on a stat to fill this panel.", nothingShown.Head.Note);
+        Assert.Equal(new[] { "Account ↑" }, nothingShown.Columns.Select(c => c.Heading).ToArray());
+        Assert.DoesNotContain(nothingShown.Rows, r => r.IsTotal);
+
+        // A pinned source that's gone is stale; an unpinned table reads the recipe's first source that is on.
+        Assert.True(PanelModels.AccountsTable(ProfileLive("diamonds"), DiamondsBook(), new PanelSettings(Profile.Slug, SourceId: "s-gone")).Head.HasStale);
+        Assert.False(PanelModels.AccountsTable(ProfileLive("diamonds"), DiamondsBook(), new PanelSettings(Profile.Slug)).Head.HasStale);
+    }
+
+    [Fact]
+    public void AnAccountsTableOnAListRecipeShowsOnlyYourAccountsNeverTheOtherPlayersItRead()
+    {
+        // Global Constraint 2 (final review Minor 8): a list recipe's read holds other members' rows; the table's rows, cells
+        // and total come from your accounts alone.
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var live = Live([main], [Installed(Clan, "value")], Snaps(Snapshot(main.Id,
+            [Row(5, 20_000_000), Row(Main.RobloxUserId, 14_020_550), Row(6, 1_000), Row(AltOne.RobloxUserId, 12_418_220), Row(7, 999_999_999)])));
+
+        var model = PanelModels.AccountsTable(live, Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
+
+        Assert.Equal(new[] { Main.RobloxUserId, AltOne.RobloxUserId, AltTwo.RobloxUserId, Loose.RobloxUserId }, model.Rows.Where(r => !r.IsTotal).Select(r => r.UserId).Order().ToArray());
+        Assert.Equal(new[] { Main.DisplayName, AltOne.DisplayName, AltTwo.DisplayName, Loose.DisplayName, "Total" }.Order(), model.Rows.Select(r => r.Name).Order());
+        Assert.DoesNotContain(model.Rows.SelectMany(r => r.Cells), cell => cell is "20,000,000" or "1,000" or "999,999,999");
+        Assert.Equal("26,438,770", model.Rows.Single(r => r.IsTotal).Cells[1]);
+    }
+
+    [Fact]
+    public void AnUnpinnedTableAndProfileStatReadTheRecipesFirstSourceThatIsOnElseItsFirst()
+    {
+        // Final review Minors 3 and 4: one rule for the recipe's source (PanelForms.FirstSourceOfRecipe). The first source
+        // is off and the second is on and read, so both panels read the second, and the table isn't waiting for anything.
+        var off = SourceOf("s-00000009", Profile, null, SourceRole.Mine) with { Enabled = false };
+        var on = SourceOf("s-0000000b", Profile, null, SourceRole.Mine);
+        var live = Live([off, on], [Installed(Profile, "diamonds")], Snaps(Snapshot(on.Id, [Row(Main.RobloxUserId, 215_850_364, "diamonds")])));
+
+        var table = PanelModels.AccountsTable(live, Reader(), new PanelSettings(Profile.Slug));
+        var stat = PanelModels.ProfileStat(live, Reader(), new PanelSettings(Profile.Slug, Stat: "diamonds"));
+
+        Assert.Equal("", table.Head.Note);
+        Assert.Equal("215,850,364", table.Rows.Single(r => r.UserId == Main.RobloxUserId).Cells[1]);
+        Assert.Equal("215,850,364", stat.Rows.Single(r => r.Name == Main.DisplayName).Value);
+
+        // With no source on, both read the recipe's first; the table says it is switched off rather than waiting for a read.
+        var allOff = Live([off], [Installed(Profile, "diamonds")], Snaps());
+
+        var offTable = PanelModels.AccountsTable(allOff, Reader(), new PanelSettings(Profile.Slug));
+        var offStat = PanelModels.ProfileStat(allOff, Reader(), new PanelSettings(Profile.Slug, Stat: "diamonds"));
+
+        Assert.False(offTable.Head.HasStale);
+        Assert.Equal($"{allOff.SourceName(off)} is switched off, so it isn't read.", offTable.Head.Note);
+        Assert.False(offStat.Head.HasStale);
     }
 
     // ---- Live leaderboard ----
@@ -428,5 +737,22 @@ public class PanelModelsTests
         Assert.Equal(new[] { "Rival", "estehernandez", "Member 7" }, model.Rows.Select(r => r.Name).ToArray());
         Assert.Equal(new[] { false, true, false }, model.Rows.Select(r => r.Yours).ToArray());
         Assert.Equal("Live only. Never saved.", model.Head.Note);
+    }
+
+    [Fact]
+    public void TheLiveLeaderboardWritesEachStatInItsFormat()
+    {
+        // Final review Minor 1: no list recipe has a format yet, so the profile recipe stands in for one that does.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var live = Live([profile], [Installed(Profile, "diamonds", "playtime", "first-join")], Snaps(Snapshot(profile.Id,
+        [
+            new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 215_850_364, ["playtime"] = 50_651_629, ["first-join"] = 1_600_000_000 }),
+            new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 1_000 }),
+        ])));
+
+        var model = PanelModels.LiveLeaderboard(live, new PanelSettings(Profile.Slug, SourceId: profile.Id), new Dictionary<long, string>());
+
+        Assert.Equal(new[] { "215,850,364", "586d 5h", "13 Sep 2020" }, model.Rows.Single(r => r.Name == Main.DisplayName).Cells);
+        Assert.Equal(new[] { "1,000", StatText.Dash, StatText.Dash }, model.Rows.Single(r => r.Name == AltOne.DisplayName).Cells);
     }
 }

@@ -103,6 +103,7 @@ public partial class BoardWindow
             window.ShowTitle(PanelGallery.TitleOf(def, live));
             window.Moved += OnPopOutMoved;
             window.Closed += OnPopOutClosed;
+            HookAccounts(window);
             _popOuts[id] = window;
             window.Show();
         }
@@ -115,7 +116,7 @@ public partial class BoardWindow
         {
             if (BoardEdits.Find(_services.Boards, window.PanelId) is not { } found) continue;
 
-            RenderPanel(found.Panel, window.View, live);
+            RenderPanel(found.Panel, window.View, live, found.Board.Id);
             window.ShowTitle(PanelGallery.TitleOf(found.Panel, live));
         }
     }

@@ -5,12 +5,14 @@
     <Border Style="{StaticResource PanelCard}">
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
-            <ui:RowList Margin="0,10,0,0" ItemsSource="{Binding Facts}" AutomationProperties.Name="Records across your accounts"
+            <!-- Key-value lines 12 apart: the mock's 10 px gap at its taller CSS line, so close to its 29 px pitch. -->
+            <ui:RowList ItemsSource="{Binding Facts}" AutomationProperties.Name="Records across your accounts"
                           Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
                 <ui:RowList.ItemTemplate>
                     <DataTemplate>
-                        <DockPanel Margin="0,3,0,0">
-                            <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" TextWrapping="Wrap" MaxWidth="240" TextAlignment="Right" />
+                        <DockPanel Margin="0,12,0,0">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" Style="{StaticResource KeyValue}" TextWrapping="Wrap" MaxWidth="240"
+                                       TextAlignment="Right" />
                             <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
                         </DockPanel>
                     </DataTemplate>

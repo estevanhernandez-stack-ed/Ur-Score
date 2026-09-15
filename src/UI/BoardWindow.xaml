@@ -4,31 +4,35 @@
         xmlns:ui="clr-namespace:Labs626.UrScore.UI"
         Title="RoRoRo Ur Score" Height="900" Width="1280" MinHeight="560" MinWidth="720"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
-        FontFamily="{StaticResource BodyFont}">
+        FontFamily="{StaticResource BodyFont}" FontSize="13">
     <Window.Resources>
-        <!-- A tab reads like Setup's list: no fill until hovered, and a cyan bar under the board on screen. -->
+        <!-- A tab (the mock's .tab): medium weight, no fill until hovered; the board on screen is a pill in the panel
+             colour with a divider edge and a cyan bar inset along its bottom. -->
         <Style x:Key="BoardTab" TargetType="ListBoxItem">
             <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+            <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="Padding" Value="12,6" />
-            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="Margin" Value="0,0,4,0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Grid>
-                            <Border x:Name="Item" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter />
-                            </Border>
-                            <Border x:Name="Bar" Height="2" VerticalAlignment="Bottom" Margin="8,0"
-                                    Background="{DynamicResource CyanBrush}" Visibility="Collapsed" />
-                        </Grid>
+                        <Border x:Name="Item" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6">
+                            <Grid>
+                                <ContentPresenter Margin="{TemplateBinding Padding}" />
+                                <Border x:Name="Bar" Height="2" VerticalAlignment="Bottom" Margin="3,0" CornerRadius="1"
+                                        Background="{DynamicResource CyanBrush}" Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowHoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowBgBrush}" />
+                                <Setter TargetName="Item" Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
                                 <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
                                 <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
                             </Trigger>
@@ -36,6 +40,18 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <!-- + Board (the mock's .tab.add): cyan, medium, lined up with the tabs' text; muted when BoardButtons turns it off. -->
+        <Style x:Key="AddBoardButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatButton}">
+            <Setter Property="Foreground" Value="{DynamicResource CyanBrush}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Padding" Value="12,7" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
     <DockPanel>
@@ -82,8 +98,8 @@
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
-                <Button x:Name="AddBoardButton" DockPanel.Dock="Left" Content="+ Board" Style="{StaticResource FlatButton}"
-                        HorizontalAlignment="Left" VerticalAlignment="Center" Margin="4,0,14,0" Click="OnAddBoardClick"
+                <Button x:Name="AddBoardButton" DockPanel.Dock="Left" Content="+ Board" Style="{StaticResource AddBoardButtonStyle}"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,14,0" Click="OnAddBoardClick"
                         AutomationProperties.Name="Add a board" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse x:Name="LiveDot" Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource CyanBrush}" Visibility="Collapsed" />

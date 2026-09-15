@@ -208,30 +208,23 @@ public sealed class AppServices : ISetupServices, IDisposable
         KnownAccounts, _time, Runner.Running);
 
     /// <summary>
-    /// The saved boards, or, while nothing is saved, the starter board rebuilt from your sources with fixed ids
-    /// (R1, R2). Never empty.
+    /// The boards on screen: the saved ones, with each tab that still follows a starter rebuilt from your sources and
+    /// shown while it has panels; with nothing saved, every starter follows (D1–D4). Never empty.
     /// </summary>
-    public IReadOnlyList<BoardDef> Boards =>
-        _savedBoards ?? [BoardDefs.FromStarter(StarterBoards.Build(Installed, Sources), freshIds: false)];
-
-    /// <summary>True until the first board change writes <c>boards.json</c>.</summary>
-    public bool BoardsFollowStarter => _savedBoards is null;
+    public IReadOnlyList<BoardDef> Boards => Following.Shown(_savedBoards, StarterBoards.All(Installed, Sources));
 
     /// <summary>Why the saved boards aren't showing, or null.</summary>
     public string? BoardsProblem { get; private set; }
 
     /// <summary>
-    /// Writes <c>boards.json</c> with only your own account ids (R17) and redraws. The old file is kept beside it
-    /// when it doesn't parse, and on the first save after it couldn't be read at start even if it reads by now
-    /// (R3). An empty list goes back to following the starter, as it would load after a restart (R1, R4). The first
-    /// write leaves out an untouched empty-state starter beside another board (<see cref="BoardEdits.ForFirstSave"/>).
-    /// Throws when the file can't be written; nothing changes then.
+    /// Writes <c>boards.json</c> with only your own account ids (R17) and redraws. A following tab you didn't change stays
+    /// a following entry, and one you changed is written as it is (D2, <see cref="Following.ToSave"/>). The old file is
+    /// kept beside it when it doesn't parse, and on the first save after it couldn't be read at start (R3). Throws when
+    /// the file can't be written; nothing changes then.
     /// </summary>
     public void SaveBoards(IReadOnlyList<BoardDef> boards)
     {
-        if (BoardsFollowStarter) boards = BoardEdits.ForFirstSave(boards, StarterBoards.Build(Installed, Sources));
-
-        var clean = BoardDefs.Sanitize(boards, LiveBoard.UserIdsOf(KnownAccounts));
+        var clean = BoardDefs.Sanitize(Following.ToSave(_savedBoards, StarterBoards.All(Installed, Sources), boards), LiveBoard.UserIdsOf(KnownAccounts));
 
         var kept = _boardsFile.Save(clean, keepExisting: _boardsUnread);
         _boardsUnread = false;
@@ -768,8 +761,8 @@ public sealed class AppServices : ISetupServices, IDisposable
     }
 
     /// <summary>
-    /// No file, or an empty list, leaves the starter following your sources (R1). A file that can't be read shows
-    /// the starter too, and says why until the next save keeps a copy of it (R3).
+    /// No file, or an empty list, leaves every starter following your sources (R1, D3). A file that can't be read shows
+    /// the starters too, and says why until the next save keeps a copy of it (R3).
     /// </summary>
     private void LoadBoards()
     {
@@ -777,8 +770,8 @@ public sealed class AppServices : ISetupServices, IDisposable
         if (!load.Readable)
         {
             _boardsUnread = true;
-            BoardsProblem = "Your boards file couldn't be read, so the starter board is showing. The next change to a board keeps a copy of the old file beside the new one.";
-            AddTrail("BOARDS NOT READ: showing the starter board.");
+            BoardsProblem = "Your boards file couldn't be read, so your starter tabs are showing. The next change to a board keeps a copy of the old file beside the new one.";
+            AddTrail("BOARDS NOT READ: showing the starter tabs.");
             return;
         }
 

@@ -5,8 +5,11 @@ namespace Labs626.UrScore.Recipes;
 /// <summary>
 /// One stat as Ur Score handles it after parsing: a recipe value, or a counter the user picked.
 /// <see cref="Key"/> is the value's id, or <c>counter:</c> plus the counter's name (stats design §5.1).
+/// A counter reads a number, sums, and sits in its counters' own section.
 /// </summary>
-public sealed record RecipeStat(string Key, string Label, string Path, string SuggestedMetricId, bool Sum);
+public sealed record RecipeStat(
+    string Key, string Label, string Path, string SuggestedMetricId, bool Sum,
+    bool Count = false, StatFormat Format = StatFormat.Number, string? Section = null);
 
 /// <summary>A stat the user set to send, and the metric id RoRoRo gets it under.</summary>
 public sealed record SentStat(string Key, string Label, string MetricId);
@@ -55,11 +58,11 @@ public static class RecipeStats
     {
         var step = recipe.LastStep;
         var value = step.Values.FirstOrDefault(v => string.Equals(v.Id, key, StringComparison.Ordinal));
-        if (value is not null) return new RecipeStat(value.Id, value.Label, value.Path, value.MetricId, value.Sum);
+        if (value is not null) return new RecipeStat(value.Id, value.Label, value.Path, value.MetricId, value.Sum, value.Count, value.Format, value.Section);
 
         if (step.Counters is { } counters && IsCounterKey(key, out var name) && CanPick(name))
         {
-            return new RecipeStat(key, name, $"{counters.Path}.{name}", counters.MetricIdPrefix + Slug(name), Sum: true);
+            return new RecipeStat(key, name, $"{counters.Path}.{name}", counters.MetricIdPrefix + Slug(name), Sum: true, Section: counters.Label);
         }
 
         return null;
@@ -78,6 +81,13 @@ public static class RecipeStats
 
         return [.. values, .. counters];
     }
+
+    /// <summary>
+    /// The values a recipe suggests showing on a first import (D11), in recipe order: those marked <c>show</c>. A group
+    /// list suggests none, as its rows are never your accounts. The import screen's ticks and its note both read this.
+    /// </summary>
+    public static IReadOnlyList<RecipeValue> Suggested(Recipe recipe) =>
+        recipe.IsGroupList ? [] : [.. recipe.LastStep.Values.Where(v => v.Show)];
 
     /// <summary>Names containing the query, ignoring case, in the order the source gave them, skipping ones already picked.</summary>
     public static IReadOnlyList<string> MatchCounterNames(IReadOnlyList<string> names, string query, IEnumerable<string> pickedKeys)

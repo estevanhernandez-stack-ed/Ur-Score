@@ -67,6 +67,7 @@ public sealed class BoardsFile(string path, TimeProvider time)
         {
             Id = board.Id,
             Name = board.Name,
+            Follows = board.Follows,
             Panels = [.. board.Panels.Select((panel, index) => new PanelDto
             {
                 Id = panel.Id,
@@ -94,6 +95,7 @@ public sealed class BoardsFile(string path, TimeProvider time)
         var boards = new List<BoardDef>();
         var boardIds = new HashSet<string>(StringComparer.Ordinal);
         var panelIds = new HashSet<string>(StringComparer.Ordinal);
+        var followed = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var board in root.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object))
         {
@@ -115,7 +117,11 @@ public sealed class BoardsFile(string path, TimeProvider time)
                     ReadPopOut(panel)));
             }
 
-            boards.Add(new BoardDef(boardId, BoardDefs.CleanName(Text(board, "name")) ?? $"Board {boards.Count + 1}", panels));
+            // A board follows a starter Ur Score knows, and only the first board following it does (D2).
+            var follows = FollowsOf(Text(board, "follows"));
+            if (follows is not null && !followed.Add(follows)) follows = null;
+
+            boards.Add(new BoardDef(boardId, BoardDefs.CleanName(Text(board, "name")) ?? $"Board {boards.Count + 1}", panels, follows));
         }
 
         return boards;
@@ -154,6 +160,10 @@ public sealed class BoardsFile(string path, TimeProvider time)
         && Enum.TryParse<PanelType>(text, ignoreCase: true, out var type) && Enum.IsDefined(type)
             ? type
             : null;
+
+    /// <summary>The starter a board follows, as its key; anything else follows nothing.</summary>
+    private static string? FollowsOf(string? text) =>
+        StarterBoards.Names.Select(StarterBoards.KeyOf).FirstOrDefault(key => string.Equals(key, text?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private static string UniqueId(string? given, HashSet<string> taken, Func<string> fresh)
     {
@@ -238,6 +248,8 @@ public sealed class BoardsFile(string path, TimeProvider time)
         public string? Id { get; set; }
 
         public string? Name { get; set; }
+
+        public string? Follows { get; set; }
 
         public List<PanelDto?>? Panels { get; set; }
     }

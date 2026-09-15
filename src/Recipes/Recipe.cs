@@ -101,9 +101,14 @@ public sealed record RecipeStep(
 /// <summary>
 /// One stat the user can tick. <see cref="MetricId"/> is only a suggestion: the name RoRoRo gets is
 /// whatever the user accepted, pinned in the recipe's state. <see cref="Sum"/> says whether adding
-/// this stat up across accounts means anything; it describes the data and triggers nothing.
+/// this stat up across accounts means anything, <see cref="Count"/> that the number is how many entries
+/// the object or list at <see cref="Path"/> holds, <see cref="Format"/> how the number reads, and
+/// <see cref="Section"/> where an account card lists it. <see cref="Show"/> suggests ticking Show on a
+/// first import; it never ticks Send (D11). All of them describe the data and trigger nothing.
 /// </summary>
-public sealed record RecipeValue(string Id, string Label, string Path, string MetricId, bool Sum = true)
+public sealed record RecipeValue(
+    string Id, string Label, string Path, string MetricId, bool Sum = true,
+    bool Count = false, StatFormat Format = StatFormat.Number, bool Show = false, string? Section = null)
 {
     /// <summary>The id a single <c>value</c> is given when the parser turns it into a list.</summary>
     public const string ShorthandId = "value";

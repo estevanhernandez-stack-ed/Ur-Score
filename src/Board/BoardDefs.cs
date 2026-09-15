@@ -16,15 +16,18 @@ public sealed record PopOutRect(double X, double Y, double W, double H);
 /// <summary>One panel on a saved board. Its place in <see cref="BoardDef.Panels"/> is its order.</summary>
 public sealed record PanelDef(string Id, PanelType Type, PanelSize Size, PanelSettings Settings, PopOutRect? PopOut = null);
 
-/// <summary>One tab (spec §9.2). Holds no other player: see <see cref="BoardDefs.Sanitize"/>.</summary>
-public sealed record BoardDef(string Id, string Name, IReadOnlyList<PanelDef> Panels);
+/// <summary>
+/// One tab (spec §9.2). Holds no other player: see <see cref="BoardDefs.Sanitize"/>. <see cref="Follows"/> names the
+/// starter it follows ("battle", "alts"): while set, its panels are rebuilt from your sources and aren't saved (D2).
+/// </summary>
+public sealed record BoardDef(string Id, string Name, IReadOnlyList<PanelDef> Panels, string? Follows = null);
 
 public static class BoardDefs
 {
-    /// <summary>The following starter's board id (R2).</summary>
-    public const string StarterBoardId = "b-starter";
-
     public const int MaxNameLength = 40;
+
+    /// <summary>A following starter's board id (D1): "b-starter-battle", "b-starter-alts".</summary>
+    public static string StarterBoardId(string starterName) => "b-starter-" + StarterBoards.KeyOf(starterName);
 
     public static string NewBoardId() => "b-" + Hex();
 
@@ -42,22 +45,30 @@ public static class BoardDefs
     public static PanelSize DefaultSize(PanelType type) => type switch
     {
         PanelType.Standing or PanelType.AccountCard or PanelType.Records => new PanelSize(PanelSize.Small),
-        PanelType.LiveLeaderboard => new PanelSize(PanelSize.Wide),
+        PanelType.LiveLeaderboard or PanelType.AccountsTable => new PanelSize(PanelSize.Wide),
         _ => new PanelSize(PanelSize.Half),
     };
 
     /// <summary>
-    /// A starter board as a saved board. The following starter (freshIds false) keeps fixed ids, so a pop-out
-    /// made on it survives the first write (R2); a starter added with + Board gets new ones.
+    /// A starter as a board. With fixed ids (freshIds false) it is "b-starter-alts" with panels "p-alts-1".., so a pop-out
+    /// made on a following tab survives the write (D1); a starter added with + Board gets new ones. Follows nothing.
     /// </summary>
-    public static BoardDef FromStarter(StarterBoard starter, bool freshIds) => new(
-        freshIds ? NewBoardId() : StarterBoardId,
-        starter.Name,
-        [.. starter.Panels.Select((panel, index) => new PanelDef(
-            freshIds ? NewPanelId() : $"p-starter-{index + 1}",
-            panel.Type,
-            new PanelSize(Math.Clamp(panel.Span, 1, BoardLayout.Columns)),
-            panel.Settings))]);
+    public static BoardDef FromStarter(StarterBoard starter, bool freshIds)
+    {
+        var key = StarterBoards.KeyOf(starter.Name);
+        return new BoardDef(
+            freshIds ? NewBoardId() : StarterBoardId(starter.Name),
+            starter.Name,
+            [.. starter.Panels.Select((panel, index) => new PanelDef(
+                freshIds ? NewPanelId() : $"p-{key}-{index + 1}",
+                panel.Type,
+                new PanelSize(Math.Clamp(panel.Span, 1, BoardLayout.Columns)),
+                panel.Settings))]);
+    }
+
+    /// <summary>A starter as the tab that follows it (D2).</summary>
+    public static BoardDef Following(StarterBoard starter) =>
+        FromStarter(starter, freshIds: false) with { Follows = StarterBoards.KeyOf(starter.Name) };
 
     /// <summary>Changes exactly when the board's panels are drawn differently. Where a pop-out window sits is not drawn on the board.</summary>
     public static string Key(BoardDef board) =>

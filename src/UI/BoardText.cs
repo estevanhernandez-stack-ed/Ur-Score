@@ -82,12 +82,12 @@ public static class BoardText
             .Distinct(StringComparer.Ordinal));
 
     /// <summary>
-    /// Which empty state a board shows (R1): no recipes over every board; the starter's own states while the
-    /// board still follows your sources; a saved board with no panels; else none.
+    /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
+    /// (D4); a board with no panels, including a following tab being edited; else none.
     /// </summary>
-    public static BoardEmpty EmptyFor(StarterBoard starter, bool followsStarter, BoardDef board) =>
-        starter.Empty == BoardEmpty.NoRecipes ? BoardEmpty.NoRecipes
-        : followsStarter ? starter.Empty
+    public static BoardEmpty EmptyFor(IReadOnlyList<StarterBoard> starters, BoardDef board, bool editing = false) =>
+        starters.Any(s => s.Empty == BoardEmpty.NoRecipes) ? BoardEmpty.NoRecipes
+        : !editing && StarterBoards.Named(starters, board.Follows) is { Empty: not BoardEmpty.None } starter ? starter.Empty
         : board.Panels.Count == 0 ? BoardEmpty.NoPanels
         : BoardEmpty.None;
 

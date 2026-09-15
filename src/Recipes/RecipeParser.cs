@@ -136,6 +136,32 @@ public static class RecipeParser
     private static bool Present(JsonElement obj, string name, out JsonElement element) =>
         JsonNav.TryGet(obj, name, out element) && element.ValueKind != JsonValueKind.Null;
 
+    /// <summary>Absent or null reads as a number; otherwise exactly "number", "duration" (seconds) or "date" (unix seconds), else a named problem.</summary>
+    private static StatFormat ParseFormat(JsonElement item, string where, List<string> problems)
+    {
+        if (!Present(item, "format", out var element)) return StatFormat.Number;
+
+        switch (element.ValueKind == JsonValueKind.String ? element.GetString() : null)
+        {
+            case "number": return StatFormat.Number;
+            case "duration": return StatFormat.Duration;
+            case "date": return StatFormat.Date;
+            default:
+                problems.Add($"'format' in {where} must be \"number\", \"duration\" or \"date\".");
+                return StatFormat.Number;
+        }
+    }
+
+    /// <summary>Absent or null is none; anything but text with something in it is a named problem. Trimmed.</summary>
+    private static string? OptionalText(JsonElement obj, string name, string where, List<string> problems)
+    {
+        if (!Present(obj, name, out var element)) return null;
+        if (element.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(element.GetString())) return element.GetString()!.Trim();
+
+        problems.Add($"'{name}' in {where} must be text.");
+        return null;
+    }
+
     private static string Capitalize(string text) => char.ToUpperInvariant(text[0]) + text[1..];
 
     private static IEnumerable<(int Number, JsonElement Item)> Items(JsonElement root, string name, List<string> problems)
@@ -354,10 +380,24 @@ public static class RecipeParser
             var path = RequiredString(item, "path", valueWhere, problems);
             var metricId = RequiredString(item, "metricId", valueWhere, problems);
             var sum = OptionalBool(item, "sum", true, valueWhere, problems);
+            var count = OptionalBool(item, "count", false, valueWhere, problems);
+            var show = OptionalBool(item, "show", false, valueWhere, problems);
+            var format = ParseFormat(item, valueWhere, problems);
+            var section = OptionalText(item, "section", valueWhere, problems);
+
+            if (count && format != StatFormat.Number)
+            {
+                problems.Add($"{Capitalize(valueWhere)} counts entries, so its format can only be \"number\".");
+            }
+
+            if (format == StatFormat.Date && sum)
+            {
+                problems.Add($"{Capitalize(valueWhere)} is a date, and dates can't be added up. Give it \"sum\": false.");
+            }
 
             if (id is not null && label is not null && path is not null && metricId is not null)
             {
-                values.Add(new RecipeValue(id, label, path, metricId, sum));
+                values.Add(new RecipeValue(id, label, path, metricId, sum, count, format, show, section));
             }
         }
 
