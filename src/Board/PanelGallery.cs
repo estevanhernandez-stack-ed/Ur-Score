@@ -19,8 +19,12 @@ public static class PanelGallery
         PanelType.PastPeriods, PanelType.Records, PanelType.Top, PanelType.ProfileStat, PanelType.LiveLeaderboard,
     ];
 
-    /// <summary>The title <see cref="PanelModels"/> gives a panel of this type on the card's recipe (<see cref="CardRecipe"/>).</summary>
+    /// <summary>The title <see cref="PanelModels"/> gives a panel of this type on the card's recipe (<see cref="CardRecipe"/>), for a panel not yet added.</summary>
     public static string Title(PanelType type, LiveBoard live) => PanelText.Title(type, CardRecipe(type, live), live.Installed);
+
+    /// <summary>The title a saved panel shows itself, on its own recipe: its pop-out's title, its popped-out slot and its ⋯ form say the same.</summary>
+    public static string TitleOf(PanelDef panel, LiveBoard live) =>
+        PanelText.Title(panel.Type, live.FindRecipe(panel.Settings.Recipe)?.Recipe, live.Installed);
 
     /// <summary>
     /// Every line of a card speaks for one recipe, the one its title names. Top, like its panel, takes the

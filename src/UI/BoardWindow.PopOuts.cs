@@ -101,7 +101,7 @@ public partial class BoardWindow
             // Drawn with the board's panels, straight after this (RenderPopOuts).
             areas ??= WorkAreas();
             var window = new PanelPopOutWindow(id, view, PopOutPlacement.Clamp(rect, areas));
-            window.ShowTitle(PanelGallery.Title(def.Type, live));
+            window.ShowTitle(PanelGallery.TitleOf(def, live));
             window.Moved += OnPopOutMoved;
             window.Closed += OnPopOutClosed;
             _popOuts[id] = window;
@@ -117,7 +117,7 @@ public partial class BoardWindow
             if (BoardEdits.Find(_services.Boards, window.PanelId) is not { } found) continue;
 
             RenderPanel(found.Panel, window.View, live);
-            window.ShowTitle(PanelGallery.Title(found.Panel.Type, live));
+            window.ShowTitle(PanelGallery.TitleOf(found.Panel, live));
         }
     }
 
@@ -186,7 +186,7 @@ public partial class BoardWindow
     /// <summary>A popped-out panel's slot on its board (R19): a short card with Bring back, and Remove in edit mode.</summary>
     private FrameworkElement PoppedOutPlaceholder(PanelDef def, string automationId)
     {
-        var title = PanelGallery.Title(def.Type, _services.CurrentBoard());
+        var title = PanelGallery.TitleOf(def, _services.CurrentBoard());
         var slot = new PoppedOutSlot(title, () =>
         {
             ReturnPanel(def.Id);

@@ -113,6 +113,28 @@ public class PanelGalleryTests
     }
 
     [Fact]
+    public void ASavedPanelIsTitledByItsOwnRecipeNotTheCardsPick()
+    {
+        // Your main is a clan, so the Standing card speaks for clans; a Standing panel on the guild recipe is still a guild's.
+        var guildWatch = new Source("s-00000004", Guild.Slug, new Dictionary<string, string> { ["guild"] = "Wolves" }, SourceRole.Watch);
+        var live = Live([MainClan, AltClan, guildWatch], [Installed(Clan, "value"), Installed(Guild, "value")], NoReads);
+        var guildStanding = new PanelDef("p-00000001", PanelType.Standing, new PanelSize(3), new PanelSettings(Guild.Slug, SourceId: guildWatch.Id));
+        var clanStanding = guildStanding with { Settings = new PanelSettings(Clan.Slug, SourceId: MainClan.Id) };
+        var guildRace = new PanelDef("p-00000002", PanelType.Race, new PanelSize(6), new PanelSettings(Guild.Slug, SourceIds: [guildWatch.Id]));
+
+        Assert.Equal("Clan standing", PanelGallery.Title(PanelType.Standing, live));
+        Assert.Equal("Guild standing", PanelGallery.TitleOf(guildStanding, live));
+        Assert.Equal("Clan standing", PanelGallery.TitleOf(clanStanding, live));
+        Assert.Equal("Season race", PanelGallery.TitleOf(guildRace, live));
+
+        // What the panel itself shows once its recipe is gone.
+        Assert.Equal("Standing", PanelGallery.TitleOf(guildStanding with { Settings = new PanelSettings("removed-recipe", SourceId: guildWatch.Id) }, live));
+        Assert.Equal(
+            PanelModels.Standing(live, Reader(), guildStanding.Settings).Head.Title,
+            PanelGallery.TitleOf(guildStanding, live));
+    }
+
+    [Fact]
     public void WithNothingToReadYetEachCardSpeaksForTheFirstRecipeItFits()
     {
         var cards = PanelGallery.Cards(Live([], [Installed(Guild, "value"), Installed(Clan, "value")], NoReads));

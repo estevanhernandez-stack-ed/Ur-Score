@@ -36,7 +36,7 @@ public partial class BoardWindow
     private void OpenPanelSettings(PanelDef def)
     {
         var live = _services.CurrentBoard();
-        var form = new PanelSettingsWindow(def.Type, PanelGallery.Title(def.Type, live), live, def.Settings, adding: false) { Owner = this };
+        var form = new PanelSettingsWindow(def.Type, PanelGallery.TitleOf(def, live), live, def.Settings, adding: false) { Owner = this };
         if (form.ShowDialog() != true || form.Result is not { } settings) return;
 
         ChangeBoard(board => BoardEdits.SetSettings(board, def.Id, settings));
