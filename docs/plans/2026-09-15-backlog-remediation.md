@@ -408,8 +408,12 @@ Every OPEN item in `docs/backlog.md`, once. "W1 T4" is wave 1 Task 4 below; "W2-
 | V3-S.3 | notice: "What changed" omits battle tracking | W1, planned in T0 (with T10) |
 | V3-S.4 | notice: the footer repeats one credit per recipe | W1, planned in T0 (with T7) |
 | V3-S.5 | test: smoke scripts can't target the installed exe | W2 |
+| V3-S.6 | notice: the icon isn't restored at start | W1, planned in T0 (with T7) |
+| V3-S.7 | notice: the icon follows the last clan read, not the main clan | W1, planned in T0 (with T7) |
+| V3-S.8 | notice: board Rename/Duplicate/Delete hidden on a right-click menu | W1, planned in T0 (new task) |
+| V3-S.9 | notice: editing a board is clumsy (fixed flow grid, no drop marker, many small steps) | Design pass first (D1): a short edit-mode design with the owner, then its own plan; not in wave 1 |
 
-Totals: wave 1, 41 items (39 you'd notice, S2-P.3, S1-14.17); wave 2, 34; wave 3, 64 (S1-9.3 included); won't fix, 6. 145 in all. The five V3-S items came from the v0.3.0 smoke on 2026-09-15; T0 writes their detailed steps before wave 1 starts, and V3-S.1 is its own task.
+Totals: wave 1, 44 items (42 you'd notice, S2-P.3, S1-14.17); wave 2, 34; wave 3, 64 (S1-9.3 included); design pass, 1 (V3-S.9); won't fix, 6. 149 in all. The nine V3-S items came from the v0.3.0 smoke and the owner's first look on 2026-09-15; T0 writes the detailed steps for the wave 1 ones before wave 1 starts (V3-S.1 and V3-S.8 are their own tasks), and V3-S.9 waits for a design pass with the owner.
 
 ---
 

@@ -6,10 +6,10 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 145** (40 you'd notice, 105 code, tests, performance or docs only), including 5 found in the v0.3.0 smoke (V3-S.1 to V3-S.5)
+- **OPEN: 149** (44 you'd notice, 105 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.1 to V3-S.9)
 - **FIXED: 46**
 - **GONE: 6**
-- Total: 197 distinct items (duplicates merged; every source is named on the line)
+- Total: 201 distinct items (duplicates merged; every source is named on the line)
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
 
 ## Open, and you'd notice
@@ -18,6 +18,10 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - V3-S.2 Updating a recipe installed before 0.3.0 starts with every stat unticked, so an update can quietly stop sending to RoRoRo.
 - V3-S.3 The update screen's "What changed" doesn't say the recipe now tracks battles.
 - V3-S.4 The board's footer repeats the same data credit once per recipe.
+- V3-S.6 The board shows Ur Score's own icon at every start until the first read, even though your clan's picture is already saved.
+- V3-S.7 The board's icon can be another clan's: it follows whichever clan on the recipe was read last, not your main clan.
+- V3-S.8 Rename, Duplicate and Delete for a board are only on a right-click menu on its tab, so they're easy to miss.
+- V3-S.9 Editing a board feels clumsy: panels only flow in reading order on a fixed grid, and moving and sizing them takes several small steps.
 - S1-6.8 Setup › Score book can give the wrong "not recording" reason when another clan source has claimed your account.
 - S1-6.9 "#rank of N" counts players with no value for that stat, so it disagrees with Promotion check.
 - S1-9.3 Records can double-count "biggest day" / "fastest week" when two sources read the same account.
@@ -336,6 +340,10 @@ v0.3.0 installed from the GitHub release into RoRoRo 1.28 (Store) and walked: al
 - V3-S.3 **OPEN** — you'd notice: the update screen's "What changed" lists the poll, the icon and empty answers, but not that the recipe now reads the battle period and past battles — src/Recipes/ImportReview.cs:144 (the change list) — v0.3.0 smoke
 - V3-S.4 **OPEN** — you'd notice: the board footer repeats "Data from Big Games' public Pet Simulator 99 API." once per installed recipe when two recipes share the same credit — src/UI/BoardText.cs:78 — v0.3.0 smoke
 - V3-S.5 **OPEN** — test gap: the smoke scripts can only launch the build folder's exe (`uia.ps1` hardcodes `bin\Release`), so walking the installed plugin needs a patched copy of the scripts; add an `UR_SCORE_EXE` override — tools/smoke/uia.ps1:14 — v0.3.0 smoke
+- V3-S.6 **OPEN** — you'd notice: the window, taskbar and board icon stay Ur Score's own at every start until the first read (Start or Test now), although the clan's picture is already in `icon-cache`; the icon files and texts live only in memory and are filled by reads — src/Composition/AppServices.cs:69-70, 688-731 — owner's first look, 2026-09-15
+- V3-S.7 **OPEN** — you'd notice: the icon is kept per recipe, not per source, so every clan read on the clan battle recipe (main, a clan your accounts are in, a watched clan) replaces it, and the board shows whichever read last instead of the main clan's (this is how K0i2's icon appeared) — src/Composition/AppServices.cs:193-201, 688-722 — owner's first look, 2026-09-15
+- V3-S.8 **OPEN** — you'd notice: Rename…, Duplicate and Delete… for a board exist only on the tab's right-click menu (or Shift+F10); nothing on screen says they're there — src/UI/BoardWindow.xaml:76-83 — owner's first look, 2026-09-15
+- V3-S.9 **OPEN** — you'd notice: editing a board is clumsy. Panels flow in reading order on a 12-column grid (R6), so resizing one reflows everything after it; there's no free placement, no drop marker while dragging (R9), and moving and sizing are separate small steps (Move earlier/later, a size menu, a Tall tick). Needs a design pass with the owner before it's planned — src/Board/BoardLayout.cs, src/UI/BoardWindow.Editing.cs, docs/plans/2026-09-14-score-book-stage-2.md R5-R9 — owner's first look, 2026-09-15
 
 Owner actions noted in the smoke, not Ur Score defects:
 - RoRoRo has no alert rules file yet ("nothing can alert until a rule is added"): add a rule for `clan.battle.points` in RoRoRo before the battle.
