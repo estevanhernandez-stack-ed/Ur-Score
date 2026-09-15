@@ -98,6 +98,15 @@ public class PanelFormsTests
             PanelForms.AccountChoices(Everything()).Select(c => (c.Key, c.Label)).ToArray());
 
     [Fact]
+    public void GroupWordsComeFromTheRecipeElseTheFirstWithInputsElseSource()
+    {
+        Assert.Equal(("clan", "clans"), PanelForms.GroupWords(Clan));
+        Assert.Equal(("source", "sources"), PanelForms.GroupWords((Labs626.UrScore.Recipes.Recipe?)null));
+        Assert.Equal(("clan", "clans"), PanelForms.GroupWords(Everything()));
+        Assert.Equal(("source", "sources"), PanelForms.GroupWords(Live([], [Installed(TopList)], new Dictionary<string, RecipeSnapshot>())));
+    }
+
+    [Fact]
     public void DefaultsFollowTheMain()
     {
         var live = Everything();

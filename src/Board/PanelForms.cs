@@ -231,8 +231,8 @@ public static class PanelForms
     {
         var installed = live.FindRecipe(settings.Recipe);
         var (word, words) = installed is { Recipe.IsGroupList: false }
-            ? (RecipeWords.Group(installed.Recipe), RecipeWords.GroupsLower(installed.Recipe))
-            : type == PanelType.Top ? ("source", "sources") : GroupWords(live);
+            ? GroupWords(installed.Recipe)
+            : type == PanelType.Top ? GroupWords((Recipe?)null) : GroupWords(live);
 
         foreach (var field in Fields(type, adding: false))
         {
@@ -251,10 +251,11 @@ public static class PanelForms
     }
 
     /// <summary>The words for a form with no recipe picked yet: the first recipe with inputs, else "source".</summary>
-    internal static (string Group, string Groups) GroupWords(LiveBoard live) =>
-        PanelText.GroupRecipe(live.Installed) is { } recipe
-            ? (RecipeWords.Group(recipe), RecipeWords.GroupsLower(recipe))
-            : ("source", "sources");
+    internal static (string Group, string Groups) GroupWords(LiveBoard live) => GroupWords(PanelText.GroupRecipe(live.Installed));
+
+    /// <summary>A recipe's words for one group and several, lower case: "clan", "clans"; with no recipe, "source", "sources".</summary>
+    internal static (string Group, string Groups) GroupWords(Recipe? recipe) =>
+        recipe is null ? ("source", "sources") : (RecipeWords.Group(recipe), RecipeWords.GroupsLower(recipe));
 
     private static string SourceLabel(LiveBoard live, Source source, bool withRecipe)
     {

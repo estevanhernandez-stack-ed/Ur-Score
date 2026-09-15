@@ -185,6 +185,17 @@ public class BoardEditsTests
             BoardEdits.AutomationIds(BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Standing, PanelType.ProfileStat)).ToArray());
 
     [Fact]
+    public void APanelsAutomationIdIsTheOneItHasOnWhicheverBoardHoldsIt()
+    {
+        IReadOnlyList<BoardDef> boards = [BoardOf("b-1", PanelType.Standing), BoardOf("b-2", PanelType.Top, PanelType.Standing, PanelType.Standing)];
+
+        Assert.Equal("StandingPanel1", BoardEdits.AutomationIdOf(boards, "p-b-1-1"));
+        Assert.Equal("StandingPanel2", BoardEdits.AutomationIdOf(boards, "p-b-2-3"));
+        Assert.Equal("TopPanel1", BoardEdits.AutomationIdOf(boards, "p-b-2-1"));
+        Assert.Null(BoardEdits.AutomationIdOf(boards, "p-gone"));
+    }
+
+    [Fact]
     public void TheAnchorIsTheFirstPanelsSourceThatIsStillOn()
     {
         var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);

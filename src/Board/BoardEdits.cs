@@ -249,6 +249,10 @@ public static class BoardEdits
         return ids;
     }
 
+    /// <summary>A panel's stage 1 id ("StandingPanel2") on whichever board holds it; null when no board does.</summary>
+    public static string? AutomationIdOf(IReadOnlyList<BoardDef> boards, string panelId) =>
+        Find(boards, panelId) is { } found ? AutomationIds(found.Board)[PanelIndex(found.Board, panelId)] : null;
+
     /// <summary>The source the top bar's period line follows: the first panel's source that is still on, else the main.</summary>
     public static string? AnchorSourceId(BoardDef board, IReadOnlyList<Source> sources)
     {

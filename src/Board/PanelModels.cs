@@ -44,7 +44,11 @@ public sealed record LiveBoard(
 {
     public DateTimeOffset Now => Time.GetUtcNow();
 
-    public IReadOnlySet<long> MyUserIds => Accounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
+    public IReadOnlySet<long> MyUserIds => UserIdsOf(Accounts);
+
+    /// <summary>Your own Roblox user ids from a list of your accounts; an account with no id (0) has none.</summary>
+    public static IReadOnlySet<long> UserIdsOf(IReadOnlyList<HostAccount> accounts) =>
+        accounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
 
     public Source? FindSource(string? id) =>
         id is null ? null : Sources.FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.Ordinal));

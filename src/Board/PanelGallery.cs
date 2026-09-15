@@ -37,7 +37,7 @@ public static class PanelGallery
             var recipe = CardRecipe(type, live);
             var groupRecipe = type == PanelType.Top ? PanelText.GroupRecipe(live.Installed) : recipe;
             var periodRecipe = type == PanelType.Top ? PanelText.TopPeriodRecipe(recipe, live.Installed) : recipe;
-            var (group, groups) = groupRecipe is null ? ("source", "sources") : (RecipeWords.Group(groupRecipe), RecipeWords.GroupsLower(groupRecipe));
+            var (group, groups) = PanelForms.GroupWords(groupRecipe);
             var period = periodRecipe is null ? "period" : RecipeWords.Period(periodRecipe);
 
             var (needs, shows, whyNot) = type switch

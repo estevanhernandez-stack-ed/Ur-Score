@@ -231,8 +231,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         if (BoardsFollowStarter) boards = BoardEdits.ForFirstSave(boards, StarterBoards.Build(Installed, Sources));
 
-        var mine = KnownAccounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
-        var clean = BoardDefs.Sanitize(boards, mine);
+        var clean = BoardDefs.Sanitize(boards, LiveBoard.UserIdsOf(KnownAccounts));
 
         var kept = _boardsFile.Save(clean, keepExisting: _boardsUnread);
         _boardsUnread = false;
