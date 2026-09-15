@@ -151,7 +151,11 @@ public static class PanelModels
         var totalId = TotalId(recipe);
         var place = HeadlineNumber(snapshot, PlaceId(recipe));
         var total = HeadlineNumber(snapshot, totalId);
-        var change = totalId is null ? Dash : Records.Change(reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value), live.Now);
+        // Before the source's own period is known, "no period" reads the book as every period kept, not this one.
+        var periodKnown = recipe.Period is null || snapshot?.Period is not null;
+        var change = totalId is null || !periodKnown
+            ? Dash
+            : Records.Change(reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value), live.Now);
         var gap = Gap(live, name);
 
         var rows = snapshot?.Rows;
@@ -186,14 +190,19 @@ public static class PanelModels
         var series = new List<ChartSeries>();
         var legend = new List<LegendItem>();
         var overdue = false;
+        var anyPeriodKnown = recipe.Period is null;
 
         for (var i = 0; i < sources.Count; i++)
         {
             var source = sources[i];
             var snapshot = live.SnapshotOf(source.Id);
-            var points = reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value)
-                .Select(p => new ChartPoint(p.T, p.Value))
-                .ToList();
+            // Before this source's own period is known, "no period" reads the book as every period kept.
+            var periodKnown = recipe.Period is null || snapshot?.Period is not null;
+            anyPeriodKnown |= periodKnown;
+
+            var points = periodKnown
+                ? reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value).Select(p => new ChartPoint(p.T, p.Value)).ToList()
+                : new List<ChartPoint>();
 
             // The live read, until the book has a line for it.
             if (HeadlineNumber(snapshot, totalId) is { } now && live.LastRead.TryGetValue(source.Id, out var at)
@@ -216,9 +225,15 @@ public static class PanelModels
         }
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
-        return new RaceModel(
-            new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started", Overdue: overdue),
-            series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}");
+        var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started", Overdue: overdue);
+
+        // No source's period is known yet: every point in "series" would be mixing periods together.
+        if (!anyPeriodKnown)
+        {
+            return new RaceModel(head with { Note = "Waiting for the first read." }, [], [], "");
+        }
+
+        return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}");
     }
 
     public static MyAccountsModel MyAccounts(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
@@ -562,6 +577,7 @@ public static class PanelModels
         }
 
         var values = ordered.Where(g => g.Value is not null).Select(g => g.Value!.Value).ToList();
+        double? lowest = values.Count == 0 ? null : values.Min();
         var placed = new HashSet<string>(ordered.Select(g => g.Row.Name), StringComparer.OrdinalIgnoreCase);
 
         foreach (var mineSource in yours)
@@ -571,10 +587,20 @@ public static class PanelModels
 
             var mineRecipe = live.FindRecipe(mineSource.Recipe)!.Recipe;
             if (HeadlineNumber(live.SnapshotOf(mineSource.Id), TotalId(mineRecipe)) is not { } total) continue;
-            if (Records.WouldPlace(total, values) is not { } place) continue;
 
             var shown = mainNames.Contains(name) ? $"{name} ★" : name;
-            rows.Add((place.Place + 0.5, new TopRow($"~{place.Place}", shown, StatText.Abbrev(total), true, true)));
+
+            // Below every value the list itself shows, "~N+1" would claim a rank the list never proved.
+            if (lowest is { } low && total < low)
+            {
+                rows.Add((double.MaxValue, new TopRow("below the list", shown, StatText.Abbrev(total), true, true)));
+                continue;
+            }
+
+            if (Records.WouldPlace(total, values) is not { } place) continue;
+
+            // Sits just before the group it would outrank, not after: "~2" among 990/980 lands between them.
+            rows.Add((place.Place - 0.5, new TopRow($"~{place.Place}", shown, StatText.Abbrev(total), true, true)));
         }
 
         return new TopModel(head, nameColumn, valueColumn, [.. rows.OrderBy(r => r.Sort).Select(r => r.Row)]);
@@ -607,14 +633,14 @@ public static class PanelModels
             var value = row is null ? null : ValueOf(row, stat.Key);
             var unavailable = snapshot?.Unavailable.GetValueOrDefault(account.RobloxUserId);
             var missed = snapshot?.CellMisses.GetValueOrDefault((account.RobloxUserId, stat.Key));
-            var today = Gain(reader.Series(source.Id, account.RobloxUserId, stat.Key, null, midnight));
-            var week = Gain(reader.Series(source.Id, account.RobloxUserId, stat.Key, null, now.AddDays(-7)));
+            // The full history, unclipped: a window that starts mid-series must still see what came before it.
+            var series = reader.Series(source.Id, account.RobloxUserId, stat.Key, null, DateTimeOffset.MinValue);
 
             rows.Add((value, new ProfileRow(
                 account.DisplayName,
                 PanelText.Full(value),
-                PanelText.Signed(today),
-                PanelText.Signed(week),
+                WindowGain(series, midnight),
+                WindowGain(series, now.AddDays(-7)),
                 unavailable ?? (value is null && missed is not null ? "can't read" : ""),
                 value is null)));
         }
@@ -650,6 +676,31 @@ public static class PanelModels
     /// <summary>The rise from the first to the last reading, or null with fewer than two.</summary>
     public static double? Gain(IReadOnlyList<SeriesPoint> points) =>
         points.Count < 2 ? null : points[^1].Value - points[0].Value;
+
+    /// <summary>
+    /// A window's gain: from the latest reading at or before <paramref name="since"/> to the last reading.
+    /// When nothing was read that early, falls back to the series' own first reading and states the real
+    /// span covered, rather than silently understating a shorter history as the full window (spec §9.4).
+    /// </summary>
+    private static string WindowGain(IReadOnlyList<SeriesPoint> series, DateTimeOffset since)
+    {
+        if (series.Count < 2) return "no earlier read";
+
+        var last = series[^1];
+        SeriesPoint? baseline = null;
+        for (var i = series.Count - 2; i >= 0; i--)
+        {
+            if (series[i].T <= since)
+            {
+                baseline = series[i];
+                break;
+            }
+        }
+
+        var from = baseline ?? series[0];
+        var text = PanelText.Signed(last.Value - from.Value);
+        return baseline is null ? $"{text} in {StatText.Span(last.T - from.T)}" : text;
+    }
 
     private sealed record RankedGroup(GroupRow Row, int Rank, double? Value);
 

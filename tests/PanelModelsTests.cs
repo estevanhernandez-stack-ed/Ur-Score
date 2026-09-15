@@ -86,6 +86,21 @@ public class PanelModelsTests
         Assert.False(stopped.Head.Overdue);
     }
 
+    [Fact]
+    public void StandingShowsNoChangeBeforeThePeriodIsKnown()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        // The snapshot has no period yet; the only book lines on hand belong to an earlier, unrelated battle.
+        var snaps = Snaps(Snapshot(main.Id, [], [Place(14), Points(1)]));
+        var reader = Reader(
+            Read(main, Now.AddDays(-10), "SummerBattle", Headline(1_000_000), "value"),
+            Read(main, Now.AddDays(-9), "SummerBattle", Headline(2_000_000), "value"));
+
+        var model = PanelModels.Standing(Live([main], [Installed(Clan, "value")], snaps), reader, new PanelSettings(Clan.Slug, SourceId: main.Id));
+
+        Assert.Equal(StatText.Dash, model.Change);
+    }
+
     // ---- Race ----
 
     [Fact]
@@ -108,6 +123,25 @@ public class PanelModelsTests
         Assert.Equal(30_214_400, model.Series[0].Points[^1].Value);
         Assert.Equal(new[] { $"★ CCGP {StatText.Abbrev(30_214_400)}", $"NovaForge · watching {StatText.Abbrev(31_300_000)}" },
             model.Legend.Select(l => l.Text).ToArray());
+    }
+
+    [Fact]
+    public void TheRaceWaitsForTheFirstReadWhenNoSourceHasAPeriodYet()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
+        // Neither snapshot has a period yet; the only book lines on hand belong to an earlier, unrelated battle.
+        var live = Live([main, rival], [Installed(Clan, "value")],
+            Snaps(Snapshot(main.Id, [], [Points(30_214_400)]), Snapshot(rival.Id, [], [Points(31_300_000)])));
+        var reader = Reader(
+            Read(main, Now.AddDays(-10), "SummerBattle", Headline(20_000_000), "value"),
+            Read(rival, Now.AddDays(-10), "SummerBattle", Headline(21_000_000), "value"));
+
+        var model = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [main.Id, rival.Id]));
+
+        Assert.Equal("Waiting for the first read.", model.Head.Note);
+        Assert.Empty(model.Series);
+        Assert.Empty(model.Legend);
     }
 
     // ---- My accounts ----
@@ -291,8 +325,26 @@ public class PanelModelsTests
         Assert.Equal(Enumerable.Range(1, 10).Select(i => $"G{i}").ToArray(), model.Rows.Take(10).Select(r => r.Name).ToArray());
         Assert.Equal(new TopRow("11", "G11 ★", StatText.Abbrev(890), true, false), model.Rows[10]);
 
-        var estimate = Records.WouldPlace(5, groups.Select(g => g.Values["value"]))!.Value;
-        Assert.Equal(new TopRow($"~{estimate.Place}", "Outsider", StatText.Abbrev(5), true, true), model.Rows[11]);
+        // Below every value the list itself shows (lowest is 880): an estimated "~13" would claim a rank
+        // the list never proved, so this reads "below the list" instead (fix round 1, finding 2).
+        Assert.Equal(new TopRow("below the list", "Outsider", StatText.Abbrev(5), true, true), model.Rows[11]);
+    }
+
+    [Fact]
+    public void TopSortsAnEstimateJustBeforeTheGroupItWouldOutrank()
+    {
+        var top = SourceOf("s-0000000a", TopList, null, SourceRole.Watch);
+        var main = SourceOf("s-00000001", Clan, "Estimator", SourceRole.Main);
+        GroupRow Group(string name, double points, int rank) => new(name, new Dictionary<string, double> { ["value"] = points }, rank);
+        var groups = new[] { Group("First", 990, 1), Group("Second", 980, 2) };
+        var live = Live([top, main], [Installed(Clan, "value"), Installed(TopList)],
+            Snaps(Snapshot(top.Id, null, groups: groups), Snapshot(main.Id, [], [Points(985)])));
+
+        var model = PanelModels.Top(live, new PanelSettings(TopList.Slug, SourceId: top.Id));
+
+        // 985 sits between 990 and 980, so the estimate lands between them, not after both.
+        Assert.Equal(new[] { "First", "Estimator ★", "Second" }, model.Rows.Select(r => r.Name).ToArray());
+        Assert.Equal("~2", model.Rows[1].Rank);
     }
 
     // ---- Profile stat ----
@@ -316,8 +368,11 @@ public class PanelModelsTests
         // Highest first; the two with no value keep your account list's order, after every value.
         Assert.Equal(new[] { "CElCPapa", "estehernandez", "ItsJustEstePapa", "ItsJustEste" }, model.Rows.Select(r => r.Name).ToArray());
         var mine = model.Rows[1];
-        Assert.Equal(PanelText.Signed(PanelModels.Gain(reader.Series(profile.Id, 101, "diamonds", null, new DateTimeOffset(Now.Date, TimeSpan.Zero)))), mine.Today);
-        Assert.Equal(PanelText.Signed(PanelModels.Gain(reader.Series(profile.Id, 101, "diamonds", null, Now.AddDays(-7)))), mine.Week);
+        // Today measures from the reading before midnight — 6 days back, since none is closer — so no span is
+        // stated. The 7-day window finds no reading that old, falls back to that same reading, and states the
+        // real span it actually covers instead of silently claiming a full 7 days (fix round 1, finding 3).
+        Assert.Equal(PanelText.Signed(15_850_364), mine.Today);
+        Assert.Equal($"{PanelText.Signed(15_850_364)} in {StatText.Span(Now.AddMinutes(-5) - Now.AddDays(-6))}", mine.Week);
         Assert.Equal(StatText.Dash, model.Rows[2].Value);
         Assert.Equal("Profile is private.", model.Rows[2].Note);
         Assert.True(model.Rows[3].Missing);
