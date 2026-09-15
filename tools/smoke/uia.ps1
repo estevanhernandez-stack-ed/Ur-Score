@@ -22,17 +22,41 @@ function Get-UrProcessId {
 }
 
 # Every top-level window of the Ur Score process: the board, Setup, the import screen, message boxes, the file picker.
+# WPF nests owned windows several levels deep in the UIA tree (board -> Setup -> the file picker, or
+# board -> Setup -> the import screen -> a message box that screen raises), not just one level under the
+# root or one level under an owner. So this walks down from whatever was found so far, a few levels deep,
+# instead of assuming a fixed depth of one. Runtime ids dedupe: a window found at one level is not walked
+# into again if it also turns up elsewhere.
 function Get-UrWindows {
     $procId = Get-UrProcessId
     if (-not $procId) { return @() }
     $byProcess = New-Object System.Windows.Automation.PropertyCondition($AE::ProcessIdProperty, $procId)
     $isWindow = New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, $CT::Window)
+
+    $seen = @{}
     $list = @()
-    foreach ($w in $AE::RootElement.FindAll($TS::Children, $byProcess)) {
-        $list += $w
-        # WPF dialogs and message boxes can also appear as children of their owner.
-        foreach ($inner in $w.FindAll($TS::Children, $isWindow)) { $list += $inner }
+    $frontier = @($AE::RootElement.FindAll($TS::Children, $byProcess))
+    foreach ($w in $frontier) { $seen[($w.GetRuntimeId() -join '-')] = $true }
+    $list += $frontier
+
+    # Five more levels reaches well past the deepest nesting seen so far (board -> Setup -> a screen it
+    # opened -> a message box that screen raised is four); the loop stops early once a level finds nothing new.
+    for ($i = 0; $i -lt 5; $i++) {
+        $next = @()
+        foreach ($w in $frontier) {
+            foreach ($child in @($w.FindAll($TS::Children, $isWindow))) {
+                $key = $child.GetRuntimeId() -join '-'
+                if (-not $seen.ContainsKey($key)) {
+                    $seen[$key] = $true
+                    $next += $child
+                }
+            }
+        }
+        if ($next.Count -eq 0) { break }
+        $list += $next
+        $frontier = $next
     }
+
     return $list
 }
 
