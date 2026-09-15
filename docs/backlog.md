@@ -6,14 +6,23 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 140** (36 you'd notice, 104 code, tests, performance or docs only)
+- **OPEN: 150** (45 you'd notice, 105 code, tests, performance or docs only), including 10 found in the v0.3.0 smoke and the owner's first look (V3-S.1 to V3-S.10)
 - **FIXED: 46**
 - **GONE: 6**
-- Total: 192 distinct items (duplicates merged; every source is named on the line)
+- Total: 202 distinct items (duplicates merged; every source is named on the line)
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
 
 ## Open, and you'd notice
 
+- V3-S.1 A main clan that sat out the current battle shows no past battles: nothing is read while the clan isn't in the battle, so its history is never backfilled.
+- V3-S.2 Updating a recipe installed before 0.3.0 starts with every stat unticked, so an update can quietly stop sending to RoRoRo.
+- V3-S.3 The update screen's "What changed" doesn't say the recipe now tracks battles.
+- V3-S.4 The board's footer repeats the same data credit once per recipe.
+- V3-S.6 The board shows Ur Score's own icon at every start until the first read, even though your clan's picture is already saved.
+- V3-S.7 The board's icon can be another clan's: it follows whichever clan on the recipe was read last, not your main clan.
+- V3-S.8 Rename, Duplicate and Delete for a board are only on a right-click menu on its tab, so they're easy to miss.
+- V3-S.9 Editing a board feels clumsy: panels only flow in reading order on a fixed grid, and moving and sizing them takes several small steps.
+- V3-S.10 Popups aren't all themed: confirmations and errors (Delete board, Remove recipe, add a 6th clan, failed saves) are plain Windows boxes, and tooltips use the Windows look. Owner rule: every popup and toast is themed.
 - S1-6.8 Setup › Score book can give the wrong "not recording" reason when another clan source has claimed your account.
 - S1-6.9 "#rank of N" counts players with no value for that stat, so it disagrees with Promotion check.
 - S1-9.3 Records can double-count "biggest day" / "fastest week" when two sources read the same account.
@@ -322,3 +331,22 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S2-FR.2 **OPEN** — you'd notice: when every source of a Profile stat's recipe is off, the form preselects an off source with no warning while the board shows "was removed" — src/Board/PanelForms.cs:242 vs src/Board/PanelModels.cs:616 — final re-review Minor 2, T4 re-review, parked
 - S2-FR.3 **OPEN** — test gap: walk-pop-outs step 3 skips instead of failing when reads are broken — tools/smoke/walk-pop-outs.ps1:48-57 — final re-review Minor 3, parked
 - S2-FR.4 **OPEN** — code tidiness: the app-wide menu item style handles flat items only (no submenus or check marks); the light-theme menu wasn't seen live — src/App.xaml:364-393 — final re-review Minor 4, parked
+
+## Found in the v0.3.0 smoke (2026-09-15)
+
+v0.3.0 installed from the GitHub release into RoRoRo 1.28 (Store) and walked: all seven smoke walks passed against the installed copy (92 checks), then the owner's own data folder was used with the clan battle recipe re-imported.
+
+- V3-S.1 **OPEN** — you'd notice: a clan that isn't in the current battle gets nothing read at all. `--try` for CCGP returns Idle ("Your clan hasn't joined this battle.") with no past periods, while `/api/clan/CCGP` holds 23 past battles, so the Past battles panel stays "No finished battles kept yet." and no finals are backfilled until the clan joins a battle. After Test now the board still says "Not started." with no reason — src/Recipes/RecipeEngine.cs:205-207 (the idle stop returns before past periods are read) — v0.3.0 smoke
+- V3-S.2 **OPEN** — you'd notice: the Update recipe screen for a recipe installed before stats had ticks (v0.1 state with only a metric name override) shows Show and Send unticked, with Update off until you tick a stat; the metric name is carried (clan.battle.points) but the old send isn't, so ticking Show alone quietly stops sending to RoRoRo — src/UI/ImportWindow.xaml.cs (initial ticks on update) — v0.3.0 smoke
+- V3-S.3 **OPEN** — you'd notice: the update screen's "What changed" lists the poll, the icon and empty answers, but not that the recipe now reads the battle period and past battles — src/Recipes/ImportReview.cs:144 (the change list) — v0.3.0 smoke
+- V3-S.4 **OPEN** — you'd notice: the board footer repeats "Data from Big Games' public Pet Simulator 99 API." once per installed recipe when two recipes share the same credit — src/UI/BoardText.cs:78 — v0.3.0 smoke
+- V3-S.5 **OPEN** — test gap: the smoke scripts can only launch the build folder's exe (`uia.ps1` hardcodes `bin\Release`), so walking the installed plugin needs a patched copy of the scripts; add an `UR_SCORE_EXE` override — tools/smoke/uia.ps1:14 — v0.3.0 smoke
+- V3-S.6 **OPEN** — you'd notice: the window, taskbar and board icon stay Ur Score's own at every start until the first read (Start or Test now), although the clan's picture is already in `icon-cache`; the icon files and texts live only in memory and are filled by reads — src/Composition/AppServices.cs:69-70, 688-731 — owner's first look, 2026-09-15
+- V3-S.7 **OPEN** — you'd notice: the icon is kept per recipe, not per source, so every clan read on the clan battle recipe (main, a clan your accounts are in, a watched clan) replaces it, and the board shows whichever read last instead of the main clan's (this is how K0i2's icon appeared) — src/Composition/AppServices.cs:193-201, 688-722 — owner's first look, 2026-09-15
+- V3-S.8 **OPEN** — you'd notice: Rename…, Duplicate and Delete… for a board exist only on the tab's right-click menu (or Shift+F10); nothing on screen says they're there — src/UI/BoardWindow.xaml:76-83 — owner's first look, 2026-09-15
+- V3-S.9 **OPEN** — you'd notice: editing a board is clumsy. Panels flow in reading order on a 12-column grid (R6), so resizing one reflows everything after it; there's no free placement, no drop marker while dragging (R9), and moving and sizing are separate small steps (Move earlier/later, a size menu, a Tall tick). Owner's goal (2026-09-15): a snap grid, where you drag a panel anywhere, drag a corner to resize, the other panels stay put, and a live outline shows where it lands. Its own spec and plan after the 2026-09-19 clan battle — src/Board/BoardLayout.cs, src/UI/BoardWindow.Editing.cs, docs/plans/2026-09-14-score-book-stage-2.md R5-R9 — owner's first look, 2026-09-15
+- V3-S.10 **OPEN** — you'd notice (owner rule, 2026-09-15: every popup and toast is themed): nine stock `MessageBox.Show` calls — BoardWindow.xaml.cs:376 (Delete board) and :420 (a failed board save), AlertsPage.xaml.cs:74 and :90, ImportFlow.cs:120 and :137, RecipesPage.xaml.cs:58, ClansPage.xaml.cs:288-289 (add a 6th clan; S1-11.4) — and the default-styled ToolTips on PanelFrame.xaml:8 ("Drag to move") and PanelPopOutWindow.xaml:19 ("Return to the board"). All eight Ur Score windows already follow the theme and Ur Score has no toasts; the recipe file picker (ImportFlow.cs:26) is Windows' own dialog and follows the Windows theme, which Ur Score can't restyle — owner's first look, 2026-09-15
+
+Owner actions noted in the smoke, not Ur Score defects:
+- RoRoRo has no alert rules file yet ("nothing can alert until a rule is added"): add a rule for `clan.battle.points` in RoRoRo before the battle.
+- CCGP isn't in the current battle (ArcadeBattle2026 ended 2026-09-11); live numbers for it start when the next battle begins.

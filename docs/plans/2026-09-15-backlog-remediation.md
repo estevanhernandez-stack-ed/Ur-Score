@@ -403,8 +403,18 @@ Every OPEN item in `docs/backlog.md`, once. "W1 T4" is wave 1 Task 4 below; "W2-
 | S2-FR.2 | notice: a Profile stat's form picks an off source while the board says "removed" | W1 T5 |
 | S2-FR.3 | test: walk-pop-outs step 3 skips when reads are broken | W2-7 |
 | S2-FR.4 | tidy: the menu item style handles flat items only | W3-7 |
+| V3-S.1 | notice: a clan outside the current battle gets no past battles backfilled | W1, planned in T0 (new task) |
+| V3-S.2 | notice: updating an old recipe starts with every stat unticked | W1, planned in T0 (with T10) |
+| V3-S.3 | notice: "What changed" omits battle tracking | W1, planned in T0 (with T10) |
+| V3-S.4 | notice: the footer repeats one credit per recipe | W1, planned in T0 (with T7) |
+| V3-S.5 | test: smoke scripts can't target the installed exe | W2 |
+| V3-S.6 | notice: the icon isn't restored at start | W1, planned in T0 (with T7) |
+| V3-S.7 | notice: the icon follows the last clan read, not the main clan | W1, planned in T0 (with T7) |
+| V3-S.8 | notice: board Rename/Duplicate/Delete hidden on a right-click menu | W1, planned in T0 (new task) |
+| V3-S.9 | notice: editing a board is clumsy (fixed flow grid, no drop marker, many small steps) | D1, decided 2026-09-15: the owner's goal is a snap grid (drag a panel anywhere, drag a corner to resize, the rest stay put, a live outline where it lands). Its own spec and plan after the 2026-09-19 clan battle; replaces R5-R9's flow layout |
+| V3-S.10 | notice: every popup themed (the nine stock message boxes and the default tooltips) | W1 T11, widened in T0 |
 
-Totals: wave 1, 37 items (35 you'd notice, S2-P.3, S1-14.17); wave 2, 33; wave 3, 64 (S1-9.3 included); won't fix, 6. 140 in all.
+Totals: wave 1, 45 items (43 you'd notice, S2-P.3, S1-14.17); wave 2, 34; wave 3, 64 (S1-9.3 included); design pass, 1 (V3-S.9); won't fix, 6. 150 in all. The ten V3-S items came from the v0.3.0 smoke and the owner's first look on 2026-09-15; T0 writes the detailed steps for the wave 1 ones before wave 1 starts (V3-S.1 and V3-S.8 are their own tasks), and V3-S.9 waits for a design pass with the owner.
 
 ---
 
@@ -3746,9 +3756,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 11: Themed message boxes
+### Task 11: Themed message boxes and tooltips
 
-S1-11.4. Ruling P34.
+S1-11.4, V3-S.10. Ruling P34. Owner rule (2026-09-15): every popup and toast in Ur Score is themed. V3-S.10 widens this task; T0 adds the steps for a themed ToolTip style in `src/App.xaml` (DynamicResource brushes, both themes), a fence that fails on a stock `MessageBox.Show` or an unstyled `ToolTip`, and a smoke step that screenshots every confirmation, error and tooltip in the dark and light themes. Windows' own file picker is out of scope; it follows the Windows theme.
 
 **Files:**
 - Create: `src/UI/MessageWindow.xaml`, `src/UI/MessageWindow.xaml.cs`
