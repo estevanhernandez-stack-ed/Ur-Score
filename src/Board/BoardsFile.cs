@@ -24,6 +24,12 @@ public sealed class BoardsFile(string path, TimeProvider time)
         AllowTrailingCommas = true,
     };
 
+    private static readonly JsonDocumentOptions DocumentOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "boards.json");
 
@@ -72,31 +78,44 @@ public sealed class BoardsFile(string path, TimeProvider time)
             })],
         }).ToList(), Options);
 
+    /// <summary>
+    /// The boards in <paramref name="json"/>, repaired per panel (R4). Text that isn't JSON, or isn't a list, throws
+    /// <see cref="JsonException"/> (R3). Inside the list a value of the wrong JSON type costs only what holds it: a
+    /// board's id, name or panel list, or a panel's size, order or pop-out, falls back as if it were missing; a panel
+    /// whose type or settings don't read is dropped; an entry that isn't a board is skipped.
+    /// </summary>
     public static IReadOnlyList<BoardDef> Parse(string json)
     {
-        var dtos = JsonSerializer.Deserialize<List<BoardDto?>>(json, Options) ?? new List<BoardDto?>();
+        using var document = JsonDocument.Parse(json, DocumentOptions);
+        var root = document.RootElement;
+        if (root.ValueKind == JsonValueKind.Null) return [];
+        if (root.ValueKind != JsonValueKind.Array) throw new JsonException("boards.json is not a list of boards.");
+
         var boards = new List<BoardDef>();
         var boardIds = new HashSet<string>(StringComparer.Ordinal);
         var panelIds = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var dto in dtos.OfType<BoardDto>())
+        foreach (var board in root.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object))
         {
-            var boardId = UniqueId(dto.Id, boardIds, BoardDefs.NewBoardId);
+            var boardId = UniqueId(Text(board, "id"), boardIds, BoardDefs.NewBoardId);
             var panels = new List<PanelDef>();
 
-            foreach (var panel in (dto.Panels ?? new List<PanelDto?>()).OfType<PanelDto>().OrderBy(p => p.Order))
+            var entries = Property(board, "panels") is { ValueKind: JsonValueKind.Array } list
+                ? list.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object).ToList()
+                : [];
+            foreach (var panel in entries.OrderBy(p => Number(p, "order") ?? 0))
             {
-                if (TypeOf(panel.Type) is not { } type) continue;
+                if (TypeOf(Text(panel, "type")) is not { } type || ReadSettings(panel) is not { } settings) continue;
 
                 panels.Add(new PanelDef(
-                    UniqueId(panel.Id, panelIds, BoardDefs.NewPanelId),
+                    UniqueId(Text(panel, "id"), panelIds, BoardDefs.NewPanelId),
                     type,
-                    panel.Size is { Span: > 0 } size ? new PanelSize(Math.Clamp(size.Span, 1, BoardLayout.Columns), size.Tall) : BoardDefs.DefaultSize(type),
-                    CleanSettings(panel.Settings),
-                    ValidPopOut(panel.Popout)));
+                    ReadSize(panel, type),
+                    settings,
+                    ReadPopOut(panel)));
             }
 
-            boards.Add(new BoardDef(boardId, BoardDefs.CleanName(dto.Name) ?? $"Board {boards.Count + 1}", panels));
+            boards.Add(new BoardDef(boardId, BoardDefs.CleanName(Text(board, "name")) ?? $"Board {boards.Count + 1}", panels));
         }
 
         return boards;
@@ -148,6 +167,56 @@ public sealed class BoardsFile(string path, TimeProvider time)
         while (!taken.Add(id));
 
         return id;
+    }
+
+    /// <summary>A panel's settings: missing or null reads as none; any other value that doesn't read as settings is null, and drops the panel.</summary>
+    private static PanelSettings? ReadSettings(JsonElement panel)
+    {
+        if (Property(panel, "settings") is not { ValueKind: not JsonValueKind.Null } element) return CleanSettings(null);
+        return TryRead<PanelSettings>(element, out var settings) ? CleanSettings(settings) : null;
+    }
+
+    /// <summary>A span of 1 or more, clamped to the grid; else, whatever the size holds, the type's default size.</summary>
+    private static PanelSize ReadSize(JsonElement panel, PanelType type) =>
+        Property(panel, "size") is { ValueKind: JsonValueKind.Object } size && Number(size, "span") is int span and > 0
+            ? new PanelSize(Math.Clamp(span, 1, BoardLayout.Columns), Property(size, "tall")?.ValueKind == JsonValueKind.True)
+            : BoardDefs.DefaultSize(type);
+
+    /// <summary>A pop-out with a finite place and a size (R4); one that doesn't read as a place has none.</summary>
+    private static PopOutRect? ReadPopOut(JsonElement panel) =>
+        Property(panel, "popout") is { } element && TryRead<PopOutRect>(element, out var rect) ? ValidPopOut(rect) : null;
+
+    /// <summary>The value, the last of that name in any letter case, as the serializer reads it; null when there is none.</summary>
+    private static JsonElement? Property(JsonElement element, string name)
+    {
+        JsonElement? found = null;
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) found = property.Value;
+        }
+
+        return found;
+    }
+
+    private static string? Text(JsonElement element, string name) =>
+        Property(element, name) is { ValueKind: JsonValueKind.String } text ? text.GetString() : null;
+
+    private static int? Number(JsonElement element, string name) =>
+        Property(element, name) is { ValueKind: JsonValueKind.Number } number && number.TryGetInt32(out var value) ? value : null;
+
+    /// <summary>One value as a <typeparamref name="T"/>; false when it doesn't read as one, so only what holds it is lost.</summary>
+    private static bool TryRead<T>(JsonElement element, out T? value)
+    {
+        try
+        {
+            value = element.Deserialize<T>(Options);
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
+        {
+            value = default;
+            return false;
+        }
     }
 
     private static PanelSettings CleanSettings(PanelSettings? settings) =>

@@ -111,6 +111,65 @@ public class BoardsFileTests
         Assert.ThrowsAny<JsonException>(() => BoardsFile.Parse("{ \"id\": 1 }"));
 
     [Fact]
+    public void TextThatIsntJsonIsStillUnreadable()
+    {
+        using var dir = TempDir.Create("urscore-boards");
+        var path = Path.Combine(dir.Path, "boards.json");
+        File.WriteAllText(path, "[{ \"id\": \"b-1\", \"panels\": [ { \"type\": \"standing\", \"settings\": 5 ");
+
+        Assert.ThrowsAny<JsonException>(() => BoardsFile.Parse(File.ReadAllText(path)));
+        Assert.False(new BoardsFile(path, new FixedTime(Now)).Load().Readable);
+    }
+
+    [Fact]
+    public void AWrongTypeInsideOnePanelDropsOrRepairsOnlyThatPanel()
+    {
+        const string Json = """
+            [
+              { "id": "b-1", "name": "Battle", "panels": [
+                  { "id": "p-1", "type": "standing", "size": { "span": "wide", "tall": "yes" }, "order": 0, "settings": { "recipe": "r", "sourceId": "s-1" } },
+                  { "id": "p-2", "type": "race", "order": 1, "settings": 5 },
+                  { "id": "p-3", "type": "records", "order": 2, "settings": { "recipe": "r", "stat": "value", "userId": "123" } },
+                  { "id": "p-4", "type": "top", "order": 3, "settings": { "recipe": "r", "sourceId": "s-9" }, "popout": { "x": "left", "y": 10, "w": 360, "h": 300 } },
+                  { "id": 7, "type": 3, "order": 4 },
+                  { "id": "p-6", "type": "accountCard", "size": 6, "order": "last", "settings": { "recipe": "r", "stat": "value", "userId": 101 } },
+                  { "id": "p-7", "type": "pastPeriods", "size": { "span": 6, "tall": true }, "order": 6, "settings": { "recipe": "r", "sourceId": "s-1" } }
+              ] },
+              { "id": 12, "name": ["Rivals"], "panels": "none" },
+              "not a board",
+              { "id": "b-3", "name": "Grind", "panels": [ { "id": "p-8", "type": "profileStat", "order": 0, "settings": { "recipe": "p", "stat": "diamonds" } } ] }
+            ]
+            """;
+        using var dir = TempDir.Create("urscore-boards");
+        var path = Path.Combine(dir.Path, "boards.json");
+        File.WriteAllText(path, Json);
+
+        var load = new BoardsFile(path, new FixedTime(Now)).Load();
+
+        Assert.True(load.Readable);
+        var boards = load.Boards;
+        Assert.Equal(3, boards.Count);
+
+        // A size, order or pop-out of the wrong type is repaired; settings of the wrong type, or a type that isn't a name, drop the panel.
+        var battle = boards[0];
+        Assert.Equal(("b-1", "Battle"), (battle.Id, battle.Name));
+        Assert.Equal(new[] { "p-1", "p-6", "p-4", "p-7" }, battle.Panels.Select(p => p.Id).ToArray());
+        Assert.Equal(BoardDefs.DefaultSize(PanelType.Standing), battle.Panels[0].Size);
+        Assert.Equal(new PanelSettings("r", SourceId: "s-1"), battle.Panels[0].Settings);
+        Assert.Equal(BoardDefs.DefaultSize(PanelType.AccountCard), battle.Panels[1].Size);
+        Assert.Equal(101, battle.Panels[1].Settings.UserId);
+        Assert.Null(battle.Panels[2].PopOut);
+        Assert.Equal(new PanelSettings("r", SourceId: "s-9"), battle.Panels[2].Settings);
+        Assert.Equal(new PanelSize(6, Tall: true), battle.Panels[3].Size);
+
+        // A board's own fields of the wrong type are repaired, and anything in the list that isn't a board is skipped.
+        Assert.Matches("^b-[0-9a-f]{8}$", boards[1].Id);
+        Assert.Equal("Board 2", boards[1].Name);
+        Assert.Empty(boards[1].Panels);
+        Assert.Equal(("b-3", "Grind", "p-8"), (boards[2].Id, boards[2].Name, boards[2].Panels.Single().Id));
+    }
+
+    [Fact]
     public void EachPanelIsRepairedOrDroppedOnItsOwn()
     {
         const string Json = """
