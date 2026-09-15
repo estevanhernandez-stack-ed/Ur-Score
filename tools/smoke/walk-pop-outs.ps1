@@ -1,7 +1,8 @@
 # Stage 2 pop-outs on a clean data folder: pop out a panel, it sits on top with no tools of its own and its
 # slot on the board says so, it updates after a read, a second one opens, a moved window's place is saved,
 # a restart reopens both, and closing one or Bring back returns each panel.
-# Step 3 needs a clan battle the source reports (activeClanBattle keeps the last one); an idle source shows dashes.
+# Step 3 needs a clan battle the source reports (activeClanBattle keeps the last one); an idle source shows dashes, and
+# the step is then listed as needing a live battle, which doesn't fail the walk.
 param([string]$Main = 'CCGP')
 
 . (Join-Path $PSScriptRoot 'uia-board.ps1')
@@ -38,11 +39,26 @@ try {
     Wait-Until { Get-PopOutFor 'AccountCardPanel1' } 15 | Out-Null
     Check '2 Two pop-outs at once' ((Get-PopOutWindows).Count -eq 2) "count=$((Get-PopOutWindows).Count)"
 
-    # 3. It updates live.
+    # 3. It updates live. Only a running battle has numbers to show: with none, the step needs a live battle and is
+    # skipped, not failed. A running battle with no number still fails.
     Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton')
     Start-Sleep -Seconds 20
     $texts = @(Get-AllTexts (Find-ByAutomationId (Get-PopOutFor 'StandingPanel1') 'StandingPanel1'))
-    Check '3 The pop-out shows numbers after a read' (@($texts | Where-Object { $_ -match '[0-9]' }).Count -gt 0) ($texts -join ' | ')
+    # A number read from the source: not the clan's own name, and not the battle line's "ends in 3d".
+    $numbers = @($texts | Where-Object { $_ -match '[0-9]' -and $_ -ne $Main -and $_ -notmatch 'ends in|ended|next read|Reads every' })
+    $dash = [string][char]0x2014
+    $periodLine = Line (Get-BoardWindow) 'PeriodLine'
+    # The board's top line names the battle while one runs: "Reads every ..." means no battle is known, "ended" one that is over.
+    $battleRuns = $periodLine -and $periodLine -ne '(absent)' -and $periodLine -notlike 'Reads every*' -and $periodLine -notmatch '\bended\b'
+    $noBattle = ($periodLine -like 'Reads every*') -or ($periodLine -match '\bended\b') -or
+        ($numbers.Count -eq 0 -and @($texts | Where-Object { $_ -eq $dash }).Count -gt 0)
+    $seen = "period line '$periodLine'; " + ($texts -join ' | ')
+    if ($numbers.Count -eq 0 -and -not $battleRuns -and $noBattle) {
+        Skip '3 The pop-out shows numbers after a read' 'needs a live battle' "no battle is running: $seen"
+    }
+    else {
+        Check '3 The pop-out shows numbers after a read' ($numbers.Count -gt 0) $seen
+    }
     & (Join-Path $PSScriptRoot 'shot.ps1') -Title 'Clan standing' -OutPath (Join-Path $UrShots 'pop-out.png') | Out-Null
 
     # 4. A moved window's place is saved.
