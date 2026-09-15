@@ -133,6 +133,23 @@ public class BoardEditsTests
     }
 
     [Fact]
+    public void SettingsThatDontChangeChangeNothing()
+    {
+        var race = new PanelSettings(Clan.Slug, SourceIds: ["s-1", "s-2"]);
+        var board = BoardOf("b", PanelType.Standing) with
+        {
+            Panels = [new PanelDef("p-b-1", PanelType.Race, new PanelSize(), race)],
+        };
+
+        // A settings form closed with nothing changed builds equal settings in a new list; nothing is written.
+        Assert.Same(board, BoardEdits.SetSettings(board, "p-b-1", new PanelSettings(Clan.Slug, SourceIds: ["s-1", "s-2"])));
+        Assert.Same(board, BoardEdits.SetSettings(board, "p-gone", new PanelSettings(Clan.Slug, SourceIds: ["s-2", "s-1"])));
+        Assert.Equal(new[] { "s-2", "s-1" },
+            BoardEdits.SetSettings(board, "p-b-1", new PanelSettings(Clan.Slug, SourceIds: ["s-2", "s-1"])).Panels[0].Settings.SourceIds);
+        Assert.NotSame(board, BoardEdits.SetSettings(board, "p-b-1", race with { Stat = "value" }));
+    }
+
+    [Fact]
     public void APanelIsFoundOnWhicheverBoardHoldsIt()
     {
         IReadOnlyList<BoardDef> boards = [BoardOf("b-1", PanelType.Standing), BoardOf("b-2", PanelType.Top, PanelType.Records)];

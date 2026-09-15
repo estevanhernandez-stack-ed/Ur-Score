@@ -103,7 +103,7 @@ public static class BoardText
                 $"Choose your main {group}"),
             BoardEmpty.NoPanels => ("This board has no panels yet",
                 "Add panels from the gallery, then arrange them with Edit board.",
-                ""),
+                "Add panel"),
             _ => ("", "", ""),
         };
     }

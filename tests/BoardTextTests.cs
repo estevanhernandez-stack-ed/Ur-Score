@@ -125,6 +125,6 @@ public class BoardTextTests
     [Fact]
     public void ASavedBoardWithNoPanelsSaysSo() =>
         Assert.Equal(
-            ("This board has no panels yet", "Add panels from the gallery, then arrange them with Edit board.", ""),
+            ("This board has no panels yet", "Add panels from the gallery, then arrange them with Edit board.", "Add panel"),
             BoardText.EmptyState(BoardEmpty.NoPanels, Clan));
 }

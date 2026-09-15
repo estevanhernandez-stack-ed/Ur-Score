@@ -2,13 +2,33 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <StackPanel>
+        <!-- Edit mode (spec §9.2): drag, move, size, tall, remove. Its own row, so a small panel wraps it instead of hiding its title. -->
+        <WrapPanel x:Name="EditTools" Margin="0,0,0,8" Visibility="Collapsed">
+            <Border x:Name="DragHandle" Background="Transparent" Cursor="SizeAll" Padding="6,3" VerticalAlignment="Center"
+                    MouseLeftButtonDown="OnDragHandleDown" ToolTip="Drag to move" AutomationProperties.Name="Drag to move">
+                <TextBlock Text="⠿" Foreground="{DynamicResource MutedTextBrush}" />
+            </Border>
+            <Button x:Name="MoveEarlierButton" Content="←" Tag="MoveEarlier" Style="{StaticResource FlatButton}" Padding="6,2"
+                    Click="OnToolClick" AutomationProperties.Name="Move earlier" />
+            <Button x:Name="MoveLaterButton" Content="→" Tag="MoveLater" Style="{StaticResource FlatButton}" Padding="6,2"
+                    Click="OnToolClick" AutomationProperties.Name="Move later" />
+            <ComboBox x:Name="SizeBox" Width="96" MinHeight="26" Margin="4,0" SelectionChanged="OnSizeChanged" AutomationProperties.Name="Size">
+                <ComboBoxItem x:Name="SmallItem" Content="Small" AutomationProperties.Name="Small" />
+                <ComboBoxItem x:Name="HalfItem" Content="Half" AutomationProperties.Name="Half" />
+                <ComboBoxItem x:Name="WideItem" Content="Wide" AutomationProperties.Name="Wide" />
+            </ComboBox>
+            <!-- Checked and Unchecked, not Click: a UI Automation toggle changes IsChecked without a click. -->
+            <CheckBox x:Name="TallBox" Content="Tall" VerticalAlignment="Center" Margin="4,0" Checked="OnTallChanged" Unchecked="OnTallChanged"
+                      AutomationProperties.Name="Tall" />
+            <Button x:Name="RemovePanelButton" Content="✕" Tag="Remove" Style="{StaticResource FlatButton}" Padding="6,2"
+                    Click="OnToolClick" AutomationProperties.Name="Remove panel" />
+        </WrapPanel>
         <DockPanel LastChildFill="False">
-            <!-- Stage 2 wires pop out and panel settings (spec §9.2, §9.3). Hidden until then. -->
-            <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal" Visibility="Collapsed">
-                <Button x:Name="PopOutButton" Content="⧉" Style="{StaticResource FlatButton}" Padding="6,2"
-                        AutomationProperties.Name="Pop out" />
-                <Button x:Name="PanelSettingsButton" Content="⋯" Style="{StaticResource FlatButton}" Padding="6,2"
-                        AutomationProperties.Name="Panel settings" />
+            <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="PopOutButton" Content="⧉" Tag="PopOut" Style="{StaticResource FlatButton}" Padding="6,2" Visibility="Collapsed"
+                        Click="OnToolClick" AutomationProperties.Name="Pop out" />
+                <Button x:Name="PanelSettingsButton" Content="⋯" Tag="Settings" Style="{StaticResource FlatButton}" Padding="6,2" Visibility="Collapsed"
+                        Click="OnToolClick" AutomationProperties.Name="Panel settings" />
             </StackPanel>
             <TextBlock x:Name="PanelTitle" DockPanel.Dock="Left" Text="{Binding Title}" Style="{StaticResource SectionLabel}"
                        Margin="0" VerticalAlignment="Center" />
@@ -26,5 +46,8 @@
                    Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVisible}}" />
         <TextBlock x:Name="PanelStale" Text="{Binding Stale}" TextWrapping="Wrap" Margin="0,10,0,0"
                    Visibility="{Binding HasStale, Converter={StaticResource BoolToVisible}}" />
+        <Button x:Name="ChooseAnotherButton" Content="Choose another" Tag="ChooseAnother" Style="{StaticResource FlatButton}"
+                HorizontalAlignment="Left" Margin="0,6,0,0" Visibility="Collapsed" Click="OnToolClick"
+                AutomationProperties.Name="Choose another" />
     </StackPanel>
 </UserControl>

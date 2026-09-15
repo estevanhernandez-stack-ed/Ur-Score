@@ -1,0 +1,51 @@
+<Window x:Class="Labs626.UrScore.UI.PanelSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:Labs626.UrScore.UI"
+        Title="Panel settings" Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
+        FontFamily="{StaticResource BodyFont}">
+    <StackPanel Margin="20,18,20,18">
+        <TextBlock x:Name="FormTitle" Style="{StaticResource Heading}" />
+
+        <StackPanel x:Name="SourceRow" Visibility="Collapsed">
+            <TextBlock x:Name="SourceLabel" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
+            <ComboBox x:Name="SourceBox" DisplayMemberPath="Label" SelectionChanged="OnPickChanged" />
+        </StackPanel>
+
+        <StackPanel x:Name="SourcesRow" Visibility="Collapsed">
+            <TextBlock x:Name="SourcesLabel" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
+            <ui:RowList x:Name="RaceSources" AutomationProperties.Name="Race lines">
+                <ui:RowList.ItemTemplate>
+                    <DataTemplate>
+                        <CheckBox Content="{Binding Label}" IsChecked="{Binding Picked, Mode=TwoWay}" Margin="0,3,0,0" Checked="OnRaceChanged" Unchecked="OnRaceChanged"
+                                  AutomationProperties.Name="{Binding Label, StringFormat='Race {0}'}" />
+                    </DataTemplate>
+                </ui:RowList.ItemTemplate>
+            </ui:RowList>
+        </StackPanel>
+
+        <StackPanel x:Name="ToSourceRow" Visibility="Collapsed">
+            <TextBlock Text="TO" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
+            <ComboBox x:Name="ToSourceBox" DisplayMemberPath="Label" SelectionChanged="OnPickChanged" AutomationProperties.Name="To" />
+        </StackPanel>
+
+        <StackPanel x:Name="StatRow" Visibility="Collapsed">
+            <TextBlock Text="STAT" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
+            <ComboBox x:Name="StatBox" DisplayMemberPath="Label" SelectionChanged="OnPickChanged" AutomationProperties.Name="Stat" />
+        </StackPanel>
+
+        <StackPanel x:Name="AccountRow" Visibility="Collapsed">
+            <TextBlock Text="ACCOUNT" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
+            <ComboBox x:Name="AccountBox" DisplayMemberPath="Label" SelectionChanged="OnPickChanged" AutomationProperties.Name="Account" />
+        </StackPanel>
+
+        <TextBlock x:Name="SettingsProblemLine" Style="{StaticResource Refusal}" Margin="0,12,0,0" Visibility="Collapsed" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+            <Button x:Name="SaveSettingsButton" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="OnSaveClick" />
+        </StackPanel>
+    </StackPanel>
+</Window>

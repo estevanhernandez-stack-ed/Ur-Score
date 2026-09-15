@@ -92,8 +92,14 @@ public static class BoardEdits
     public static BoardDef Resize(BoardDef board, string panelId, PanelSize size) =>
         Update(board, panelId, p => p with { Size = new PanelSize(Math.Clamp(size.Span, 1, BoardLayout.Columns), size.Tall) });
 
-    public static BoardDef SetSettings(BoardDef board, string panelId, PanelSettings settings) =>
-        Update(board, panelId, p => p with { Settings = settings });
+    /// <summary>Settings equal to the panel's own, as a settings form closed with nothing changed builds, change nothing.</summary>
+    public static BoardDef SetSettings(BoardDef board, string panelId, PanelSettings settings)
+    {
+        var index = PanelIndex(board, panelId);
+        return index < 0 || SameSettings(board.Panels[index].Settings, settings)
+            ? board
+            : Update(board, panelId, p => p with { Settings = settings });
+    }
 
     public static BoardDef PopOut(BoardDef board, string panelId, PopOutRect rect) =>
         Update(board, panelId, p => p with { PopOut = rect });
@@ -140,6 +146,11 @@ public static class BoardEdits
 
         return enabled.FirstOrDefault(s => s.Role == SourceRole.Main)?.Id;
     }
+
+    /// <summary>Record equality compares a race's list by instance; this compares its ids in order, with no list the same as an empty one.</summary>
+    private static bool SameSettings(PanelSettings a, PanelSettings b) =>
+        a with { SourceIds = null } == b with { SourceIds = null }
+        && (a.SourceIds ?? Array.Empty<string>()).SequenceEqual(b.SourceIds ?? Array.Empty<string>(), StringComparer.Ordinal);
 
     private static BoardDef Update(BoardDef board, string panelId, Func<PanelDef, PanelDef> change) =>
         PanelIndex(board, panelId) < 0 ? board : board with { Panels = [.. board.Panels.Select(p => p.Id == panelId ? change(p) : p)] };

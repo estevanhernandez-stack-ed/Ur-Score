@@ -73,6 +73,11 @@ public partial class BoardWindow : Window
         InitializeComponent();
         ThemeService.Attach(this);
         _services = services;
+
+        // Panel tools raise one routed event; each concern handles its own tools (Tasks 6-8).
+        PanelFrame.SetShowSettings(BoardPanels, true);
+        BoardPanels.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnSettingsTool));
+
         _services.Changed += Render;
         _services.IconChanged += ApplyIcon;
         _clock.Tick += (_, _) => RenderLines();
@@ -277,7 +282,7 @@ public partial class BoardWindow : Window
         EmptyStateDetail.Text = detail;
         EmptyStateButton.Content = button;
 
-        // No panels has no button until the gallery arrives (Task 6).
+        // Every empty state has a button; no empty state has none.
         EmptyStateButton.Visibility = button.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         AutomationProperties.SetName(EmptyStateButton, button);
     }
@@ -509,6 +514,12 @@ public partial class BoardWindow : Window
     private async void OnEmptyStateClick(object sender, RoutedEventArgs e)
     {
         if (_importing) return;
+
+        if (_empty == BoardEmpty.NoPanels)
+        {
+            AddPanelFromGallery();
+            return;
+        }
 
         if (_empty == BoardEmpty.NoStats)
         {
