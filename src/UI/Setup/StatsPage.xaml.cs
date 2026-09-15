@@ -16,7 +16,11 @@ public partial class StatsPage : UserControl, ISetupPage
 {
     private readonly ISetupServices _services;
     private readonly CancellationTokenSource _closing = new();
-    private IReadOnlyList<RecipeChoice> _choices = [];
+
+    /// <summary>Null until the first <see cref="Refresh"/>, so an empty first run (no recipes yet) is never
+    /// mistaken for "unchanged since last time" and skip the visibility this page needs to show.</summary>
+    private IReadOnlyList<RecipeChoice>? _choices;
+
     private string? _slug;
 
     public StatsPage(ISetupServices services, string? recipeSlug = null)
@@ -41,10 +45,12 @@ public partial class StatsPage : UserControl, ISetupPage
             .ToList();
 
         // Rebuilt only when the recipe list changes, so a snapshot arriving never resets ticks being made.
-        if (choices.SequenceEqual(_choices)) return;
+        // _choices is null only before the very first render, so that render is never skipped even when
+        // it has nothing to show (fix round 1: the empty state was silently skipped on a no-recipes open).
+        if (_choices is not null && choices.SequenceEqual(_choices)) return;
         _choices = choices;
 
-        var any = choices.Count > 0;
+        var any = ShowsBody(choices.Count);
         RecipeRow.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
         StatsBody.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
         StatsEmptyLine.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
@@ -59,6 +65,10 @@ public partial class StatsPage : UserControl, ISetupPage
         _slug = choice.Slug;
         Load();
     }
+
+    /// <summary>Whether the recipe picker and Stats table show, versus the empty-state line. Pure and public so the
+    /// fix for the skipped-first-render bug (fix round 1) has a test that needs no live window.</summary>
+    public static bool ShowsBody(int recipeChoiceCount) => recipeChoiceCount > 0;
 
     private InstalledRecipe? Current =>
         _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _slug, StringComparison.Ordinal));
