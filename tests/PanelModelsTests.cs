@@ -302,6 +302,22 @@ public class PanelModelsTests
         Assert.Equal("Diamonds", model.Head.Subtitle);
     }
 
+    [Fact]
+    public void RecordsThatOnlyFellShowOneMinusSign()
+    {
+        // Same UTC day, value falling: the biggest day and the fastest 7 days are both -1,500.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var reader = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "diamonds", (201, 2_000)),
+            Read(profile, Now.AddHours(-2), null, null, "diamonds", (201, 500)));
+        var live = Live([profile], [Installed(Profile, "diamonds")], Snaps());
+
+        var model = PanelModels.RecordsPanel(live, reader, new PanelSettings(Profile.Slug, Stat: "diamonds"));
+
+        Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · -1.5K"), model.Facts[1]);
+        Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · -1.5K"), model.Facts[2]);
+    }
+
     // ---- Top ----
 
     [Fact]

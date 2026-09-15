@@ -528,8 +528,8 @@ public static class PanelModels
         }
 
         facts.Add(new FactModel("Highest", Highest(r => r.Highest, (a, _, v) => $"{a.DisplayName} · {StatText.Abbrev(v)}")));
-        facts.Add(new FactModel("Biggest day", Highest(r => r.BiggestDay, (a, _, v) => $"{a.DisplayName} · +{StatText.Abbrev(v)}")));
-        facts.Add(new FactModel("Fastest 7 days", Highest(r => r.FastestWeek, (a, _, v) => $"{a.DisplayName} · +{StatText.Abbrev(v)}")));
+        facts.Add(new FactModel("Biggest day", Highest(r => r.BiggestDay, (a, _, v) => $"{a.DisplayName} · {PanelText.Signed(v)}")));
+        facts.Add(new FactModel("Fastest 7 days", Highest(r => r.FastestWeek, (a, _, v) => $"{a.DisplayName} · {PanelText.Signed(v)}")));
 
         return new RecordsModel(new PanelHead(Title, stat.Label), facts);
     }
