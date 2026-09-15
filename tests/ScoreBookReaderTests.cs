@@ -1,3 +1,4 @@
+using System.Text;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
 
@@ -131,6 +132,59 @@ public class ScoreBookReaderTests
 
         Assert.Equal(new[] { 2d }, reader.Series("s-1", 111, "value", null, DateTimeOffset.MinValue).Select(p => p.Value).ToArray());
         Assert.Equal(2, reader.Readings(Slug));
+    }
+
+    [Fact]
+    public void ALoadOfManyLinesKeepsTheLastFiveWeeksAndApplyStillEvictsAsTheClockAdvances()
+    {
+        // One reading every 30 minutes for about 62 days, spread over the month files the book writes.
+        using var dir = TempDir.Create("urscore-reader");
+        var lines = Enumerable.Range(0, 3000).Select(i => Read(Now.AddMinutes(-30 * (2999 - i)), i)).ToList();
+        WriteBook(dir.Path, lines);
+
+        var time = new ManualTime(Now);
+        var reader = new ScoreBookReader(dir.Path, time);
+        reader.Load([Slug]);
+
+        Assert.Equal(3000, reader.Readings(Slug));
+        Assert.Equal(lines[0].T, reader.FirstReading(Slug));
+        Assert.Equal(
+            lines.Where(l => l.T >= Now - ScoreBookReader.KeepReadings).Select(l => l.Accounts["111"].V["value"]).ToArray(),
+            reader.Series("s-1", 111, "value", null, DateTimeOffset.MinValue).Select(p => p.Value).ToArray());
+
+        time.Advance(TimeSpan.FromDays(10));
+        reader.Apply(Read(time.Now, 5000));
+
+        var cutoff = time.Now - ScoreBookReader.KeepReadings;
+        Assert.Equal(
+            lines.Where(l => l.T >= cutoff).Select(l => l.Accounts["111"].V["value"]).Append(5000d).ToArray(),
+            reader.Series("s-1", 111, "value", null, DateTimeOffset.MinValue).Select(p => p.Value).ToArray());
+        Assert.Equal(3001, reader.Readings(Slug));
+        Assert.Equal(lines[0].T, reader.FirstReading(Slug));
+    }
+
+    [Fact]
+    public void AReadingAppliedOutOfOrderStillAgesOut()
+    {
+        var time = new ManualTime(Now);
+        var reader = new ScoreBookReader("unused-root", time);
+
+        reader.Apply(Read(Now, 1));
+        reader.Apply(Read(Now.AddDays(-20), 2));
+        time.Advance(TimeSpan.FromDays(20));
+        reader.Apply(Read(time.Now, 3));
+
+        Assert.Equal(new[] { 1d, 3d }, reader.Series("s-1", 111, "value", null, DateTimeOffset.MinValue).Select(p => p.Value).ToArray());
+        Assert.Equal(3, reader.Readings(Slug));
+    }
+
+    private static void WriteBook(string root, IEnumerable<BookLine> lines)
+    {
+        foreach (var month in lines.GroupBy(l => BookFiles.MonthFile(root, l.Recipe.Slug, l.T)))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(month.Key)!);
+            File.AppendAllText(month.Key, string.Concat(month.Select(l => BookJson.Serialize(l) + "\n")), new UTF8Encoding(false));
+        }
     }
 
     [Fact]

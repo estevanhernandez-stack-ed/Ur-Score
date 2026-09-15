@@ -20,13 +20,27 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
     private readonly object _gate = new();
     private readonly Dictionary<string, SlugData> _slugs = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// One cutoff for the whole load, and a line older than it is never added, so nothing is pruned here. A line
+    /// that can't be taken in (a corrupt one that slipped past <see cref="BookJson.TryParse"/>) is skipped, never
+    /// the book.
+    /// </summary>
     public void Load(IEnumerable<string> slugs)
     {
         var cutoff = time.GetUtcNow() - KeepReadings;
         foreach (var slug in slugs.Distinct(StringComparer.Ordinal))
         {
             var data = new SlugData();
-            foreach (var line in BookFiles.ReadAll(root, slug)) data.Add(line, cutoff);
+            foreach (var line in BookFiles.ReadAll(root, slug))
+            {
+                try
+                {
+                    data.Add(line, cutoff);
+                }
+                catch (Exception)
+                {
+                }
+            }
 
             lock (_gate) _slugs[slug] = data;
         }
@@ -39,6 +53,7 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
         {
             if (!_slugs.TryGetValue(line.Recipe.Slug, out var data)) _slugs[line.Recipe.Slug] = data = new SlugData();
             data.Add(line, cutoff);
+            data.Prune(cutoff);
         }
     }
 
@@ -136,6 +151,9 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
 
     private sealed class SlugData
     {
+        /// <summary>The oldest reading in <see cref="Readings"/>, so <see cref="Prune"/> knows without scanning.</summary>
+        private DateTimeOffset? _oldestKept;
+
         public List<BookLine> Readings { get; } = [];
 
         public List<BookLine> Finals { get; } = [];
@@ -144,6 +162,7 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
 
         public DateTimeOffset? First { get; private set; }
 
+        /// <summary>Never prunes: a line older than <paramref name="cutoff"/> is only counted, not kept.</summary>
         public void Add(BookLine line, DateTimeOffset cutoff)
         {
             if (line.Kind == BookLine.KindFinal)
@@ -156,13 +175,23 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
 
             ReadingCount++;
             if (First is null || line.T < First) First = line.T;
-            if (line.T >= cutoff) Readings.Add(line);
+            if (line.T < cutoff) return;
 
-            // The cutoff moves forward on every call, so a reading kept on an earlier call can age out on
-            // a later one without ever being re-added; prune it here rather than let Series/HeadlineSeries
-            // keep scanning it forever. RemoveAll rather than trimming the front: callers of Apply don't
-            // guarantee strict time order.
+            Readings.Add(line);
+            if (_oldestKept is null || line.T < _oldestKept) _oldestKept = line.T;
+        }
+
+        /// <summary>
+        /// The cutoff moves forward with the clock, so a reading kept on an earlier call can age out later without
+        /// ever being re-added. Only when the oldest kept reading is past the cutoff is the list walked at all:
+        /// RemoveAll rather than trimming the front, since callers of Apply don't guarantee strict time order.
+        /// </summary>
+        public void Prune(DateTimeOffset cutoff)
+        {
+            if (_oldestKept is not { } oldest || oldest >= cutoff) return;
+
             Readings.RemoveAll(l => l.T < cutoff);
+            _oldestKept = Readings.Count == 0 ? null : Readings.Min(l => l.T);
         }
     }
 }
