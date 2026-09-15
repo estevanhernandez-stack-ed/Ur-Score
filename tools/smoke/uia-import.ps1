@@ -49,10 +49,16 @@ function Get-MessageBoxText($w) {
         Where-Object { $_.Current.ClassName -eq 'Static' -and $_.Current.Name } | ForEach-Object { $_.Current.Name }
 }
 
+# ConvertFrom-Json's return value is not reliably enumerable as an array on every PowerShell version when
+# the JSON is an array of exactly one element -- foreach always yields one object per element either way,
+# in Windows PowerShell 5.1 and in PowerShell 7, so this never depends on that.
 function Read-Sources {
     $file = Join-Path $UrData 'sources.json'
     if (-not (Test-Path $file)) { return @() }
-    @(Get-Content $file -Raw | ConvertFrom-Json)
+    $text = Get-Content $file -Raw
+    if (-not $text.Trim()) { return @() }
+    $parsed = $text | ConvertFrom-Json
+    foreach ($s in $parsed) { $s }
 }
 
 function Get-RoleText($source) { "$($source.role)".ToLowerInvariant() }

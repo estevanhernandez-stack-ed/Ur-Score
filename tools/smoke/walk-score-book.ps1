@@ -55,3 +55,4 @@ finally {
     if ($null -ne $backup) { Restore-UrData $backup }
     Show-Results
 }
+exit $LASTEXITCODE

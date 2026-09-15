@@ -42,12 +42,18 @@ try {
     $found = Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120
     Check '5 Picking the main clan reads it once and says who was found' ($found -match "^(Found .+ in $Main\.|None of your accounts are in $Main yet\.|Read $Main\.|Added $Main)") $found
 
-    $main = @(Read-Sources | Where-Object { (Get-RoleText $_) -in @('main', '0') })
-    Check '5b sources.json holds it as the main clan' (($main.Count -eq 1) -and ($main[0].inputs.clan -eq $Main)) (Get-Content (Join-Path $UrData 'sources.json') -Raw)
+    # Named $mainSources, not $main: PowerShell variable names are case-insensitive, so a local $main here
+    # would be the exact same variable as the -Main parameter and clobber every use of $Main after it.
+    $mainSources = @(Read-Sources | Where-Object { (Get-RoleText $_) -in @('main', '0') })
+    Check '5b sources.json holds it as the main clan' (($mainSources.Count -eq 1) -and ($mainSources[0].inputs.clan -eq $Main)) (Get-Content (Join-Path $UrData 'sources.json') -Raw)
 
     Close-UrWindow $setup
     $board = Get-BoardWindow
-    Wait-Until { [bool](Find-ByAutomationId (Get-BoardWindow) 'StandingPanel1') } 20 | Out-Null
+    # Wait for the panel's bound text, not just its presence in the tree, before reading it for the check.
+    Wait-Until {
+        $standing = Find-ByAutomationId (Get-BoardWindow) 'StandingPanel1'
+        $standing -and (Line $standing 'PanelTitle') -eq 'Clan standing' -and (Line $standing 'PanelSubtitle') -eq $Main
+    } 20 | Out-Null
     $standing = Find-ByAutomationId $board 'StandingPanel1'
     Check '6 The board shows the main clan standing' ((Line $standing 'PanelTitle') -eq 'Clan standing' -and (Line $standing 'PanelSubtitle') -eq $Main) "title='$(Line $standing 'PanelTitle')' subtitle='$(Line $standing 'PanelSubtitle')'"
 
@@ -74,3 +80,4 @@ finally {
     Show-Results
     "RoRoRo running: $rororo"
 }
+exit $LASTEXITCODE

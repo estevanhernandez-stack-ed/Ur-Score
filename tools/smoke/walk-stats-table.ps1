@@ -63,3 +63,4 @@ finally {
     Show-Results
     "RoRoRo running: $rororo"
 }
+exit $LASTEXITCODE

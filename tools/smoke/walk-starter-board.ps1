@@ -50,7 +50,14 @@ try {
     }
     if ($topFixture) { $expected['TopPanel1'] = 'Top of the battle' }
 
-    Wait-Until { [bool](Find-ByAutomationId (Get-BoardWindow) 'PastPeriodsPanel1') } 20 | Out-Null
+    # PastPeriods is the last panel StarterBoards adds, so waiting for its bound title is a proxy for the
+    # whole board having finished rendering -- reading a panel's text right after it merely appears in the
+    # tree can race its data binding.
+    Wait-Until {
+        $past = Find-ByAutomationId (Get-BoardWindow) 'PastPeriodsPanel1'
+        $past -and (Line $past 'PanelTitle') -eq 'Past battles'
+    } 20 | Out-Null
+    $board = Get-BoardWindow
     foreach ($id in $expected.Keys) {
         $panel = Find-ByAutomationId $board $id
         Check "1 $id is on the board" ($panel -and (Line $panel 'PanelTitle') -eq $expected[$id]) "title='$(Line $panel 'PanelTitle')'"
@@ -81,3 +88,4 @@ finally {
     Show-Results
     "RoRoRo running: $rororo"
 }
+exit $LASTEXITCODE
