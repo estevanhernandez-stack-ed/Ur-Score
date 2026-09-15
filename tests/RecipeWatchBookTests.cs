@@ -151,4 +151,68 @@ public class RecipeWatchBookTests
         Assert.Equal(SourceRole.Watch, watch.Source!.Role);
         Assert.Empty(Assert.Single(book.Lines).Accounts);
     }
+
+    // Fix round 1, finding 1: RecipeWatch.Record wrote _previousPeriod without checking whether the
+    // recipe or inputs it read with had since been replaced, so a mid-cycle UpdateRecipe could
+    // resurrect the old recipe's period as "previous" for the new one. The fix guards that write the
+    // same way Remember already guards its own write. The exact window the finding names — between
+    // the top-of-cycle RecipeChanged check and Record's write, with no await between them — cannot be
+    // hit by a synchronous stub engine the way the mid-read window below can: by the time Record could
+    // run, the read has already completed, so there is no callback hook left to interleave on a single
+    // thread. This test instead proves the guard that already exists (the top-of-cycle check, which
+    // fires first and keeps Record from running at all here) still holds after the change, and the new
+    // guard inside Record is otherwise covered only by inspection and the comment beside it.
+    [Fact]
+    public async Task ARecipeChangedDuringTheReadRecordsNothingAndKeepsNoLine()
+    {
+        var book = new MemoryBook();
+        var followers = RecipeParser.Parse(RecipeParserTests.Fixture("roblox-followers.recipe.json")).Recipe!;
+        RecipeWatch? watch = null;
+        var engine = new StubEngine(() =>
+        {
+            watch!.UpdateRecipe(followers, new Dictionary<string, string>(), new HashSet<string> { "value" });
+            return Reading(EngineRow(111, 4200));
+        });
+        watch = Watch(engine, new StubHost(true, AltAccount), book, SourceOf(SourceRole.Mine));
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Empty(book.Lines);
+        Assert.False(snapshot.Recorded);
+        Assert.Null(snapshot.NotRecordingReason);
+        Assert.Equal(RecipeWatch.RecipeChangedDetail, snapshot.Detail);
+    }
+
+    // Fix round 1, finding 2, part 1: a book attached to a watch that was never given the recipe's
+    // text (the default empty string) must not hash and write "" as if it were real text.
+    [Fact]
+    public async Task NoRecipeTextRecordsNothingAndSaysWhy()
+    {
+        var book = new MemoryBook();
+
+        var snapshot = await Watch(new StubEngine(() => Reading(EngineRow(111, 4200))), new StubHost(true, AltAccount), book,
+            SourceOf(SourceRole.Mine), text: "").RunOnceAsync(CancellationToken.None);
+
+        Assert.Empty(book.Lines);
+        Assert.False(snapshot.Recorded);
+        Assert.Equal(RecipeWatch.NotRecordingNoText, snapshot.NotRecordingReason);
+    }
+
+    // Fix round 1, finding 2, part 2: switching to a different recipe without also supplying its text
+    // must not keep lining the new slug under the old recipe's text and hash; UpdateRecipe clears the
+    // text on a slug change, and Record then keeps nothing until the caller supplies the new text.
+    [Fact]
+    public async Task SwitchingRecipesWithoutNewTextRecordsNothingUntilTextArrives()
+    {
+        var book = new MemoryBook();
+        var followers = RecipeParser.Parse(RecipeParserTests.Fixture("roblox-followers.recipe.json")).Recipe!;
+        var watch = Watch(new StubEngine(() => Reading(EngineRow(111, 4200))), new StubHost(true, AltAccount), book, SourceOf(SourceRole.Mine));
+
+        watch.UpdateRecipe(followers, new Dictionary<string, string>(), new HashSet<string> { "value" });
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Empty(book.Lines);
+        Assert.False(snapshot.Recorded);
+        Assert.Equal(RecipeWatch.NotRecordingNoText, snapshot.NotRecordingReason);
+    }
 }

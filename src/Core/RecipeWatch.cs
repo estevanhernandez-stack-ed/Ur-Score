@@ -88,6 +88,8 @@ public sealed class RecipeWatch(
 
     internal const string NotRecordingNothingRead = "Nothing was read this time.";
 
+    internal const string NotRecordingNoText = "The recipe text isn't known, so nothing is kept.";
+
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
     /// <summary>
@@ -147,14 +149,20 @@ public sealed class RecipeWatch(
     {
         lock (_gate)
         {
-            var same = string.Equals(newRecipe.Slug, recipe.Slug, StringComparison.Ordinal)
+            var slugChanged = !string.Equals(newRecipe.Slug, recipe.Slug, StringComparison.Ordinal);
+            var same = !slugChanged
                        && newInputs.Count == inputs.Count
                        && newInputs.All(kv => inputs.TryGetValue(kv.Key, out var v) && string.Equals(v, kv.Value, StringComparison.Ordinal));
 
             recipe = newRecipe;
             inputs = new Dictionary<string, string>(newInputs, StringComparer.Ordinal);
             trackedStats = new HashSet<string>(newTrackedStats, StringComparer.Ordinal);
-            recipeText = newRecipeText ?? recipeText;
+
+            // A different slug with no text supplied must not keep the old recipe's bytes under the
+            // new slug (fix round 1, finding 2): Record hashes and writes whatever recipeText holds,
+            // so an unset text for a changed recipe reads as "unknown" here, never as the previous
+            // recipe's text.
+            recipeText = newRecipeText ?? (slugChanged ? "" : recipeText);
             _held = null;
 
             if (!same)
@@ -309,7 +317,7 @@ public sealed class RecipeWatch(
         // Ruling R6: an account two sources of this recipe both saw belongs to the one that claimed it first.
         var owned = OwnedMap(readRecipe, readSource, reading, map);
 
-        var (recorded, notRecording) = Record(readRecipe, readText, readTracked, readSource, trigger, reading, owned);
+        var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, owned);
         RecipeSnapshot Kept(RecipeSnapshot snapshot) => snapshot with { Recorded = recorded, NotRecordingReason = notRecording };
 
         var mine = reading.Rows
@@ -406,10 +414,14 @@ public sealed class RecipeWatch(
     /// period has already ended. Returns whether a reading line was kept, and why not.
     /// </summary>
     private (bool Recorded, string? Reason) Record(
-        Recipe readRecipe, string readText, IReadOnlySet<string> readTracked, Source? readSource, string trigger,
+        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, IReadOnlySet<string> readTracked, Source? readSource, string trigger,
         RecipeReading reading, IReadOnlyDictionary<long, Guid> owned)
     {
         if (book is null || readSource is null) return (false, null);
+
+        // Fix round 1, finding 2: an unknown recipe text (never given, and cleared on a slug change
+        // by UpdateRecipe) must not be hashed and written under a recipe it doesn't belong to.
+        if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
 
         var at = (time ?? TimeProvider.System).GetUtcNow();
         var offset = (int)TimeZoneInfo.Local.GetUtcOffset(at).TotalMinutes;
@@ -429,7 +441,10 @@ public sealed class RecipeWatch(
 
         lock (_gate)
         {
-            if (reading.Period is { } period) _previousPeriod = period.Value;
+            // Fix round 1, finding 1: a recipe or inputs swap that lands between the top-of-cycle
+            // RecipeChanged check and here must not resurrect its period as "previous" for whatever
+            // now runs under the new recipe. Mirrors the guard Remember already takes.
+            if (reading.Period is { } period && !RecipeChanged(readRecipe, readInputs)) _previousPeriod = period.Value;
         }
 
         if (finals is not null && FinalsPlanner.CurrentPeriodEnded(context, reading, finals)) return (false, NotRecordingEnded);
