@@ -16,14 +16,17 @@
 
         <StackPanel x:Name="SourcesRow" Visibility="Collapsed">
             <TextBlock x:Name="SourcesLabel" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
-            <ui:RowList x:Name="RaceSources" AutomationProperties.Name="Race lines">
-                <ui:RowList.ItemTemplate>
-                    <DataTemplate>
-                        <CheckBox Content="{Binding Label}" IsChecked="{Binding Picked, Mode=TwoWay}" Margin="0,3,0,0" Checked="OnRaceChanged" Unchecked="OnRaceChanged"
-                                  AutomationProperties.Name="{Binding Label, StringFormat='Race {0}'}" />
-                    </DataTemplate>
-                </ui:RowList.ItemTemplate>
-            </ui:RowList>
+            <!-- The window sizes to its content and can't be resized: past this height the list scrolls, so Save stays on screen. -->
+            <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <ui:RowList x:Name="RaceSources" AutomationProperties.Name="Race lines">
+                    <ui:RowList.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Label}" IsChecked="{Binding Picked, Mode=TwoWay}" Margin="0,3,0,0" Checked="OnRaceChanged" Unchecked="OnRaceChanged"
+                                      AutomationProperties.Name="{Binding Label, StringFormat='Race {0}'}" />
+                        </DataTemplate>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
+            </ScrollViewer>
         </StackPanel>
 
         <StackPanel x:Name="ToSourceRow" Visibility="Collapsed">

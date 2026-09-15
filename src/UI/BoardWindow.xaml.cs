@@ -303,7 +303,7 @@ public partial class BoardWindow : Window
         EmptyStateDetail.Text = detail;
         EmptyStateButton.Content = button;
 
-        // Every empty state has a button; no empty state has none.
+        // Only BoardEmpty.None has no button.
         EmptyStateButton.Visibility = button.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         AutomationProperties.SetName(EmptyStateButton, button);
     }
