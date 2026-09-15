@@ -119,7 +119,17 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
             await RunOneAsync(entry, trigger, cancellationToken).ConfigureAwait(false);
             trigger = BookLine.TriggerTimer;
 
-            var seconds = Math.Max(Recipe.MinimumEverySeconds, intervalSeconds(entry.Source));
+            int seconds;
+            try
+            {
+                seconds = Math.Max(Recipe.MinimumEverySeconds, intervalSeconds(entry.Source));
+            }
+            catch (Exception)
+            {
+                // A caller's interval lookup must never end this source's loop; fall back to the floor.
+                seconds = Recipe.MinimumEverySeconds;
+            }
+
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(seconds), cancellationToken).ConfigureAwait(false);
@@ -152,13 +162,27 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
             };
         }
 
+        bool written;
         lock (_gate)
         {
-            if (!_entries.TryGetValue(entry.Source.Id, out var current) || !ReferenceEquals(current, entry)) return;
+            // The identity check and the write must be one atomic step: Apply can remove this entry
+            // (or replace it and re-add a same-id one) between a lock-free check and a later write,
+            // which would bring a removed source's snapshot back or file an old watch's snapshot
+            // under a re-added entry.
+            written = _entries.TryGetValue(entry.Source.Id, out var current) && ReferenceEquals(current, entry);
+            if (written) _latest[entry.Source.Id] = snapshot;
         }
 
-        _latest[entry.Source.Id] = snapshot;
-        SnapshotReady?.Invoke(entry.Source.Id, snapshot);
+        if (!written) return;
+
+        try
+        {
+            SnapshotReady?.Invoke(entry.Source.Id, snapshot);
+        }
+        catch (Exception)
+        {
+            // A subscriber's fault must never stop this source's loop.
+        }
     }
 
     private sealed class Entry(Source source, RecipeWatch watch)

@@ -125,4 +125,44 @@ public class SourceHostTests
         Assert.Contains("InvalidOperationException", snapshot.Detail);
         Assert.DoesNotContain("SECRET-VALUE", snapshot.Detail);
     }
+
+    [Fact]
+    public async Task AThrowingSnapshotSubscriberDoesNotStopReading()
+    {
+        var engine = new StubEngine(Reading);
+        using var host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 180);
+        host.SnapshotReady += (_, _) => throw new InvalidOperationException("subscriber boom");
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        await host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+        await host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+
+        Assert.Equal(2, engine.Calls);
+        Assert.Equal("s-1", host.Latest["s-1"].SourceId);
+    }
+
+    [Fact]
+    public async Task ARemovalDuringAReadIsNeverOverwrittenByThatReadsSnapshot()
+    {
+        SourceHost? host = null;
+        var engine = new StubEngine(() =>
+        {
+            // Force the interleaving: the source is gone by the time this read finishes.
+            host!.Apply([]);
+            return Reading();
+        });
+
+        host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 180);
+        using (host)
+        {
+            var sawEvent = false;
+            host.SnapshotReady += (_, _) => sawEvent = true;
+            host.Apply([SourceNamed("s-1", "CCGP")]);
+
+            await host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+
+            Assert.False(host.Latest.ContainsKey("s-1"));
+            Assert.False(sawEvent);
+        }
+    }
 }
