@@ -21,9 +21,8 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        // Task 15 adds the --try branch HERE, first, before the single-instance mutex: a try-out runs no
-        // window, no RoRoRo, no state, no book and no mutex (spec §10).
-
+        // The --try branch comes first, before the single-instance mutex: a try-out runs no window, no RoRoRo,
+        // no state, no book and no mutex (spec §10).
         if (Cli.TryCommand.Wants(e.Args))
         {
             // A console to write to when launched from one; redirected output works without it.
