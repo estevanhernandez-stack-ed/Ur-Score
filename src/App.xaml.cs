@@ -24,6 +24,20 @@ public partial class App : Application
         // Task 15 adds the --try branch HERE, first, before the single-instance mutex: a try-out runs no
         // window, no RoRoRo, no state, no book and no mutex (spec §10).
 
+        if (Cli.TryCommand.Wants(e.Args))
+        {
+            // A console to write to when launched from one; redirected output works without it.
+            AttachConsole(-1);
+
+            using var http = new System.Net.Http.HttpClient(Recipes.HttpRecipeTransport.CreateHandler());
+            var keys = new Recipes.KeyStore(Recipes.KeyStore.DefaultPath);
+            var transport = new Recipes.HttpRecipeTransport(http, rawDirectory: null, new Recipes.Redactor(() => keys.Values()));
+            var code = Cli.TryCommand.RunAsync(e.Args, Console.Out, transport, keys, CancellationToken.None).GetAwaiter().GetResult();
+            Console.Out.Flush();
+            Shutdown(code);
+            return;
+        }
+
         _instance = new Mutex(initiallyOwned: true, SingleInstanceName, out var isFirst);
         _owns = isFirst;
 
@@ -73,4 +87,7 @@ public partial class App : Application
         _instance?.Dispose();
         base.OnExit(e);
     }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool AttachConsole(int processId);
 }
