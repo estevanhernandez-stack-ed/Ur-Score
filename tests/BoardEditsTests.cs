@@ -244,6 +244,36 @@ public class BoardEditsTests
     }
 
     [Fact]
+    public void DoneKeepsAChangedDraftOfAFollowingTabWhoseStarterWentEmptyWhileEditing()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var ticked = StarterBoards.All([Installed(Profile, "diamonds")], [profile]);
+        var atEdit = Assert.Single(Following.Shown(null, ticked));
+        var draft = BoardEdits.RemovePanel(atEdit, atEdit.Panels[1].Id);
+
+        // Every stat unticked in Setup while editing: Alts has nothing to show, so it isn't among the boards now.
+        var unticked = StarterBoards.All([Installed(Profile)], [profile]);
+        var boards = Following.Shown(null, unticked);
+        Assert.DoesNotContain(boards, b => b.Id == atEdit.Id);
+
+        // The change is kept as a board of its own, and shows once saved.
+        var finished = BoardEdits.Finish(boards, atEdit, draft);
+        var kept = Assert.Single(finished, b => b.Id == atEdit.Id);
+        Assert.Null(kept.Follows);
+        Assert.Equal(draft.Panels, kept.Panels);
+        var saved = Following.ToSave(null, unticked, finished);
+        Assert.Equal(draft.Panels.Count, Assert.Single(Following.Shown(saved, unticked), b => b.Id == atEdit.Id).Panels.Count);
+
+        // Every panel removed: still kept, a board that says it has no panels rather than a tab that vanishes.
+        var emptied = Following.ToSave(null, unticked, BoardEdits.Finish(boards, atEdit, draft with { Panels = [] }));
+        var shownEmpty = Assert.Single(Following.Shown(emptied, unticked), b => b.Id == atEdit.Id);
+        Assert.Equal(BoardEmpty.NoPanels, Labs626.UrScore.UI.BoardText.EmptyFor(unticked, shownEmpty));
+
+        // A draft with no change still writes nothing.
+        Assert.Same(boards, BoardEdits.Finish(boards, atEdit, atEdit with { Panels = [.. atEdit.Panels] }));
+    }
+
+    [Fact]
     public void AfterARemoveFocusGoesToTheNextPanelElseThePreviousElseNone()
     {
         var board = BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Top);

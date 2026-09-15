@@ -68,7 +68,8 @@ public partial class BoardWindow
     /// <summary>
     /// Done: a draft drawn differently from the board as editing began replaces its board and is saved through
     /// <see cref="SaveBoards"/> (<see cref="BoardEdits.Finish"/>), with every pop-out as the saved boards have it now.
-    /// One that isn't writes nothing. A save that fails stays in edit mode, so the arrangement isn't lost.
+    /// A changed draft of a tab whose starter went empty meanwhile is saved as a board of its own. One that isn't
+    /// changed writes nothing. A save that fails stays in edit mode, so the arrangement isn't lost.
     /// </summary>
     private void FinishEditing()
     {

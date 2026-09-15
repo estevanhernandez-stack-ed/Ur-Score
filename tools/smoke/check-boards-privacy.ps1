@@ -24,6 +24,8 @@ foreach ($board in (Get-Content $boardsFile -Raw | ConvertFrom-Json)) {
     if (-not $board) { continue }
     $boards++
     foreach ($key in $board.PSObject.Properties.Name) { if (@('id', 'name', 'panels', 'follows') -notcontains $key) { $unexpected++ } }
+    # follows only ever names a starter Ur Score knows, in any letter case it reads; any other value is free text, and unexpected.
+    if (@($board.PSObject.Properties.Name) -contains 'follows' -and -not ($board.follows -is [string] -and @('battle', 'alts') -contains $board.follows.Trim())) { $unexpected++ }
     foreach ($panel in @($board.panels)) {
         if (-not $panel) { continue }
         $panels++

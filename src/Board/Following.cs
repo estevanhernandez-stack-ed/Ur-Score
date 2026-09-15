@@ -24,8 +24,10 @@ public static class Following
     /// <summary>
     /// What <c>boards.json</c> holds after <paramref name="edited"/>, a changed copy of <see cref="Shown"/>. A following board
     /// drawn as its starter draws it now stays a following entry, with no panels; a changed one (a panel, a size, a
-    /// setting, a name, a pop-out) is written as it is and follows no more. A following board that was showing and is
-    /// gone was deleted; one hidden because its starter had nothing to show was never on screen, and keeps following.
+    /// setting, a name, a pop-out) is written as it is and follows no more, and so is one handed over following
+    /// nothing (a draft kept after its starter went empty, <see cref="BoardEdits.Finish"/>). A following board that was
+    /// showing and is gone was deleted; one hidden because its starter had nothing to show was never on screen, and
+    /// keeps following.
     /// </summary>
     public static IReadOnlyList<BoardDef> ToSave(IReadOnlyList<BoardDef>? saved, IReadOnlyList<StarterBoard> starters, IReadOnlyList<BoardDef> edited)
     {
@@ -34,7 +36,7 @@ public static class Following
         var shown = Shown(saved, starters).Select(b => b.Id).ToHashSet(StringComparer.Ordinal);
 
         var result = edited
-            .Select(board => following.TryGetValue(board.Id, out var built) && !BoardEdits.Changed(built, board)
+            .Select(board => board.Follows is not null && following.TryGetValue(board.Id, out var built) && !BoardEdits.Changed(built, board)
                 ? Entry(built)
                 : board with { Follows = null })
             .ToList();

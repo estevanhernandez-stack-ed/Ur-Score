@@ -100,6 +100,19 @@ public class FollowingTests
     }
 
     [Fact]
+    public void ATabHandedOverFollowingNothingIsWrittenAsItIsEvenWhenItMatchesItsStarter()
+    {
+        var starters = Both();
+        var shown = Following.Shown(null, starters);
+
+        var saved = Following.ToSave(null, starters, BoardEdits.Replace(shown, shown[1] with { Follows = null }));
+
+        Assert.Equal("battle", saved[0].Follows);
+        Assert.Null(saved[1].Follows);
+        Assert.Equal(shown[1].Panels, saved[1].Panels);
+    }
+
+    [Fact]
     public void ADeletedTabIsGoneForGoodButAHiddenOneKeepsFollowing()
     {
         // Only the clan recipe: Alts has nothing to show and is hidden, so + Board doesn't delete it.

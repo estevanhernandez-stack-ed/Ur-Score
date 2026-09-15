@@ -770,8 +770,8 @@ public sealed class AppServices : ISetupServices, IDisposable
         if (!load.Readable)
         {
             _boardsUnread = true;
-            BoardsProblem = "Your boards file couldn't be read, so the starter board is showing. The next change to a board keeps a copy of the old file beside the new one.";
-            AddTrail("BOARDS NOT READ: showing the starter board.");
+            BoardsProblem = "Your boards file couldn't be read, so your starter tabs are showing. The next change to a board keeps a copy of the old file beside the new one.";
+            AddTrail("BOARDS NOT READ: showing the starter tabs.");
             return;
         }
 

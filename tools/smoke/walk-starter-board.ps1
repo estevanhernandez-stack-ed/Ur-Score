@@ -99,6 +99,7 @@ try {
     Select-Tab (Get-BoardWindow) 'Alts'
     Check '5 Alts shows the accounts table' ([bool](Find-ByAutomationId (Get-BoardWindow) 'AccountsTablePanel1')) (@(Get-PanelIds (Get-BoardWindow)) -join ',')
     & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'alts-tab.png') | Out-Null
+    Check '5b No boards.json while both tabs follow' (-not (Test-Path $boardsFile)) "exists=$(Test-Path $boardsFile)"
 
     # 6. Changing Alts writes Alts; Battle keeps following.
     Enter-EditMode (Get-BoardWindow)
