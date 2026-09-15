@@ -28,6 +28,8 @@ public static class PanelForms
 
     public const string TopAccountKey = "";
 
+    private const string ChooseAnother = "Choose another.";
+
     public static string StatKey(string recipe, string stat) => recipe + KeySeparator + stat;
 
     public static (string Recipe, string Stat)? SplitStatKey(string? key)
@@ -201,9 +203,10 @@ public static class PanelForms
 
         var sourceId = type switch
         {
+            // The recipe's first source that is on, else its first source: one that is off still shows, it isn't removed (R16).
             PanelType.ProfileStat => source is not null && source.Recipe == recipe
                 ? source.Id
-                : live.Sources.FirstOrDefault(s => s.Enabled && s.Recipe == recipe)?.Id,
+                : (live.Sources.FirstOrDefault(s => s.Enabled && s.Recipe == recipe) ?? live.Sources.FirstOrDefault(s => s.Recipe == recipe))?.Id,
             PanelType.Race or PanelType.MyAccounts or PanelType.Records or PanelType.AccountCard => null,
             _ => source?.Id,
         };
@@ -249,7 +252,7 @@ public static class PanelForms
 
     /// <summary>The words for a form with no recipe picked yet: the first recipe with inputs, else "source".</summary>
     internal static (string Group, string Groups) GroupWords(LiveBoard live) =>
-        live.Installed.FirstOrDefault(i => !i.Recipe.IsGroupList && i.Recipe.Inputs.Count > 0)?.Recipe is { } recipe
+        PanelText.GroupRecipe(live.Installed) is { } recipe
             ? (RecipeWords.Group(recipe), RecipeWords.GroupsLower(recipe))
             : ("source", "sources");
 
@@ -264,8 +267,13 @@ public static class PanelForms
 
     private static string? SourceProblem(PanelType type, PanelSettings settings, LiveBoard live, string word)
     {
-        if (settings.SourceId is null) return type == PanelType.ProfileStat ? null : $"Choose a {word}.";
-        if (live.FindSource(settings.SourceId) is not { } source) return $"This panel's {word} was removed. Choose another.";
+        // A Profile stat with no source reads the recipe's first source that is on (PanelModels.ProfileStat); with none on, it must pin one.
+        if (settings.SourceId is null)
+        {
+            return type == PanelType.ProfileStat && live.Sources.Any(s => s.Enabled && s.Recipe == settings.Recipe) ? null : $"Choose a {word}.";
+        }
+
+        if (live.FindSource(settings.SourceId) is not { } source) return $"{PanelText.StaleSource(word)} {ChooseAnother}";
         if (source.Recipe != settings.Recipe || live.FindRecipe(source.Recipe) is not { } installed || !Fits(type, installed.Recipe))
         {
             return $"This panel can't show that {word}.";
@@ -290,7 +298,7 @@ public static class PanelForms
     private static string? ToSourceProblem(PanelSettings settings, LiveBoard live, string word)
     {
         if (settings.ToSourceId is null) return $"Choose a {word} to compare with.";
-        if (live.FindSource(settings.ToSourceId) is not { } to) return $"This panel's {word} was removed. Choose another.";
+        if (live.FindSource(settings.ToSourceId) is not { } to) return $"{PanelText.StaleSource(word)} {ChooseAnother}";
 
         return to.Recipe != settings.Recipe || to.Id == settings.SourceId ? $"Choose a different {word} of the same recipe to compare with." : null;
     }
@@ -298,7 +306,7 @@ public static class PanelForms
     private static string? StatProblem(PanelType type, PanelSettings settings, InstalledRecipe? installed)
     {
         if (settings.Stat is null) return type == PanelType.PastPeriods ? null : "Choose a stat.";
-        if (installed is null || RecipeStats.Find(installed.Recipe, settings.Stat) is null) return "This panel's stat was removed. Choose another.";
+        if (installed is null || RecipeStats.Find(installed.Recipe, settings.Stat) is null) return $"{PanelText.StaleStat} {ChooseAnother}";
 
         return Fits(type, installed.Recipe) ? null : "This panel can't show that stat.";
     }

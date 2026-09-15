@@ -149,6 +149,23 @@ public class PanelFormsTests
     }
 
     [Fact]
+    public void AProfileStatWhoseOnlySourceIsOffIsNotStale()
+    {
+        var off = ProfileSource with { Enabled = false };
+        var live = Live([off], [Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>());
+
+        var settings = PanelForms.Build(PanelType.ProfileStat, PanelForms.Defaults(PanelType.ProfileStat, live), live);
+
+        Assert.Equal(new PanelSettings(Profile.Slug, SourceId: off.Id, Stat: "diamonds"), settings);
+        Assert.Null(PanelForms.Problem(PanelType.ProfileStat, settings, live));
+        Assert.False(PanelModels.ProfileStat(live, Reader(), settings).Head.HasStale);
+
+        // With no source pinned, the panel only reads a source that is on, so the form asks for one.
+        Assert.True(PanelModels.ProfileStat(live, Reader(), settings with { SourceId = null }).Head.HasStale);
+        Assert.Equal("Choose a source.", PanelForms.Problem(PanelType.ProfileStat, settings with { SourceId = null }, live));
+    }
+
+    [Fact]
     public void ProblemsUseTheRecipesWordsAndNameWhatToFix()
     {
         var live = Everything();

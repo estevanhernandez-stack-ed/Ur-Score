@@ -532,7 +532,7 @@ public static class PanelModels
     public static TopModel Top(LiveBoard live, PanelSettings settings)
     {
         var installed = live.FindRecipe(settings.Recipe);
-        var groupRecipe = live.Installed.FirstOrDefault(i => i.Recipe.Inputs.Count > 0 && !i.Recipe.IsGroupList)?.Recipe;
+        var groupRecipe = PanelText.GroupRecipe(live.Installed);
         var title = PanelText.Title(PanelType.Top, installed?.Recipe, live.Installed);
         var nameColumn = groupRecipe is null ? "Name" : RecipeWords.Capital(RecipeWords.Group(groupRecipe));
 

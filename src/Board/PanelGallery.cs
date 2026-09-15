@@ -1,4 +1,4 @@
-using Labs626.UrScore.Core;
+using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
@@ -19,19 +19,23 @@ public static class PanelGallery
         PanelType.PastPeriods, PanelType.Records, PanelType.Top, PanelType.ProfileStat, PanelType.LiveLeaderboard,
     ];
 
-    /// <summary>The title <see cref="PanelModels"/> gives a panel of this type on the first installed recipe that fits it.</summary>
-    public static string Title(PanelType type, LiveBoard live) =>
-        PanelText.Title(type, live.Installed.FirstOrDefault(i => PanelForms.Fits(type, i.Recipe))?.Recipe, live.Installed);
+    /// <summary>The title <see cref="PanelModels"/> gives a panel of this type on the card's recipe (<see cref="CardRecipe"/>).</summary>
+    public static string Title(PanelType type, LiveBoard live) => PanelText.Title(type, CardRecipe(type, live), live.Installed);
 
-    public static IReadOnlyList<GalleryCard> Cards(LiveBoard live)
-    {
-        var (group, groups) = PanelForms.GroupWords(live);
-        var period = live.Installed.FirstOrDefault(i => !i.Recipe.IsGroupList && i.Recipe.Period is not null)?.Recipe is { } withPeriod
-            ? RecipeWords.Period(withPeriod)
-            : "period";
-
-        return [.. Order.Select(type =>
+    /// <summary>
+    /// Every line of a card speaks for one recipe, the one its title names. Top, like its panel, takes the
+    /// period from its list (else the first recipe with one) and names groups by the group recipe.
+    /// </summary>
+    public static IReadOnlyList<GalleryCard> Cards(LiveBoard live) =>
+    [
+        .. Order.Select(type =>
         {
+            var recipe = CardRecipe(type, live);
+            var groupRecipe = type == PanelType.Top ? PanelText.GroupRecipe(live.Installed) : recipe;
+            var periodRecipe = type == PanelType.Top ? PanelText.TopPeriodRecipe(recipe, live.Installed) : recipe;
+            var (group, groups) = groupRecipe is null ? ("source", "sources") : (RecipeWords.Group(groupRecipe), RecipeWords.GroupsLower(groupRecipe));
+            var period = periodRecipe is null ? "period" : RecipeWords.Period(periodRecipe);
+
             var (needs, shows, whyNot) = type switch
             {
                 PanelType.Standing => ($"Needs a {group}.", $"Place, total, the last hour's gain and the {period} line.", $"Add a {group} in Setup first."),
@@ -53,9 +57,17 @@ public static class PanelGallery
             };
 
             var canAdd = CanAdd(type, live);
-            return new GalleryCard(type, Title(type, live), needs, shows, canAdd, canAdd ? "" : whyNot);
-        })];
-    }
+            return new GalleryCard(type, PanelText.Title(type, recipe, live.Installed), needs, shows, canAdd, canAdd ? "" : whyNot);
+        }),
+    ];
+
+    /// <summary>
+    /// The recipe a card speaks for: the one a panel added from it starts on (<see cref="PanelForms.Defaults"/>),
+    /// else the first installed recipe the type fits, else none.
+    /// </summary>
+    private static Recipe? CardRecipe(PanelType type, LiveBoard live) =>
+        live.FindRecipe(PanelForms.Build(type, PanelForms.Defaults(type, live), live).Recipe)?.Recipe
+        ?? live.Installed.FirstOrDefault(i => PanelForms.Fits(type, i.Recipe))?.Recipe;
 
     private static bool CanAdd(PanelType type, LiveBoard live)
     {

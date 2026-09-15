@@ -1,5 +1,6 @@
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Recipes;
 using static UrScore.Tests.BoardFixtures;
 
 namespace UrScore.Tests;
@@ -56,6 +57,79 @@ public class PanelGalleryTests
         Assert.False(Card(cards, PanelType.PromotionCheck).CanAdd);
         Assert.False(Card(cards, PanelType.Top).CanAdd);
         Assert.False(Card(cards, PanelType.ProfileStat).CanAdd);
+    }
+
+    private const string GuildSeasonJson = """
+        {
+          "recipe": 1, "name": "Guild season", "credit": "Test data.", "metricId": "test.guild", "valueLabel": "Points",
+          "everySeconds": 180,
+          "inputs": [ { "id": "guild", "label": "Your guild", "plural": "Guilds" } ],
+          "steps": [
+            { "url": "https://example.test/season", "take": { "season": "data.season" } },
+            { "url": "https://example.test/guild/{guild}", "rows": "data.members", "userId": "id", "value": "points" }
+          ],
+          "period": { "value": "season" },
+          "headline": [ { "id": "guild-points", "label": "Guild points", "path": "data.points" } ]
+        }
+        """;
+
+    private const string TopRoundJson = """
+        {
+          "recipe": 1, "name": "Top of the round", "credit": "Test data.", "valueLabel": "Points", "everySeconds": 300,
+          "steps": [
+            { "url": "https://example.test/round", "take": { "round": "data.round" } },
+            { "url": "https://example.test/top/{round}", "rows": "data.top", "groupName": "name", "value": "points", "rank": "rank" }
+          ],
+          "period": { "value": "round" }
+        }
+        """;
+
+    private static Recipe Guild => RecipeParser.Parse(GuildSeasonJson).Recipe!;
+
+    private static Recipe TopRound => RecipeParser.Parse(TopRoundJson).Recipe!;
+
+    private static string[] Lines(IReadOnlyList<GalleryCard> cards, PanelType type)
+    {
+        var card = Card(cards, type);
+        return [card.Title, card.Needs, card.Shows, card.WhyNot];
+    }
+
+    [Fact]
+    public void EachCardSpeaksForOneRecipeTheOneAPanelAddedFromItWouldRead()
+    {
+        // The guild recipe comes first, but your main is a clan: a panel added now reads the clans.
+        var guildWatch = new Source("s-00000004", Guild.Slug, new Dictionary<string, string> { ["guild"] = "Wolves" }, SourceRole.Watch);
+        var roundTop = SourceOf("s-0000000b", TopRound, null, SourceRole.Watch);
+        var cards = PanelGallery.Cards(Live(
+            [guildWatch, MainClan, AltClan, roundTop],
+            [Installed(Guild, "value"), Installed(Clan, "value"), Installed(TopRound)], NoReads));
+
+        Assert.Equal(new[] { "Clan standing", "Needs a clan.", "Place, total, the last hour's gain and the battle line.", "" }, Lines(cards, PanelType.Standing));
+        Assert.Equal(new[] { "Battle race", "Needs 2 to 5 clans of one recipe.", "Each clan's total over the current battle, one line each.", "" }, Lines(cards, PanelType.Race));
+        Assert.Equal(new[] { "Past battles", "Needs a clan.", "Finished battles newest first: place, total and your best account.", "" }, Lines(cards, PanelType.PastPeriods));
+        // Top reads the list's own period, and names groups the way its panel's name column does.
+        Assert.Equal(new[] { "Top of the round", "Needs a recipe that lists groups.", "The top of the round live, with your guilds placed where they'd rank.", "" },
+            Lines(cards, PanelType.Top));
+    }
+
+    [Fact]
+    public void WithNothingToReadYetEachCardSpeaksForTheFirstRecipeItFits()
+    {
+        var cards = PanelGallery.Cards(Live([], [Installed(Guild, "value"), Installed(Clan, "value")], NoReads));
+
+        Assert.Equal(
+            new[] { "Guild standing", "Needs a guild.", "Place, total, the last hour's gain and the season line.", "Add a guild in Setup first." },
+            Lines(cards, PanelType.Standing));
+        Assert.Equal(
+            new[] { "Season race", "Needs 2 to 5 guilds of one recipe.", "Each guild's total over the current season, one line each.", "Needs at least 2 guilds of one recipe. Add them in Setup." },
+            Lines(cards, PanelType.Race));
+        // Only the clan recipe keeps past periods.
+        Assert.Equal(
+            new[] { "Past battles", "Needs a clan.", "Finished battles newest first: place, total and your best account.", "Needs a clan whose recipe keeps past battles." },
+            Lines(cards, PanelType.PastPeriods));
+        Assert.Equal(
+            new[] { "Top of the season", "Needs a recipe that lists groups.", "The top of the season live, with your guilds placed where they'd rank.", "Import a recipe that lists groups, and turn it on in Setup." },
+            Lines(cards, PanelType.Top));
     }
 
     [Fact]

@@ -82,6 +82,11 @@ public static class PanelText
 
     public static string StaleSource(string group) => $"This panel's {group} was removed.";
 
-    private static Recipe? TopPeriodRecipe(Recipe? list, IReadOnlyList<InstalledRecipe> installed) =>
+    /// <summary>The recipe whose period a Top panel names: its list recipe's own, else the first installed recipe that has one.</summary>
+    internal static Recipe? TopPeriodRecipe(Recipe? list, IReadOnlyList<InstalledRecipe> installed) =>
         list?.Period is not null ? list : installed.FirstOrDefault(i => i.Recipe.Period is not null && !i.Recipe.IsGroupList)?.Recipe;
+
+    /// <summary>The recipe that names groups where no recipe is picked (Top's name column, a blank form): the first non-list recipe with inputs.</summary>
+    internal static Recipe? GroupRecipe(IReadOnlyList<InstalledRecipe> installed) =>
+        installed.FirstOrDefault(i => !i.Recipe.IsGroupList && i.Recipe.Inputs.Count > 0)?.Recipe;
 }
