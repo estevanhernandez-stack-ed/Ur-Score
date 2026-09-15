@@ -1,6 +1,7 @@
-# The starter board on a clean data folder: a main clan, a clan your accounts are in, a watched clan, (when
-# the fixture exists) the top list and the profile recipe with its suggestions, then every Battle panel with its
-# title and no account card or table on it, Start, Test now and Stop.
+# The starter boards on a clean data folder: a main clan, a clan your accounts are in, a watched clan, (when
+# the fixture exists) the top list and the profile recipe with its suggestions, then two tabs, Battle first, and
+# every Battle panel with its title and no account card or table on it, Alts as its own tab, Start, Test now and
+# Stop, and a change to Alts that leaves Battle following.
 param(
     [string]$Main = 'CCGP',
     [string]$Alt = 'K0i2'
@@ -10,6 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
 $profileFixture = Join-Path $UrFixtures 'petsim99-profile.recipe.json'
+$boardsFile = Join-Path $UrData 'boards.json'
 $topFixture = Get-ChildItem $UrFixtures -Filter *.recipe.json | Where-Object { (Get-Content $_.FullName -Raw) -match '"groupName"' } | Select-Object -First 1
 $rororo = [bool](Get-Process -Name 'ROROROblox.App' -ErrorAction SilentlyContinue)
 $backup = $null
@@ -69,6 +71,8 @@ try {
         $panel = Find-ByAutomationId $board $id
         Check "1 $id is on the board" ($panel -and (Line $panel 'PanelTitle') -eq $expected[$id]) "title='$(Line $panel 'PanelTitle')'"
     }
+    $tabs = @(Get-TabNames $board)
+    Check '1b Two tabs, Battle first' ($tabs.Count -eq 2 -and $tabs[0] -eq 'Battle' -and $tabs[1] -eq 'Alts') ($tabs -join ', ')
     Check '1d Battle has no account card or table' (-not (Find-ByAutomationId $board 'AccountCardPanel1') -and -not (Find-ByAutomationId $board 'AccountsTablePanel1')) (@(Get-PanelIds $board) -join ',')
     Check '1c The promotion check names both clans' ((Line (Find-ByAutomationId $board 'PromotionCheckPanel1') 'PanelSubtitle') -match "^$Alt .+ $Main$") (Line (Find-ByAutomationId $board 'PromotionCheckPanel1') 'PanelSubtitle')
 
@@ -90,6 +94,23 @@ try {
     Check '3 My accounts groups your accounts by clan' $grouped ($accounts -join ' | ')
 
     & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'starter-board.png') | Out-Null
+
+    # 5. Alts is a tab of its own.
+    Select-Tab (Get-BoardWindow) 'Alts'
+    Check '5 Alts shows the accounts table' ([bool](Find-ByAutomationId (Get-BoardWindow) 'AccountsTablePanel1')) (@(Get-PanelIds (Get-BoardWindow)) -join ',')
+    & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'alts-tab.png') | Out-Null
+
+    # 6. Changing Alts writes Alts; Battle keeps following.
+    Enter-EditMode (Get-BoardWindow)
+    Invoke-PanelTool (Get-BoardWindow) 'RecordsPanel1' 'RemovePanelButton'
+    Complete-EditMode (Get-BoardWindow)
+    $saved = @(Read-Boards)
+    $battleEntry = $saved | Where-Object { $_.id -eq 'b-starter-battle' } | Select-Object -First 1
+    $altsEntry = $saved | Where-Object { $_.id -eq 'b-starter-alts' } | Select-Object -First 1
+    Check '6 boards.json keeps Battle following, with no panels' ($battleEntry -and $battleEntry.follows -eq 'battle' -and @($battleEntry.panels).Count -eq 0) ($saved | ConvertTo-Json -Depth 2 -Compress)
+    Check '6b ...and Alts as you left it' ($altsEntry -and -not $altsEntry.follows -and @($altsEntry.panels).Count -eq 2) "alts panels=$(@($altsEntry.panels).Count)"
+    Select-Tab (Get-BoardWindow) 'Battle'
+    Check '6c Battle still shows its panels' ([bool](Find-ByAutomationId (Get-BoardWindow) 'RacePanel1')) (@(Get-PanelIds (Get-BoardWindow)) -join ',')
 
     Invoke-Element (Find-ByAutomationId $board 'StartStopButton')
     $stopped = Wait-Line $board 'StateLine' '^Stopped\.$' 20

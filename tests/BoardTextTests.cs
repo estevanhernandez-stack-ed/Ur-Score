@@ -78,19 +78,21 @@ public class BoardTextTests
         Assert.Equal(Clan.Credit, BoardText.Attribution(Live([MainClan], [Installed(Clan, "value"), Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>())));
 
     [Fact]
-    public void NoRecipesShowsOverEveryBoardAndTheStartersStatesOnlyWhileItFollows()
+    public void NoRecipesShowsOverEveryBoardAndAStartersStatesOnlyOnATabThatFollowsIt()
     {
-        var noStats = StarterBoards.Build([Installed(Clan)], [MainClan]);
+        var noStats = StarterBoards.All([Installed(Clan)], [MainClan]);
+        var following = BoardDefs.Following(noStats[0]);
         var saved = new BoardDef("b-00000001", "Rivals", []);
         var withPanel = saved with
         {
             Panels = [new PanelDef("p-00000001", PanelType.Standing, new PanelSize(3), new PanelSettings(Clan.Slug, SourceId: MainClan.Id))],
         };
 
-        Assert.Equal(BoardEmpty.NoRecipes, BoardText.EmptyFor(StarterBoards.Build([], []), followsStarter: false, withPanel));
-        Assert.Equal(BoardEmpty.NoStats, BoardText.EmptyFor(noStats, followsStarter: true, withPanel));
-        Assert.Equal(BoardEmpty.NoPanels, BoardText.EmptyFor(noStats, followsStarter: false, saved));
-        Assert.Equal(BoardEmpty.None, BoardText.EmptyFor(noStats, followsStarter: false, withPanel));
+        Assert.Equal(BoardEmpty.NoRecipes, BoardText.EmptyFor(StarterBoards.All([], []), withPanel));
+        Assert.Equal(BoardEmpty.NoStats, BoardText.EmptyFor(noStats, following));
+        Assert.Equal(BoardEmpty.NoPanels, BoardText.EmptyFor(noStats, following, editing: true));
+        Assert.Equal(BoardEmpty.NoPanels, BoardText.EmptyFor(noStats, saved));
+        Assert.Equal(BoardEmpty.None, BoardText.EmptyFor(noStats, withPanel));
     }
 
     [Fact]

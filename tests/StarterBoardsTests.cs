@@ -145,6 +145,55 @@ public class StarterBoardsTests
     }
 
     [Fact]
+    public void AStarterIsBuiltByItsNameOrItsKeyInAnyLetterCaseAndNoOtherName()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        IReadOnlyList<InstalledRecipe> installed = [Installed(Clan, "value"), Installed(Profile, "diamonds")];
+        IReadOnlyList<Source> sources = [MainClan, profile];
+
+        // A tab's follows value is the key ("alts"): it builds Alts, not Battle.
+        foreach (var name in new[] { StarterBoards.Alts, "alts", "ALTS", " Alts " })
+        {
+            Assert.Equal(PanelType.AccountsTable, StarterBoards.Build(installed, sources, name).Panels[0].Type);
+        }
+
+        Assert.Equal(StarterBoards.Battle, StarterBoards.Build(installed, sources, "battle").Name);
+        Assert.Throws<ArgumentException>(() => StarterBoards.Build(installed, sources, "grind"));
+    }
+
+    [Fact]
+    public void AltsWithNoSourceReadsYourAccountsUnlessItsRecipeNeedsOne()
+    {
+        // The profile recipe reads each of your accounts and needs no source: with none, the table still reads it.
+        var noSource = StarterBoards.Build([Installed(Profile, "diamonds")], [], StarterBoards.Alts);
+        Assert.Equal(BoardEmpty.None, noSource.Empty);
+        Assert.Equal(new PanelSettings(Profile.Slug, SourceId: null), noSource.Panels[0].Settings);
+
+        // A recipe without a period that asks for an input can't be read without a source: Alts asks for one.
+        var members = Clan with { Name = "Clan members", Period = null };
+        var asks = StarterBoards.Build([Installed(members, "value")], [], StarterBoards.Alts);
+        Assert.Equal((StarterBoards.Alts, BoardEmpty.NoSources, 0, members.Slug), (asks.Name, asks.Empty, asks.Panels.Count, asks.RecipeSlug));
+    }
+
+    [Fact]
+    public void AltsTakesARecipeWithASourceOnFirstThenOneThatReadsYourAccountsOneByOne()
+    {
+        var members = Clan with { Name = "Clan members", Period = null };
+        var membersSource = SourceOf("s-00000005", members, "CCGP", SourceRole.Main);
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        IReadOnlyList<InstalledRecipe> installed = [Installed(members, "value"), Installed(Profile, "diamonds")];
+
+        string TableRecipe(params Source[] sources) => StarterBoards.Build(installed, sources, StarterBoards.Alts).Panels[0].Settings.Recipe;
+
+        // Both have a source on: the one that reads your accounts one by one, though it is installed second.
+        Assert.Equal(Profile.Slug, TableRecipe(membersSource, profile));
+        // Only the other has a source on: that one.
+        Assert.Equal(members.Slug, TableRecipe(membersSource, profile with { Enabled = false }));
+        // Neither has: your accounts one by one again.
+        Assert.Equal(Profile.Slug, TableRecipe());
+    }
+
+    [Fact]
     public void TheFirstStatFallsBackToASentOneWhenNoneIsShown()
     {
         var installed = new InstalledRecipe(Profile, "", new RecipeState(

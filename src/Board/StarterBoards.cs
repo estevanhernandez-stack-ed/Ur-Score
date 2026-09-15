@@ -48,12 +48,14 @@ public static class StarterBoards
 
     /// <summary>
     /// One starter: Battle from a recipe with a period, Alts from one without (your accounts one by one first). A
-    /// starter whose kind of recipe has no ticked stat is empty. Any name but Alts builds Battle.
+    /// starter whose kind of recipe has no ticked stat is empty. <paramref name="name"/> is a starter's name or its key
+    /// in any letter case ("Alts", "alts", as <c>follows</c> holds it); any other name throws.
     /// </summary>
     public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string name = Battle)
     {
-        var alts = string.Equals(name, Alts, StringComparison.Ordinal);
-        var named = alts ? Alts : Battle;
+        var named = Names.FirstOrDefault(n => string.Equals(n, name?.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? throw new ArgumentException($"No starter is named '{name}'.", nameof(name));
+        var alts = named == Alts;
         if (installed.Count == 0) return new StarterBoard(named, BoardEmpty.NoRecipes, [], null);
 
         var ticked = installed.Where(i => !i.Recipe.IsGroupList && i.State.TrackedStats(i.Recipe).Count > 0).ToList();

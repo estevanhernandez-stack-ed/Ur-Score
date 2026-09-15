@@ -225,20 +225,55 @@ public class BoardsFileTests
     }
 
     [Fact]
-    public void TheFollowingStarterHasFixedIdsAndAFreshCopyHasNewOnes()
+    public void AFollowingStarterHasFixedIdsAndAFreshCopyHasNewOnes()
     {
         var starter = StarterBoards.Build([Installed(Clan, "value")], [MainClan, AltClan]);
 
-        var following = BoardDefs.FromStarter(starter, freshIds: false);
+        var following = BoardDefs.Following(starter);
         var fresh = BoardDefs.FromStarter(starter, freshIds: true);
 
-        Assert.Equal(BoardDefs.StarterBoardId, following.Id);
-        Assert.Equal(StarterBoards.Battle, following.Name);
-        Assert.Equal(starter.Panels.Select((_, i) => $"p-starter-{i + 1}"), following.Panels.Select(p => p.Id));
+        Assert.Equal(("b-starter-battle", StarterBoards.Battle), (following.Id, following.Name));
+        Assert.Equal("battle", following.Follows);
+        Assert.Equal(starter.Panels.Select((_, i) => $"p-battle-{i + 1}"), following.Panels.Select(p => p.Id));
         Assert.Equal(starter.Panels.Select(p => (p.Type, p.Span, p.Settings)), following.Panels.Select(p => (p.Type, p.Size.Span, p.Settings)));
         Assert.All(following.Panels, p => Assert.False(p.Size.Tall));
         Assert.Matches("^b-[0-9a-f]{8}$", fresh.Id);
         Assert.All(fresh.Panels, p => Assert.Matches("^p-[0-9a-f]{8}$", p.Id));
+        Assert.Null(fresh.Follows);
+    }
+
+    [Fact]
+    public void AFollowingTabIsWrittenByNameAloneAndOnlyAKnownStarterFollows()
+    {
+        IReadOnlyList<BoardDef> boards = [new BoardDef("b-starter-battle", "Battle", [], Follows: "battle"), new BoardDef("b-00000001", "Rivals", [])];
+
+        var json = BoardsFile.Serialize(boards);
+        Assert.Contains("\"follows\": \"battle\"", json);
+        Assert.DoesNotContain("\"follows\": null", json);
+        Assert.Equal(new[] { "battle", null }, BoardsFile.Parse(json).Select(b => b.Follows).ToArray());
+
+        // An unknown starter follows nothing; a second board following the same starter follows nothing either.
+        var odd = BoardsFile.Parse("""
+            [ { "id": "a", "name": "A", "follows": "grind", "panels": [] },
+              { "id": "b", "name": "B", "follows": "ALTS" },
+              { "id": "c", "name": "C", "follows": "alts" } ]
+            """);
+        Assert.Equal(new[] { null, "alts", null }, odd.Select(b => b.Follows).ToArray());
+    }
+
+    [Fact]
+    public void AFollowingEntryKeepsTheFieldsAnOlderVersionReadsAndAFollowsOfTheWrongTypeFollowsNothing()
+    {
+        // 0.3.0 reads a board's id, name and panels and ignores anything else, so a following entry loads there as
+        // an empty board with its starter's name (D2).
+        using var document = System.Text.Json.JsonDocument.Parse(BoardsFile.Serialize([new BoardDef("b-starter-alts", "Alts", [], Follows: "alts")]));
+        var entry = Assert.Single(document.RootElement.EnumerateArray().ToList());
+        Assert.Equal(new[] { "id", "name", "follows", "panels" }, entry.EnumerateObject().Select(p => p.Name).ToArray());
+        Assert.Equal(0, entry.GetProperty("panels").GetArrayLength());
+
+        var wrongType = BoardsFile.Parse("""[ { "id": "b-1", "name": "Battle", "follows": 1, "panels": [] }, { "id": "b-2", "name": "Alts", "follows": ["alts"] } ]""");
+        Assert.All(wrongType, b => Assert.Null(b.Follows));
+        Assert.Equal(2, wrongType.Count);
     }
 
     [Fact]

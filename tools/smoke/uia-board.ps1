@@ -39,6 +39,14 @@ function Get-SelectedTabName($board) {
     if ($selected) { $selected.Current.Name } else { '(none)' }
 }
 
+# Selects a tab by its board name, the way a click does.
+function Select-Tab($board, [string]$name) {
+    $tab = Get-TabItems $board | Where-Object { $_.Current.Name -eq $name } | Select-Object -First 1
+    if (-not $tab) { throw "no tab '$name'" }
+    $tab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Start-Sleep -Milliseconds 1000
+}
+
 # Opens the selected tab's right-click menu with Shift+F10 and invokes one item by automation id.
 # Returns $false (and closes the menu) when that item is disabled.
 function Invoke-TabMenu($board, [string]$itemId) {

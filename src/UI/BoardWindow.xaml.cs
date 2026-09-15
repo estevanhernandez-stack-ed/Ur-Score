@@ -288,11 +288,10 @@ public partial class BoardWindow : Window
 
     private void RenderEmpty(BoardDef board)
     {
-        var starter = StarterBoards.Build(_services.Installed, _services.Sources);
-        // A draft is a board being shaped, not the starter following your sources: with no panels it says so and
-        // offers Add panel, and a panel added to it shows at once.
-        _empty = BoardText.EmptyFor(starter, _services.BoardsFollowStarter && !Editing, board);
-        _emptyRecipe = starter.RecipeSlug;
+        var starters = StarterBoards.All(_services.Installed, _services.Sources);
+        // A draft is a board being shaped, not a tab following your sources: with no panels it says so and offers Add panel.
+        _empty = BoardText.EmptyFor(starters, board, Editing);
+        _emptyRecipe = (StarterBoards.Named(starters, board.Follows) ?? StarterBoards.EmptyState(starters)).RecipeSlug;
 
         var recipe = _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _emptyRecipe, StringComparison.Ordinal))?.Recipe;
         var (line, detail, button) = BoardText.EmptyState(_empty, recipe, Editing);

@@ -23,7 +23,7 @@ $boards = 0; $panels = 0; $notYours = 0; $unexpected = 0; $digitStats = 0
 foreach ($board in (Get-Content $boardsFile -Raw | ConvertFrom-Json)) {
     if (-not $board) { continue }
     $boards++
-    foreach ($key in $board.PSObject.Properties.Name) { if (@('id', 'name', 'panels') -notcontains $key) { $unexpected++ } }
+    foreach ($key in $board.PSObject.Properties.Name) { if (@('id', 'name', 'panels', 'follows') -notcontains $key) { $unexpected++ } }
     foreach ($panel in @($board.panels)) {
         if (-not $panel) { continue }
         $panels++
