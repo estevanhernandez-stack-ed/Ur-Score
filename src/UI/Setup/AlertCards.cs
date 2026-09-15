@@ -96,6 +96,10 @@ public static partial class AlertCards
     public const string TwoDecimals = "Use at most two decimal places, like 1.25.";
     public const string AboveZero = "Use a number above 0.";
     public const string TooBig = "Use a number below 1,000,000,000,000,000.";
+    public const string TooManyDigits = "Use 15 digits or fewer, counting the decimals.";
+
+    /// <summary>A double shows every decimal digit of a number with at most this many significant digits exactly, so what you typed is what the card says.</summary>
+    public const int MaxDigits = 15;
     public const string ChooseMinutes = "Choose how many minutes.";
     public const string ChooseDirection = "Choose above or below.";
 
@@ -130,12 +134,19 @@ public static partial class AlertCards
         return new AlertsView(cards, rules.Problem, showNext);
     }
 
-    /// <summary>Whether two views say the same thing, so a refresh that changes nothing doesn't redraw (A14).</summary>
+    /// <summary>
+    /// Whether two views say the same thing, so a refresh that changes nothing doesn't redraw (A14). A rule's place in the file
+    /// is left out: a rule added or removed higher up shifts every index below it and changes nothing a card says, and a redraw
+    /// would drop keyboard focus. Nothing acts on a view's index: every write finds Ur Score's rule in the file again.
+    /// </summary>
     public static bool Same(AlertsView a, AlertsView b) =>
         a.Problem == b.Problem && a.ShowNext == b.ShowNext && a.Cards.Count == b.Cards.Count
         && a.Cards.Zip(b.Cards).All(pair =>
             pair.First.Stat == pair.Second.Stat && pair.First.Note == pair.Second.Note
-            && pair.First.CanAdd.SequenceEqual(pair.Second.CanAdd) && pair.First.Alerts.SequenceEqual(pair.Second.Alerts));
+            && pair.First.CanAdd.SequenceEqual(pair.Second.CanAdd)
+            && pair.First.Alerts.Select(Placeless).SequenceEqual(pair.Second.Alerts.Select(Placeless)));
+
+    private static AlertLine Placeless(AlertLine line) => line with { Rule = line.Rule with { Index = 0 } };
 
     public static AlertCard? CardFor(AlertsView view, string metricId) =>
         view.Cards.FirstOrDefault(c => string.Equals(c.Stat.MetricId, metricId, StringComparison.Ordinal));
@@ -274,17 +285,12 @@ public static partial class AlertCards
         Direction = rule.AlertWhenBelow ? Below : Above,
     };
 
-    /// <summary>10, 15 and 30, plus the minutes an existing rule already has, so saving never changes them unasked.</summary>
-    public static IReadOnlyList<string> MinuteChoices(string? current)
-    {
-        var minutes = Minutes.ToList();
-        if (double.TryParse(current, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value) && value > 0 && !minutes.Contains(value))
-        {
-            minutes.Add(value);
-        }
-
-        return [.. minutes.Order().Select(Editable)];
-    }
+    /// <summary>
+    /// 10, 15 and 30, and nothing else, whatever <paramref name="current"/> holds (controller ruling, Task 2 review, replacing
+    /// A12's extra choice). A rule whose window is another number reads as-is in its sentence; its Change opens with no minutes
+    /// chosen, and Save asks you to choose one of these. The parameter stays so the contract's signature does.
+    /// </summary>
+    public static IReadOnlyList<string> MinuteChoices(string? current) => [.. Minutes.Select(Editable)];
 
     [GeneratedRegex(@"^([0-9]{1,3}(,[0-9]{3})+|[0-9]+)(\.[0-9]{1,2})?$")]
     private static partial Regex PlainNumber();
@@ -295,7 +301,11 @@ public static partial class AlertCards
     [GeneratedRegex(@"^([0-9]{1,3}(,[0-9]{3})+|[0-9]+)\.[0-9]{3,}$")]
     private static partial Regex LongDecimal();
 
-    /// <summary>"" and the number, or why it can't be used. Digits only (ASCII), commas in threes, a dot and up to two decimals.</summary>
+    /// <summary>
+    /// "" and the number, or why it can't be used. Digits only (ASCII), commas in threes, a dot and up to two decimals, and at
+    /// most <see cref="MaxDigits"/> significant digits: a double formats at 15, so "999999999999999.9" would otherwise be accepted
+    /// and shown as "1,000,000,000,000,000", the very limit <see cref="TooBig"/> names.
+    /// </summary>
     public static string ParseNumber(string? text, AlertKind kind, out double value)
     {
         value = 0;
@@ -304,8 +314,10 @@ public static partial class AlertCards
         if (LongDecimal().IsMatch(typed)) return TwoDecimals;
         if (!PlainNumber().IsMatch(typed)) return TypeANumber;
 
-        var number = double.Parse(typed.Replace(",", "", StringComparison.Ordinal), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
+        var plain = typed.Replace(",", "", StringComparison.Ordinal);
+        var number = double.Parse(plain, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
         if (number >= MaxNumber) return TooBig;
+        if (plain.Replace(".", "", StringComparison.Ordinal).Trim('0').Length > MaxDigits) return TooManyDigits;
         if (kind == AlertKind.Rate && number <= 0) return AboveZero;
 
         value = number;
@@ -320,8 +332,10 @@ public static partial class AlertCards
 
         if (kind == AlertKind.Rate)
         {
-            return double.TryParse(draft.Minutes, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var minutes) && minutes > 0
-                ? (new AlertSpec(kind, threshold, minutes, AlertWhenBelow: true, label), "")
+            // Only a choice the box offers, matched as text: "Infinity", "NaN", 0 or a rule's own 20 never reach the file.
+            var chosen = Minutes.Where(m => string.Equals(Editable(m), draft.Minutes?.Trim(), StringComparison.Ordinal)).ToList();
+            return chosen.Count == 1
+                ? (new AlertSpec(kind, threshold, chosen[0], AlertWhenBelow: true, label), "")
                 : (null, ChooseMinutes);
         }
 

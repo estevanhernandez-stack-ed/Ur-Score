@@ -162,10 +162,61 @@ public class AlertCardsTests
     [InlineData("1.255", AlertKind.Rate, 0d, "Use at most two decimal places, like 1.25.")]
     [InlineData("0", AlertKind.Rate, 0d, "Use a number above 0.")]
     [InlineData("1000000000000000", AlertKind.Level, 0d, "Use a number below 1,000,000,000,000,000.")]
+    [InlineData("999999999999999.9", AlertKind.Level, 0d, "Use 15 digits or fewer, counting the decimals.")]
+    [InlineData("99999999999999.99", AlertKind.Rate, 0d, "Use 15 digits or fewer, counting the decimals.")]
+    [InlineData("999,999,999,999,999", AlertKind.Level, 999999999999999d, "")]
+    [InlineData("9999999999999.99", AlertKind.Rate, 9999999999999.99, "")]
+    [InlineData("100000000000000.00", AlertKind.Level, 1e14, "")]
     public void TheNumberYouTypeIsCheckedBeforeAnythingIsWritten(string typed, AlertKind kind, double expected, string problem)
     {
         Assert.Equal(problem, AlertCards.ParseNumber(typed, kind, out var value));
         Assert.Equal(expected, value);
+    }
+
+    [Theory]
+    [InlineData("999,999,999,999,999", "999,999,999,999,999", "999999999999999")]
+    [InlineData("9999999999999.99", "9,999,999,999,999.99", "9999999999999.99")]
+    [InlineData("99,999,999,999,999.9", "99,999,999,999,999.9", "99999999999999.9")]
+    [InlineData("0.01", "0.01", "0.01")]
+    public void ANumberYouCanTypeShowsAsYouTypedIt(string typed, string shown, string inTheBox)
+    {
+        // A double formats at 15 significant digits, so every accepted number must fit in 15, or the card would round it
+        // (to 1,000,000,000,000,000 at the cap, the very limit the refusal names).
+        var (spec, problem) = AlertCards.Check(AlertKind.Level, new AlertDraft { Number = typed }, "Rank");
+
+        Assert.Equal("", problem);
+        Assert.Equal(shown, AlertCards.Number(spec!.Threshold));
+        Assert.Equal(inTheBox, AlertCards.Editable(spec.Threshold));
+        Assert.Equal(((AlertSpec?)null, "Use 15 digits or fewer, counting the decimals."), AlertCards.Check(AlertKind.Level, new AlertDraft { Number = "999999999999999.9" }, "Rank"));
+    }
+
+    [Theory]
+    [InlineData("Infinity")]
+    [InlineData("NaN")]
+    [InlineData("0")]
+    [InlineData("20")]
+    [InlineData("-10")]
+    [InlineData("10.5")]
+    public void StopsClimbingTakesOnlyTheMinutesTheBoxOffers(string minutes)
+    {
+        Assert.Equal(((AlertSpec?)null, "Choose how many minutes."),
+            AlertCards.Check(AlertKind.Rate, new AlertDraft { Number = "250", Minutes = minutes }, "Diamonds"));
+    }
+
+    [Fact]
+    public void ARuleWithOtherMinutesReadsAsItIsAndChangeOffersOnlyTheUsualMinutes()
+    {
+        var view = AlertCards.Build([Sending("diamonds")], RulesOf(Rule(0, Diamonds, AlertKind.Rate, 100, window: 20)));
+        var line = view.Cards[0].Alerts[0];
+        var changing = AlertCards.OpenChange(line);
+
+        Assert.Equal("Alert me when an account's Diamonds gains fewer than 100 a minute for 20 minutes.", line.Sentence);
+        Assert.Equal(new[] { "10", "15", "30" }, AlertCards.Rows(view, changing)[0].MinuteChoices);
+        Assert.Equal(((AlertSpec?)null, "Choose how many minutes."), AlertCards.Check(AlertKind.Rate, changing.Draft!, "Diamonds"));
+        foreach (var offered in AlertCards.MinuteChoices(null))
+        {
+            Assert.Equal("", AlertCards.Check(AlertKind.Rate, new AlertDraft { Number = "100", Minutes = offered }, "Diamonds").Problem);
+        }
     }
 
     [Fact]
@@ -193,7 +244,7 @@ public class AlertCardsTests
 
         var changing = AlertCards.DraftOf(Rule(0, Diamonds, AlertKind.Rate, 1500.5, window: 20));
         Assert.Equal(("1500.5", "20"), (changing.Number, changing.Minutes));
-        Assert.Equal(new[] { "10", "15", "20", "30" }, AlertCards.MinuteChoices(changing.Minutes));
+        Assert.Equal(new[] { "10", "15", "30" }, AlertCards.MinuteChoices(changing.Minutes));
         Assert.Equal(new[] { "10", "15", "30" }, AlertCards.MinuteChoices("15"));
         Assert.Equal(new[] { "10", "15", "30" }, AlertCards.MinuteChoices(null));
         Assert.Equal("10", AlertCards.DraftOf(Rule(0, Diamonds, AlertKind.Rate, 5)).Minutes);
@@ -242,7 +293,7 @@ public class AlertCardsTests
         Assert.Equal(("Save", "Save the alert for Diamonds"), (row.ConfirmText, row.ConfirmName));
         Assert.False(row.Lines[0].ShowChange || row.Lines[0].ShowRemove);
         Assert.False(row.ShowAdd);
-        Assert.Equal(new[] { "10", "15", "20", "30" }, row.MinuteChoices);
+        Assert.Equal(new[] { "10", "15", "30" }, row.MinuteChoices);
     }
 
     [Fact]
@@ -343,6 +394,31 @@ public class AlertCardsTests
         Assert.True(AlertCards.Same(a, b));
         Assert.False(AlertCards.Same(a, c));
         Assert.False(AlertCards.Same(a, AlertCards.Empty));
+    }
+
+    [Fact]
+    public void ARuleAddedOrRemovedHigherInTheFileLeavesTheCardsAsTheyAre()
+    {
+        // Someone else's rule above ours shifts our row's index and changes nothing a card says, so the page mustn't redraw
+        // (and drop keyboard focus) for it.
+        IReadOnlyList<InstalledRecipe> installed = [Sending("diamonds", "rank")];
+        var before = AlertCards.Build(installed, RulesOf(
+            Rule(0, Diamonds, AlertKind.Rate, 100, window: 10), Rule(1, Rank, AlertKind.Level, 40, RuleOwner.You, below: false)));
+        var inserted = AlertCards.Build(installed, RulesOf(
+            Rule(0, "memory.warning", AlertKind.Event, 0, RuleOwner.AnotherPlugin),
+            Rule(1, Diamonds, AlertKind.Rate, 100, window: 10), Rule(2, Rank, AlertKind.Level, 40, RuleOwner.You, below: false)));
+        var removed = AlertCards.Build(installed, RulesOf(
+            Rule(0, "memory.warning", AlertKind.Event, 0, RuleOwner.AnotherPlugin), Rule(1, "old.metric", AlertKind.Level, 3, RuleOwner.You),
+            Rule(2, Diamonds, AlertKind.Rate, 100, window: 10), Rule(3, Rank, AlertKind.Level, 40, RuleOwner.You, below: false)));
+
+        Assert.True(AlertCards.Same(before, inserted));
+        Assert.True(AlertCards.Same(removed, inserted));
+
+        // What a rule says still counts: its owner, its direction.
+        Assert.False(AlertCards.Same(before, AlertCards.Build(installed, RulesOf(
+            Rule(0, Diamonds, AlertKind.Rate, 100, window: 10), Rule(1, Rank, AlertKind.Level, 40, RuleOwner.AnotherPlugin, below: false)))));
+        Assert.False(AlertCards.Same(before, AlertCards.Build(installed, RulesOf(
+            Rule(0, Diamonds, AlertKind.Rate, 100, window: 10), Rule(1, Rank, AlertKind.Level, 40, RuleOwner.You, below: true)))));
     }
 
     [Fact]
