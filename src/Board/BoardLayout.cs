@@ -1,10 +1,15 @@
 namespace Labs626.UrScore.Board;
 
-public sealed record PanelPlacement(int Index, int Row, int Column, int Span);
+/// <summary>Where one panel sits: its row and column, how many columns, and how many rows (2 for a tall panel).</summary>
+public sealed record PanelPlacement(int Index, int Row, int Column, int Span, int Rows = 1);
+
+/// <summary>Where a panel was arranged, in the grid's own coordinates.</summary>
+public sealed record CellRect(double Left, double Top, double Width, double Height);
 
 /// <summary>
-/// Panels flow in order across a 12-column grid (spec §9.2), wrapping to a new row when the next one doesn't
-/// fit. Narrow windows widen panels the way the mock does: 3- and 4-wide become half, 5 and 7+ take the row.
+/// Panels flow in order across a 12-column grid (spec §9.2), each at the first free spot at or after the
+/// previous one's, so a tall panel's second row pushes later panels along and order stays reading order (R6).
+/// Narrow windows widen panels the way the mock does: 3- and 4-wide become half, 5 and 7+ take the row.
 /// </summary>
 public static class BoardLayout
 {
@@ -17,24 +22,99 @@ public static class BoardLayout
         : width < NarrowWidth ? span switch { <= 4 => 6, 6 => 6, _ => Columns }
         : Math.Clamp(span, 1, Columns);
 
-    public static IReadOnlyList<PanelPlacement> Flow(IReadOnlyList<int> spans, double width)
+    public static IReadOnlyList<PanelPlacement> Flow(IReadOnlyList<int> spans, double width) =>
+        Flow(spans.Select(span => new PanelSize(span)).ToList(), width);
+
+    public static IReadOnlyList<PanelPlacement> Flow(IReadOnlyList<PanelSize> sizes, double width)
     {
-        var placements = new List<PanelPlacement>();
+        var placements = new List<PanelPlacement>(sizes.Count);
+        var taken = new HashSet<(int Row, int Column)>();
         int row = 0, column = 0;
 
-        for (var index = 0; index < spans.Count; index++)
+        for (var index = 0; index < sizes.Count; index++)
         {
-            var span = EffectiveSpan(spans[index], width);
-            if (column + span > Columns)
+            var span = EffectiveSpan(sizes[index].Span, width);
+            var rows = sizes[index].Tall ? 2 : 1;
+
+            while (true)
             {
-                row++;
-                column = 0;
+                if (column + span > Columns)
+                {
+                    row++;
+                    column = 0;
+                }
+
+                if (Free(taken, row, column, span, rows)) break;
+                column++;
             }
 
-            placements.Add(new PanelPlacement(index, row, column, span));
+            for (var r = row; r < row + rows; r++)
+            {
+                for (var c = column; c < column + span; c++) taken.Add((r, c));
+            }
+
+            placements.Add(new PanelPlacement(index, row, column, span, rows));
             column += span;
         }
 
         return placements;
+    }
+
+    /// <summary>
+    /// Each row is as tall as its tallest one-row panel. A tall panel that needs more than its two rows and the
+    /// gap between them grows its second row by the difference.
+    /// </summary>
+    public static IReadOnlyList<double> RowHeights(IReadOnlyList<PanelPlacement> placements, IReadOnlyList<double> desired, double gap)
+    {
+        var rows = new List<double>();
+
+        foreach (var placement in placements.Where(p => p.Rows == 1))
+        {
+            while (rows.Count <= placement.Row) rows.Add(0);
+            rows[placement.Row] = Math.Max(rows[placement.Row], desired[placement.Index]);
+        }
+
+        foreach (var placement in placements.Where(p => p.Rows > 1))
+        {
+            var last = placement.Row + placement.Rows - 1;
+            while (rows.Count <= last) rows.Add(0);
+
+            var have = Enumerable.Range(placement.Row, placement.Rows).Sum(r => rows[r]) + gap * (placement.Rows - 1);
+            if (desired[placement.Index] > have) rows[last] += desired[placement.Index] - have;
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// The insertion index for a drop at (x, y), counting the dragged panel itself (<see cref="BoardEdits.MoveTo"/>).
+    /// Over a panel: before it on its left half, after it on its right half. Elsewhere: after every panel that ends
+    /// above the point or sits to its left on the same line.
+    /// </summary>
+    public static int DropIndex(IReadOnlyList<CellRect> cells, double x, double y)
+    {
+        for (var i = 0; i < cells.Count; i++)
+        {
+            var cell = cells[i];
+            if (x >= cell.Left && x < cell.Left + cell.Width && y >= cell.Top && y < cell.Top + cell.Height)
+            {
+                return x < cell.Left + cell.Width / 2 ? i : i + 1;
+            }
+        }
+
+        return cells.Count(cell => cell.Top + cell.Height <= y || (cell.Top <= y && cell.Left + cell.Width <= x));
+    }
+
+    private static bool Free(HashSet<(int Row, int Column)> taken, int row, int column, int span, int rows)
+    {
+        for (var r = row; r < row + rows; r++)
+        {
+            for (var c = column; c < column + span; c++)
+            {
+                if (taken.Contains((r, c))) return false;
+            }
+        }
+
+        return true;
     }
 }
