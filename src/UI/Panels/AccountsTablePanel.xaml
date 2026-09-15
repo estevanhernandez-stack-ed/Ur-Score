@@ -17,7 +17,7 @@
             <ui:PanelFrame DataContext="{Binding Head}" />
             <!-- Columns are built from the model in code: a stat key isn't a binding path. -->
             <DataGrid x:Name="AccountsGrid" Margin="0,10,0,0" Style="{StaticResource PanelTable}" ItemsSource="{Binding Rows}"
-                      FrozenColumnCount="1"
+                      FrozenColumnCount="1" ClipboardCopyMode="IncludeHeader"
                       Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}"
                       Sorting="OnSorting" SelectionChanged="OnSelectionChanged" PreviewMouseWheel="OnPreviewMouseWheel"
                       AutomationProperties.Name="Your accounts side by side">

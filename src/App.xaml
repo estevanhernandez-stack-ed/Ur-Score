@@ -599,7 +599,9 @@
                 <Setter Property="CanUserReorderColumns" Value="False" />
                 <Setter Property="CanUserResizeRows" Value="False" />
                 <Setter Property="SelectionUnit" Value="FullRow" />
-                <Setter Property="ClipboardCopyMode" Value="IncludeHeader" />
+                <!-- Copies nothing: a panel table may hold other players, who never reach the clipboard. The Accounts table,
+                     your own accounts only, turns copying on itself (ClipboardFenceTests). -->
+                <Setter Property="ClipboardCopyMode" Value="None" />
                 <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
                 <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
                 <Setter Property="Typography.NumeralAlignment" Value="Tabular" />

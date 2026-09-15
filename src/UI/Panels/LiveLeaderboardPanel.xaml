@@ -5,9 +5,9 @@
     <Border Style="{StaticResource PanelCard}">
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
-            <!-- A panel table like the rest, except that it scrolls within its 360 and never copies: its rows are other players. -->
+            <!-- A panel table like the rest, except that it scrolls within its 360. It copies nothing, as the style says: its rows are other players. -->
             <DataGrid x:Name="LeaderGrid" Margin="0,10,0,0" MaxHeight="360" Style="{StaticResource PanelTable}"
-                      VerticalScrollBarVisibility="Auto" ClipboardCopyMode="None"
+                      VerticalScrollBarVisibility="Auto"
                       ItemsSource="{Binding Rows}"
                       Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}"
                       AutomationProperties.Name="Every row read, your accounts marked">
