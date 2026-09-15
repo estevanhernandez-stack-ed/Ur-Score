@@ -5318,3 +5318,34 @@ Run this against RoRoRo 1.28 with your own accounts. Record each numbered result
    - In RoRoRo's Plugins page, use Install from URL with `https://github.com/estevanhernandez-stack-ed/Ur-Score/releases/latest/download/` and accept the consent.
    - Start the installed Ur Score from RoRoRo. Your saved boards and pop-outs come back; **Edit board**, the gallery, a tab rename and one pop-out work; RoRoRo's Plugins page names version 0.3.0.
 5. **Clan post:** draft the "what's new in 0.3.0" note for the clan (boards you arrange, several boards as tabs, the gallery, pop-outs that stay on top while you play, and that nothing about other players is saved). Este posts it.
+
+---
+
+## Execution record (2026-09-15)
+
+Built on `feat/boards` with subagent-driven development: each task implemented, reviewed against its brief, fixed until approved; then a whole-branch review, one fix wave and a scoped re-review (no Critical or Important findings left). 776 tests pass; both builds are clean with `-warnaserror`.
+
+**Tasks:** 1 `e899544` · 2 `f7430f9` · 3 `cdbd712` · 4 `1b21402` `75375a2` `2e18235` · 5 `93651bf` `10eb325` `da74cb2` · 6 `028e24d` · 7 `ae24feb` `fa169ac` · 8 `4383253` `cd40bd0` · 9 `6c7fe0e` · final fix wave `e942e1d`..`73e911a`.
+
+**Rulings made during execution** (they change or add to the plan above):
+- Every list in `src/UI` is a `ui:RowList` (the gallery cards and race sources included), so row controls reach UI Automation by name.
+- Board-window button state is decided only by `BoardButtons.For` and applied by `ApplyButtons`, with inputs for the board count and edit mode. Stop keeps working during a Test now read. Task 5 edited the existing window instead of the plan's replacement file.
+- One save path: a failed board save shows a message box owned by the board; a failed pop-out position save goes to the trail only. The boards-file problem (R3) takes precedence on the detail line and shows before the score book loads.
+- Edits that change nothing return the same instance and write nothing (rename to the same name, settings closed unchanged, Done with no change). Handlers re-read the boards after a dialog closes. `BoardsFile.Save(keepExisting)` keeps the unreadable copy when the file failed to load at start, even if it reads by the first save.
+- Titles and a source's role label live in `PanelText` and are shared by `PanelModels`, the gallery and the forms. A gallery card speaks for one recipe; a panel's pop-out, placeholder and settings titles use the panel's own recipe.
+- Edit mode: keyboard focus returns to the same tool after every rebuild; after Remove it goes to a neighbour's ⋯. Done compares against the board as it was at Edit, and carries each panel's current pop-out state onto the draft. A popped-out panel's slot shows Remove in edit mode and ignores every other tool.
+- Pop-outs clamp to the monitor work areas (`PopOutPlacement.Clamp(rect, workAreas)`), never maximize, and keep current automation ids after a renumber.
+- `boards.json`: a wrong JSON type costs one panel, not the file; an untouched empty starter is never saved; a duplicated long name still ends in " copy".
+- Smoke: `Skip` in `uia.ps1` marks a step that needs a live battle; `check-boards-privacy.ps1` exits 2 when there is nothing to check.
+
+**Live walk (RoRoRo 1.28, the owner's accounts):** window-smoke 12/12, walk-setup-clans 11/11, walk-stats-table 10/10, walk-starter-board 15/15, walk-board-editing 24/24, walk-pop-outs 14/14 and walk-score-book 6/6 with `-Main K0i2` (a clan whose battle can be read: 39 finished battles backfilled, the pop-out showed live numbers), check-boards-privacy and check-book-privacy clean. On the owner's own data folder: a pop-out survived a restart, and a broken `boards.json` showed the starter with its reason and was kept as `boards.unreadable-*.json` on the first change; the folder was returned to no `boards.json`.
+
+**Parked (not fixed in v0.3.0):**
+- A Past periods panel whose stat was removed can't be saved when its recipe has no ticked stat left.
+- When every source of a recipe is off, the settings form picks an off source while the board shows the stale state.
+- walk-pop-outs step 3 can skip, not fail, when a read fails.
+- The app-wide menu item style handles flat items only (no submenus); the menu in the light theme and the settings forms' unavailable-choice states weren't seen live.
+- The starter board is rebuilt on every `Boards` read (cost only); a pop-out doesn't reopen until a redraw when the score book fails to load; an outside close sent to every window returns pop-outs.
+- Stage 1 leftovers still open: claim conflicts not in Diagnostics, the book read twice at startup, reader indexing at scale, a non-atomic recipe text write, silent per-line book skips with no trail breadcrumb.
+
+**Owner action before a battle:** a clan battle recipe installed before v0.2.0 has no `period`, so the starter is Grind and nothing is backfilled. Re-import the current clan battle recipe.
