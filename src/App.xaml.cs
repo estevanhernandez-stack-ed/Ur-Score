@@ -16,6 +16,9 @@ public partial class App : Application
     private bool _owns;
     private Composition.AppServices? _services;
 
+    /// <summary>The board is shown; only from then on is an unhandled UI-thread failure kept from ending the app.</summary>
+    private bool _started;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // Task 15 adds the --try branch HERE, first, before the single-instance mutex: a try-out runs no
@@ -43,16 +46,20 @@ public partial class App : Application
         var board = new UI.BoardWindow(_services);
         MainWindow = board;
         board.Show();
+
+        // Last, after Show: until here a failure must end the process, which releases the single-instance mutex.
+        _started = true;
     }
 
     /// <summary>
-    /// The last net under every UI-thread callback: once the board is up, a failure goes to the trail (its type
-    /// only) and the app keeps running, so it can still flush the score book on exit. Before that there is no
-    /// window to keep, so a startup failure is left to end the process.
+    /// The last net under every UI-thread callback: once the board is shown, a failure goes to the trail (its type
+    /// only) and the app keeps running, so it can still flush the score book on exit. Before that a failure is left
+    /// to end the process. <see cref="Application.MainWindow"/> can't tell the two apart: WPF sets it to the first
+    /// window constructed, before that window's own constructor or <c>Show</c> has finished.
     /// </summary>
     private void OnUnhandled(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
-        if (_services is null || MainWindow is null) return;
+        if (!_started || _services is null) return;
 
         _services.AddTrail($"UNHANDLED: {e.Exception.GetType().Name}");
         e.Handled = true;

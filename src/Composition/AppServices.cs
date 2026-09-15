@@ -691,8 +691,10 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     /// <summary>
     /// Recipes, then sources. Part 2a's saved inputs become sources only on the first start, when there is no
-    /// <c>sources.json</c> yet (spec §4.1); after that the file is the truth, so a source the user removed stays
-    /// removed. A file that exists but can't be read leaves no sources this session and is never written over.
+    /// <c>sources.json</c> yet (spec §4.1); after that the file is the truth, so a clan source the user removed
+    /// stays removed. An installed recipe with no inputs and no source (placed in the folder while Ur Score was
+    /// closed) gets its one source, since no screen can make one for it. A file that exists but can't be read
+    /// leaves no sources this session and is never written over.
     /// </summary>
     private void LoadAtStart()
     {
@@ -715,7 +717,10 @@ public sealed class AppServices : ISetupServices, IDisposable
             return;
         }
 
-        Sources = load.Sources;
+        // Nothing counts as installed before, so every input-less recipe without a source is treated as new.
+        var sources = SourceRules.ForNewRecipes(load.Sources, [], Installed);
+        Sources = sources;
+        if (!ReferenceEquals(sources, load.Sources)) TrySaveSources(sources);
     }
 
     /// <summary>Saves what changed without an import or reload failing over it; a file that couldn't be read is left alone.</summary>

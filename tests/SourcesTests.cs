@@ -142,6 +142,24 @@ public class SourcesTests
     }
 
     [Fact]
+    public void AtStartEveryInstalledRecipeWithNoInputsAndNoSourceGetsOne()
+    {
+        // At start nothing counts as installed before, so a recipe placed in the folder while Ur Score was closed
+        // is read too. A recipe with inputs still gets nothing, and one that already has a source keeps just that.
+        var clan = Installed("petsim99-clan-battle.recipe.json", new RecipeState(Inputs: Clan("CCGP")));
+        var profile = Installed("petsim99-profile.recipe.json");
+        var top = Installed("petsim99-top-clans.recipe.json");
+        IReadOnlyList<Source> loaded = [new Source("s-00000001", profile.Recipe.Slug, new Dictionary<string, string>(), SourceRole.Mine)];
+
+        var sources = SourceRules.ForNewRecipes(loaded, [], [clan, profile, top]);
+
+        Assert.Equal(
+            new[] { ("s-00000001", profile.Recipe.Slug, SourceRole.Mine), (sources[1].Id, top.Recipe.Slug, SourceRole.Watch) },
+            sources.Select(s => (s.Id, s.Recipe, s.Role)).ToArray());
+        Assert.Same(loaded, SourceRules.ForNewRecipes(loaded, [], [clan, profile]));
+    }
+
+    [Fact]
     public void TheStoreRoundTripsAndABrokenFileLoadsAsNoSources()
     {
         var dir = Path.Combine(Path.GetTempPath(), "urscore-sources-" + Guid.NewGuid().ToString("N"));
