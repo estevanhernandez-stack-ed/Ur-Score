@@ -22,6 +22,9 @@ internal sealed class StubHost(bool reachable, params HostAccount[] accounts) : 
 
     public bool DenyAccounts { get; set; }
 
+    /// <summary>When set, listing the accounts throws this, as a transport failure after a good probe would.</summary>
+    public Exception? AccountsFailure { get; set; }
+
     public int AccountCalls { get; private set; }
 
     public List<(Guid Subject, string MetricId, double Value, DateTimeOffset ObservedAt)> Reported { get; } = [];
@@ -31,6 +34,7 @@ internal sealed class StubHost(bool reachable, params HostAccount[] accounts) : 
     public Task<IReadOnlyList<HostAccount>> GetAccountsAsync(CancellationToken cancellationToken)
     {
         AccountCalls++;
+        if (AccountsFailure is not null) return Task.FromException<IReadOnlyList<HostAccount>>(AccountsFailure);
         return DenyAccounts
             ? throw new RpcException(new Status(StatusCode.PermissionDenied, "revoked"))
             : Task.FromResult<IReadOnlyList<HostAccount>>(accounts);

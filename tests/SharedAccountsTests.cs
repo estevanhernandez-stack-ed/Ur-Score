@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Grpc.Core;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
@@ -57,6 +58,32 @@ public class SharedAccountsTests
 
         Assert.True(list.Denied);
         Assert.Empty(list.Accounts);
+    }
+
+    [Fact]
+    public async Task AnAccountListThatFailsAfterAGoodProbeUsesTheSavedAccounts()
+    {
+        // Spec §5.4, §5.5: RoRoRo answering the probe and then failing the list is RoRoRo not answering, not a lost read.
+        using var dir = TempDir.Create("urscore-accounts");
+        var cache = new AccountsCache(Path.Combine(dir.Path, "accounts.json"));
+        cache.Save([Alt]);
+
+        foreach (var failure in new Exception[] { new RpcException(new Status(StatusCode.Unavailable, "pipe gone")), new IOException("broken pipe") })
+        {
+            var host = new StubHost(true, Alt) { AccountsFailure = failure };
+            var shared = new SharedAccounts(host, cache, new ManualTime(Start));
+            AccountList? listed = null;
+            shared.Listed += l => listed = l;
+
+            var list = await shared.GetAsync(CancellationToken.None);
+
+            Assert.Equal((false, true, false), (list.HostUp, list.FromCache, list.Denied));
+            Assert.Equal(Alt, Assert.Single(list.Accounts));
+            Assert.Equal(cache.SavedAt(), list.ListedAt);
+            Assert.Same(list, shared.Last);
+            Assert.Same(list, listed);
+            Assert.Equal(1, host.AccountCalls);
+        }
     }
 
     [Fact]

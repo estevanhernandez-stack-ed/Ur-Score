@@ -89,11 +89,17 @@ public sealed class SharedAccounts(IHostClient host, AccountsCache cache, TimePr
                 {
                     list = new AccountList([], HostUp: true, FromCache: false, Denied: true, ListedAt: Last?.ListedAt);
                 }
+                catch (Exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // RoRoRo answered the probe, then the list failed (unavailable, a deadline, a broken pipe): to a
+                    // read that is RoRoRo not answering, so the saved list stands in and reading and recording go on
+                    // (score book spec §5.4, §5.5). Only the caller's own cancellation ends the fetch.
+                    list = FromSaved();
+                }
             }
             else
             {
-                var cached = cache.Load();
-                list = new AccountList(cached, HostUp: false, FromCache: true, Denied: false, ListedAt: Last?.ListedAt ?? cache.SavedAt());
+                list = FromSaved();
             }
 
             Last = list;
@@ -106,6 +112,10 @@ public sealed class SharedAccounts(IHostClient host, AccountsCache cache, TimePr
             _one.Release();
         }
     }
+
+    /// <summary>The accounts RoRoRo last listed, from <c>accounts.json</c>, for when RoRoRo isn't answering.</summary>
+    private AccountList FromSaved() =>
+        new(cache.Load(), HostUp: false, FromCache: true, Denied: false, ListedAt: Last?.ListedAt ?? cache.SavedAt());
 
     /// <summary>Each subscriber on its own: one that throws costs neither the others nor the fetch.</summary>
     private void RaiseListed(AccountList list)
