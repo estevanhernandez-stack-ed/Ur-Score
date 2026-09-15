@@ -75,6 +75,24 @@ function Select-GridRow($row) {
     Start-Sleep -Milliseconds 800
 }
 
+# The board's own vertical scroll (BoardScroll), 0-100; -1 when it isn't tall enough to scroll at all.
+function Get-BoardScrollPercent($board) {
+    $scroll = Find-ByAutomationId $board 'BoardScroll'
+    if (-not $scroll) { throw 'BoardScroll not found' }
+    $pattern = $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
+    if (-not $pattern.Current.VerticallyScrollable) { return -1 }
+    $pattern.Current.VerticalScrollPercent
+}
+
+# Scrolls the board to a vertical percent (0-100), the way a drag on the scrollbar does.
+function Set-BoardScrollPercent($board, [double]$percent) {
+    $scroll = Find-ByAutomationId $board 'BoardScroll'
+    if (-not $scroll) { throw 'BoardScroll not found' }
+    $pattern = $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
+    $pattern.SetScrollPercent([System.Windows.Automation.ScrollPattern]::NoScroll, $percent)
+    Start-Sleep -Milliseconds 300
+}
+
 # Opens the selected tab's right-click menu with Shift+F10 and invokes one item by automation id.
 # Returns $false (and closes the menu) when that item is disabled.
 function Invoke-TabMenu($board, [string]$itemId) {

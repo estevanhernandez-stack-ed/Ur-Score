@@ -142,6 +142,21 @@ function Get-AllTexts($root) {
     Find-All $root $CT::Text | ForEach-Object { $_.Current.Name } | Where-Object { $_ }
 }
 
+# True when UI Automation's focused element is $root itself or somewhere under it (a cell, a row, ...).
+function Test-FocusWithin($root) {
+    if (-not $root) { return $false }
+    $focused = $AE::FocusedElement
+    if (-not $focused) { return $false }
+    $targetId = $root.GetRuntimeId() -join '-'
+    $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+    $node = $focused
+    for ($i = 0; $i -lt 25 -and $node; $i++) {
+        if (($node.GetRuntimeId() -join '-') -eq $targetId) { return $true }
+        $node = $walker.GetParent($node)
+    }
+    return $false
+}
+
 function Stop-UrScore {
     Get-Process | Where-Object { $_.ProcessName -match 'ur-score' } | ForEach-Object {
         $_.CloseMainWindow() | Out-Null
@@ -151,12 +166,21 @@ function Stop-UrScore {
 
 # Starts the Release build and waits until the board has read the score book.
 function Start-UrScore([int]$seconds = 60) {
-    if (-not (Test-Path $UrExe)) { throw "No build at $UrExe. Run: dotnet build Ur-Score.csproj -c Release" }
+    if (-not (Test-Path $UrExe)) {
+        if ($env:UR_SCORE_EXE) { throw "UR_SCORE_EXE points at a missing file: $UrExe" }
+        throw "No build at $UrExe. Run: dotnet build Ur-Score.csproj -c Release"
+    }
     Start-Process -FilePath $UrExe -WorkingDirectory (Split-Path $UrExe) | Out-Null
     $board = Wait-UrWindow '^RoRoRo Ur Score$' $seconds
     if (-not $board) { throw 'the board window never appeared' }
     # Start is enabled once the score book has been read.
     Wait-Until { $start = Find-ByAutomationId (Get-BoardWindow) 'StartStopButton'; $start -and $start.Current.IsEnabled } $seconds | Out-Null
+    # Every walk's first move from here is Setup, directly or through Open-SetupPage / Complete-ClanImport /
+    # Initialize-ClanBoard: wait until it is actually in the tree before handing the window back, so an early
+    # caller can't race a window UI Automation can't see the children of yet (the bug behind
+    # walk-starter-board.ps1's one-off "element not found" before its first check).
+    $hasSetup = Wait-Until { [bool](Find-ByAutomationId (Get-BoardWindow) 'SetupButton') } $seconds
+    if (-not $hasSetup) { throw 'the board window appeared but SetupButton never showed up' }
     Start-Sleep -Seconds 1
     return Get-BoardWindow
 }

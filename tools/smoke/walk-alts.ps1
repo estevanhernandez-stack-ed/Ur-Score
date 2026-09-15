@@ -80,10 +80,32 @@ try {
         $subtitle = Line $card 'PanelSubtitle'
         Check '6 The card shows the picked account' ($subtitle.StartsWith($pickName)) "picked '$pickName'; card '$subtitle'; note '$(Line $card 'PanelNote')'"
 
+        # 6b. The pick's own redraw puts keyboard focus back in the table (Task 5's fix; AccountsTableFocusTests
+        # covers the logic, this proves the real DataGrid lands focus somewhere under AccountsGrid, not just off it).
+        $focusedName = try { $AE::FocusedElement.Current.Name } catch { '(none)' }
+        $focusedId = try { $AE::FocusedElement.Current.AutomationId } catch { '' }
+        Check '6b Keyboard focus stays in the table after the pick' (Test-FocusWithin (Get-AccountsGrid)) "focused name='$focusedName' id='$focusedId'"
+
         # 7. The total sums Diamonds (the first stat column); the rank column stays blank.
         $total = @(Get-GridRows (Get-AccountsGrid)) | Where-Object { $_.Current.Name -eq 'Total' } | Select-Object -First 1
         $totalTexts = @(Get-AllTexts $total)
         Check '7 The total row sums what adds up' ($totalTexts.Count -ge 2 -and $totalTexts[0] -eq 'Total' -and ($totalTexts[1] -match '^[\d,]+$' -or $totalTexts[1] -eq $dash)) ($totalTexts -join ' | ')
+
+        # 7b. A refresh (Test now) doesn't scroll the board back to wherever the table is (Task 5's fix: a data
+        # refresh leaves focus and scrolling alone, only a sort or pick this table raised may restore them).
+        $scrollable = Get-BoardScrollPercent (Get-BoardWindow)
+        if ($scrollable -eq -1) {
+            Skip '7b A refresh does not scroll the board' 'board is not tall enough to scroll' 'BoardScroll.VerticallyScrollable=false'
+        }
+        else {
+            Set-BoardScrollPercent (Get-BoardWindow) 80
+            $before = Get-BoardScrollPercent (Get-BoardWindow)
+            Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton')
+            Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10 | Out-Null
+            Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240 | Out-Null
+            $after = Get-BoardScrollPercent (Get-BoardWindow)
+            Check '7b A refresh does not scroll the board' ([Math]::Abs($after - $before) -le 2) "scrolled to $before before Test now, $after after"
+        }
     }
 
     # 8. Sorting and picking are this session's only.
