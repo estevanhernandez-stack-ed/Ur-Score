@@ -178,6 +178,29 @@ public class ScoreBookReaderTests
         Assert.Equal(3, reader.Readings(Slug));
     }
 
+    [Fact]
+    public void MalformedLinesInTheBookAreSkippedAndTheRestLoads()
+    {
+        using var dir = TempDir.Create("urscore-reader");
+        var nullInput = BookJson.Serialize(Final("X", Now.AddDays(-3), 1, 9)).Replace("\"clan\":\"K0i2\"", "\"clan\":null", StringComparison.Ordinal);
+        var noValues = BookJson.Serialize(Read(Now.AddMinutes(-4), 5)).Replace("{\"v\":{\"value\":5}}", "{}", StringComparison.Ordinal);
+        Assert.Contains("\"clan\":null", nullInput);
+        Assert.Contains("\"111\":{}", noValues);
+
+        var file = BookFiles.MonthFile(dir.Path, Slug, Now);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, string.Join("\n",
+            BookJson.Serialize(Read(Now.AddMinutes(-9), 1)), nullInput, BookJson.Serialize(Final("B", Now.AddDays(-1), 4200, 1)),
+            noValues, BookJson.Serialize(Read(Now.AddMinutes(-2), 2))) + "\n", new UTF8Encoding(false));
+
+        var reader = new ScoreBookReader(dir.Path, new ManualTime(Now));
+        reader.Load([Slug]);
+
+        Assert.Equal(2, reader.Readings(Slug));
+        Assert.Equal(new[] { 1d, 2d }, reader.Series("s-1", 111, "value", null, DateTimeOffset.MinValue).Select(p => p.Value).ToArray());
+        Assert.Equal(new[] { "B" }, reader.Finals(Slug, Source.KeyOf(K0i2)).Select(f => f.Period).ToArray());
+    }
+
     private static void WriteBook(string root, IEnumerable<BookLine> lines)
     {
         foreach (var month in lines.GroupBy(l => BookFiles.MonthFile(root, l.Recipe.Slug, l.T)))

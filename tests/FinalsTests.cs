@@ -133,4 +133,26 @@ public class FinalsTests
         Assert.True(index.HasAccount(Clan.Slug, key, "A", 111));
         Assert.False(index.HasAccount(Clan.Slug, key, "A", 222));
     }
+
+    [Fact]
+    public void AMalformedLineInTheBookIsSkippedAndTheIndexStillLoads()
+    {
+        using var dir = TempDir.Create("urscore-finals");
+        var lines = FinalsPlanner.Plan(Context(), Reading("C", null, Past("A", Row(111, 300)), Past("B", Row(111, 90))), Map, Points, new FinalsIndex(), null);
+        var a = BookJson.Serialize(lines[0]);
+        var broken = BookJson.Serialize(lines[1] with { Period = new BookPeriod("X") }).Replace("\"clan\":\"K0i2\"", "\"clan\":null", StringComparison.Ordinal);
+        var b = BookJson.Serialize(lines[1]);
+        Assert.Contains("\"clan\":null", broken);
+
+        var file = BookFiles.MonthFile(dir.Path, Clan.Slug, At);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, a + "\n" + broken + "\n" + b + "\n", new System.Text.UTF8Encoding(false));
+
+        var index = FinalsIndex.Load(dir.Path);
+        var key = Context().Source.InputsKey;
+
+        Assert.True(index.HasClan(Clan.Slug, key, "A"));
+        Assert.True(index.HasClan(Clan.Slug, key, "B"));
+        Assert.False(index.HasClan(Clan.Slug, key, "X"));
+    }
 }

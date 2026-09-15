@@ -39,12 +39,22 @@ public sealed class FinalsIndex
         lock (_gate) return _accounts.Contains((slug, inputsKey, period, userId));
     }
 
+    /// <summary>A line that can't be indexed (a corrupt one that slipped past <see cref="BookJson.TryParse"/>) is skipped, never the book.</summary>
     public static FinalsIndex Load(string root)
     {
         var index = new FinalsIndex();
         foreach (var slug in BookFiles.Slugs(root))
         {
-            foreach (var line in BookFiles.ReadAll(root, slug)) index.Add(line);
+            foreach (var line in BookFiles.ReadAll(root, slug))
+            {
+                try
+                {
+                    index.Add(line);
+                }
+                catch (Exception)
+                {
+                }
+            }
         }
 
         return index;

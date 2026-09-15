@@ -59,7 +59,10 @@ public static class BookJson
 
     public static string Serialize(BookLine line) => JsonSerializer.Serialize(line, Options);
 
-    /// <summary>A line that isn't valid JSON, carries NUL, or has an unknown <c>v</c> is null, and a reader skips it.</summary>
+    /// <summary>
+    /// A line that isn't valid JSON, carries NUL, has an unknown <c>v</c>, or is missing a part a reader relies on
+    /// (see <see cref="Complete"/>) is null, and a reader skips it.
+    /// </summary>
     public static BookLine? TryParse(string text)
     {
         if (string.IsNullOrWhiteSpace(text) || text.Contains('\0')) return null;
@@ -67,15 +70,27 @@ public static class BookJson
         try
         {
             var line = JsonSerializer.Deserialize<BookLine>(text, Options);
-            return line is { V: BookLine.Version, Kind: not null, Recipe: not null, Inputs: not null, Headline: not null, Stats: not null, Accounts: not null }
-                ? line
-                : null;
+            return line is { V: BookLine.Version } && Complete(line) ? line : null;
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or FormatException)
         {
             return null;
         }
     }
+
+    /// <summary>
+    /// JSON nulls nested in a hand-edited or corrupted line (<c>"inputs":{"clan":null}</c>, an account with no
+    /// <c>v</c>, <c>"recipe":{}</c>) deserialize without complaint and would throw later, in the finals index or a
+    /// panel, taking the whole book load with them. Such a line is not a line.
+    /// </summary>
+    private static bool Complete(BookLine line) =>
+        line is { Kind: not null, Recipe: not null, Inputs: not null, Headline: not null, Stats: not null, Accounts: not null }
+        && !string.IsNullOrEmpty(line.Recipe.Slug)
+        && !string.IsNullOrEmpty(line.Recipe.Hash)
+        && line.Inputs.Values.All(v => v is not null)
+        && line.Stats.All(s => s is not null)
+        && line.Accounts.Values.All(a => a?.V is not null)
+        && (line.Kind != BookLine.KindFinal || !string.IsNullOrEmpty(line.Period?.Value));
 
     /// <summary>Always UTC with a Z and milliseconds, so lines sort and compare as text.</summary>
     private sealed class UtcTimeConverter : JsonConverter<DateTimeOffset>

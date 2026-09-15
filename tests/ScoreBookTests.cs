@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Recipes;
 
@@ -44,6 +45,26 @@ public class ScoreBookTests
     [InlineData("""{"v":2,"kind":"read"}""")]
     [InlineData("{\"v\":1,\"kind\":\"read\"\0}")]
     public void ALineThatIsBrokenOrFromANewerFormatIsSkipped(string text) => Assert.Null(BookJson.TryParse(text));
+
+    [Theory]
+    [InlineData(BookLine.KindRead, @"""inputs"":\{[^}]*\}", @"""inputs"":{""clan"":null}")]
+    [InlineData(BookLine.KindFinal, @"""inputs"":\{[^}]*\}", @"""inputs"":{""clan"":null}")]
+    [InlineData(BookLine.KindRead, @"""accounts"":\{.*\}\}$", @"""accounts"":{""1"":{}}}")]
+    [InlineData(BookLine.KindFinal, @"""accounts"":\{.*\}\}$", @"""accounts"":{""1"":null}}")]
+    [InlineData(BookLine.KindRead, @"""recipe"":\{[^}]*\}", @"""recipe"":{}")]
+    [InlineData(BookLine.KindRead, @"""hash"":""[0-9a-f]+""", @"""hash"":""""")]
+    [InlineData(BookLine.KindRead, @"""stats"":\[[^\]]*\]", @"""stats"":[""value"",null]")]
+    [InlineData(BookLine.KindFinal, @"""period"":\{[^}]*\}", @"""period"":{""value"":""""}")]
+    [InlineData(BookLine.KindFinal, @"""period"":\{[^}]*\},", "")]
+    public void ALineWithANestedNullOrAMissingPartIsSkipped(string kind, string pattern, string replacement)
+    {
+        var good = BookJson.Serialize(Line(T, kind));
+        var broken = Regex.Replace(good, pattern, replacement);
+
+        Assert.NotNull(BookJson.TryParse(good));
+        Assert.NotEqual(good, broken);
+        Assert.Null(BookJson.TryParse(broken));
+    }
 
     [Fact]
     public void TheHashIsSixteenLowercaseHexDigitsOfTheRecipeText()
