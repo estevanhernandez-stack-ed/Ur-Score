@@ -5306,12 +5306,12 @@ Run this against RoRoRo 1.28 with your own accounts. Record each numbered result
   - Step 11 a live walk → Task 9; §11's stage 2 walks → Task 9.
   - §13 Boards: `boards.json` round-trip (Task 1), starter boards built from the sources present (stage 1 tests plus Task 1's named starters), a stale panel setting shows its message (stage 1's `PanelModelsTests` plus Task 4's problems and Task 9 step 7).
 - **Placeholders:** none; every step names exact files, code and commands.
-- **Types against the stage 1 tree:** `PanelSettings(Recipe, SourceId, SourceIds, ToSourceId, Stat, UserId)`, `PanelType`, `LiveBoard.FindSource/FindRecipe/SourceName/MyUserIds/Accounts`, `StarterBoard(Name, Empty, Panels, AnchorSourceId, RecipeSlug)`, `PanelSpec(Type, Span, Settings)`, `BoardLayout.Flow(IReadOnlyList<int>, double)`, `PanelViews.Create/Render`, `BoardText.EmptyState/TopLine/StateLine/DetailLine/Attribution`, `AppServices.CurrentBoard/KnownAccounts/RaiseChanged/AddTrail/Redactor`, `RecipeStats.Offered/Find`, `RecipeState.TrackedStats/StatChoices`, `RecipeWords.Group/GroupsLower/Period/Periods/Capital/Lower` are used as they are in `src/` on `feat/score-book`.
+- **Types against the stage 1 tree:** `PanelSettings(Recipe, SourceId, SourceIds, ToSourceId, Stat, UserId)`, `PanelType`, `LiveBoard.FindSource/FindRecipe/SourceName/MyUserIds/Accounts`, `StarterBoard(Name, Empty, Panels, AnchorSourceId, RecipeSlug)`, `PanelSpec(Type, Span, Settings)`, `BoardLayout.Flow(IReadOnlyList<int>, double)`, `PanelViews.Create/Render`, `BoardText.EmptyState/TopLine/StateLine/DetailLine/Attribution`, `AppServices.CurrentBoard/KnownAccounts/RaiseChanged/AddTrail/Redactor`, `RecipeStats.Offered/Find`, `RecipeState.TrackedStats/StatChoices`, `RecipeWords.Group/GroupsLower/Period/Periods/Capital/Lower` are used as they are in `src/` on master at v0.2.0 (`f0353ee`).
 
 ## After stage 2: release (the controller does these)
 
 1. **Version:** set `0.3.0` in `manifest.json` (`"version"`) and in `Ur-Score.csproj` (`<Version>`). Commit `release: 0.3.0`.
-2. **Merge:** open the PR from `feat/score-book` to `master`, wait for the `test` workflow to pass, then merge.
+2. **Merge (ask Este first; v0.3.0 is not pre-authorized):** open the PR from `feat/boards` to `master`, wait for the `test` workflow to pass, then merge.
 3. **Tag and release:** tag `v0.3.0` on `master` and push the tag. The `release` workflow checks that the tag, `manifest.json` and the csproj agree, runs the tests, builds the plugin with .NET included, and attaches `manifest.json`, `manifest.sha256` and `plugin.zip`. Confirm all three are on the release.
 4. **Install from the release, not the build folder:**
    - Back up `%LOCALAPPDATA%\ROROROblox\plugins\626labs.ur-score` to the session scratchpad and remove it. Leave `%LOCALAPPDATA%\626labs.ur-score` (your data, including `boards.json`) in place.
