@@ -220,6 +220,41 @@ public class PanelModelsTests
     }
 
     [Fact]
+    public void MyAccountsReadsPlaytimeAsADurationAndADateWithNoChange()
+    {
+        // Final review Important 2, under the Task 3 ruling: My accounts fits the profile recipe too, so a duration's value
+        // and its change read as time ("+2h 0m in 2h 55m", not "+7.2K in 2h 55m"), and a date has no change.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id,
+        [
+            new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["playtime"] = 50_651_629, ["first-join"] = 1_600_000_000 }),
+            new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["playtime"] = 3_600, ["first-join"] = 1_700_000_000 }),
+        ]);
+        var live = Live([profile], [Installed(Profile, "playtime", "first-join")], Snaps(snapshot));
+        var playtimeBook = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "playtime", (Main.RobloxUserId, 50_644_429)),
+            Read(profile, Now.AddMinutes(-5), null, null, "playtime", (Main.RobloxUserId, 50_651_629)));
+        var dateBook = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "first-join", (Main.RobloxUserId, 1_600_000_000)),
+            Read(profile, Now.AddMinutes(-5), null, null, "first-join", (Main.RobloxUserId, 1_600_000_000)));
+
+        var playtime = PanelModels.MyAccounts(live, playtimeBook, new PanelSettings(Profile.Slug, Stat: "playtime"));
+        var main = playtime.Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId);
+        var alt = playtime.Groups.SelectMany(g => g.Rows).Single(r => r.UserId == AltOne.RobloxUserId);
+
+        Assert.Equal("586d 5h", main.Value);
+        Assert.Equal($"+2h 0m in {StatText.Span(TimeSpan.FromMinutes(175))}", main.Change);
+        Assert.Equal("1h 0m", alt.Value);
+        Assert.Equal("no earlier read", alt.Change);
+
+        var firstJoined = PanelModels.MyAccounts(live, dateBook, new PanelSettings(Profile.Slug, Stat: "first-join"));
+        var joined = firstJoined.Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId);
+
+        Assert.Equal("13 Sep 2020", joined.Value);
+        Assert.Equal(StatText.Dash, joined.Change);
+    }
+
+    [Fact]
     public void MyAccountsForAStatNoLongerOfferedIsStale()
     {
         var model = PanelModels.MyAccounts(Live([], [Installed(Clan, "value")], Snaps()), Reader(), new PanelSettings(Clan.Slug, Stat: "counter:Gone"));
@@ -658,5 +693,22 @@ public class PanelModelsTests
         Assert.Equal(new[] { "Rival", "estehernandez", "Member 7" }, model.Rows.Select(r => r.Name).ToArray());
         Assert.Equal(new[] { false, true, false }, model.Rows.Select(r => r.Yours).ToArray());
         Assert.Equal("Live only. Never saved.", model.Head.Note);
+    }
+
+    [Fact]
+    public void TheLiveLeaderboardWritesEachStatInItsFormat()
+    {
+        // Final review Minor 1: no list recipe has a format yet, so the profile recipe stands in for one that does.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var live = Live([profile], [Installed(Profile, "diamonds", "playtime", "first-join")], Snaps(Snapshot(profile.Id,
+        [
+            new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 215_850_364, ["playtime"] = 50_651_629, ["first-join"] = 1_600_000_000 }),
+            new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 1_000 }),
+        ])));
+
+        var model = PanelModels.LiveLeaderboard(live, new PanelSettings(Profile.Slug, SourceId: profile.Id), new Dictionary<long, string>());
+
+        Assert.Equal(new[] { "215,850,364", "586d 5h", "13 Sep 2020" }, model.Rows.Single(r => r.Name == Main.DisplayName).Cells);
+        Assert.Equal(new[] { "1,000", StatText.Dash, StatText.Dash }, model.Rows.Single(r => r.Name == AltOne.DisplayName).Cells);
     }
 }

@@ -265,6 +265,7 @@ public static class PanelModels
         }
 
         var group = RecipeWords.Group(recipe);
+        var zone = live.Time.LocalTimeZone;
         var assigned = new HashSet<long>();
         var groups = new List<AccountGroupModel>();
         var overdue = false;
@@ -296,9 +297,9 @@ public static class PanelModels
                 lines.Add((value, new AccountLineModel(
                     account.RobloxUserId,
                     account.DisplayName,
-                    PanelText.Full(value),
+                    PanelText.Value(value, stat.Format, zone),
                     value is not null && ranks.TryGetValue(account.RobloxUserId, out var rank) ? $"#{rank} of {rows.Count}" : Dash,
-                    Records.Change(series[account.RobloxUserId], live.Now),
+                    RecentChange(series[account.RobloxUserId], stat.Format),
                     sent,
                     Records.Stalled(series[account.RobloxUserId], others),
                     value is null)));
@@ -789,10 +790,11 @@ public static class PanelModels
         if (live.SnapshotOf(source.Id)?.Rows is not { } rows) return new LeaderboardModel(head, columns, []);
 
         var ranked = Leaderboard.Rank(rows, live.MyUserIds, shown[0].Key);
+        var zone = live.Time.LocalTimeZone;
         return new LeaderboardModel(head, columns, [.. ranked.Select(r => new LeaderRow(
             r.Position.ToString(CultureInfo.InvariantCulture),
             r.IsMine ? live.AccountName(r.UserId) : names.GetValueOrDefault(r.UserId) ?? $"Member {r.UserId}",
-            [.. shown.Select(s => r.Values.TryGetValue(s.Key, out var v) ? StatText.Number(v) : Dash)],
+            [.. shown.Select(s => PanelText.Value(r.Values.TryGetValue(s.Key, out var v) ? v : null, s.Format, zone))],
             r.IsMine))]);
     }
 
@@ -826,6 +828,15 @@ public static class PanelModels
         var text = PanelText.Change(last.Value - from.Value, format);
         return baseline is null ? $"{text} in {StatText.Span(last.T - from.T)}" : text;
     }
+
+    /// <summary>
+    /// <see cref="Records.Change"/>'s recent change ("+220K in 1h") written in the stat's format: a duration's rise reads
+    /// as time ("+2h 0m in 3h"), and a date has no change.
+    /// </summary>
+    private static string RecentChange(IReadOnlyList<SeriesPoint> series, StatFormat format) =>
+        format == StatFormat.Date ? Dash
+        : Records.Movement(series) is not { } moved ? Records.NoEarlierRead
+        : $"{PanelText.Change(moved.Delta, format)} in {StatText.Span(moved.Span)}";
 
     private sealed record RankedGroup(GroupRow Row, int Rank, double? Value);
 

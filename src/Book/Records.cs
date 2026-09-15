@@ -64,9 +64,21 @@ public static class Records
     /// "+220K in 1h": the last value against the latest reading at least an hour before it, or the first
     /// reading when all are within the hour. <paramref name="now"/> is kept for callers that show "ago" beside it.
     /// </summary>
-    public static string Change(IReadOnlyList<SeriesPoint> series, DateTimeOffset now)
+    public static string Change(IReadOnlyList<SeriesPoint> series, DateTimeOffset now) =>
+        Movement(series) is not { } moved
+            ? NoEarlierRead
+            : $"{(moved.Delta < 0 ? "-" : "+")}{StatText.Abbrev(Math.Abs(moved.Delta))} in {StatText.Span(moved.Span)}";
+
+    /// <summary>What <see cref="Change"/> says with fewer than two readings.</summary>
+    public const string NoEarlierRead = "no earlier read";
+
+    /// <summary>
+    /// The rise <see cref="Change"/> writes and the span it covers, for a caller that writes the rise its own way
+    /// (a duration as time); null with fewer than two readings.
+    /// </summary>
+    public static (double Delta, TimeSpan Span)? Movement(IReadOnlyList<SeriesPoint> series)
     {
-        if (series.Count < 2) return "no earlier read";
+        if (series.Count < 2) return null;
 
         var last = series[^1];
         var target = last.T - TimeSpan.FromHours(1);
@@ -80,8 +92,7 @@ public static class Records
             }
         }
 
-        var delta = last.Value - earlier.Value;
-        return $"{(delta < 0 ? "-" : "+")}{StatText.Abbrev(Math.Abs(delta))} in {StatText.Span(last.T - earlier.T)}";
+        return (last.Value - earlier.Value, last.T - earlier.T);
     }
 
     private static double? BiggestDay(IReadOnlyList<SeriesPoint> series)
