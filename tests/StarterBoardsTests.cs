@@ -120,4 +120,22 @@ public class StarterBoardsTests
         Assert.Equal(one.Key, same.Key);
         Assert.NotEqual(one.Key, more.Key);
     }
+
+    [Fact]
+    public void AStarterCanBeAskedForByName()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        InstalledRecipe[] installed = [Installed(Clan, "value"), Installed(Profile, "diamonds")];
+        Source[] sources = [MainClan, profile];
+
+        Assert.Equal(StarterBoards.Battle, StarterBoards.Build(installed, sources).Name);
+
+        var grind = StarterBoards.Build(installed, sources, StarterBoards.Grind);
+        Assert.Equal(StarterBoards.Grind, grind.Name);
+        Assert.Equal(PanelType.ProfileStat, grind.Panels[0].Type);
+        Assert.Equal(Profile.Slug, grind.Panels[0].Settings.Recipe);
+
+        Assert.Empty(StarterBoards.Build([Installed(Clan, "value")], [MainClan], StarterBoards.Grind).Panels);
+        Assert.Empty(StarterBoards.Build([Installed(Profile, "diamonds")], [profile], StarterBoards.Battle).Panels);
+    }
 }

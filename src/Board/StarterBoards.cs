@@ -8,7 +8,7 @@ using Source = Labs626.UrScore.Core.Source;
 /// <summary>One panel on a board: its type, how many of the 12 columns it spans, and what it shows.</summary>
 public sealed record PanelSpec(PanelType Type, int Span, PanelSettings Settings);
 
-public enum BoardEmpty { None, NoRecipes, NoStats, NoSources }
+public enum BoardEmpty { None, NoRecipes, NoStats, NoSources, NoPanels }
 
 public sealed record StarterBoard(string Name, BoardEmpty Empty, IReadOnlyList<PanelSpec> Panels, string? AnchorSourceId, string? RecipeSlug)
 {
@@ -26,20 +26,33 @@ public static class StarterBoards
     public const string Battle = "Battle";
     public const string Grind = "Grind";
 
-    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources)
+    /// <summary>
+    /// Stage 1's board, or a named starter for + Board (spec §9.2). With no name, Battle when a recipe with a
+    /// period has ticked stats, else Grind. A named starter that can't be built has no panels.
+    /// </summary>
+    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string? name = null)
     {
-        if (installed.Count == 0) return new StarterBoard(Battle, BoardEmpty.NoRecipes, [], null, null);
+        if (installed.Count == 0) return new StarterBoard(name ?? Battle, BoardEmpty.NoRecipes, [], null, null);
 
         var ticked = installed.Where(i => !i.Recipe.IsGroupList && i.State.TrackedStats(i.Recipe).Count > 0).ToList();
         if (ticked.Count == 0)
         {
             var first = installed.FirstOrDefault(i => !i.Recipe.IsGroupList) ?? installed[0];
-            return new StarterBoard(Battle, BoardEmpty.NoStats, [], null, first.Recipe.Slug);
+            return new StarterBoard(name ?? Battle, BoardEmpty.NoStats, [], null, first.Recipe.Slug);
         }
 
         var enabled = sources.Where(s => s.Enabled).ToList();
         var withPeriod = ticked.Where(i => i.Recipe.Period is not null).ToList();
-        return withPeriod.Count > 0 ? BattleBoard(installed, withPeriod, enabled) : GrindBoard(ticked, enabled);
+        var withoutPeriod = ticked.Where(i => i.Recipe.Period is null).ToList();
+
+        return name switch
+        {
+            Battle when withPeriod.Count == 0 => new StarterBoard(Battle, BoardEmpty.NoStats, [], null, ticked[0].Recipe.Slug),
+            Battle => BattleBoard(installed, withPeriod, enabled),
+            Grind when withoutPeriod.Count == 0 => new StarterBoard(Grind, BoardEmpty.NoStats, [], null, ticked[0].Recipe.Slug),
+            Grind => GrindBoard(withoutPeriod, enabled),
+            _ => withPeriod.Count > 0 ? BattleBoard(installed, withPeriod, enabled) : GrindBoard(ticked, enabled),
+        };
     }
 
     /// <summary>The first shown stat in recipe order, else the first sent one.</summary>
