@@ -25,7 +25,13 @@ public partial class PanelSettingsWindow : Window
     private readonly PanelType _type;
     private readonly LiveBoard _live;
     private readonly PanelSettings? _current;
-    private readonly IReadOnlyList<PanelField> _fields;
+    private readonly FormValues? _saved;
+    private readonly bool _adding;
+
+    /// <summary>A saved value a shown list no longer offers, by field: checked as the form's value until you pick another (<see cref="PanelForms.Pick"/>).</summary>
+    private readonly Dictionary<PanelField, string> _held = [];
+
+    private IReadOnlyList<PanelField> _fields;
     private bool _filling;
 
     public PanelSettingsWindow(PanelType type, string title, LiveBoard live, PanelSettings? current, bool adding)
@@ -36,6 +42,8 @@ public partial class PanelSettingsWindow : Window
         _type = type;
         _live = live;
         _current = current;
+        _saved = current is null ? null : PanelForms.From(current);
+        _adding = adding;
         _fields = PanelForms.Fields(type, adding);
 
         Title = adding ? $"Add {title}" : "Panel settings";
@@ -59,7 +67,7 @@ public partial class PanelSettingsWindow : Window
         StatRow.Visibility = Shows(PanelField.Stat);
         AccountRow.Visibility = Shows(PanelField.Account);
 
-        Fill(current is null ? PanelForms.Defaults(type, live) : PanelForms.From(current));
+        Fill(_saved ?? PanelForms.Defaults(type, live));
         Check();
     }
 
@@ -68,24 +76,37 @@ public partial class PanelSettingsWindow : Window
 
     private Visibility Shows(PanelField field) => _fields.Contains(field) ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>Refills every list from the values, keeping each pick while it is still offered. A field the form doesn't show falls back to its first choice.</summary>
+    /// <summary>
+    /// Refills every list from the values, keeping each pick while it is still offered. A field the form doesn't show
+    /// falls back to its first choice; a saved value a shown field no longer offers is held and checked, never blanked
+    /// into a default (<see cref="PanelForms.Pick"/>).
+    /// </summary>
     private void Fill(FormValues values)
     {
         _filling = true;
         try
         {
-            Pick(SourceBox, PanelField.Source, PanelForms.SourceChoices(_type, PanelField.Source, _live, values), values.Source);
-            var withSource = values with { Source = (SourceBox.SelectedItem as FormChoice)?.Key };
+            var withSource = values;
+            if (_type != PanelType.ProfileStat)
+            {
+                Pick(SourceBox, PanelField.Source, PanelForms.SourceChoices(_type, PanelField.Source, _live, values), values.Source);
+                withSource = values with { Source = KeyOf(SourceBox, PanelField.Source) };
+            }
 
             Pick(ToSourceBox, PanelField.ToSource, PanelForms.SourceChoices(_type, PanelField.ToSource, _live, withSource), values.ToSource);
             Pick(StatBox, PanelField.Stat, PanelForms.StatChoices(_type, _live, withSource, _current), values.Stat);
             Pick(AccountBox, PanelField.Account, PanelForms.AccountChoices(_live), values.Account);
 
-            // Profile stat's source list follows the stat just picked.
+            // Profile stat's source list follows the stat just picked, and always shows the source the panel reads: the
+            // one picked while the stat's recipe has it, else the one it falls back to. Adding asks for it only when
+            // that isn't the recipe's one source that is on, so what is saved is a source you saw.
             if (_type == PanelType.ProfileStat)
             {
-                var withStat = withSource with { Stat = (StatBox.SelectedItem as FormChoice)?.Key };
-                Pick(SourceBox, PanelField.Source, PanelForms.SourceChoices(_type, PanelField.Source, _live, withStat), values.Source);
+                var withStat = values with { Stat = KeyOf(StatBox, PanelField.Stat) };
+                _fields = PanelForms.Fields(_type, _adding, _live, withStat);
+                SourceRow.Visibility = Shows(PanelField.Source);
+                Pick(SourceBox, PanelField.Source, PanelForms.SourceChoices(_type, PanelField.Source, _live, withStat),
+                    PanelForms.Build(_type, withStat, _live).SourceId);
             }
 
             var picked = (values.Sources ?? []).ToHashSet(StringComparer.Ordinal);
@@ -101,16 +122,32 @@ public partial class PanelSettingsWindow : Window
 
     private void Pick(ComboBox box, PanelField field, IReadOnlyList<FormChoice> choices, string? key)
     {
+        var pick = PanelForms.Pick(choices, key, _fields.Contains(field), SavedKey(field));
         box.ItemsSource = choices;
-        box.SelectedItem = choices.FirstOrDefault(c => c.Key == key) ?? (_fields.Contains(field) ? null : choices.FirstOrDefault());
+        box.SelectedItem = pick.Selected;
+
+        if (pick.Held is { } held) _held[field] = held;
+        else _held.Remove(field);
     }
 
+    /// <summary>The field's value: its pick, else the saved value it holds.</summary>
+    private string? KeyOf(ComboBox box, PanelField field) => (box.SelectedItem as FormChoice)?.Key ?? _held.GetValueOrDefault(field);
+
+    private string? SavedKey(PanelField field) => field switch
+    {
+        PanelField.Source => _saved?.Source,
+        PanelField.ToSource => _saved?.ToSource,
+        PanelField.Stat => _saved?.Stat,
+        PanelField.Account => _saved?.Account,
+        _ => null,
+    };
+
     private FormValues Values() => new(
-        Source: (SourceBox.SelectedItem as FormChoice)?.Key,
+        Source: KeyOf(SourceBox, PanelField.Source),
         Sources: RaceSources.Items.OfType<RaceChoice>().Where(c => c.Picked).Select(c => c.Key).ToList(),
-        ToSource: (ToSourceBox.SelectedItem as FormChoice)?.Key,
-        Stat: (StatBox.SelectedItem as FormChoice)?.Key,
-        Account: (AccountBox.SelectedItem as FormChoice)?.Key);
+        ToSource: KeyOf(ToSourceBox, PanelField.ToSource),
+        Stat: KeyOf(StatBox, PanelField.Stat),
+        Account: KeyOf(AccountBox, PanelField.Account));
 
     /// <summary>Shows what's wrong with the form as it stands, and returns it.</summary>
     private string? Check()

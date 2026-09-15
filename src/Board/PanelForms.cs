@@ -15,6 +15,12 @@ public sealed record FormChoice(string Key, string Label)
     public override string ToString() => Label;
 }
 
+/// <summary>
+/// What one list in a form shows for a value: the choice picked, or none. <paramref name="Held"/> is a saved value the
+/// list no longer offers, which the form keeps checking until you pick another, so it is never blanked silently.
+/// </summary>
+public sealed record FormPick(FormChoice? Selected, string? Held);
+
 /// <summary>What a form holds before it becomes <see cref="PanelSettings"/>.</summary>
 public sealed record FormValues(string? Source = null, IReadOnlyList<string>? Sources = null, string? ToSource = null, string? Stat = null, string? Account = null);
 
@@ -72,6 +78,33 @@ public static class PanelForms
             _ => Array.Empty<PanelField>(),
         };
         return [.. needs, .. extra];
+    }
+
+    /// <summary>
+    /// The fields a form shows for these values: <see cref="Fields(PanelType, bool)"/>, except that adding a Profile stat
+    /// also shows its source when the stat's recipe has more than one, or only one that is off, so the source saved is
+    /// always one you saw (R14). With one source that is on, that one is saved.
+    /// </summary>
+    public static IReadOnlyList<PanelField> Fields(PanelType type, bool adding, LiveBoard live, FormValues values)
+    {
+        var fields = Fields(type, adding);
+        if (type != PanelType.ProfileStat || fields.Contains(PanelField.Source)) return fields;
+
+        var sources = SourceChoices(type, PanelField.Source, live, values).Select(c => live.FindSource(c.Key)).ToList();
+        return sources.Count > 1 || sources.Any(s => s?.Enabled != true) ? [.. fields, PanelField.Source] : fields;
+    }
+
+    /// <summary>
+    /// What a list shows for <paramref name="key"/>: that choice while it is offered. Else a hidden field takes its first
+    /// choice; a shown one shows none, and holds the key when it is the <paramref name="saved"/> value, so the form's
+    /// problem line names what is wrong with it (a removed clan, an account not listed) instead of saving a default.
+    /// </summary>
+    public static FormPick Pick(IReadOnlyList<FormChoice> choices, string? key, bool shown, string? saved)
+    {
+        if (choices.FirstOrDefault(c => c.Key == key) is { } offered) return new FormPick(offered, null);
+        if (!shown) return new FormPick(choices.FirstOrDefault(), null);
+
+        return new FormPick(null, key is not null && key == saved ? key : null);
     }
 
     /// <summary>Sources that fit, main first, then yours, then watched. Promotion check's "to" is another source of the "from" recipe.</summary>

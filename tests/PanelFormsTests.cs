@@ -41,6 +41,50 @@ public class PanelFormsTests
         Assert.Equal(expected, PanelForms.Fields(type, adding).ToArray());
 
     [Fact]
+    public void AddingAProfileStatAsksForItsSourceWhenItIsntTheOnlyOneOn()
+    {
+        var stat = new FormValues(Stat: PanelForms.StatKey(Profile.Slug, "diamonds"));
+        var second = SourceOf("s-00000019", Profile, null, SourceRole.Mine);
+        LiveBoard LiveWith(params Source[] sources) => Live(sources, [Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>());
+
+        // One source, on: nothing to ask, and it is the one saved.
+        Assert.Equal(new[] { PanelField.Stat }, PanelForms.Fields(PanelType.ProfileStat, true, LiveWith(ProfileSource), stat).ToArray());
+
+        // Two sources, or only one that is off: the form shows the source, so what is saved is one you saw.
+        var two = LiveWith(ProfileSource with { Enabled = false }, second);
+        Assert.Equal(new[] { PanelField.Stat, PanelField.Source }, PanelForms.Fields(PanelType.ProfileStat, true, two, stat).ToArray());
+        Assert.Equal(second.Id, PanelForms.Build(PanelType.ProfileStat, stat, two).SourceId);
+        Assert.Equal(new[] { PanelField.Stat, PanelField.Source },
+            PanelForms.Fields(PanelType.ProfileStat, true, LiveWith(ProfileSource with { Enabled = false }), stat).ToArray());
+
+        // Every other form is as Fields(type, adding) says.
+        Assert.Equal(new[] { PanelField.Stat, PanelField.Source }, PanelForms.Fields(PanelType.ProfileStat, false, LiveWith(ProfileSource), stat).ToArray());
+        Assert.Equal(new[] { PanelField.Account }, PanelForms.Fields(PanelType.AccountCard, true, two, stat).ToArray());
+    }
+
+    [Fact]
+    public void ASavedPickNoLongerOfferedIsHeldAndCheckedNotBlanked()
+    {
+        var choices = new[] { new FormChoice(PanelForms.TopAccountKey, "Your top account"), new FormChoice("101", "estehernandez") };
+
+        Assert.Equal(new FormPick(choices[1], null), PanelForms.Pick(choices, "101", shown: true, saved: "201"));
+        Assert.Equal(new FormPick(null, "201"), PanelForms.Pick(choices, "201", shown: true, saved: "201"));
+        Assert.Equal(new FormPick(null, null), PanelForms.Pick(choices, "999", shown: true, saved: "201"));
+        Assert.Equal(new FormPick(null, null), PanelForms.Pick(choices, null, shown: true, saved: null));
+        Assert.Equal(new FormPick(choices[0], null), PanelForms.Pick(choices, "201", shown: false, saved: "201"));
+
+        // An Account card pinned to an account RoRoRo doesn't list now: held, the form says what's wrong, and it can't
+        // be saved as "Your top account" until you choose that. A blank pick would have saved it so, silently.
+        var live = Live([], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(), accounts: [Main]);
+        var saved = PanelForms.From(new PanelSettings(Clan.Slug, Stat: "value", UserId: AltOne.RobloxUserId));
+        var held = PanelForms.Pick(PanelForms.AccountChoices(live), saved.Account, shown: true, saved: saved.Account);
+
+        Assert.Null(held.Selected);
+        Assert.Equal("Choose one of your accounts.", PanelForms.Problem(PanelType.AccountCard, PanelForms.Build(PanelType.AccountCard, saved with { Account = held.Held }, live), live));
+        Assert.Null(PanelForms.Build(PanelType.AccountCard, saved with { Account = null }, live).UserId);
+    }
+
+    [Fact]
     public void SourcesAreOfferedMainFirstAndOnlyWhereThePanelFits()
     {
         var live = Everything();
