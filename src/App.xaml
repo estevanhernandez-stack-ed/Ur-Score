@@ -110,6 +110,41 @@
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
 
+            <!-- Bool to Visibility for bindings. Panels and Setup rows use it. -->
+            <BooleanToVisibilityConverter x:Key="BoolToVisible" />
+
+            <!-- A button that reads as a row: no fill or edge until hovered, content on the left. Search
+                 matches and panel tools use it. -->
+            <Style x:Key="FlatButton" TargetType="Button">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="8,5" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="FontFamily" Value="{StaticResource BodyFont}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid>
+                                <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="3" />
+                                <Border x:Name="Sheen" Background="{DynamicResource WhiteBrush}" CornerRadius="3"
+                                        Opacity="0" IsHitTestVisible="False" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Sheen" Property="Opacity" Value="0.08" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Sheen" Property="Opacity" Value="0.16" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style TargetType="TextBox">
                 <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                 <Setter Property="Background" Value="{DynamicResource RowBgBrush}" />

@@ -1,0 +1,41 @@
+<UserControl x:Class="Labs626.UrScore.UI.ClanSearchBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <TextBox x:Name="SearchText" TextChanged="OnTextChanged" PreviewKeyDown="OnSearchKeyDown" />
+        <!-- Matches are buttons, so a click and UI Automation's Invoke both pick. Focus stays in the text box;
+             Up and Down move the highlight and Enter picks it. -->
+        <ListBox x:Name="SearchMatches" Visibility="Collapsed" Margin="0,4,0,0" MaxHeight="260" Focusable="False"
+                 Background="{DynamicResource RowBgBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
+                 Foreground="{DynamicResource WhiteBrush}"
+                 AutomationProperties.Name="Names matching what you typed">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <Border x:Name="Item" Background="Transparent">
+                                    <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowHoverBrush}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Button Content="{Binding}" Style="{StaticResource FlatButton}" Focusable="False" Click="OnMatchClick"
+                            AutomationProperties.Name="{Binding StringFormat='Pick {0}'}" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock x:Name="SearchStatus" Style="{StaticResource Muted}" Margin="0,4,0,0" />
+    </StackPanel>
+</UserControl>

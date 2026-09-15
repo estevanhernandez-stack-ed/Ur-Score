@@ -1,0 +1,54 @@
+<Window x:Class="Labs626.UrScore.UI.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Setup" Width="1000" Height="780" MinWidth="760" MinHeight="540"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
+        FontFamily="{StaticResource BodyFont}">
+    <Window.Resources>
+        <Style x:Key="NavItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid>
+                            <Border x:Name="Item" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter />
+                            </Border>
+                            <Border x:Name="Bar" Width="2" HorizontalAlignment="Left" Margin="0,5"
+                                    Background="{DynamicResource CyanBrush}" Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowBgBrush}" />
+                                <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+                                <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="210" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0" Padding="8,12">
+            <ListBox x:Name="SetupNav" DisplayMemberPath="Title" ItemContainerStyle="{StaticResource NavItem}"
+                     Background="Transparent" BorderThickness="0" SelectionChanged="OnNavChanged"
+                     AutomationProperties.Name="Setup pages" />
+        </Border>
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ContentControl x:Name="PageHost" Margin="24,18,24,24" Focusable="False" />
+        </ScrollViewer>
+    </Grid>
+</Window>
