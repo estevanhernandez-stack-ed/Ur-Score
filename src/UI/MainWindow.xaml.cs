@@ -1222,14 +1222,14 @@ public partial class MainWindow : Window
     }
 
     /// <summary>The settings screen's "Look up stat names" read, offered only for a recipe with counters.</summary>
-    private Func<IReadOnlyDictionary<string, string>, Task<ImportWindow.CounterLookup>>? CounterLookupFor(Recipe recipe) =>
+    private Func<IReadOnlyDictionary<string, string>, Task<CounterLookup>>? CounterLookupFor(Recipe recipe) =>
         recipe.LastStep.Counters is null ? null : inputs => LookUpCounterNamesAsync(recipe, inputs);
 
     /// <summary>
     /// One read with every recipe value asked for, so the response can offer its counter names. Its
     /// own engine and no report policy: nothing read here can reach RoRoRo.
     /// </summary>
-    private async Task<ImportWindow.CounterLookup> LookUpCounterNamesAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs)
+    private async Task<CounterLookup> LookUpCounterNamesAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs)
     {
         try
         {
@@ -1241,16 +1241,16 @@ public partial class MainWindow : Window
             var reading = await engine.ReadAsync(recipe, inputs, ids, everyValue, CancellationToken.None);
             _trail.Add(Stamp($"LOOK UP STAT NAMES: {reading.Outcome}, {reading.CounterNames.Count} name(s). {reading.Detail}"));
 
-            if (reading.CounterNames.Count > 0) return new ImportWindow.CounterLookup(reading.CounterNames, null);
+            if (reading.CounterNames.Count > 0) return new CounterLookup(reading.CounterNames, null);
 
             var problem = reading.Outcome != ReadingOutcome.Read ? reading.Detail
                 : recipe.LastStep.PerAccount && ids.Count == 0 ? "RoRoRo hasn't shared any accounts yet, so there was nothing to read."
                 : $"The source answered, but no {recipe.LastStep.Counters!.Label} came back.";
-            return new ImportWindow.CounterLookup([], _redactor.Redact(problem));
+            return new CounterLookup([], _redactor.Redact(problem));
         }
         catch (Exception ex)
         {
-            return new ImportWindow.CounterLookup([], _redactor.Redact($"Could not look them up: {ex.Message}"));
+            return new CounterLookup([], _redactor.Redact($"Could not look them up: {ex.Message}"));
         }
     }
 

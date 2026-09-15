@@ -1,11 +1,12 @@
 <Window x:Class="Labs626.UrScore.UI.ImportWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Import recipe" Width="640" SizeToContent="Height" ResizeMode="NoResize"
+        xmlns:ui="clr-namespace:Labs626.UrScore.UI"
+        Title="Import recipe" Width="680" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
         FontFamily="{StaticResource BodyFont}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="820">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="860">
         <StackPanel Margin="20,18,20,18">
             <TextBlock x:Name="NameLine" Style="{StaticResource Heading}" />
             <TextBlock x:Name="CreditLine" Margin="0,4,0,0" Style="{StaticResource Muted}" />
@@ -40,92 +41,25 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- STATS (stats design §6.6, §7.1). Nothing is ticked for the user: a recipe that
-                 pre-ticked a stat would be deciding what gets sent. -->
-            <TextBlock Text="STATS" Style="{StaticResource SectionLabel}" Margin="0,8,0,4" />
-            <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
-                       Text="Show puts a stat on Ur Score's board. Send reports it to RoRoRo, where alerts still need a rule." />
-            <Grid Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="64" />
-                    <ColumnDefinition Width="64" />
-                    <ColumnDefinition Width="220" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Stat" Style="{StaticResource Muted}" />
-                <TextBlock Grid.Column="1" Text="Show" Style="{StaticResource Muted}" />
-                <TextBlock Grid.Column="2" Text="Send" Style="{StaticResource Muted}" />
-                <TextBlock Grid.Column="3" Text="Name RoRoRo uses" Style="{StaticResource Muted}" />
-            </Grid>
-            <ItemsControl x:Name="StatsList" AutomationProperties.Name="Stats this recipe offers">
+            <!-- Spec §7.3 and §14: what every successful read writes to the score book. -->
+            <TextBlock Text="KEPT IN YOUR SCORE BOOK" Style="{StaticResource SectionLabel}" Margin="0,8,0,4" />
+            <TextBlock x:Name="KeptNote" Style="{StaticResource Muted}" />
+            <ItemsControl x:Name="KeptList" Margin="0,4,0,0" AutomationProperties.Name="Kept in your score book">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Grid Margin="0,0,0,6">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="64" />
-                                <ColumnDefinition Width="64" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding Label}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0" />
-                            <CheckBox Grid.Column="1" IsChecked="{Binding Show}" VerticalAlignment="Center"
-                                      AutomationProperties.Name="{Binding ShowName}" />
-                            <CheckBox Grid.Column="2" IsChecked="{Binding Send}" VerticalAlignment="Center"
-                                      AutomationProperties.Name="{Binding SendName}" />
-                            <TextBox Grid.Column="3" Text="{Binding MetricId, UpdateSourceTrigger=PropertyChanged}"
-                                     FontFamily="{StaticResource MonoFont}"
-                                     AutomationProperties.Name="{Binding MetricIdName}" />
-                        </Grid>
+                        <TextBlock Text="{Binding}" Margin="0,2,0,0" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <StackPanel x:Name="CounterPanel" Margin="0,8,0,0">
-                <Button x:Name="LookUpButton" Content="Look up stat names (reads once from the hosts above)"
-                        HorizontalAlignment="Left" Click="OnLookUpClick"
-                        AutomationProperties.Name="Look up stat names (reads once from the hosts above)" />
-                <TextBlock x:Name="LookUpLine" Margin="0,4,0,0" Style="{StaticResource Muted}" />
-                <TextBlock Text="Add a game statistic" FontWeight="SemiBold" Margin="0,10,0,4" />
-                <TextBox x:Name="CounterSearchBox" TextChanged="OnCounterSearchChanged"
-                         AutomationProperties.Name="Add a game statistic" />
-                <ListBox x:Name="CounterMatches" MaxHeight="190" Margin="0,4,0,0"
-                         Background="{DynamicResource RowBgBrush}" Foreground="{DynamicResource WhiteBrush}"
-                         BorderBrush="{DynamicResource EdgeBrush}"
-                         SelectionChanged="OnCounterMatchSelected"
-                         AutomationProperties.Name="Statistic names matching what you typed">
-                    <!-- The stock item paints a system-blue selection under white text. -->
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
-                            <Setter Property="Padding" Value="8,4" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListBoxItem">
-                                        <Border x:Name="Item" Background="Transparent" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowHoverBrush}" />
-                                            </Trigger>
-                                            <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Item" Property="Background" Value="{DynamicResource DividerBrush}" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
-                <Button x:Name="AddCounterButton" Content="Add this statistic" HorizontalAlignment="Left" Margin="0,6,0,0"
-                        IsEnabled="False" Click="OnAddCounterClick" AutomationProperties.Name="Add the selected statistic" />
+            <!-- Nothing is ticked for the user: a recipe that pre-ticked a stat would be deciding what gets
+                 sent. A group list has no stats to tick at all. -->
+            <StackPanel x:Name="StatsSection">
+                <TextBlock Text="STATS" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
+                <ui:StatsTable x:Name="StatsTable" />
             </StackPanel>
 
-            <TextBlock x:Name="SlotLine" Margin="0,12,0,0" Style="{StaticResource Muted}" />
-            <TextBlock x:Name="RuleLine" Margin="0,6,0,0" Style="{StaticResource Muted}" />
-
-            <TextBlock x:Name="RefusalLine" Margin="0,12,0,0" Style="{StaticResource Refusal}" />
+            <TextBlock x:Name="ImportRefusalLine" Margin="0,12,0,0" Style="{StaticResource Refusal}" Visibility="Collapsed" />
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                 <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
