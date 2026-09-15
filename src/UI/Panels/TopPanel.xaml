@@ -21,28 +21,33 @@
                 <ui:RowList ItemsSource="{Binding Rows}" AutomationProperties.Name="The leading groups, with yours placed">
                     <ui:RowList.ItemTemplate>
                         <DataTemplate>
-                            <Border>
-                                <Border.Style>
-                                    <Style TargetType="Border" BasedOn="{StaticResource PanelTableRowLine}">
-                                        <Setter Property="Background" Value="Transparent" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Yours}" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource RowHoverBrush}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="44" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="90" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Rank}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" />
-                                </Grid>
-                            </Border>
+                            <!-- Your clan's row is tinted cyan across the row, as the Accounts table tints its picked row. -->
+                            <Grid>
+                                <Border IsHitTestVisible="False" Background="{DynamicResource CyanBrush}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Opacity" Value="0" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Yours}" Value="True">
+                                                    <Setter Property="Opacity" Value="0.14" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                </Border>
+                                <Border Style="{StaticResource PanelTableRowLine}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="44" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="90" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Rank}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" />
+                                    </Grid>
+                                </Border>
+                            </Grid>
                         </DataTemplate>
                     </ui:RowList.ItemTemplate>
                 </ui:RowList>

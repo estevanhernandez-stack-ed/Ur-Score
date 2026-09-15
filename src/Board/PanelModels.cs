@@ -18,8 +18,12 @@ public sealed record PanelSettings(
     string? Stat = null,
     long? UserId = null);
 
-/// <summary>Every panel's header: title, subtitle, role chip, overdue mark, and the stale message that replaces the body.</summary>
-public sealed record PanelHead(string Title, string Subtitle = "", string Chip = "", bool Overdue = false, string? Stale = null, string Note = "")
+/// <summary>
+/// Every panel's header: title, subtitle, role chip, overdue mark, and the stale message that replaces the body.
+/// <see cref="ChipRole"/> is the role the chip names, so the chip is coloured by the role and never by its words.
+/// </summary>
+public sealed record PanelHead(
+    string Title, string Subtitle = "", string Chip = "", bool Overdue = false, string? Stale = null, string Note = "", SourceRole? ChipRole = null)
 {
     public bool HasBody => Stale is null;
 
@@ -173,7 +177,7 @@ public static class PanelModels
         var mine = rows?.Count(r => live.MyUserIds.Contains(r.UserId)) ?? 0;
 
         return new StandingModel(
-            new PanelHead(title, name, PanelText.Chip(source.Role), live.IsOverdue(source)),
+            new PanelHead(title, name, PanelText.Chip(source.Role), live.IsOverdue(source), ChipRole: source.Role),
             place is { } p ? PanelText.Ordinal((int)p) : Dash,
             recipe.Period is null || place is null ? "" : $"in the {RecipeWords.Period(recipe)}",
             recipe.Headline.FirstOrDefault(h => h.Id == totalId)?.Label ?? "Total",
@@ -504,7 +508,7 @@ public static class PanelModels
             : $"Filled in from the {RecipeWords.Group(recipe)}'s own record.";
 
         return new PastPeriodsModel(
-            new PanelHead(title, live.SourceName(source), PanelText.Chip(source.Role), Note: note),
+            new PanelHead(title, live.SourceName(source), PanelText.Chip(source.Role), Note: note, ChipRole: source.Role),
             RecipeWords.Capital(RecipeWords.Period(recipe)), rows);
     }
 
@@ -769,7 +773,7 @@ public static class PanelModels
         }
 
         var shown = installed.State.ShownStats(installed.Recipe);
-        var head = new PanelHead(title, live.SourceName(source), PanelText.Chip(source.Role), live.IsOverdue(source), Note: "Live only. Never saved.");
+        var head = new PanelHead(title, live.SourceName(source), PanelText.Chip(source.Role), live.IsOverdue(source), Note: "Live only. Never saved.", ChipRole: source.Role);
         if (shown.Count == 0) return new LeaderboardModel(head with { Note = "Tick Show on a stat to fill this panel." }, [], []);
 
         IReadOnlyList<string> columns = [.. shown.Select(s => s.Label)];

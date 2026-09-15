@@ -30,6 +30,26 @@ public class PanelModelsTests
 
     // ---- Standing ----
 
+    [Theory]
+    [InlineData(SourceRole.Main)]
+    [InlineData(SourceRole.Mine)]
+    [InlineData(SourceRole.Watch)]
+    public void AChipCarriesItsSourcesRoleSoItsColourNeverHangsOnItsWords(SourceRole role)
+    {
+        var source = SourceOf("s-00000001", Clan, "CCGP", role);
+        var live = Live([source], [Installed(Clan, "value")], Snaps());
+
+        var standing = PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: source.Id));
+        var past = PanelModels.PastPeriods(live, Reader(), new PanelSettings(Clan.Slug, SourceId: source.Id, Stat: "value"));
+        var leaderboard = PanelModels.LiveLeaderboard(live, new PanelSettings(Clan.Slug, SourceId: source.Id), new Dictionary<long, string>());
+
+        Assert.All(new[] { standing.Head, past.Head, leaderboard.Head }, head => Assert.Equal((PanelText.Chip(role), role), (head.Chip, head.ChipRole)));
+
+        // A head with no source has no chip and no role.
+        var gone = PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: "s-gone0000"));
+        Assert.Equal(("", (SourceRole?)null), (gone.Head.Chip, gone.Head.ChipRole));
+    }
+
     [Fact]
     public void StandingShowsPlaceTotalChangeAndTheRecipesWords()
     {
@@ -42,7 +62,7 @@ public class PanelModelsTests
 
         var model = PanelModels.Standing(live, reader, new PanelSettings(Clan.Slug, SourceId: main.Id));
 
-        Assert.Equal(new PanelHead("Clan standing", "CCGP", "★ main"), model.Head);
+        Assert.Equal(new PanelHead("Clan standing", "CCGP", "★ main", ChipRole: SourceRole.Main), model.Head);
         Assert.Equal("14th", model.Place);
         Assert.Equal("in the battle", model.PlaceSuffix);
         Assert.Equal("Clan points", model.TotalLabel);

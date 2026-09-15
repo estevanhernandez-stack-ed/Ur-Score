@@ -1,6 +1,7 @@
 <UserControl x:Class="Labs626.UrScore.UI.PanelFrame"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:Labs626.UrScore.Core">
     <StackPanel>
         <!-- Edit mode (spec §9.2): drag, move, size, tall, remove. Its own row, so a small panel wraps it instead of hiding its title. -->
         <WrapPanel x:Name="EditTools" Margin="0,0,0,8" Visibility="Collapsed">
@@ -33,22 +34,22 @@
             </StackPanel>
             <TextBlock x:Name="PanelTitle" DockPanel.Dock="Left" Text="{Binding Title, Converter={StaticResource Upper}}"
                        AutomationProperties.Name="{Binding Title}" Style="{StaticResource PanelTitleText}" />
-            <!-- The chip (the mock's .chip): a pill in the colour of the source's role. The chip's text is the role's
-                 (PanelText.Chip): your main in white on the interactive edge, a clan your accounts are in cyan, a watched
-                 one magenta; any other in muted text on the divider. -->
+            <!-- The chip (the mock's .chip): a pill coloured by the source's role (PanelHead.ChipRole), never by its words:
+                 your main in white on the interactive edge, a clan your accounts are in cyan, a watched one magenta; a chip
+                 with no role in muted text on the divider. -->
             <Border DockPanel.Dock="Left" Margin="8,0,0,0" Padding="7,3" CornerRadius="999" BorderThickness="1" VerticalAlignment="Center"
                     Visibility="{Binding HasChip, Converter={StaticResource BoolToVisible}}">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Chip}" Value="★ main">
+                            <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Main}">
                                 <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding Chip}" Value="yours">
+                            <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Mine}">
                                 <Setter Property="BorderBrush" Value="{DynamicResource CyanBrush}" />
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding Chip}" Value="watching">
+                            <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Watch}">
                                 <Setter Property="BorderBrush" Value="{DynamicResource MagentaBrush}" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -59,13 +60,13 @@
                         <Style TargetType="TextBlock">
                             <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding Chip}" Value="★ main">
+                                <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Main}">
                                     <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding Chip}" Value="yours">
+                                <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Mine}">
                                     <Setter Property="Foreground" Value="{DynamicResource CyanBrush}" />
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding Chip}" Value="watching">
+                                <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Watch}">
                                     <Setter Property="Foreground" Value="{DynamicResource MagentaBrush}" />
                                 </DataTrigger>
                             </Style.Triggers>
