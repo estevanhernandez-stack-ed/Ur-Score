@@ -67,14 +67,21 @@ public partial class AccountsPage : UserControl, ISetupPage
     private void OnTick(object? sender, PropertyChangedEventArgs e)
     {
         if (_reverting || sender is not SendTick tick) return;
-        if (_services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, tick.RecipeSlug, StringComparison.Ordinal)) is not { } installed) return;
 
-        var ids = _services.KnownAccounts.Select(a => a.AccountId).ToList();
-        var change = AccountsModel.ToggleSend(installed, _services.Installed, ids, tick.AccountId, tick.On);
+        var slug = tick.RecipeSlug;
+        var accountId = tick.AccountId;
+        var on = tick.On;
 
-        // Deferred: saving re-renders the rows, and a row must not be replaced while its checkbox is mid-click.
+        // Deferred: saving re-renders the rows, and a row must not be replaced while its checkbox is mid-click. The
+        // change is worked out inside, from the recipe state as it is by then, so a second quick tick builds on the
+        // first tick's save instead of on the state both ticks started from.
         Dispatcher.BeginInvoke(() =>
         {
+            if (_services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, slug, StringComparison.Ordinal)) is not { } installed) return;
+
+            var ids = _services.KnownAccounts.Select(a => a.AccountId).ToList();
+            var change = AccountsModel.ToggleSend(installed, _services.Installed, ids, accountId, on);
+
             if (change.Refusal is not null)
             {
                 _refusal = change.Refusal;
