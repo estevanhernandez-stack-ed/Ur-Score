@@ -238,6 +238,31 @@ public class BoardEditsTests
     }
 
     [Fact]
+    public void AnEmptyFollowingStarterIsNotWrittenByTheFirstChangeElsewhere()
+    {
+        // R1: first run, nothing to show yet, and + Board. The empty starter isn't frozen into boards.json.
+        var empty = StarterBoards.Build([], []);
+        var following = BoardDefs.FromStarter(empty, freshIds: false);
+        var added = new BoardDef("b-00000001", "Board 2", []);
+
+        Assert.Equal(new[] { added }, BoardEdits.ForFirstSave([following, added], empty));
+        Assert.Equal(new[] { added }, BoardEdits.ForFirstSave([added, following], StarterBoards.Build([Installed(Clan)], [])));
+
+        // A change to the starter itself is kept: renamed, or a panel added to it. So is the last board.
+        IReadOnlyList<BoardDef> renamed = [following with { Name = "Mine" }, added];
+        IReadOnlyList<BoardDef> built = [BoardEdits.AddPanel(following, PanelType.Records, new PanelSettings(Clan.Slug, Stat: "value")), added];
+        IReadOnlyList<BoardDef> alone = [following];
+        Assert.Same(renamed, BoardEdits.ForFirstSave(renamed, empty));
+        Assert.Same(built, BoardEdits.ForFirstSave(built, empty));
+        Assert.Same(alone, BoardEdits.ForFirstSave(alone, empty));
+
+        // A starter with panels is written like any board.
+        var filled = StarterBoards.Build([Installed(Clan, "value")], [SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main)]);
+        IReadOnlyList<BoardDef> materialized = [BoardDefs.FromStarter(filled, freshIds: false), added];
+        Assert.Same(materialized, BoardEdits.ForFirstSave(materialized, filled));
+    }
+
+    [Fact]
     public void AResizeThatKeepsTheSpanAndFlipsTallCameFromTheTallTick()
     {
         Assert.True(BoardEdits.IsTallTick(new PanelSize(4), new PanelSize(4, Tall: true)));

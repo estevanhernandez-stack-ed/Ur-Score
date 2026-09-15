@@ -223,11 +223,14 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary>
     /// Writes <c>boards.json</c> with only your own account ids (R17) and redraws. The old file is kept beside it
     /// when it doesn't parse, and on the first save after it couldn't be read at start even if it reads by now
-    /// (R3). An empty list goes back to following the starter, as it would load after a restart (R1, R4).
+    /// (R3). An empty list goes back to following the starter, as it would load after a restart (R1, R4). The first
+    /// write leaves out an untouched empty-state starter beside another board (<see cref="BoardEdits.ForFirstSave"/>).
     /// Throws when the file can't be written; nothing changes then.
     /// </summary>
     public void SaveBoards(IReadOnlyList<BoardDef> boards)
     {
+        if (BoardsFollowStarter) boards = BoardEdits.ForFirstSave(boards, StarterBoards.Build(Installed, Sources));
+
         var mine = KnownAccounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
         var clean = BoardDefs.Sanitize(boards, mine);
 

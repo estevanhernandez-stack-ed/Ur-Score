@@ -110,6 +110,20 @@ public static class BoardEdits
         return (later ?? earlier)?.Id;
     }
 
+    /// <summary>
+    /// What the first write of <c>boards.json</c> keeps while the boards still follow the starter (R1): everything, except
+    /// the following starter when it is an empty state (no recipe, stat or source yet) that nothing touched and another
+    /// board is being written. A + Board on first run then doesn't freeze "Import a recipe" as a board with no panels.
+    /// A starter renamed, given a panel, or left the only board is written. Nothing dropped returns <paramref name="boards"/>.
+    /// </summary>
+    public static IReadOnlyList<BoardDef> ForFirstSave(IReadOnlyList<BoardDef> boards, StarterBoard following)
+    {
+        if (following.Empty == BoardEmpty.None || boards.Count < 2) return boards;
+
+        bool Untouched(BoardDef b) => b.Id == BoardDefs.StarterBoardId && b.Panels.Count == 0 && b.Name == following.Name;
+        return boards.Any(Untouched) ? [.. boards.Where(b => !Untouched(b))] : boards;
+    }
+
     /// <summary>Which tool a resize came from, so focus goes back to it: Tall keeps the span and flips Tall; the size box picks a span.</summary>
     public static bool IsTallTick(PanelSize before, PanelSize after) => before.Span == after.Span && before.Tall != after.Tall;
 
