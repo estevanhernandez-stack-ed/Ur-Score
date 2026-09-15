@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 $boardsFile = Join-Path $UrData 'boards.json'
 $backup = $null
 
-function Get-SavedPanels([int]$board = 0) { @(@(Read-Boards)[$board].panels) }
+function Get-SavedPanels([int]$index = 0) { @(@(Read-Boards)[$index].panels) }
 
 try {
     $backup = Move-UrDataAside

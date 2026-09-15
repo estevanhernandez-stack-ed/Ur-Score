@@ -6,20 +6,21 @@ param([string]$DataFolder = (Join-Path $env:LOCALAPPDATA '626labs.ur-score'))
 $boardsFile = Join-Path $DataFolder 'boards.json'
 $accountsFile = Join-Path $DataFolder 'accounts.json'
 if (-not (Test-Path $boardsFile)) { "No boards.json in $DataFolder yet."; exit 2 }
+if (-not (Test-Path $accountsFile)) { "No accounts.json in $DataFolder, so there is nothing to check. Start RoRoRo while Ur Score runs, then check again."; exit 2 }
 
-# Windows PowerShell 5.1 passes a parsed JSON array down the pipeline as one object, so unroll it first.
-$mine = @()
-if (Test-Path $accountsFile) {
-    $parsedAccounts = Get-Content $accountsFile -Raw | ConvertFrom-Json
-    $mine = @(@($parsedAccounts) | ForEach-Object { [string]$_.robloxUserId } | Where-Object { $_ -and $_ -ne '0' })
-}
+# Windows PowerShell 5.1 writes a parsed JSON array down the pipeline as one object; foreach over the parenthesized
+# read unrolls it (see Read-Sources in uia-import.ps1), so every id is its own string and not one joined string.
+$mine = @(foreach ($account in (Get-Content $accountsFile -Raw | ConvertFrom-Json)) {
+    if ($account -and $account.robloxUserId -and [string]$account.robloxUserId -ne '0') { [string]$account.robloxUserId }
+})
+# With no ids of yours, every userId would read as not yours, and a board with none would pass without comparing anything.
+if ($mine.Count -eq 0) { "accounts.json lists no Roblox user ids, so there is nothing to check."; exit 2 }
 
 $panelKeys = @('id', 'type', 'size', 'order', 'settings', 'popout')
 $settingKeys = @('recipe', 'sourceId', 'sourceIds', 'toSourceId', 'stat', 'userId')
 $boards = 0; $panels = 0; $notYours = 0; $unexpected = 0; $digitStats = 0
 
-$parsedBoards = Get-Content $boardsFile -Raw | ConvertFrom-Json
-foreach ($board in @($parsedBoards)) {
+foreach ($board in (Get-Content $boardsFile -Raw | ConvertFrom-Json)) {
     if (-not $board) { continue }
     $boards++
     foreach ($key in $board.PSObject.Properties.Name) { if (@('id', 'name', 'panels') -notcontains $key) { $unexpected++ } }
