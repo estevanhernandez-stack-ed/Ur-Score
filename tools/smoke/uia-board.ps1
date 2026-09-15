@@ -47,6 +47,34 @@ function Select-Tab($board, [string]$name) {
     Start-Sleep -Milliseconds 1000
 }
 
+# The accounts table on the board on screen.
+function Get-AccountsGrid {
+    $panel = Find-ByAutomationId (Get-BoardWindow) 'AccountsTablePanel1'
+    if (-not $panel) { return $null }
+    Find-ByAutomationId $panel 'AccountsGrid'
+}
+
+# A table's column headings in order; a sorted one ends in an arrow.
+function Get-GridHeaders($grid) { @(Find-All $grid $CT::HeaderItem | ForEach-Object { $_.Current.Name }) }
+
+# A table's rows in order: named by account, the totals row last.
+function Get-GridRows($grid) { @(Find-All $grid $CT::DataItem) }
+
+# Clicks the heading whose name starts with a label, the way a person sorts.
+function Invoke-GridHeader($grid, [string]$label) {
+    $header = Find-All $grid $CT::HeaderItem | Where-Object { $_.Current.Name.StartsWith($label) } | Select-Object -First 1
+    if (-not $header) { throw "no heading '$label'" }
+    Invoke-Element $header
+    Start-Sleep -Milliseconds 800
+}
+
+# Picks a row, the way a click or the arrow keys do.
+function Select-GridRow($row) {
+    if (-not $row) { throw 'row not found' }
+    $row.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Start-Sleep -Milliseconds 800
+}
+
 # Opens the selected tab's right-click menu with Shift+F10 and invokes one item by automation id.
 # Returns $false (and closes the menu) when that item is disabled.
 function Invoke-TabMenu($board, [string]$itemId) {

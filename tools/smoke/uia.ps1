@@ -11,7 +11,8 @@ $script:CT = [System.Windows.Automation.ControlType]
 
 # Paths come from this file's own location, never from a machine.
 $script:UrRepo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$script:UrExe = Join-Path $UrRepo 'bin\Release\net10.0-windows\626labs.ur-score.exe'
+# UR_SCORE_EXE walks another copy, such as the one RoRoRo installed (D22); else the Release build.
+$script:UrExe = if ($env:UR_SCORE_EXE) { $env:UR_SCORE_EXE } else { Join-Path $UrRepo 'bin\Release\net10.0-windows\626labs.ur-score.exe' }
 $script:UrFixtures = Join-Path $UrRepo 'tests\Fixtures'
 $script:UrData = Join-Path $env:LOCALAPPDATA '626labs.ur-score'
 $script:UrShots = Join-Path $UrRepo 'artifacts\smoke'

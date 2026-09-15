@@ -8,6 +8,7 @@ UI Automation walks of the real window: they start the Release build, click thro
 - A Release build: `dotnet build Ur-Score.csproj -c Release` from the repo root. Close Ur Score first; a running copy locks `bin\Release`.
 - RoRoRo running is optional. Without it, steps that need your accounts are skipped or accept the "RoRoRo hasn't listed your accounts" wording.
 - Leave the mouse alone while a walk runs; `shot.ps1` brings windows to the front.
+- To walk another copy (the one RoRoRo installed), set `UR_SCORE_EXE` to its `626labs.ur-score.exe` first.
 
 ## Your data is safe
 
@@ -20,7 +21,8 @@ Every walk that needs a clean start moves `%LOCALAPPDATA%\626labs.ur-score` to `
 | `window-smoke.ps1 [-Main CCGP]` | First run, a refused file, the import screen, Setup opening on Clans, the main clan, the board, Test now, copied diagnostics |
 | `walk-setup-clans.ps1 [-Main CCGP] [-Alt K0i2]` | Main, mine and watched clans, Make main, Remove, a repeat pick, the request line, the Top switch |
 | `walk-stats-table.ps1` | The Stats table: search, ticked rows kept, the name column, Setup › Stats, saving, "tick at least one stat" |
-| `walk-starter-board.ps1 [-Main CCGP] [-Alt K0i2]` | Every Battle panel by automation id and title, Start, Test now, Stop |
+| `walk-starter-board.ps1 [-Main CCGP] [-Alt K0i2]` | Two tabs, every Battle panel by automation id and title, Alts as its own tab, Start, Test now, Stop, and a change to Alts that leaves Battle following |
+| `walk-alts.ps1` | The Alts tab: a first import's suggested ticks, the accounts table's columns, sort and flip, a picked account in the card, the total, nothing written |
 | `walk-board-editing.ps1 [-Main CCGP] [-Alt K0i2]` | The starter with no `boards.json`, edit mode (move, wide, tall, remove, Done), the gallery, a removed clan with Choose another, + Board with Add panel, rename, duplicate, delete, a restart |
 | `walk-pop-outs.ps1 [-Main CCGP]` | Two pop-outs on top with their slots, a live update, a moved window saved, a restart reopening both, closing and Bring back |
 | `walk-score-book.ps1 [-Main CCGP]` | Setup › Score book counts, the not-recording reason, book files, diagnostics without book content, the privacy check |
