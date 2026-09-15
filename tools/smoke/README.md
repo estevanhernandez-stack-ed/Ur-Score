@@ -14,6 +14,8 @@ UI Automation walks of the real window: they start the Release build, click thro
 
 Every walk that needs a clean start moves `%LOCALAPPDATA%\626labs.ur-score` to `626labs.ur-score.smoke-backup-<time>` and puts it back in a `finally`, even when a step throws. If a run is killed mid-walk, rename the newest `.smoke-backup-*` folder back to `626labs.ur-score` yourself.
 
+`walk-alerts.ps1` never writes RoRoRo's `metric-rules.json`. It points Ur Score at a scratch file under `%TEMP%` with `UR_SCORE_RULES_FILE`, deletes that file afterwards, and fails its last step if RoRoRo's own file changed. If a run is killed mid-walk, close Ur Score before starting it again from a shell where that variable isn't set.
+
 ## The scripts
 
 | Script | What it walks |
@@ -21,6 +23,7 @@ Every walk that needs a clean start moves `%LOCALAPPDATA%\626labs.ur-score` to `
 | `window-smoke.ps1 [-Main CCGP]` | First run, a refused file, the import screen, Setup opening on Clans, the main clan, the board, Test now, copied diagnostics |
 | `walk-setup-clans.ps1 [-Main CCGP] [-Alt K0i2]` | Main, mine and watched clans, Make main, Remove, a repeat pick, the request line, the Top switch |
 | `walk-stats-table.ps1` | The Stats table: search, ticked rows kept, the name column, Setup › Stats, saving, "tick at least one stat" |
+| `walk-alerts.ps1` | Setup › Alerts against a scratch rules file: sentences with no JSON, Change, a crosses-a-number alert with a refused number and Enter, Escape, a locked file, Remove, a stat you stop sending, and RoRoRo's own rules file unchanged |
 | `walk-starter-board.ps1 [-Main CCGP] [-Alt K0i2]` | Two tabs, every Battle panel by automation id and title, Alts as its own tab, Start, Test now, Stop, and a change to Alts that leaves Battle following |
 | `walk-alts.ps1` | The Alts tab: a first import's suggested ticks, the accounts table's columns, sort and flip, a picked account in the card, the total, nothing written |
 | `walk-board-editing.ps1 [-Main CCGP] [-Alt K0i2]` | The starter with no `boards.json`, edit mode (move, wide, tall, remove, Done), the gallery, a removed clan with Choose another, + Board with Add panel, rename, duplicate, delete, a restart |
