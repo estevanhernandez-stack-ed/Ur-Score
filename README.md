@@ -171,7 +171,7 @@ are the states it can be in and what each one means:
 | Idle — no clan name set | `clanName` is empty in settings.json. Nothing is being polled. |
 | Could not reach the clan data | A network or transport problem reaching the game's API. Not RoRoRo's fault. |
 | No clan battle running | Normal, and the common state between battles. Not an error. |
-| The response was not a shape Ur Score understands | The game's API returned something the parser didn't expect. Use **Copy diagnostics** and check `%LOCALAPPDATA%\626labs.ur-score\last-response\` — the message names the keys actually present. |
+| The response was not a shape Ur Score understands | The game's API returned something the parser didn't expect. Use **Copy diagnostics** — the message names the keys actually present. |
 | None of your accounts are in this battle's contributions | Contributors came back, but none matched a saved RoRoRo account. Check the clan name and that your accounts have resolved Roblox ids. |
 | Reporting to RoRoRo | Working. At least one account matched and was sent. |
 | RoRoRo is not running | Ur Score keeps polling the clan and keeps its account mapping warm, but holds every report — nothing is queued to send once RoRoRo comes back; it resumes from the next live poll. |

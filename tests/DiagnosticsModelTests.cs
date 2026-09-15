@@ -76,9 +76,11 @@ public class DiagnosticsModelTests
         var trail = Enumerable.Range(0, 50).Select(i => $"trail-{i:00};").ToList();
 
         var text = DiagnosticsModel.CopyText(Now, [Installed], [source], [row], resolveNames: true, "host=1.28.0.0 reject=(none)",
-            @"C:\data\last-response", @"C:\data\scorebook", bookPending: 2, bookDropped: 0, trail, new Redactor(() => [FakeKey]));
+            @"C:\data\scorebook", bookPending: 2, bookDropped: 0, trail, new Redactor(() => [FakeKey]));
 
         Assert.DoesNotContain(FakeKey, text);
+        Assert.DoesNotContain("raw response", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("last-response", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(Redactor.Mask, text);
         Assert.Contains("score book in C:\\data\\scorebook: pending=2 dropped=0 (no book content is included)", text);
         Assert.Contains($"source={source.Id} recipe={Clan.Slug} role=Main enabled=True inputs=clan=CCGP", text);

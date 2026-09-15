@@ -85,7 +85,10 @@ public sealed class AppServices : ISetupServices, IDisposable
         Store = new RecipeStore(RecipeStore.DefaultDirectory);
         Settings = Settings.Load();
 
-        var transport = new SpacedTransport(new HttpRecipeTransport(_recipeHttp, RawDirectory, Redactor), _time, SpacedTransport.DefaultSpacing);
+        // No raw responses kept: a response body holds every row the source returned, other players' ids and values
+        // included, and other players never reach disk.
+        DeleteOldRawResponses();
+        var transport = new SpacedTransport(new HttpRecipeTransport(_recipeHttp, rawDirectory: null, Redactor), _time, SpacedTransport.DefaultSpacing);
         _engine = new RecipeEngine(transport, Keys);
         _searchLists = new SearchLists(transport);
 
@@ -142,9 +145,6 @@ public sealed class AppServices : ISetupServices, IDisposable
     public string? BudgetWarning { get; private set; }
 
     public string HostText => $"host={_host.HostVersion ?? "(not connected)"} reject={_host.RejectReason ?? "(none)"}";
-
-    public string RawDirectory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "last-response");
 
     public IReadOnlyList<string> Trail
     {
@@ -752,6 +752,23 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     private InstalledRecipe? FindInstalled(string? slug) =>
         slug is null ? null : Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, slug, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Earlier versions kept each call's last response under <c>last-response</c>, other players' rows and all.
+    /// That folder goes on start. Best effort: a folder that can't be removed costs a trail line, never the start.
+    /// </summary>
+    private void DeleteOldRawResponses()
+    {
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "last-response");
+        try
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            AddTrail($"OLD RESPONSES NOT REMOVED: {ex.GetType().Name}");
+        }
+    }
 
     private static IReadOnlyList<HostAccount> LoadSavedAccounts(AccountsCache cache)
     {

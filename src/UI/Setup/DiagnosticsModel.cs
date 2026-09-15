@@ -100,7 +100,7 @@ public static class DiagnosticsModel
 
     public static string CopyText(
         DateTimeOffset now, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyList<SourceDiagnostic> rows,
-        bool resolveNames, string hostText, string rawDirectory, string bookRoot, int bookPending, int bookDropped,
+        bool resolveNames, string hostText, string bookRoot, int bookPending, int bookDropped,
         IReadOnlyList<string> trail, Redactor redactor)
     {
         // global:: because this namespace's Source alias hides the Labs626.UrScore.Source namespace; outside the
@@ -110,7 +110,6 @@ public static class DiagnosticsModel
             .AppendLine($"Ur Score diagnostics {now:O}")
             .AppendLine($"user-agent={userAgent} resolveNames={resolveNames}")
             .AppendLine(hostText)
-            .AppendLine($"raw responses kept in {rawDirectory}")
             .AppendLine($"score book in {bookRoot}: pending={bookPending} dropped={bookDropped} (no book content is included)");
 
         foreach (var item in installed)

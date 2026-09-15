@@ -61,8 +61,6 @@ public interface ISetupServices
     /// <summary>"host=1.28.0.0 reject=(none)", for diagnostics.</summary>
     string HostText { get; }
 
-    string RawDirectory { get; }
-
     /// <summary>The newest trail lines, redacted, oldest first.</summary>
     IReadOnlyList<string> Trail { get; }
 

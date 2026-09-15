@@ -29,7 +29,7 @@ public partial class DiagnosticsPage : UserControl, ISetupPage
     {
         Refresh();
         var text = DiagnosticsModel.CopyText(DateTimeOffset.UtcNow, _services.Installed, _services.Sources, _rows,
-            _services.Settings.ResolveNames, _services.HostText, _services.RawDirectory, _services.Book.Root,
+            _services.Settings.ResolveNames, _services.HostText, _services.Book.Root,
             _services.Book.Pending, _services.Book.Dropped, _services.Trail, _services.Redactor);
 
         try
