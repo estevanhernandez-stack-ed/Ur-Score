@@ -80,7 +80,14 @@ public partial class SetupWindow : Window
         (PageHost.Content as ISetupPage)?.Refresh();
     }
 
-    private FrameworkElement CreatePage(SetupPage page) => page.RecipeSlug is { } slug
-        ? new ClansPage(_services, slug)
-        : new TextBlock { Text = page.Title, Style = (Style)FindResource("Heading") };
+    private FrameworkElement CreatePage(SetupPage page) => page.Id switch
+    {
+        _ when page.RecipeSlug is { } slug => new ClansPage(_services, slug),
+        SetupPages.Accounts => new AccountsPage(_services),
+        SetupPages.Stats => new StatsPage(_services),
+        SetupPages.Recipes => new RecipesPage(_services, this),
+        SetupPages.Alerts => new AlertsPage(_services),
+        SetupPages.ScoreBook => new ScoreBookPage(_services),
+        _ => new DiagnosticsPage(_services),
+    };
 }
