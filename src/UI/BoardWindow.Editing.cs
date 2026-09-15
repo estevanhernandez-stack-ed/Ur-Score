@@ -67,15 +67,17 @@ public partial class BoardWindow
 
     /// <summary>
     /// Done: a draft drawn differently from the board as editing began replaces its board and is saved through
-    /// <see cref="SaveBoards"/> (<see cref="BoardEdits.Finish"/>). One that isn't writes nothing. A save that fails
-    /// stays in edit mode, so the arrangement isn't lost.
+    /// <see cref="SaveBoards"/> (<see cref="BoardEdits.Finish"/>), with every pop-out as the saved boards have it now.
+    /// One that isn't writes nothing. A save that fails stays in edit mode, so the arrangement isn't lost.
     /// </summary>
     private void FinishEditing()
     {
         if (_draft is not { } draft) return;
 
         var boards = _services.Boards;
-        var finished = _draftBase is { } atEdit ? BoardEdits.Finish(boards, atEdit, draft) : BoardEdits.Replace(boards, draft);
+        var finished = _draftBase is { } atEdit
+            ? BoardEdits.Finish(boards, atEdit, draft)
+            : BoardEdits.Replace(boards, BoardEdits.CarryPopOuts(draft, boards));
         if (!ReferenceEquals(finished, boards) && !SaveBoards(finished)) return;
 
         _draft = _draftBase = null;
@@ -99,6 +101,10 @@ public partial class BoardWindow
     private void OnEditTool(object? sender, PanelToolEventArgs e)
     {
         if (!Editing || PanelAt(e.OriginalSource) is not { } def) return;
+
+        // R19: a popped-out panel can be removed in edit mode, and nothing else; bring it back first. BoardEdits
+        // refuses to move or resize it too.
+        if (def.PopOut is not null && e.Tool != PanelTool.Remove) return;
 
         // Every tool but the drag rebuilds the grid, destroying the control that was pressed; focus goes back to the
         // same tool on the redrawn panel (R7), so a keyboard user can press it again.
@@ -161,7 +167,9 @@ public partial class BoardWindow
 
             if (ReferenceEquals(view, before) && view.IsKeyboardFocusWithin) return;
 
-            PanelFrame.Of(view)?.FocusTool(tool, tall);
+            // A popped-out panel's slot has no tools of its own, only its buttons (R19).
+            if (view is PoppedOutSlot slot) slot.FocusButton(Editing);
+            else PanelFrame.Of(view)?.FocusTool(tool, tall);
             view.BringIntoView();
         }, DispatcherPriority.Loaded);
     }

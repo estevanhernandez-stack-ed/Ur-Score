@@ -28,9 +28,72 @@ public static class BoardEdits
     /// the board as editing began. Compared with that, not with the boards now, so an untouched draft writes nothing
     /// even when the following starter was rebuilt meanwhile (R1). Nothing to write, or no board to replace, returns
     /// <paramref name="boards"/> itself.
+    /// <para>
+    /// Edit mode doesn't edit pop-outs (R19): both sides take every panel's pop-out as it is now
+    /// (<see cref="CarryPopOuts"/>), so a pop-out returned, moved or opened while editing is neither undone nor
+    /// counted as a change.
+    /// </para>
     /// </summary>
-    public static IReadOnlyList<BoardDef> Finish(IReadOnlyList<BoardDef> boards, BoardDef atEdit, BoardDef draft) =>
-        Changed(atEdit, draft) ? Replace(boards, draft) : boards;
+    public static IReadOnlyList<BoardDef> Finish(IReadOnlyList<BoardDef> boards, BoardDef atEdit, BoardDef draft)
+    {
+        var carried = CarryPopOuts(draft, boards);
+        return Changed(CarryPopOuts(atEdit, boards), carried) ? Replace(boards, carried) : boards;
+    }
+
+    /// <summary>
+    /// The draft with each panel's pop-out as the same panel has it on its board in <paramref name="boards"/> now; a
+    /// panel that board doesn't have (one added in the draft) is not out. No such board, or nothing to carry, returns
+    /// <paramref name="draft"/> itself.
+    /// </summary>
+    public static BoardDef CarryPopOuts(BoardDef draft, IReadOnlyList<BoardDef> boards)
+    {
+        if (boards.FirstOrDefault(b => b.Id == draft.Id) is not { } board) return draft;
+
+        var now = new Dictionary<string, PopOutRect?>(StringComparer.Ordinal);
+        foreach (var panel in board.Panels) now.TryAdd(panel.Id, panel.PopOut);
+
+        var changed = false;
+        var panels = draft.Panels.Select(panel =>
+        {
+            var current = now.GetValueOrDefault(panel.Id);
+            if (panel.PopOut == current) return panel;
+
+            changed = true;
+            return panel with { PopOut = current };
+        }).ToList();
+
+        return changed ? draft with { Panels = panels } : draft;
+    }
+
+    /// <summary>
+    /// The panels that have a pop-out window (R18, R20): every panel with a <c>popout</c> on every board, in board
+    /// order, except one the draft being edited has removed from its board.
+    /// </summary>
+    public static IReadOnlyList<PanelDef> PoppedOut(IReadOnlyList<BoardDef> boards, BoardDef? draft) =>
+        [.. boards.SelectMany(board => board.Panels.Where(panel =>
+            panel.PopOut is not null && (draft is null || draft.Id != board.Id || draft.Panels.Any(p => p.Id == panel.Id))))];
+
+    /// <summary>
+    /// Where each pop-out window sits now, by panel id, onto the boards. Only a panel still out takes a place, so a
+    /// window closing late never pops its panel back out. Nothing moved returns <paramref name="boards"/> itself.
+    /// </summary>
+    public static IReadOnlyList<BoardDef> PlacePopOuts(IReadOnlyList<BoardDef> boards, IReadOnlyDictionary<string, PopOutRect> places)
+    {
+        var changed = false;
+        var placed = boards.Select(board =>
+        {
+            var moved = board;
+            foreach (var panel in board.Panels)
+            {
+                if (panel.PopOut is { } at && places.TryGetValue(panel.Id, out var place) && place != at) moved = PopOut(moved, panel.Id, place);
+            }
+
+            changed |= !ReferenceEquals(moved, board);
+            return moved;
+        }).ToList();
+
+        return changed ? placed : boards;
+    }
 
     /// <summary>After a panel is removed in edit mode, whose tool takes keyboard focus (R7): the next panel's, else the previous one's, else none.</summary>
     public static string? FocusAfterRemove(BoardDef board, string panelId)
@@ -88,11 +151,12 @@ public static class BoardEdits
     /// <summary>
     /// Drops the panel before the panel now at <paramref name="insertionIndex"/>, counting the panel itself, so
     /// a drop on its own left or right half changes nothing (the index <see cref="BoardLayout.DropIndex"/> gives).
+    /// A popped-out panel isn't moved until it is back (R19); others still move past it.
     /// </summary>
     public static BoardDef MoveTo(BoardDef board, string panelId, int insertionIndex)
     {
         var from = PanelIndex(board, panelId);
-        if (from < 0) return board;
+        if (from < 0 || board.Panels[from].PopOut is not null) return board;
 
         var to = Math.Clamp(insertionIndex, 0, board.Panels.Count);
         if (to > from) to--;
@@ -114,8 +178,14 @@ public static class BoardEdits
         return MoveTo(board, panelId, delta > 0 ? from + delta + 1 : from + delta);
     }
 
-    public static BoardDef Resize(BoardDef board, string panelId, PanelSize size) =>
-        Update(board, panelId, p => p with { Size = new PanelSize(Math.Clamp(size.Span, 1, BoardLayout.Columns), size.Tall) });
+    /// <summary>Span kept within the grid. A popped-out panel isn't resized until it is back (R19).</summary>
+    public static BoardDef Resize(BoardDef board, string panelId, PanelSize size)
+    {
+        var index = PanelIndex(board, panelId);
+        return index < 0 || board.Panels[index].PopOut is not null
+            ? board
+            : Update(board, panelId, p => p with { Size = new PanelSize(Math.Clamp(size.Span, 1, BoardLayout.Columns), size.Tall) });
+    }
 
     /// <summary>Settings equal to the panel's own, as a settings form closed with nothing changed builds, change nothing.</summary>
     public static BoardDef SetSettings(BoardDef board, string panelId, PanelSettings settings)

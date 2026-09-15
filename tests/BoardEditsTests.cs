@@ -237,4 +237,93 @@ public class BoardEditsTests
         Assert.False(BoardEdits.IsTallTick(new PanelSize(4), new PanelSize(PanelSize.Half)));
         Assert.False(BoardEdits.IsTallTick(new PanelSize(3, Tall: true), new PanelSize(PanelSize.Wide, Tall: true)));
     }
+
+    [Fact]
+    public void APoppedOutPanelIsNotMovedOrResizedUntilItIsBack()
+    {
+        var board = BoardEdits.PopOut(BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Top), "p-b-2", new PopOutRect(10, 10, 360, 300));
+
+        Assert.Same(board, BoardEdits.MoveTo(board, "p-b-2", 0));
+        Assert.Same(board, BoardEdits.MoveBy(board, "p-b-2", 1));
+        Assert.Same(board, BoardEdits.Resize(board, "p-b-2", new PanelSize(PanelSize.Wide, Tall: true)));
+
+        // Its neighbours still move past it, and it can still be removed.
+        Assert.Equal(new[] { "p-b-2", "p-b-1", "p-b-3" }, Ids(BoardEdits.MoveBy(board, "p-b-1", 1)));
+        Assert.Equal(new[] { "p-b-1", "p-b-3" }, Ids(BoardEdits.RemovePanel(board, "p-b-2")));
+    }
+
+    [Fact]
+    public void EveryPanelWithAPopOutHasAWindowExceptOneTheDraftRemoved()
+    {
+        var rect = new PopOutRect(10, 10, 360, 300);
+        var first = BoardEdits.PopOut(BoardOf("b-1", PanelType.Standing, PanelType.Race), "p-b-1-2", rect);
+        var second = BoardEdits.PopOut(BoardOf("b-2", PanelType.Top, PanelType.Records), "p-b-2-1", rect);
+        IReadOnlyList<BoardDef> boards = [first, second];
+
+        Assert.Equal(new[] { "p-b-1-2", "p-b-2-1" }, BoardEdits.PoppedOut(boards, draft: null).Select(p => p.Id).ToArray());
+        Assert.Equal(new[] { "p-b-1-2", "p-b-2-1" }, BoardEdits.PoppedOut(boards, BoardEdits.MoveBy(first, "p-b-1-1", 1)).Select(p => p.Id).ToArray());
+        Assert.Equal(new[] { "p-b-2-1" }, BoardEdits.PoppedOut(boards, BoardEdits.RemovePanel(first, "p-b-1-2")).Select(p => p.Id).ToArray());
+    }
+
+    [Fact]
+    public void DoneKeepsEveryPopOutAsItIsNowNotAsItWasWhenEditingBegan()
+    {
+        var at = new PopOutRect(10, 10, 360, 300);
+        var atEdit = BoardEdits.PopOut(BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Top), "p-b-1", at);
+
+        // Returned by its window while editing, and nothing else changed: nothing to write.
+        IReadOnlyList<BoardDef> returned = [BoardEdits.Return(atEdit, "p-b-1")];
+        Assert.Same(returned, BoardEdits.Finish(returned, atEdit, atEdit));
+
+        // Returned, and the draft moved another panel: the move is saved, and the return isn't undone.
+        var moved = BoardEdits.MoveBy(atEdit, "p-b-3", -1);
+        var saved = BoardEdits.Finish(returned, atEdit, moved);
+        Assert.Equal(new[] { "p-b-1", "p-b-3", "p-b-2" }, Ids(saved[0]));
+        Assert.All(saved[0].Panels, p => Assert.Null(p.PopOut));
+
+        // Its window moved, and another opened, while editing: both kept as they are now.
+        var elsewhere = new PopOutRect(900, 40, 400, 320);
+        IReadOnlyList<BoardDef> now = [BoardEdits.PopOut(BoardEdits.PopOut(atEdit, "p-b-1", elsewhere), "p-b-2", at)];
+        Assert.Same(now, BoardEdits.Finish(now, atEdit, atEdit));
+        var resized = BoardEdits.Finish(now, atEdit, BoardEdits.Resize(atEdit, "p-b-3", new PanelSize(PanelSize.Wide)));
+        Assert.Equal(new[] { elsewhere, at, null }, resized[0].Panels.Select(p => p.PopOut).ToArray());
+        Assert.Equal(new PanelSize(PanelSize.Wide), resized[0].Panels[2].Size);
+
+        // A popped-out panel removed in the draft goes, window and all.
+        Assert.Equal(new[] { "p-b-2", "p-b-3" }, Ids(BoardEdits.Finish(now, atEdit, BoardEdits.RemovePanel(atEdit, "p-b-1"))[0]));
+    }
+
+    [Fact]
+    public void CarryingPopOutsTakesEachPanelsFromItsBoardNow()
+    {
+        var rect = new PopOutRect(10, 10, 360, 300);
+        var draft = BoardEdits.AddPanel(BoardOf("b", PanelType.Standing, PanelType.Race), PanelType.Top, new PanelSettings(Clan.Slug));
+        IReadOnlyList<BoardDef> boards = [BoardEdits.PopOut(BoardOf("b", PanelType.Standing, PanelType.Race), "p-b-2", rect)];
+
+        var carried = BoardEdits.CarryPopOuts(draft, boards);
+
+        Assert.Equal(new[] { null, rect, null }, carried.Panels.Select(p => p.PopOut).ToArray());
+        Assert.Same(carried, BoardEdits.CarryPopOuts(carried, boards));
+        Assert.Same(draft, BoardEdits.CarryPopOuts(draft, [BoardOf("b-other")]));
+    }
+
+    [Fact]
+    public void WhereTheWindowsSitIsSavedOnlyForPanelsStillOut()
+    {
+        var at = new PopOutRect(10, 10, 360, 300);
+        var there = new PopOutRect(500, 200, 420, 310);
+        IReadOnlyList<BoardDef> boards =
+        [
+            BoardEdits.PopOut(BoardOf("b-1", PanelType.Standing, PanelType.Race), "p-b-1-1", at),
+            BoardEdits.PopOut(BoardOf("b-2", PanelType.Top), "p-b-2-1", at),
+        ];
+
+        var placed = BoardEdits.PlacePopOuts(boards, new Dictionary<string, PopOutRect> { ["p-b-2-1"] = there, ["p-b-1-2"] = there, ["p-gone"] = there });
+
+        Assert.Equal(at, placed[0].Panels[0].PopOut);
+        Assert.Null(placed[0].Panels[1].PopOut);
+        Assert.Equal(there, placed[1].Panels[0].PopOut);
+        Assert.Same(boards[0], placed[0]);
+        Assert.Same(boards, BoardEdits.PlacePopOuts(boards, new Dictionary<string, PopOutRect> { ["p-b-1-1"] = at, ["p-b-1-2"] = there }));
+    }
 }

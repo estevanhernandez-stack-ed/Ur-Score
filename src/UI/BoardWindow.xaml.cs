@@ -77,6 +77,7 @@ public partial class BoardWindow : Window
         PanelFrame.SetShowSettings(BoardPanels, true);
         BoardPanels.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnSettingsTool));
         HookEditing();
+        HookPopOuts();
 
         _services.Changed += Render;
         _services.IconChanged += ApplyIcon;
@@ -148,6 +149,9 @@ public partial class BoardWindow : Window
             BuildPanels(board);
         }
 
+        // Only once shown: the constructor's first draw must not open windows ahead of the board.
+        if (IsLoaded) SyncPopOuts();
+
         _anchorSourceId = BoardEdits.AnchorSourceId(board, _services.Sources);
         var live = _services.CurrentBoard();
 
@@ -155,6 +159,7 @@ public partial class BoardWindow : Window
         if (_services.ReaderLoaded)
         {
             foreach (var (def, view, _) in _panels) RenderPanel(def, view, live);
+            RenderPopOuts(live);
         }
 
         _ = ResolveNamesAsync(live);
@@ -186,9 +191,11 @@ public partial class BoardWindow : Window
         }
     }
 
-    /// <summary>The control for one panel on the board, named by its automation id.</summary>
+    /// <summary>The control for one panel on the board, named by its automation id; a popped-out panel's slot holds a placeholder (R19).</summary>
     private FrameworkElement CreatePanelView(PanelDef def, string automationId)
     {
+        if (def.PopOut is not null) return PoppedOutPlaceholder(def, automationId);
+
         var view = PanelViews.Create(def.Type);
         AutomationProperties.SetAutomationId(view, automationId);
         return view;
@@ -207,8 +214,19 @@ public partial class BoardWindow : Window
         }
     }
 
-    /// <summary>Every panel showing anywhere, for looking up Live leaderboard names.</summary>
-    private IEnumerable<PanelDef> ShownPanels() => _panels.Select(p => p.Def);
+    /// <summary>Every panel showing anywhere, on the board or popped out, for looking up Live leaderboard names.</summary>
+    private IEnumerable<PanelDef> ShownPanels()
+    {
+        foreach (var (def, _, _) in _panels)
+        {
+            if (def.PopOut is null) yield return def;
+        }
+
+        foreach (var id in _popOuts.Keys.ToList())
+        {
+            if (BoardEdits.Find(_services.Boards, id) is { } found) yield return found.Panel;
+        }
+    }
 
     private void RenderTabs(IReadOnlyList<BoardDef> boards, BoardDef shown)
     {

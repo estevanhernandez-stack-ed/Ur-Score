@@ -89,6 +89,7 @@ public partial class PanelFrame : UserControl
             PanelTool.Resize => tall ? TallBox : SizeBox,
             PanelTool.Remove => RemovePanelButton,
             PanelTool.Settings or PanelTool.ChooseAnother => PanelSettingsButton,
+            PanelTool.PopOut => PopOutButton,
             _ => null,
         };
 
