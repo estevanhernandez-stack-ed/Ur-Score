@@ -18,7 +18,10 @@ public static class ImportFlow
 {
     public const string DialogTitle = "Import a recipe";
 
-    public static async Task<ImportOutcome?> RunAsync(Window owner, ISetupServices services)
+    public const string AskingForAccounts = "Asking RoRoRo for your accounts…";
+
+    /// <param name="status">Shows a line while the import waits on RoRoRo, and clears it after.</param>
+    public static async Task<ImportOutcome?> RunAsync(Window owner, ISetupServices services, Action<string>? status = null)
     {
         var dialog = new OpenFileDialog
         {
@@ -77,6 +80,7 @@ public static class ImportFlow
             }
 
             // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
+            status?.Invoke(AskingForAccounts);
             try
             {
                 await services.RefreshAccountsAsync(CancellationToken.None);
@@ -85,12 +89,16 @@ public static class ImportFlow
             {
                 // The budget then counts the accounts already known.
             }
+            finally
+            {
+                status?.Invoke("");
+            }
 
             var window = new ImportWindow(
                 recipe, review, comparison, installed?.State, services.Installed,
                 () => [.. services.KnownAccounts.Select(a => a.AccountId)],
                 metricId => AlertsModel.RuleSentence(metricId).Text,
-                recipe.LastStep.Counters is null ? null : _ => services.ReadCounterNamesAsync(recipe, CancellationToken.None))
+                recipe.LastStep.Counters is null ? null : () => services.ReadCounterNamesAsync(recipe, CancellationToken.None))
             {
                 Owner = owner,
             };

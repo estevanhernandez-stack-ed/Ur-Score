@@ -1,0 +1,53 @@
+<Window x:Class="Labs626.UrScore.UI.BoardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:Labs626.UrScore.UI"
+        Title="RoRoRo Ur Score" Height="900" Width="1280" MinHeight="560" MinWidth="720"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
+        FontFamily="{StaticResource BodyFont}">
+    <DockPanel>
+        <!-- The top bar (spec §8). Stage 2 adds tabs on the left and Edit board beside Setup. -->
+        <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,10">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="StartStopButton" Content="Start" Style="{StaticResource PrimaryButton}" Click="OnStartStopClick"
+                            AutomationProperties.Name="Start or stop reading" />
+                    <Button x:Name="TestNowButton" Content="Test now" Margin="8,0,0,0" Click="OnTestNowClick"
+                            AutomationProperties.Name="Read every source once now" />
+                    <Button x:Name="SetupButton" Margin="8,0,0,0" Click="OnSetupClick" AutomationProperties.Name="Setup">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <TextBlock Text="Setup" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image x:Name="BoardIcon" Width="22" Height="22" Margin="0,0,10,0" Visibility="Collapsed"
+                           AutomationProperties.Name="Main source icon" />
+                    <Ellipse x:Name="LiveDot" Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource CyanBrush}" Visibility="Collapsed" />
+                    <TextBlock x:Name="PeriodLine" Style="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <StackPanel DockPanel.Dock="Top" Margin="16,8,16,0">
+            <TextBlock x:Name="StateLine" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.HelpText="What Ur Score is doing" />
+            <TextBlock x:Name="DetailLine" Style="{StaticResource Muted}" Margin="0,2,0,0" />
+        </StackPanel>
+
+        <TextBlock x:Name="AttributionLine" DockPanel.Dock="Bottom" Style="{StaticResource Muted}" FontSize="11" Margin="16,4,16,8" />
+
+        <Grid>
+            <ScrollViewer x:Name="BoardScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
+                <ui:PanelGrid x:Name="BoardPanels" AutomationProperties.Name="Board" />
+            </ScrollViewer>
+            <StackPanel x:Name="EmptyState" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480">
+                <TextBlock x:Name="EmptyStateLine" Style="{StaticResource Heading}" TextAlignment="Center" />
+                <TextBlock x:Name="EmptyStateDetail" Style="{StaticResource Muted}" TextAlignment="Center" Margin="0,8,0,0" />
+                <Button x:Name="EmptyStateButton" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center" Margin="0,16,0,0"
+                        Click="OnEmptyStateClick" />
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</Window>

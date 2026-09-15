@@ -28,21 +28,10 @@
             <TextBlock x:Name="PollLine" Margin="0,4,0,0" TextWrapping="Wrap" />
             <TextBlock x:Name="ReusedLine" Margin="0,4,0,0" TextWrapping="Wrap" />
             <TextBlock x:Name="ChangesLine" Margin="0,4,0,0" TextWrapping="Wrap" />
-
-            <ItemsControl x:Name="InputsList" Margin="0,16,0,0">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Margin="0,0,0,12">
-                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.Name="{Binding Label}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <TextBlock x:Name="InputsNote" Margin="0,8,0,0" TextWrapping="Wrap" />
 
             <!-- Spec §7.3 and §14: what every successful read writes to the score book. -->
-            <TextBlock Text="KEPT IN YOUR SCORE BOOK" Style="{StaticResource SectionLabel}" Margin="0,8,0,4" />
+            <TextBlock Text="KEPT IN YOUR SCORE BOOK" Style="{StaticResource SectionLabel}" Margin="0,16,0,4" />
             <TextBlock x:Name="KeptNote" Style="{StaticResource Muted}" />
             <ItemsControl x:Name="KeptList" Margin="0,4,0,0" AutomationProperties.Name="Kept in your score book">
                 <ItemsControl.ItemTemplate>

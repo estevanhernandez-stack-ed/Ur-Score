@@ -129,7 +129,7 @@ public interface IRecipeEngine
 /// </summary>
 public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : IRecipeEngine
 {
-    public const string NothingTracked = "No stat is ticked to show or send. Choose some in Recipe settings.";
+    public const string NothingTracked = "No stat is ticked to show or send. Choose some in Setup › Stats.";
 
     public async Task<RecipeReading> ReadAsync(
         Recipe recipe, IReadOnlyDictionary<string, string> inputs, IReadOnlyCollection<long> accountUserIds,

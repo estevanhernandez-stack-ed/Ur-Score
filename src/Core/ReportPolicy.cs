@@ -107,7 +107,7 @@ public sealed class ReportPolicy(
     }
 
     /// <summary>
-    /// Rendered verbatim in the window (<c>MainWindow.RenderPolicy</c>), so what leaves is readable
+    /// Rendered verbatim in Setup › Alerts (<c>AlertsModel.Policies</c>), so what leaves is readable
     /// without reading code. Names every sent stat by its label and the metric id RoRoRo gets it
     /// under; it never assumes the number is points.
     /// <para>

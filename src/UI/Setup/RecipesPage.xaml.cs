@@ -37,7 +37,7 @@ public partial class RecipesPage : UserControl, ISetupPage
 
         try
         {
-            var outcome = await ImportFlow.RunAsync(_window, _services);
+            var outcome = await ImportFlow.RunAsync(_window, _services, text => Show(RecipesLine, text));
             if (outcome is null) return;
 
             Show(RecipesLine, outcome.Message);

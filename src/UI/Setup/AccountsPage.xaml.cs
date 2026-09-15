@@ -17,6 +17,9 @@ public partial class AccountsPage : UserControl, ISetupPage
 
     private bool _reverting;
 
+    /// <summary>RoRoRo is being asked for the accounts; the listed line says so until it answers or the wait runs out.</summary>
+    private bool _asking;
+
     public AccountsPage(ISetupServices services)
     {
         InitializeComponent();
@@ -27,7 +30,9 @@ public partial class AccountsPage : UserControl, ISetupPage
 
     public void Refresh()
     {
-        ListedLine.Text = AccountsModel.ListedLine(_services.Accounts.Last, _services.AccountsCache.SavedAt(), DateTimeOffset.UtcNow);
+        ListedLine.Text = _asking
+            ? ImportFlow.AskingForAccounts
+            : AccountsModel.ListedLine(_services.Accounts.Last, _services.AccountsCache.SavedAt(), DateTimeOffset.UtcNow);
 
         foreach (var tick in _rows.SelectMany(r => r.Sends)) tick.PropertyChanged -= OnTick;
         var accounts = _services.KnownAccounts;
@@ -42,6 +47,8 @@ public partial class AccountsPage : UserControl, ISetupPage
 
     private async Task AskForAccountsAsync()
     {
+        _asking = true;
+        ListedLine.Text = ImportFlow.AskingForAccounts;
         try
         {
             await _services.RefreshAccountsAsync(CancellationToken.None);
@@ -49,6 +56,11 @@ public partial class AccountsPage : UserControl, ISetupPage
         catch (Exception ex)
         {
             Show(AccountsBudgetLine, _services.Redactor.Redact($"Could not ask RoRoRo for your accounts: {ex.Message}"));
+        }
+        finally
+        {
+            _asking = false;
+            ListedLine.Text = AccountsModel.ListedLine(_services.Accounts.Last, _services.AccountsCache.SavedAt(), DateTimeOffset.UtcNow);
         }
     }
 

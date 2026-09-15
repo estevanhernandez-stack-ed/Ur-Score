@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
@@ -15,4 +16,10 @@ public static class ImportText
         recipe.IsGroupList ? "Nothing from this recipe is kept. Its rows are groups, shown live only."
         : recipe.Headline.Count == 0 ? "Every read keeps the stats you tick, for your own accounts only."
         : "Every read keeps these headline items, and the stats you tick for your own accounts only.";
+
+    /// <summary>A recipe with inputs has its values picked in Setup, where the search list helps.</summary>
+    public static string InputsNote(Recipe recipe) =>
+        recipe.IsGroupList || RecipeWords.MainInput(recipe) is not { } input
+            ? ""
+            : $"After you import it, pick {RecipeWords.Lower(input.Label)} in Setup › {RecipeWords.Groups(recipe)}.";
 }

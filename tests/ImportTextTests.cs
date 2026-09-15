@@ -34,6 +34,16 @@ public class ImportTextTests
     }
 
     [Fact]
+    public void ARecipeWithInputsSaysWhereToPickThem()
+    {
+        var clan = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+        var profile = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-profile.recipe.json")).Recipe!;
+
+        Assert.Equal("After you import it, pick your clan in Setup › Clans.", ImportText.InputsNote(clan));
+        Assert.Equal("", ImportText.InputsNote(profile));
+    }
+
+    [Fact]
     public void AGroupListKeepsNothing()
     {
         var parsed = RecipeParser.Parse(GroupList);

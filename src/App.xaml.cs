@@ -14,9 +14,13 @@ public partial class App : Application
 
     private Mutex? _instance;
     private bool _owns;
+    private Composition.AppServices? _services;
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Task 15 adds the --try branch HERE, first, before the single-instance mutex: a try-out runs no
+        // window, no RoRoRo, no state, no book and no mutex (spec §10).
+
         _instance = new Mutex(initiallyOwned: true, SingleInstanceName, out var isFirst);
         _owns = isFirst;
 
@@ -32,11 +36,18 @@ public partial class App : Application
 
         base.OnStartup(e);
         Theming.ThemeService.Start();
-        new UI.MainWindow().Show();
+
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+        _services = new Composition.AppServices(Dispatcher);
+        var board = new UI.BoardWindow(_services);
+        MainWindow = board;
+        board.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Flushes the score book's pending lines before the process goes.
+        _services?.Dispose();
         if (_owns) _instance?.ReleaseMutex();
         _instance?.Dispose();
         base.OnExit(e);

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Grpc.Core;
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
@@ -382,15 +383,45 @@ public class RecipeWatchTests
     }
 
     [Fact]
-    public void TheWindowConstructsExactlyOneRecipeWatch()
+    public void OnlyTheCompositionRootConstructsARecipeWatch()
     {
-        // F2: a watch built per cycle gets a fresh serialization guard, and a timer tick and a Test
-        // now click could then both report one observation.
-        var text = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "MainWindow.xaml.cs"));
-        var count = Regex.Matches(text, Regex.Escape("new RecipeWatch(")).Count;
+        // F2: a watch built per cycle gets a fresh serialization guard, and a timer tick and a Test now
+        // click could then both report one observation. The main window that held the one construction
+        // is gone; AppServices now builds each source's watch, once, inside SourceHost's factory.
+        var src = Path.Combine(RepoRoot(), "src");
+        var builders = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Select(f => (Relative: Path.GetRelativePath(src, f), Count: Regex.Matches(File.ReadAllText(f), Regex.Escape("new RecipeWatch(")).Count))
+            .Where(f => f.Count > 0)
+            .ToList();
 
-        Assert.True(count == 1, $"src/UI/MainWindow.xaml.cs constructs RecipeWatch {count} time(s); expected exactly 1. "
-            + "A watch built per cycle regresses F2: a fresh semaphore serializes nothing, and one observation can be reported twice.");
+        Assert.True(
+            builders.Count == 1 && builders[0].Relative == Path.Combine("Composition", "AppServices.cs") && builders[0].Count == 1,
+            $"RecipeWatch is constructed in: {string.Join(", ", builders.Select(b => $"{b.Relative} ({b.Count})"))}. "
+            + "Expected exactly one construction, in Composition/AppServices.cs. A watch built per cycle regresses F2: "
+            + "a fresh semaphore serializes nothing, and one observation can be reported twice.");
+    }
+
+    [Fact]
+    public async Task TheSourceHostKeepsOneWatchPerSourceAcrossAppliesAndReads()
+    {
+        var built = 0;
+        var engine = new FakeEngine(() => Reading("battle=A", Row(111, 1)));
+        var host = new FakeHost(true, [MyAccount]);
+        var source = new Source("s-0000abcd", PetSim.Slug, Clan, SourceRole.Mine);
+        using var sources = new SourceHost(_ => { built++; return Watch(engine, host); }, _ => 180);
+
+        sources.Apply([source]);
+        await sources.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+        var first = sources.WatchFor(source.Id);
+
+        // A role change keeps the watch (RecipeWatch.UpdateSource); only a new source id gets a new one.
+        sources.Apply([source with { Role = SourceRole.Main }]);
+        await sources.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.Same(first, sources.WatchFor(source.Id));
+        Assert.Equal(1, built);
+        Assert.Equal(2, engine.Calls);
     }
 
     private static string RepoRoot()
