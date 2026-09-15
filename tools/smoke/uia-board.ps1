@@ -75,6 +75,18 @@ function Select-GridRow($row) {
     Start-Sleep -Milliseconds 800
 }
 
+# Picks a row the way a person actually does: keyboard focus lands on it first (SetFocus, the same call
+# Invoke-TabMenu uses), then it's selected. SelectionItemPattern.Select alone (Select-GridRow) never moves
+# focus, which no click or arrow key leaves true -- a caller that wants to assert focus stayed in the table
+# afterward needs this one instead.
+function Select-GridRowAsUser($row) {
+    if (-not $row) { throw 'row not found' }
+    $row.SetFocus()
+    Start-Sleep -Milliseconds 300
+    $row.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Start-Sleep -Milliseconds 800
+}
+
 # The board's own vertical scroll (BoardScroll), 0-100; -1 when it isn't tall enough to scroll at all.
 function Get-BoardScrollPercent($board) {
     $scroll = Find-ByAutomationId $board 'BoardScroll'

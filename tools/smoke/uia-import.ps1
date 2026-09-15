@@ -73,7 +73,7 @@ function Complete-ClanImport([string]$fixture, [string[]]$show, [string[]]$send)
     }
     foreach ($label in $show) { Set-Tick (Get-Check $screen "Show $label") $true }
     foreach ($label in $send) { Set-Tick (Get-Check $screen "Send $label") $true }
-    Invoke-Element (Find-ByAutomationId $screen 'ImportButton')
+    Invoke-WhenReady $screen 'ImportButton'
     Start-Sleep -Seconds 2
     return Get-SetupWindow
 }

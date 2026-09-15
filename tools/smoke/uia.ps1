@@ -99,6 +99,17 @@ function Invoke-Element($el) {
     $el.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
+# Waits for an element to exist under $root, then invokes it. A window that just appeared (a new page, a
+# screen an import opened) isn't always fully laid out for UI Automation to see its children on the very
+# first poll; invoking straight off Find-ByAutomationId in that window races it, and Invoke-Element's own
+# 'element not found' doesn't say which element was missing. This names it instead.
+function Invoke-WhenReady($root, [string]$id, [int]$seconds = 15) {
+    $el = $null
+    $ok = Wait-Until { $el = Find-ByAutomationId $root $id; [bool]$el } $seconds
+    if (-not $ok) { throw "$id never showed up" }
+    Invoke-Element $el
+}
+
 function Set-ElementValue($el, [string]$value) {
     if (-not $el) { throw 'element not found' }
     $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($value)

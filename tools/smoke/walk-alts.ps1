@@ -72,10 +72,11 @@ try {
         $headers = @(Get-GridHeaders (Get-AccountsGrid))
         Check '5b A second click flips it' ($headers -contains "Player rank $up") ($headers -join ' | ')
 
-        # 6. Picking an account fills the account card.
+        # 6. Picking an account fills the account card. A real pick focuses the row first, the way a click or
+        # the arrow keys do; SelectionItemPattern.Select alone (Select-GridRow) never moves focus, and 6b needs it to.
         $pick = @(Get-GridRows (Get-AccountsGrid)) | Where-Object { $_.Current.Name -ne 'Total' } | Select-Object -Last 1
         $pickName = $pick.Current.Name
-        Select-GridRow $pick
+        Select-GridRowAsUser $pick
         $card = Find-ByAutomationId (Get-BoardWindow) 'AccountCardPanel1'
         $subtitle = Line $card 'PanelSubtitle'
         Check '6 The card shows the picked account' ($subtitle.StartsWith($pickName)) "picked '$pickName'; card '$subtitle'; note '$(Line $card 'PanelNote')'"
@@ -92,19 +93,24 @@ try {
         Check '7 The total row sums what adds up' ($totalTexts.Count -ge 2 -and $totalTexts[0] -eq 'Total' -and ($totalTexts[1] -match '^[\d,]+$' -or $totalTexts[1] -eq $dash)) ($totalTexts -join ' | ')
 
         # 7b. A refresh (Test now) doesn't scroll the board back to wherever the table is (Task 5's fix: a data
-        # refresh leaves focus and scrolling alone, only a sort or pick this table raised may restore them).
+        # refresh leaves focus and scrolling alone, only a sort or pick this table raised may restore them). The
+        # board's viewport is close to its own extent, so VerticalScrollPercent alone swings with any small change
+        # in content height; the accounts table's own screen position is the stable measure -- it's the board's
+        # first panel (check 2b), so nothing above it can push it around, and the percent is kept only for Seen.
         $scrollable = Get-BoardScrollPercent (Get-BoardWindow)
         if ($scrollable -eq -1) {
             Skip '7b A refresh does not scroll the board' 'board is not tall enough to scroll' 'BoardScroll.VerticallyScrollable=false'
         }
         else {
             Set-BoardScrollPercent (Get-BoardWindow) 80
-            $before = Get-BoardScrollPercent (Get-BoardWindow)
+            $beforePct = Get-BoardScrollPercent (Get-BoardWindow)
+            $beforeTop = (Find-ByAutomationId (Get-BoardWindow) 'AccountsTablePanel1').Current.BoundingRectangle.Top
             Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton')
             Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10 | Out-Null
             Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240 | Out-Null
-            $after = Get-BoardScrollPercent (Get-BoardWindow)
-            Check '7b A refresh does not scroll the board' ([Math]::Abs($after - $before) -le 2) "scrolled to $before before Test now, $after after"
+            $afterPct = Get-BoardScrollPercent (Get-BoardWindow)
+            $afterTop = (Find-ByAutomationId (Get-BoardWindow) 'AccountsTablePanel1').Current.BoundingRectangle.Top
+            Check '7b A refresh does not scroll the board' ([Math]::Abs($afterTop - $beforeTop) -le 4) "table top $beforeTop before Test now, $afterTop after (scroll $beforePct% -> $afterPct%)"
         }
     }
 

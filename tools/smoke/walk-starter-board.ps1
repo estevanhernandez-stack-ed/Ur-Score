@@ -27,22 +27,22 @@ try {
     $setup = Wait-UrWindow '^Setup$' 30
     Select-SearchName $setup 'Your main clan' $Main
     Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
-    Invoke-Element (Find-ByAutomationId $setup 'AddMineButton')
+    Invoke-WhenReady $setup 'AddMineButton'
     Select-SearchName $setup 'Add a clan your accounts are in' $Alt
     Wait-Line $setup 'MineFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
-    Invoke-Element (Find-ByAutomationId $setup 'WatchClanButton')
+    Invoke-WhenReady $setup 'WatchClanButton'
     Select-FirstSearchMatch $setup 'Watch a clan' 'an' @($Main, $Alt) | Out-Null
 
     if ($topFixture) {
         Start-Import $topFixture.FullName
         $screen = Wait-UrWindow '^Import recipe$' 30
-        Invoke-Element (Find-ByAutomationId $screen 'ImportButton')
+        Invoke-WhenReady $screen 'ImportButton'
         Start-Sleep -Seconds 2
     }
 
     Start-Import $profileFixture
     $screen = Wait-UrWindow '^Import recipe$' 30
-    Invoke-Element (Find-ByAutomationId $screen 'ImportButton')
+    Invoke-WhenReady $screen 'ImportButton'
     Start-Sleep -Seconds 2
 
     Close-UrWindow (Get-SetupWindow)
