@@ -2956,3 +2956,146 @@ Expected: every step passes (a SKIP that needs a live battle is not a failure), 
 - **Placeholders:** none; every code step carries its code, every command is exact. Task 8's rounds are a checklist the controller runs, with fixed targets and a stop rule.
 - **Types across tasks:** `StatFormat`, `RecipeStat.Format/Section` (Task 1) are used by `PanelText.Value` and `Sections` (Task 3) and `AccountsTable` (Task 4). `WindowGain(series, since, format, none)` (Task 3) is what Task 4 calls. `AccountColumn`, `AccountSort.Clicked`, `AccountRow`, `PanelSession` (Task 4) are what `AccountsTablePanel` and `BoardWindow.Accounts.cs` use (Task 5). `AccountCard(..., pickedUserId)` (Task 3) is what `PanelViews.Render` passes (Task 5). `StarterBoards.All/Named/EmptyState/KeyOf` (Task 6) are what `Following`, `BoardDefs.Following`, `BoardsFile.FollowsOf`, `BoardText.EmptyFor` and `AppServices` use (Task 7). Automation ids in the table above match the walks (Task 9).
 - **Against the tree at `9218049`:** `PanelSettings`, `PanelHead`, `LiveBoard.FindSource/FindRecipe/SourceName/AccountName/MyUserIds/IsOverdue`, `RecipeSnapshot.Rows/Unavailable`, `ScoreBookReader.Series`, `BoardEdits.Changed/Replace/RemovePanel/Rename/PopOut/Delete/Find`, `BoardFixtures.Installed/SourceOf/Snapshot/Row/Read/Reader/Live`, `PanelFrame`, `PanelAt`, `_popOuts`, `PanelPopOutWindow.View/PanelId`, `StatsTable.Load`, `ImportWindow.Show` and the smoke helpers `Find-All`, `Get-Check`, `Set-Tick`, `Line`, `Get-AllTexts`, `Read-Boards`, `Enter-EditMode`, `Invoke-PanelTool`, `Complete-EditMode`, `Start-Import` are used as they are.
+
+---
+
+## Execution record (2026-09-15)
+
+Built by nine subagent-driven tasks off `9218049`, each with its own dispatch, a per-task review, and a fix round where the review found real issues (Task 5 took two fix rounds to close a focus/scroll bug properly; Task 7 and Task 8 each took one). A visual pass (Task 8) held the built Battle and Alts tabs up against the owner's approved mock through two rounds of screenshot comparison plus a review round of its own. Once all nine tasks were done, a whole-branch review read the full diff from `9218049`, found two Important cross-task issues and eleven Minors, and one fix wave plus a scoped re-review closed all of it with no Critical or Important findings left. The branch ends at 855 tests, and both the app and test-project builds are `-warnaserror` clean.
+
+### Tasks
+
+- **Task 1** (recipe format additions, the profile recipe's named stats): `b633ac8`.
+- **Task 2** (first import starts with suggested stats ticked): `9466d88`.
+- **Task 3** (durations/dates on panels, the sectioned account card): `c634488`.
+- **Task 4** (Accounts table model, form, gallery card): `7ec5170`.
+- **Task 5** (Accounts table on the board — sort, pick, focus): `edee6f2`, fix round 1 `2b49123`, fix round 2 `61dbd06`.
+- **Task 6** (Battle and Alts in rows that fill the grid): `c3f53c3`.
+- **Task 7** (each tab follows your sources until you change it): `6224164`, fix round `8525906`.
+- **Task 8** (both tabs next to the approved mock): round 1 `1fdc025`, round 2 `7cd5086` + `c0a49bd`, review-fix round `fa4320b`.
+- **Task 9** (smoke walks, the live walk): Steps 1-7 `3a327c7`, follow-up `c5c81a1`, follow-up round 2 `910e326`, controller's walk-regression fix `b997bb9`.
+- **Docs tie-up before the whole-branch review:** `f69abcc`.
+- **Final fix wave** (whole-branch review's Importants and Minors): `cc3aa86`, `13ea6e7`, `ecb6029`, `88d7fdb`, `41703e2`, `04ffc38`, `e088a0c`.
+
+### Rulings made during execution
+
+- Pre-flight FIX findings were folded straight into the tasks that touched their files, not fixed separately: T1 renamed the not-offered test stat `"rebirths"` → `"prestige"` (`RecipeStoreTests.cs`); T2 updated `walk-stats-table`'s counts and default ticks in its own commit; T4 extracted shared "first enabled source, else its first" and midnight helpers instead of copying them a third time; T6 moved the two-tab `walk-starter-board`/`walk-pop-outs` edits into its own commit; T9 Step 8 checks the "Updated … New stat" outcome text instead of an update screen that turns out not to exist for a same-hosts update.
+- Task 3's ruling bound durations/dates everywhere they show — the Account card's value facts and the Records panel, not only the table and card sections — overruling D10's original carve-out.
+- Task 5's ruling (sort/pick redraws never run inside the DataGrid's own `Sorting`/`SelectionChanged`; keyboard focus returns to the picked row, D14) took three passes to land safely: the first fix missed a Total-row round-trip that could still arm a restore; the second added a generation-stamped token (`FocusRestoreGate`) so a data refresh can never restore focus or scroll the board, only the redraw that actually answered the table's own input can.
+- Task 9's walk scripts (Steps 1-7) were run before Task 8, because Task 8's baseline shots needed `walk-alts`; Task 9 Step 8 (the live walk) ran after Task 8.
+- Natural heights (reversing Task 6's row-stretch, superseding D7): panels keep their own height, top-aligned in their row, matching the mock instead of stretching to their row's tallest neighbour; carried by `PanelGrid.cs` and a new `BoardLayout.ArrangedHeight`.
+- The Battle rebalance (fidelity round 2): rows reordered to standings + race / My accounts + Promotion + Top / Past battles + Records, matching the mock's arrangement and moving panels the owner had already approved — the controller flagged this to the owner rather than treating it as self-evidently fine.
+- Chips are coloured by role (`PanelHead.ChipRole`), not by their text, so a copy change can never silently mute a chip's colour; after a contrast finding on the watching chip, chip text became `WhiteBrush` for every role, with the role's colour kept on the border only.
+- The clipboard default flipped: the shared `PanelTable` style now defaults to `ClipboardCopyMode=None`, and only `AccountsGrid` opts in locally to `IncludeHeader` (your own accounts only), guarded by a fence test.
+- The one-source rule: "first enabled source, else its first" (`PanelForms.FirstSourceOfRecipe`) is now shared by the Accounts table and Profile stat instead of each panel picking its own rule; the table's note now distinguishes a switched-off source from "waiting for the first read."
+- Card section columns are chosen from width by a pure rule (`CardLayout.SectionColumns`, floor of 200px per column, equal widths), replacing the fixed two-column grid that trimmed labels on a Small card or a pop-out.
+- Starter name lookup: `StarterBoards.Build` now matches a starter's name or its key, ignoring case, and throws on anything else — closing the trap where passing `"alts"` (a `boards.json` key) silently built Battle instead.
+- The walk-script regression on `910e326` was root-caused, not just re-run: `Invoke-WhenReady`'s `Wait-Until` assigned `$el` in its own scope (the outer `$el` stayed null, so every import walk threw "element not found"), and `Select-GridRowAsUser` called `SetFocus` on a DataGrid row, which isn't focusable. Both were fixed in the controller's `b997bb9`.
+
+### Live walk
+
+Final results, on `e088a0c`, all green: `walk-alts` 16/16, `walk-stats-table` 11/11, `walk-starter-board` 21/21, `walk-board-editing` 24/24, `walk-pop-outs -Main K0i2` 14/14, `walk-score-book -Main K0i2` 6/6, `window-smoke` 12/12, `walk-setup-clans` 11/11 — 115 checks, no `smoke-backup` folder left behind. The battle-only steps (`walk-pop-outs`, `walk-score-book`) ran against a real account, K0i2, whose clan battle is public and readable, rather than a fixture.
+
+### Release note to carry
+
+After a downgrade to 0.3.0 and one save there, following tabs come back as empty boards. Delete them and add Battle or Alts again with **+ Board**.
+
+### Nice-to-haves (every review Minor)
+
+Every Minor finding from every task review, rereview, the final review and re-review, the pre-flight scan, and the two visual-fidelity rounds, checked against the code at `e088a0c` on 2026-09-15. **39 open, 35 fixed, 0 gone** (74 total).
+
+**Pre-flight**
+- DV-PF.1 **OPEN** — a code comment still claims a recipe can never name "a stat to tick," but the new `show` field does exactly that — code tidiness — `src/Recipes/Recipe.cs:8-11` — preflight.md §4.
+- DV-PF.2 **OPEN** — the plan's own note on downgrading to 0.3.0 doesn't mention that it also drops any Accounts table panel on a plain (non-following) board — doc gap — plan D2 cost line — preflight.md §4.
+
+**Task 1 — recipe format, profile recipe's named stats**
+- DV-T1.1 **OPEN** — two nearly identical count-reading helpers repeat the same two-line "value wasn't found" check instead of one owning it — code tidiness — `src/Recipes/RecipeEngine.cs:656-657,672-673` — task-1-review.md Minor.
+
+**Task 2 — first import starts with suggested ticks**
+- DV-T2.1 **OPEN** — the import screen's "so it starts ticked" wording (exactly one suggested stat) has no test; only the many-stats and zero-stats cases are tested — test gap — `src/UI/ImportText.cs:29-33`, `tests/ImportTextTests.cs` — task-2-review.md Minor 1.
+- DV-T2.2 **OPEN** — a helper method sits after a different one than the brief asked for; no effect on behaviour — code tidiness — `src/UI/Controls/StatsTableModel.cs:160` — task-2-review.md Minor 2.
+
+**Task 3 — durations/dates on panels, sectioned account card**
+- DV-T3.1 **OPEN** — the "Best {period}" fact (e.g. "Best battle") is wired to format as a duration or date but no test exercises that combination — test gap — `src/Board/PanelModels.cs:396,548` — task-3-review.md Minor 1.
+- DV-T3.2 **OPEN** — a date reading of exactly midnight 1 Jan 1970 shows a dash instead of the date, which the code's own doc comment says should be valid — code tidiness — `src/Board/PanelText.cs:60-62` — task-3-review.md Minor 2.
+
+**Task 4 — Accounts table model, form, gallery card**
+- DV-T4.1 **OPEN** — the gallery's doc comment still says "the ten panels"; the Accounts table makes eleven — code tidiness — `src/Board/PanelGallery.cs:9` — task-4-review.md Minor.
+
+**Task 5 — Accounts table on the board (sort, pick, focus)**
+- DV-T5.1 **OPEN** — you can't sort the Accounts table from the keyboard, only by clicking a column heading; backlogged on purpose (a default sort always exists) — `src/App.xaml:482-487` — task-5-review.md Minor 1.
+- DV-T5.2 **OPEN** — if you alt-tab away with focus in the table, a data refresh can leave keyboard navigation stuck until you click the table again — `src/UI/Panels/AccountsTablePanel.xaml.cs:51` — task-5-review.md Minor 2.
+- DV-T5.3 **FIXED** — a focus restore after sorting could land in the wrong column; it now follows the column by name, not position — `src/Board/AccountsTableFocus.cs:31-48` — task-5-rereview.md Ruling 3.
+- DV-T5.4 **FIXED** — "which row stays picked after a refresh" and "where focus falls back to" are now pure, tested rules instead of undocumented control logic — `src/Board/AccountsTableFocus.cs:17-24` — task-5-rereview.md Ruling 4.
+- DV-T5.5 **FIXED** — a table cell style no longer duplicates WPF's whole default cell template just to change its padding — code tidiness — `src/App.xaml:450-461` — task-5-rereview.md Ruling 5.
+- DV-T5.6 **FIXED** — a redundant header style setter (duplicated an existing one) was removed and commented — code tidiness — `src/App.xaml:531-533` — task-5-rereview.md Ruling 6.
+- DV-T5.7 **FIXED** — the keyboard focus outline on a table cell was thinner (1px) than the rest of the app's (1.5px); now matches — `src/App.xaml:497` — task-5-rereview.md Ruling 7.
+- DV-T5.8 **OPEN** — the line between table rows is full-strength, where the mock uses a dimmer ~55%; never given a theme slot — `src/App.xaml:202-203` — task-5-review.md Minor 8.
+- DV-T5.9 **OPEN** — clicking a row or column heading redraws the entire board (every panel, every pop-out), not just the table and card; fine at clan sizes today — `src/UI/BoardWindow.Accounts.cs:66` — task-5-review.md Minor 9; also flagged in final-review.md's after-Saturday recommendations.
+- DV-T5.10 **FIXED** — extra table styles landed ahead of Task 8's visual pass; Task 8 confirmed it built on them instead of restyling twice — `src/App.xaml:489-536` — task-5-review.md Minor 10.
+
+**Task 6 — Battle and Alts in rows that fill the grid**
+- DV-T6.1 **FIXED** — building a starter by its saved key (e.g. `"alts"`) used to silently build Battle instead; now matches name or key, ignoring case, and rejects anything else — `src/Board/StarterBoards.cs:56-57` — task-6-review.md Minor 1, fixed by task-7-review.md Ruling 1.
+- DV-T6.2 **OPEN** — the empty-tab fallback would throw if the starter list were ever empty (not reachable today, since there are always two starters) — code tidiness — `src/Board/StarterBoards.cs:44-47` — task-6-review.md Minor 2.
+- DV-T6.3 **OPEN** — the same small helper for matching a source to a recipe is written out twice, once for Battle and once for Alts — code tidiness — `src/Board/StarterBoards.cs:87,133` — task-6-review.md Minor 3.
+- DV-T6.4 **OPEN** — a row-height calculation is duplicated instead of one calling the other — code tidiness — `src/Board/BoardLayout.cs:68-75,82` — task-6-review.md Minor 4.
+- DV-T6.5 **FIXED** — a profile-only user (no clan recipe) used to see Battle's "No stats turned on yet" until Task 7 shipped; now they see Alts alone with no empty Battle tab — task-6-review.md Minor 5, fixed by task-7-review.md Ruling 2.
+- DV-T6.6 **OPEN** — a test checks that a profile-only user's Battle tab has no panels, but not which "nothing to show yet" message it would display — test gap — `tests/StarterBoardsTests.cs:142-143` — task-6-review.md Minor 6.
+- DV-T6.7 **FIXED** — two Alts-tab paths (no available source; two candidate recipes) had no test; Task 7 added both — task-6-review.md Minor 7, fixed by task-7-review.md Ruling 1's tests.
+- DV-T6.8 **FIXED** — a test's saved reference layout was named after the old four-row starter design and was misleading; renamed — `tests/BoardLayoutTests.cs` — task-6-review.md Minor 8, fixed in Task 8 round 2.
+- DV-T6.9 **OPEN** — a code comment describing starter panel widths as "4- or 5-wide" is stale; starters now use 3, 4, 5, 6, 7 and 8 — code tidiness — `src/UI/Panels/PanelFrame.xaml.cs:122` — task-6-review.md Minor 9.
+- DV-T6.10 **FIXED** — a popped-out panel next to a taller one used to sit half-empty; addressed by Task 8's natural-heights change — task-6-review.md Minor 10.
+
+**Task 7 — each tab follows your sources until you change it**
+- DV-T7.1 **OPEN** — with nothing ticked anywhere, the one empty tab shown is always named "Battle," even for a profile-only user who has no clan recipe installed — `src/Board/StarterBoards.cs:44-47,62-66` — task-7-review.md Minor 1.
+- DV-T7.2 **FIXED** — editing a following tab (e.g. Alts) while its underlying source disappears (e.g. you untick every stat in Setup mid-edit) used to drop your edit silently on Done; now it's kept — `src/Board/BoardEdits.cs:42-49` — task-7-rereview.md Ruling 3.
+- DV-T7.3 **FIXED** — the message shown when `boards.json` can't be read still said "the starter board is showing" from when there was only one tab; now says "starter tabs" — `src/Composition/AppServices.cs:772-773` — task-7-rereview.md Ruling 2.
+- DV-T7.4 **FIXED** — the walk script never actually checked that no `boards.json` file gets written while both tabs are still following; a check was added — `tools/smoke/walk-starter-board.ps1` — task-7-rereview.md Ruling 1.
+- DV-T7.5 **OPEN** — downgrading to 0.3.0 and saving there turns following tabs into permanent empty boards, including a hidden Alts you never saw; needs a release-notes line — see "Release note to carry" above — task-7-review.md Minor 5.
+- DV-T7.6 **FIXED** — the privacy check script accepted any value in a board's `follows` field; now only accepts the two real values — `tools/smoke/check-boards-privacy.ps1` — task-7-rereview.md Ruling 4.
+- DV-T7.7 **OPEN** — the same "match a starter's name or key" logic is written three separate times with slightly different rules — code tidiness — `src/Board/StarterBoards.cs`, `src/Board/BoardsFile.cs:166` — task-7-review.md Minor 7.
+- DV-T7.8 **OPEN** — both starter tabs get rebuilt from scratch on every read of the board list, several times per click; fine at clan sizes today — `src/Composition/AppServices.cs:214` — task-7-review.md Minor 8; also flagged in final-review.md's after-Saturday recommendations.
+- DV-T7.9 **OPEN** — no test specifically proves that cleaning up a board's data keeps its "follows" flag intact — test gap — `tests/BoardsFileTests.cs` — task-7-review.md Minor 9.
+- DV-T7.10 **OPEN** — a test's wording and ids still describe the old single-starter-tab design — code tidiness — `tests/BoardEditsTests.cs:233-235` — task-7-review.md Minor 10.
+- DV-T7.11 **OPEN** — a `follows` value from a future version Ur Score doesn't recognize loads as a visible empty board, and the next save silently drops that "follows" for good — accepted, no fix planned — `src/Board/BoardsFile.cs:166` — task-7-review.md Minor 11.
+
+**Task 8 — both tabs next to the approved mock**
+- DV-T8.1 **FIXED** — the new "panel keeps its own height" layout rule had no test guarding it from regressing back to full-stretch; now a tested rule — `src/Board/BoardLayout.cs` (`ArrangedHeight`) — task-8-review.md Minor 1.
+- DV-T8.2 **FIXED** — two visual on/off switches (hide the empty chart; hide empty sections) were driven by a fragile technical trick instead of a named, tested flag — `src/Board/PanelModels.cs` (`HasLine`/`HasSections`) — task-8-review.md Minor 2.
+- DV-T8.3 **FIXED** — a chip's colour and its wording were two separate settings that could disagree; the colour now always comes from the role — `src/Board/PanelModels.cs` (`PanelHead.Chip`) — task-8-review.md Minor 3.
+- DV-T8.4 **FIXED** — a leftover style setter had no effect and could mislead a future edit; removed — `src/App.xaml` — task-8-review.md Minor 4.
+- DV-T8.5 **FIXED** — the same "picked row" highlight colour was hardcoded in two places; now one shared style — `src/App.xaml` (`PanelRowTint`), `src/UI/Panels/TopPanel.xaml` — task-8-review.md Minor 5.
+- DV-T8.6 **FIXED** — clicking a row in the Live leaderboard picked up the Accounts table's "picked row" highlight, which means nothing there — `src/UI/Panels/LiveLeaderboardPanel.xaml` — task-8-review.md Minor 6.
+- DV-T8.7 **FIXED** — the **+ Board** button stayed bright cyan even when disabled, reading as clickable when it wasn't — `src/UI/BoardWindow.xaml` — task-8-review.md Minor 7.
+- DV-T8.8 **FIXED** — subsumed by the Important-1 fix (card section columns from width): uneven row heights across account-card section columns are gone — task-8-review.md Minor 8.
+- DV-T8.9 **OPEN** — a chip's padding is 7×3 rather than the checklist's 7×4; a deliberate, explained trade-off for WPF's taller line height — accepted as a D21 cost — `src/UI/Panels/PanelFrame.xaml:40` — task-8-review.md Minor 9.
+- DV-T8.10 **FIXED** — the plan (D6, D7) and the design doc described the pre-rebalance, stretched-panel Battle layout; both now carry "changed during execution" banners pointing at this record — `docs/2026-09-15-default-views-design.md:23`, this plan's D6/D7 — task-8-review.md Minor 10.
+- DV-T8.11 **OPEN** — some panels put their subtitle on the same line as the title in the mock ("BATTLE RACE points since…"); the build always puts it on its own line — needs a per-panel model change — fidelity-round-1.md.
+- DV-T8.12 **OPEN** — a clan that isn't in the battle shows a plain "—" rather than a designed empty state — backlog V3-S.1 — fidelity-round-1.md.
+- DV-T8.13 **OPEN** — the race chart has no x-axis labels or line-end dots before any data arrives — fidelity-round-1.md.
+- DV-T8.14 **OPEN** — the footer repeats one credit line per recipe instead of combining them — backlog V3-S.4 — fidelity-round-1.md.
+- DV-T8.15 **OPEN** — a chip reads "yours" where the mock says "alts"; wording only, no functional difference — fidelity-round-1.md.
+- DV-T8.16 **OPEN** — the account card has an empty band between its big number and its sections, reserved for a sparkline that has no data yet — fidelity-round-1.md.
+- DV-T8.17 **OPEN** — panel titles have no letter-spacing; WPF's `TextBlock` doesn't support it — fidelity-round-2.md.
+- DV-T8.18 **OPEN** — chip borders are drawn at full colour strength rather than the mock's softer tint — fidelity-round-2.md.
+- DV-T8.19 **OPEN** — the app's theme has no green or amber brush, so the mock's colours for those states can't be matched — fidelity-round-2.md.
+- DV-T8.20 **OPEN** — line spacing throughout is about 1px shorter than the mock's — fidelity-round-2.md.
+- DV-T8.21 **OPEN** — pop-out windows keep 12px text rather than matching the board's sizing — fidelity-round-2.md.
+- DV-T8.22 **OPEN** — the top bar's padding doesn't exactly match the mock's — fidelity-round-2.md.
+
+**Task 9 — smoke walks, the live walk**
+- DV-T9.1 **FIXED** — `walk-alts.ps1` had no check for the exact focus/scroll bug Task 5 fixed; it now has one (picking a row keeps focus; a refresh doesn't scroll the board) — `tools/smoke/walk-alts.ps1` (checks 6b, 7b) — task-9-review.md Minor 1.
+- DV-T9.2 **FIXED** — the "no build found" error when starting Ur Score for a walk didn't say whether the problem was a missing build or a bad `UR_SCORE_EXE` override; now it does — `tools/smoke/uia.ps1:182-183` — task-9-review.md Minor 2.
+
+**Final whole-branch review**
+- DV-F.1 **FIXED** — the Live leaderboard panel wrote every stat as a plain number, ignoring duration/date formatting (latent — no live recipe uses it yet) — `src/Board/PanelModels.cs` — final-review.md Minor 1.
+- DV-F.2 **FIXED** — a focus-restore helper took a parameter that was always passed the same value, so its own test proved nothing — `src/Board/AccountsTableFocus.cs` — final-review.md Minor 2.
+- DV-F.3 **FIXED** — the Accounts table would read from a source you'd switched off while Records and the Account card refused to, so the three panels could disagree with no explanation why (also raised independently in preflight.md 1.24) — `src/Board/PanelModels.cs` — final-review.md Minor 3.
+- DV-F.4 **FIXED** — Profile stat and the Accounts table used two different rules for "which source to fall back to" when nothing was pinned — `src/Board/PanelModels.cs:270` — final-review.md Minor 4.
+- DV-F.5 **FIXED** — "which stats a recipe suggests ticking" was implemented twice, and the two copies could drift; now one shared helper — `src/Recipes/RecipeStats.cs` (`Suggested`) — final-review.md Minor 5.
+- DV-F.6 **OPEN** — when a following tab's draft is kept because its starter went empty mid-edit, it's appended as the last tab rather than reinserted where it was — `src/Board/BoardEdits.cs:48` — final-review.md Minor 6 (parked by ruling).
+- DV-F.7 **FIXED** — no test proved an Accounts table panel survives being saved to and loaded back from `boards.json` — `tests/BoardsFileTests.cs` — final-review.md Minor 7.
+- DV-F.8 **FIXED** — no test proved the Accounts table shows only your own accounts when the underlying source is a clan/group list with other players in it — `tests/PanelModelsTests.cs` — final-review.md Minor 8.
+- DV-F.9 **OPEN** — a clan member who updates the shared recipe file before updating Ur Score itself would see the three new count stats error out, and playtime/first-join show as raw seconds; needs a release-notes/clan-post line telling people to update the app first (also raised independently in preflight.md §4) — `tests/Fixtures/petsim99-profile.recipe.json` — final-review.md Minor 9 (parked by ruling).
+- DV-F.10 **FIXED** — the design doc's "changed during execution" banner was dated a day late (16th instead of 15th) — `docs/2026-09-15-default-views-design.md:23` — final-review.md Minor 10.
+- DV-F.11 **FIXED** — the release step's draft CHANGELOG text and a backlog item's disposition still described the old stretched-panel layout instead of natural heights — this plan's release step 1, D20 — final-review.md Minor 11.
