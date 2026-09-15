@@ -1,3 +1,4 @@
+using System.IO;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
@@ -45,6 +46,29 @@ public static class BoardText
 
     public static string DetailLine(LiveBoard live, string? budgetWarning) =>
         live.Snapshots.Values.Any(s => s.State == WatchState.HostDown) ? HostDown : budgetWarning ?? "";
+
+    /// <summary>
+    /// The detail line on the board: why your boards aren't saved or aren't showing comes first (R3), since a
+    /// change that silently didn't happen is worse; then RoRoRo being down, then the budget warning.
+    /// </summary>
+    public static string DetailLine(LiveBoard live, string? budgetWarning, string? boardsProblem) =>
+        boardsProblem ?? DetailLine(live, budgetWarning);
+
+    /// <summary>A board change that couldn't be written, in plain words. No stack; an unknown IO reason is Windows' own sentence.</summary>
+    public static string BoardsNotSaved(Exception ex)
+    {
+        const string NotSaved = "Your change to the boards wasn't saved: ";
+        const int SharingViolation = unchecked((int)0x80070020), LockViolation = unchecked((int)0x80070021);
+        const int DiskFull = unchecked((int)0x80070070), HandleDiskFull = unchecked((int)0x80070027);
+
+        return ex switch
+        {
+            UnauthorizedAccessException => NotSaved + "Windows didn't let Ur Score write to its data folder.",
+            IOException { HResult: SharingViolation or LockViolation } => NotSaved + "another program has your boards file open. Close it, then try again.",
+            IOException { HResult: DiskFull or HandleDiskFull } => NotSaved + "the disk is full.",
+            _ => NotSaved + ex.Message,
+        };
+    }
 
     /// <summary>Each recipe being read credits its data (spec §6.1 of the first design).</summary>
     public static string Attribution(LiveBoard live) =>

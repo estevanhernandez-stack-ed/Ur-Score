@@ -40,11 +40,15 @@ public sealed class BoardsFile(string path, TimeProvider time)
         }
     }
 
-    /// <summary>Writes the boards. Returns where an unreadable old file was kept, or null. Throws when the folder can't be written.</summary>
-    public string? Save(IReadOnlyList<BoardDef> boards)
+    /// <summary>
+    /// Writes the boards. Returns where the old file was kept, or null. The old file is kept when it doesn't
+    /// parse, or, with <paramref name="keepExisting"/>, whatever it holds: a file that couldn't be read at start
+    /// may read now, and was still never shown (R3). Throws when the folder can't be written.
+    /// </summary>
+    public string? Save(IReadOnlyList<BoardDef> boards, bool keepExisting = false)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var kept = KeepUnreadable();
+        var kept = KeepUnreadable(keepExisting);
 
         var temp = path + ".tmp";
         File.WriteAllText(temp, Serialize(boards));
@@ -98,23 +102,30 @@ public sealed class BoardsFile(string path, TimeProvider time)
         return boards;
     }
 
-    /// <summary>A file that no longer parses is copied aside before it is written over (R3).</summary>
-    private string? KeepUnreadable()
+    /// <summary>A file that no longer parses, or any file when asked to keep it, is copied aside before it is written over (R3).</summary>
+    private string? KeepUnreadable(bool keepExisting)
     {
         if (!File.Exists(path)) return null;
 
         var text = File.ReadAllText(path);
+        if (!keepExisting && Parses(text)) return null;
+
+        var stamp = time.GetUtcNow().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var copy = Path.Combine(Path.GetDirectoryName(path)!, $"boards.unreadable-{stamp}.json");
+        File.WriteAllText(copy, text);
+        return copy;
+    }
+
+    private static bool Parses(string text)
+    {
         try
         {
             Parse(text);
-            return null;
+            return true;
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            var stamp = time.GetUtcNow().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-            var copy = Path.Combine(Path.GetDirectoryName(path)!, $"boards.unreadable-{stamp}.json");
-            File.WriteAllText(copy, text);
-            return copy;
+            return false;
         }
     }
 

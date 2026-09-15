@@ -26,6 +26,7 @@ public partial class AddBoardWindow : Window
         _grind = StarterBoards.Build(installed, sources, StarterBoards.Grind);
 
         NewBoardNameBox.Text = suggestedName;
+        NewBoardNameBox.MaxLength = BoardDefs.MaxNameLength;
         Describe(BattleBoardButton, _battle);
         Describe(GrindBoardButton, _grind);
         StarterLine.Text = _battle.Panels.Count == 0 && _grind.Panels.Count == 0
@@ -42,13 +43,15 @@ public partial class AddBoardWindow : Window
     /// <summary>The board to add, once a choice was made.</summary>
     public BoardDef? Result { get; private set; }
 
+    /// <summary>The button's name is its text, so a screen reader hears why a starter can't be picked.</summary>
     private static void Describe(Button button, StarterBoard starter)
     {
         var count = starter.Panels.Count;
-        button.Content = count == 0 ? $"{starter.Name}: nothing to show yet" : $"{starter.Name}: {count} panel{(count == 1 ? "" : "s")}";
+        var text = count == 0 ? $"{starter.Name}: nothing to show yet" : $"{starter.Name}: {count} panel{(count == 1 ? "" : "s")}";
+        button.Content = text;
         button.HorizontalContentAlignment = HorizontalAlignment.Left;
         button.IsEnabled = count > 0;
-        AutomationProperties.SetName(button, $"{starter.Name} starter");
+        AutomationProperties.SetName(button, text);
     }
 
     private void OnEmptyClick(object sender, RoutedEventArgs e) =>

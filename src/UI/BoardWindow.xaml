@@ -41,8 +41,9 @@
     <DockPanel>
         <!-- The top bar (spec §8): tabs and the period line on the left; Start, Test now and Setup on the right. -->
         <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,8">
-            <DockPanel LastChildFill="True">
-                <StackPanel x:Name="TopButtons" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+            <DockPanel x:Name="TopBar" LastChildFill="True" SizeChanged="OnTopBarSizeChanged">
+                <StackPanel x:Name="TopButtons" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                            SizeChanged="OnTopBarSizeChanged">
                     <Button x:Name="StartStopButton" Content="Start" Style="{StaticResource PrimaryButton}" Click="OnStartStopClick"
                             AutomationProperties.Name="Start or stop reading" />
                     <Button x:Name="TestNowButton" Content="Test now" Margin="8,0,0,0" Click="OnTestNowClick"
@@ -56,9 +57,11 @@
                 </StackPanel>
                 <Image x:Name="BoardIcon" DockPanel.Dock="Left" Width="22" Height="22" Margin="0,0,10,0" Visibility="Collapsed"
                        VerticalAlignment="Center" AutomationProperties.Name="Main source icon" />
+                <!-- Past its share of the bar (OnTopBarSizeChanged) the tabs scroll, so + Board and the period line always show. -->
                 <ListBox x:Name="BoardTabs" DockPanel.Dock="Left" ItemContainerStyle="{StaticResource BoardTab}" DisplayMemberPath="Name"
                          Background="Transparent" BorderThickness="0" VerticalAlignment="Center" SelectionChanged="OnTabChanged"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Boards">
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         AutomationProperties.Name="Boards">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Orientation="Horizontal" />

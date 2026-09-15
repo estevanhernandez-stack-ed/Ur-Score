@@ -24,10 +24,14 @@ public static class BoardEdits
     public static IReadOnlyList<BoardDef> Replace(IReadOnlyList<BoardDef> boards, BoardDef board) =>
         IndexOf(boards, board.Id) < 0 ? boards : [.. boards.Select(b => b.Id == board.Id ? board : b)];
 
-    public static IReadOnlyList<BoardDef> Rename(IReadOnlyList<BoardDef> boards, string boardId, string name) =>
-        BoardDefs.CleanName(name) is not { } clean || IndexOf(boards, boardId) < 0
+    /// <summary>A blank name, a board that isn't there, or the name it already has changes nothing, so nothing is written (R1).</summary>
+    public static IReadOnlyList<BoardDef> Rename(IReadOnlyList<BoardDef> boards, string boardId, string name)
+    {
+        var index = IndexOf(boards, boardId);
+        return index < 0 || BoardDefs.CleanName(name) is not { } clean || string.Equals(boards[index].Name, clean, StringComparison.Ordinal)
             ? boards
             : [.. boards.Select(b => b.Id == boardId ? b with { Name = clean } : b)];
+    }
 
     /// <summary>R13: right after the original, "name copy", new panel ids, and nothing popped out.</summary>
     public static IReadOnlyList<BoardDef> Duplicate(IReadOnlyList<BoardDef> boards, string boardId)

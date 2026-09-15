@@ -14,7 +14,10 @@ public static class BoardButtons
     /// <param name="starting">Start was pressed and is still asking RoRoRo for accounts.</param>
     /// <param name="testing">A Test now read is in flight.</param>
     /// <param name="importing">The empty state's Import recipe… is in flight.</param>
-    /// <param name="boards">How many boards there are; the last one can't be deleted (R11).</param>
+    /// <param name="boards">
+    /// How many boards there are; the last one can't be deleted (R11). The default of 1 is for a press guard that
+    /// only asks about Start/Stop or Test now, and it leaves Delete off; anything that reads DeleteBoard passes the real count.
+    /// </param>
     public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing, int boards = 1) => new(
         StartStop: loaded && !starting && (running || !testing),
         TestNow: loaded && !starting && !testing,

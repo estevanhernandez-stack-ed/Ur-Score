@@ -94,6 +94,35 @@ public class BoardTextTests
     }
 
     [Fact]
+    public void WhyYourBoardsArentSavedComesBeforeRoRoRoBeingDownAndTheBudget()
+    {
+        var down = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>
+        {
+            [MainClan.Id] = new RecipeSnapshot(WatchState.HostDown, null, [], [], 0) { SourceId = MainClan.Id },
+        });
+        var up = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>());
+
+        Assert.Equal("Your boards file couldn't be read.", BoardText.DetailLine(down, "over budget", "Your boards file couldn't be read."));
+        Assert.Equal("Your boards file couldn't be read.", BoardText.DetailLine(up, "over budget", "Your boards file couldn't be read."));
+        Assert.Equal(BoardText.HostDown, BoardText.DetailLine(down, "over budget", boardsProblem: null));
+        Assert.Equal("over budget", BoardText.DetailLine(up, "over budget", boardsProblem: null));
+        Assert.Equal("", BoardText.DetailLine(up, null, boardsProblem: null));
+    }
+
+    [Fact]
+    public void ABoardChangeThatWasntSavedSaysWhyInPlainWords()
+    {
+        Assert.Equal("Your change to the boards wasn't saved: another program has your boards file open. Close it, then try again.",
+            BoardText.BoardsNotSaved(new IOException("sharing", unchecked((int)0x80070020))));
+        Assert.Equal("Your change to the boards wasn't saved: the disk is full.",
+            BoardText.BoardsNotSaved(new IOException("full", unchecked((int)0x80070070))));
+        Assert.Equal("Your change to the boards wasn't saved: Windows didn't let Ur Score write to its data folder.",
+            BoardText.BoardsNotSaved(new UnauthorizedAccessException("denied")));
+        Assert.Equal("Your change to the boards wasn't saved: The device is not ready.",
+            BoardText.BoardsNotSaved(new IOException("The device is not ready.")));
+    }
+
+    [Fact]
     public void ASavedBoardWithNoPanelsSaysSo() =>
         Assert.Equal(
             ("This board has no panels yet", "Add panels from the gallery, then arrange them with Edit board.", ""),

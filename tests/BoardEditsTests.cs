@@ -43,6 +43,16 @@ public class BoardEditsTests
     }
 
     [Fact]
+    public void RenamingToTheNameItHasChangesNothing()
+    {
+        IReadOnlyList<BoardDef> boards = [BoardOf("b-1"), BoardOf("b-2")];
+
+        Assert.Same(boards, BoardEdits.Rename(boards, "b-2", "b-2"));
+        Assert.Same(boards, BoardEdits.Rename(boards, "b-2", "  b-2 "));
+        Assert.Equal("B-2", BoardEdits.Rename(boards, "b-2", "B-2")[1].Name);
+    }
+
+    [Fact]
     public void DuplicateGoesRightAfterWithNewIdsAndNoPopOuts()
     {
         var original = BoardOf("b-1", PanelType.Standing, PanelType.Race) with { Name = "Battle" };

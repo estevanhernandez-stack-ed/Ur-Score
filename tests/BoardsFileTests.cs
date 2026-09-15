@@ -85,6 +85,28 @@ public class BoardsFileTests
     }
 
     [Fact]
+    public void AFileThatCouldntBeReadAtStartIsKeptEvenWhenItReadsByTheFirstSave()
+    {
+        using var dir = TempDir.Create("urscore-boards");
+        var path = Path.Combine(dir.Path, "boards.json");
+        var file = new BoardsFile(path, new FixedTime(Now));
+        file.Save([Battle()]);
+        var saved = File.ReadAllText(path);
+
+        // Another program holds the file while Ur Score starts, and lets go before the first change.
+        using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.False(file.Load().Readable);
+        }
+
+        var kept = file.Save([Battle() with { Name = "Rivals" }], keepExisting: true);
+
+        Assert.Equal(Path.Combine(dir.Path, "boards.unreadable-20260919-180000.json"), kept);
+        Assert.Equal(saved, File.ReadAllText(kept!));
+        Assert.Equal("Rivals", file.Load().Boards[0].Name);
+    }
+
+    [Fact]
     public void MalformedJsonIsNotParsed() =>
         Assert.ThrowsAny<JsonException>(() => BoardsFile.Parse("{ \"id\": 1 }"));
 

@@ -25,6 +25,9 @@ public sealed record BoardTabItem(string Id, string Name)
 /// </summary>
 public partial class BoardWindow : Window
 {
+    /// <summary>The most of the top bar's left side the tabs take before they scroll, leaving room for + Board and the period line.</summary>
+    private const double TabStripShare = 0.6;
+
     private readonly AppServices _services;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(20) };
 
@@ -45,8 +48,11 @@ public partial class BoardWindow : Window
     private string? _anchorSourceId;
     private string? _emptyRecipe;
 
-    /// <summary>Why the last board change couldn't be saved, or null.</summary>
+    /// <summary>Why the last board change couldn't be saved, or null. Cleared by the next save that works.</summary>
     private string? _boardsNote;
+
+    /// <summary>Why the score book couldn't be read at start, or null. It keeps the detail line until the book loads.</summary>
+    private string? _bookProblem;
 
     private BoardEmpty _empty;
 
@@ -95,7 +101,8 @@ public partial class BoardWindow : Window
         catch (Exception ex)
         {
             StateLine.Text = "Your score book could not be read.";
-            DetailLine.Text = _services.Redactor.Redact(ex.Message);
+            _bookProblem = _services.Redactor.Redact(ex.Message);
+            DetailLine.Text = _bookProblem;
             _services.AddTrail($"BOOK NOT LOADED: {ex}");
             return;
         }
@@ -212,6 +219,7 @@ public partial class BoardWindow : Window
             if ((BoardTabs.SelectedItem as BoardTabItem)?.Id != shown.Id)
             {
                 BoardTabs.SelectedItem = BoardTabs.Items.OfType<BoardTabItem>().FirstOrDefault(t => t.Id == shown.Id);
+                if (BoardTabs.SelectedItem is { } selected) BoardTabs.ScrollIntoView(selected);
             }
         }
         finally
@@ -241,11 +249,16 @@ public partial class BoardWindow : Window
         StartStopButton.Content = live.Running ? "Stop" : "Start";
         AttributionLine.Text = BoardText.Attribution(live);
 
-        if (!_services.ReaderLoaded) return;
-        StateLine.Text = BoardText.StateLine(live, _services.EverStarted);
+        var boardsProblem = _boardsNote ?? _services.BoardsProblem;
+        if (!_services.ReaderLoaded)
+        {
+            // Why your boards aren't showing is said from the first draw (R3), unless the score book's own failure is on the line.
+            if (boardsProblem is not null && _bookProblem is null) DetailLine.Text = boardsProblem;
+            return;
+        }
 
-        var detail = BoardText.DetailLine(live, _services.BudgetWarning);
-        DetailLine.Text = detail.Length > 0 ? detail : _boardsNote ?? _services.BoardsProblem ?? "";
+        StateLine.Text = BoardText.StateLine(live, _services.EverStarted);
+        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem);
     }
 
     private void RenderEmpty(BoardDef board)
@@ -281,24 +294,30 @@ public partial class BoardWindow : Window
     /// <summary>The menu opens on what is true now, e.g. a board deleted since the last redraw.</summary>
     private void OnTabMenuOpened(object sender, RoutedEventArgs e) => ApplyButtons();
 
+    // Each handler that opens a dialog reads the boards again once it closes, and edits that list: something
+    // else (a pop-out coming back, later) may have changed them while it was open.
+
     private void OnAddBoardClick(object sender, RoutedEventArgs e)
     {
-        var boards = _services.Boards;
-        var dialog = new AddBoardWindow(_services.Installed, _services.Sources, BoardEdits.NextName(boards)) { Owner = this };
+        var dialog = new AddBoardWindow(_services.Installed, _services.Sources, BoardEdits.NextName(_services.Boards)) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } board) return;
 
-        if (SaveBoards(BoardEdits.Add(boards, board))) ShowBoard(board.Id);
+        if (SaveBoards(BoardEdits.Add(_services.Boards, board))) ShowBoard(board.Id);
     }
 
     private void OnRenameBoardClick(object sender, RoutedEventArgs e)
     {
-        var boards = _services.Boards;
-        var board = ShownBoard(boards);
+        var board = ShownBoard(_services.Boards);
         var dialog = new BoardNameWindow(board.Name) { Owner = this };
         if (dialog.ShowDialog() != true) return;
 
+        // The name it already has changes nothing, so nothing is written (R1).
+        var boards = _services.Boards;
         var renamed = BoardEdits.Rename(boards, board.Id, dialog.BoardName);
-        if (!ReferenceEquals(renamed, boards)) SaveBoards(renamed);
+        if (ReferenceEquals(renamed, boards) || !SaveBoards(renamed)) return;
+
+        ShowBoard(board.Id);
+        FocusShownTab();
     }
 
     private void OnDuplicateBoardClick(object sender, RoutedEventArgs e)
@@ -308,24 +327,30 @@ public partial class BoardWindow : Window
         if (ReferenceEquals(duplicated, boards)) return;
 
         var copy = duplicated.First(b => boards.All(old => old.Id != b.Id));
-        if (SaveBoards(duplicated)) ShowBoard(copy.Id);
+        if (!SaveBoards(duplicated)) return;
+
+        ShowBoard(copy.Id);
+        FocusShownTab();
     }
 
     private void OnDeleteBoardClick(object sender, RoutedEventArgs e)
     {
-        var boards = _services.Boards;
-        var board = ShownBoard(boards);
+        var board = ShownBoard(_services.Boards);
 
         // The item is disabled for the last board; this only catches a press already on its way.
-        if (!BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing, boards.Count).DeleteBoard) return;
+        if (!BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing, _services.Boards.Count).DeleteBoard) return;
 
         var answer = MessageBox.Show(this,
             $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",
             "Ur Score", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
         if (answer != MessageBoxResult.OK) return;
 
+        var boards = _services.Boards;
         var remaining = BoardEdits.Delete(boards, board.Id);
-        if (!ReferenceEquals(remaining, boards) && SaveBoards(remaining)) ShowBoard(remaining[0].Id);
+        if (ReferenceEquals(remaining, boards) || !SaveBoards(remaining)) return;
+
+        ShowBoard(remaining[0].Id);
+        FocusShownTab();
     }
 
     private void ShowBoard(string boardId)
@@ -334,7 +359,17 @@ public partial class BoardWindow : Window
         Render();
     }
 
-    /// <summary>Saves through the services. A file that can't be written says so on the detail line, and the board stays as it was.</summary>
+    /// <summary>A tab menu action rebuilds the tabs, which drops keyboard focus; it goes back to the tab on screen.</summary>
+    private void FocusShownTab()
+    {
+        BoardTabs.UpdateLayout();
+        if (BoardTabs.SelectedItem is { } item && BoardTabs.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem tab) tab.Focus();
+    }
+
+    /// <summary>
+    /// Saves through the services. A file that can't be written is never silent: a message says the change wasn't
+    /// saved and why, the detail line keeps saying so until a save works, and the board stays as it was.
+    /// </summary>
     private bool SaveBoards(IReadOnlyList<BoardDef> boards)
     {
         try
@@ -345,12 +380,17 @@ public partial class BoardWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _boardsNote = $"Your boards couldn't be saved: {_services.Redactor.Redact(ex.Message)}";
+            _boardsNote = _services.Redactor.Redact(BoardText.BoardsNotSaved(ex));
             _services.AddTrail($"BOARDS NOT SAVED: {ex.GetType().Name}");
             RenderLines();
+            MessageBox.Show(this, _boardsNote, "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
     }
+
+    /// <summary>The tabs never take more than their share of what the top bar's buttons leave (<see cref="TabStripShare"/>).</summary>
+    private void OnTopBarSizeChanged(object sender, SizeChangedEventArgs e) =>
+        BoardTabs.MaxWidth = Math.Max(0, (TopBar.ActualWidth - TopButtons.ActualWidth) * TabStripShare);
 
     // ---- names, the top bar, Setup ----
 

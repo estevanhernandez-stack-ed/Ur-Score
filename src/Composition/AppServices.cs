@@ -60,6 +60,9 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     /// <summary>What <c>boards.json</c> holds, or null while there is no file (R1) or it couldn't be read (R3).</summary>
     private IReadOnlyList<BoardDef>? _savedBoards;
+
+    /// <summary><c>boards.json</c> was there at start and couldn't be read, for any reason: the first save keeps a copy whatever it holds by then (R3).</summary>
+    private bool _boardsUnread;
     private readonly List<string> _trail = [];
     private readonly Dictionary<string, RecipeSnapshot> _latest = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _lastRead = new(StringComparer.Ordinal);
@@ -218,17 +221,19 @@ public sealed class AppServices : ISetupServices, IDisposable
     public string? BoardsProblem { get; private set; }
 
     /// <summary>
-    /// Writes <c>boards.json</c> with only your own account ids (R17), keeps an unreadable old file beside it
-    /// (R3), and redraws. Throws when the file can't be written; nothing changes then.
+    /// Writes <c>boards.json</c> with only your own account ids (R17) and redraws. The old file is kept beside it
+    /// when it doesn't parse, and on the first save after it couldn't be read at start even if it reads by now
+    /// (R3). An empty list goes back to following the starter, as it would load after a restart (R1, R4).
+    /// Throws when the file can't be written; nothing changes then.
     /// </summary>
     public void SaveBoards(IReadOnlyList<BoardDef> boards)
     {
         var mine = KnownAccounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
         var clean = BoardDefs.Sanitize(boards, mine);
 
-        var kept = _boardsFile.Save(clean);
+        var kept = _boardsFile.Save(clean, keepExisting: _boardsUnread);
+        _boardsUnread = false;
 
-        // An empty list loads as no file (R4), so it follows the starter now as it would after a restart.
         _savedBoards = clean.Count > 0 ? clean : null;
         BoardsProblem = null;
         if (kept is not null) AddTrail($"BOARDS: the unreadable boards file was kept as {Path.GetFileName(kept)}.");
@@ -769,6 +774,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         var load = _boardsFile.Load();
         if (!load.Readable)
         {
+            _boardsUnread = true;
             BoardsProblem = "Your boards file couldn't be read, so the starter board is showing. The next change to a board keeps a copy of the old file beside the new one.";
             AddTrail("BOARDS NOT READ: showing the starter board.");
             return;
