@@ -18,11 +18,13 @@ public static class PanelViews
         PanelType.Records => new RecordsPanel(),
         PanelType.Top => new TopPanel(),
         PanelType.ProfileStat => new ProfileStatPanel(),
+        PanelType.AccountsTable => new AccountsTablePanel(),
         _ => new LiveLeaderboardPanel(),
     };
 
     public static void Render(
-        FrameworkElement view, PanelSettings settings, LiveBoard live, ScoreBookReader reader, IReadOnlyDictionary<long, string> names)
+        FrameworkElement view, PanelSettings settings, LiveBoard live, ScoreBookReader reader, IReadOnlyDictionary<long, string> names,
+        PanelSession session)
     {
         switch (view)
         {
@@ -30,11 +32,12 @@ public static class PanelViews
             case RacePanel panel: panel.Render(PanelModels.Race(live, reader, settings)); break;
             case MyAccountsPanel panel: panel.Render(PanelModels.MyAccounts(live, reader, settings)); break;
             case PromotionCheckPanel panel: panel.Render(PanelModels.PromotionCheck(live, settings)); break;
-            case AccountCardPanel panel: panel.Render(PanelModels.AccountCard(live, reader, settings)); break;
+            case AccountCardPanel panel: panel.Render(PanelModels.AccountCard(live, reader, settings, session.PickedUserId)); break;
             case PastPeriodsPanel panel: panel.Render(PanelModels.PastPeriods(live, reader, settings)); break;
             case RecordsPanel panel: panel.Render(PanelModels.RecordsPanel(live, reader, settings)); break;
             case TopPanel panel: panel.Render(PanelModels.Top(live, settings)); break;
             case ProfileStatPanel panel: panel.Render(PanelModels.ProfileStat(live, reader, settings)); break;
+            case AccountsTablePanel panel: panel.Render(PanelModels.AccountsTable(live, reader, settings, session.Sort, session.PickedUserId)); break;
             case LiveLeaderboardPanel panel: panel.Render(PanelModels.LiveLeaderboard(live, settings, names)); break;
         }
     }

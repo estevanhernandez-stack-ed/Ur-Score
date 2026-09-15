@@ -478,6 +478,87 @@
                 <Setter Property="Focusable" Value="False" />
             </Style>
 
+            <!-- A table that sits on a panel card (D14): no fill of its own, dividers between rows, headings like the panels' column headers. -->
+            <Style x:Key="PanelTableHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="FontSize" Value="10.5" />
+                <Setter Property="FontWeight" Value="Medium" />
+                <Setter Property="Padding" Value="8,6" />
+            </Style>
+            <!-- A number column's heading lines up with its numbers. -->
+            <Style x:Key="PanelTableNumberHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource PanelTableHeader}">
+                <Setter Property="HorizontalContentAlignment" Value="Right" />
+            </Style>
+            <!-- The cell the arrow keys are on: a thin cyan ring inside it, shown for the keyboard only. -->
+            <Style x:Key="PanelTableCellFocus">
+                <Setter Property="Control.Template">
+                    <Setter.Value>
+                        <ControlTemplate>
+                            <Rectangle Margin="1" StrokeThickness="1" Stroke="{DynamicResource CyanBrush}" SnapsToDevicePixels="True" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="PanelTableCell" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource PanelTableCellFocus}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridCell">
+                            <Border Background="{TemplateBinding Background}" Padding="6,6">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- A row: the hover fill, and the picked row tinted cyan across the whole width. -->
+            <Style x:Key="PanelTableRow" TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridRow">
+                            <Grid>
+                                <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True" />
+                                <Border x:Name="Tint" Background="{DynamicResource CyanBrush}" Opacity="0" IsHitTestVisible="False" />
+                                <DataGridCellsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Tint" Property="Opacity" Value="0.14" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="Transparent" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="PanelTable" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                <Style.Resources>
+                    <!-- The grid's filler heading lies under the real ones across the whole width; it takes no fill either. -->
+                    <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource PanelTableHeader}" />
+                </Style.Resources>
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="RowBackground" Value="Transparent" />
+                <Setter Property="AlternatingRowBackground" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="GridLinesVisibility" Value="Horizontal" />
+                <Setter Property="IsReadOnly" Value="True" />
+                <Setter Property="AutoGenerateColumns" Value="False" />
+                <Setter Property="CanUserReorderColumns" Value="False" />
+                <Setter Property="CanUserResizeRows" Value="False" />
+                <Setter Property="SelectionUnit" Value="FullRow" />
+                <Setter Property="ClipboardCopyMode" Value="IncludeHeader" />
+                <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+                <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+                <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+                <Setter Property="ColumnHeaderStyle" Value="{StaticResource PanelTableHeader}" />
+                <Setter Property="CellStyle" Value="{StaticResource PanelTableCell}" />
+                <Setter Property="RowStyle" Value="{StaticResource PanelTableRow}" />
+            </Style>
+
             <!-- Slim scrollbars: a thin thumb in the divider colour, no arrows, no track. -->
             <Style x:Key="SlimThumb" TargetType="Thumb">
                 <Setter Property="Template">

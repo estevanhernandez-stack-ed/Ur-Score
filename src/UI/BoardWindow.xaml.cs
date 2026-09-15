@@ -78,6 +78,7 @@ public partial class BoardWindow : Window
         BoardPanels.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnSettingsTool));
         HookEditing();
         HookPopOuts();
+        HookAccounts();
 
         _services.Changed += Render;
         _services.IconChanged += ApplyIcon;
@@ -158,7 +159,7 @@ public partial class BoardWindow : Window
         // The reader is filled on a worker thread until the book has loaded; nothing may read it before then.
         if (_services.ReaderLoaded)
         {
-            foreach (var (def, view, _) in _panels) RenderPanel(def, view, live);
+            foreach (var (def, view, _) in _panels) RenderPanel(def, view, live, board.Id);
             RenderPopOuts(live);
         }
 
@@ -201,11 +202,11 @@ public partial class BoardWindow : Window
         return view;
     }
 
-    private void RenderPanel(PanelDef def, FrameworkElement view, LiveBoard live)
+    private void RenderPanel(PanelDef def, FrameworkElement view, LiveBoard live, string boardId)
     {
         try
         {
-            PanelViews.Render(view, def.Settings, live, _services.Reader, _names);
+            PanelViews.Render(view, def.Settings, live, _services.Reader, _names, SessionFor(boardId, def));
         }
         catch (Exception ex)
         {
