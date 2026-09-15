@@ -290,7 +290,8 @@ public static class PanelForms
 
     /// <summary>
     /// The recipe's first source that is on, else its first: one that is off still shows, it isn't removed (R16).
-    /// Shared by a saved panel's sourceId (<see cref="Build"/>) and an unpinned Accounts table's read (D17).
+    /// The one rule for "the recipe's source": a saved panel's sourceId (<see cref="Build"/>), and what an unpinned Accounts
+    /// table (D17) or Profile stat reads.
     /// </summary>
     internal static Source? FirstSourceOfRecipe(LiveBoard live, string recipe) =>
         live.Sources.FirstOrDefault(s => s.Enabled && s.Recipe == recipe) ?? live.Sources.FirstOrDefault(s => s.Recipe == recipe);

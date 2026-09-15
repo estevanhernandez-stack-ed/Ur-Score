@@ -215,8 +215,9 @@ public class PanelFormsTests
         Assert.Null(PanelForms.Problem(PanelType.ProfileStat, settings, live));
         Assert.False(PanelModels.ProfileStat(live, Reader(), settings).Head.HasStale);
 
-        // With no source pinned, the panel only reads a source that is on, so the form asks for one.
-        Assert.True(PanelModels.ProfileStat(live, Reader(), settings with { SourceId = null }).Head.HasStale);
+        // With no source pinned, the panel reads the recipe's first source that is on, else its first, as the Accounts table
+        // does (final review Minor 4: one rule), so it isn't stale; the form still asks you to pin one while none is on.
+        Assert.False(PanelModels.ProfileStat(live, Reader(), settings with { SourceId = null }).Head.HasStale);
         Assert.Equal("Choose a source.", PanelForms.Problem(PanelType.ProfileStat, settings with { SourceId = null }, live));
     }
 

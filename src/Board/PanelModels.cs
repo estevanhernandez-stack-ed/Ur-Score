@@ -646,8 +646,8 @@ public static class PanelModels
             return new ProfileStatModel(new PanelHead(title, Stale: PanelText.StaleStat), "", []);
         }
 
-        var source = live.FindSource(settings.SourceId)
-                     ?? live.Sources.FirstOrDefault(s => s.Enabled && string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal));
+        // The pinned source, else the recipe's first source that is on, else its first: the Accounts table's rule (D17).
+        var source = live.FindSource(settings.SourceId) ?? PanelForms.FirstSourceOfRecipe(live, recipe.Slug);
         if (source is null) return new ProfileStatModel(StaleSource(live, settings, title), "", []);
 
         var snapshot = live.SnapshotOf(source.Id);
@@ -768,7 +768,11 @@ public static class PanelModels
             list.Add(new AccountRow(0, "Total", totals, "", Missing: false, Picked: false, IsTotal: true));
         }
 
-        var note = stats.Count == 0 ? "Tick Show on a stat to fill this panel." : snapshot is null ? "Waiting for the first read." : "";
+        // A source that is switched off is never read, so the table says so instead of waiting for a read that won't come.
+        var note = stats.Count == 0 ? "Tick Show on a stat to fill this panel."
+            : snapshot is not null ? ""
+            : source.Enabled ? "Waiting for the first read."
+            : $"{live.SourceName(source)} is switched off, so it isn't read.";
         return new AccountsTableModel(new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note), columns, list);
     }
 

@@ -679,6 +679,33 @@ public class PanelModelsTests
         Assert.False(PanelModels.AccountsTable(ProfileLive("diamonds"), DiamondsBook(), new PanelSettings(Profile.Slug)).Head.HasStale);
     }
 
+    [Fact]
+    public void AnUnpinnedTableAndProfileStatReadTheRecipesFirstSourceThatIsOnElseItsFirst()
+    {
+        // Final review Minors 3 and 4: one rule for the recipe's source (PanelForms.FirstSourceOfRecipe). The first source
+        // is off and the second is on and read, so both panels read the second, and the table isn't waiting for anything.
+        var off = SourceOf("s-00000009", Profile, null, SourceRole.Mine) with { Enabled = false };
+        var on = SourceOf("s-0000000b", Profile, null, SourceRole.Mine);
+        var live = Live([off, on], [Installed(Profile, "diamonds")], Snaps(Snapshot(on.Id, [Row(Main.RobloxUserId, 215_850_364, "diamonds")])));
+
+        var table = PanelModels.AccountsTable(live, Reader(), new PanelSettings(Profile.Slug));
+        var stat = PanelModels.ProfileStat(live, Reader(), new PanelSettings(Profile.Slug, Stat: "diamonds"));
+
+        Assert.Equal("", table.Head.Note);
+        Assert.Equal("215,850,364", table.Rows.Single(r => r.UserId == Main.RobloxUserId).Cells[1]);
+        Assert.Equal("215,850,364", stat.Rows.Single(r => r.Name == Main.DisplayName).Value);
+
+        // With no source on, both read the recipe's first; the table says it is switched off rather than waiting for a read.
+        var allOff = Live([off], [Installed(Profile, "diamonds")], Snaps());
+
+        var offTable = PanelModels.AccountsTable(allOff, Reader(), new PanelSettings(Profile.Slug));
+        var offStat = PanelModels.ProfileStat(allOff, Reader(), new PanelSettings(Profile.Slug, Stat: "diamonds"));
+
+        Assert.False(offTable.Head.HasStale);
+        Assert.Equal($"{allOff.SourceName(off)} is switched off, so it isn't read.", offTable.Head.Note);
+        Assert.False(offStat.Head.HasStale);
+    }
+
     // ---- Live leaderboard ----
 
     [Fact]
