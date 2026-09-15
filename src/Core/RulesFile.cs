@@ -121,10 +121,13 @@ public static class RulesFile
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>A fully qualified override (the walk's scratch file), else RoRoRo's own file (A1).</summary>
+    /// <summary>
+    /// A fully qualified override naming a file (the walk's scratch file), else RoRoRo's own file (A1). A drive root or a folder
+    /// ending in a separator names no file, so it falls back like a blank or relative override.
+    /// </summary>
     public static string ResolvePath(string? overridePath) =>
-        !string.IsNullOrWhiteSpace(overridePath) && Path.IsPathFullyQualified(overridePath.Trim())
-            ? overridePath.Trim()
+        overridePath?.Trim() is { Length: > 0 } candidate && Path.IsPathFullyQualified(candidate) && NamesAFile(candidate)
+            ? candidate
             : DefaultPath;
 
     /// <summary>Every rule RoRoRo can read in the file at <paramref name="path"/>. Never throws for a file problem: it says which.</summary>
@@ -163,7 +166,7 @@ public static class RulesFile
     /// <summary>Deletes exactly the one Ur Score rule of that kind for the metric (A5). NotThere when Ur Score has none.</summary>
     public static RuleWrite Remove(string path, string metricId, AlertKind kind)
     {
-        if (string.IsNullOrWhiteSpace(metricId)) throw new ArgumentException("A rule needs a metric id.", nameof(metricId));
+        GuardId(metricId);
         return Write(path, (rules, read) =>
         {
             if (read.OursFor(metricId, kind) is not { } ours) return (RuleWrite.NotThere, false);
@@ -317,9 +320,18 @@ public static class RulesFile
 
     private static void Guard(string metricId, AlertKind kind)
     {
-        if (string.IsNullOrWhiteSpace(metricId)) throw new ArgumentException("A rule needs a metric id.", nameof(metricId));
+        GuardId(metricId);
         if (kind == AlertKind.Event) throw new ArgumentException("Ur Score writes Rate and Level rules only.", nameof(kind));
     }
+
+    private static void GuardId(string metricId)
+    {
+        if (string.IsNullOrWhiteSpace(metricId)) throw new ArgumentException("A rule needs a metric id.", nameof(metricId));
+    }
+
+    /// <summary>Whether <paramref name="path"/> ends in a file name: a drive root or a trailing separator names only a folder.</summary>
+    private static bool NamesAFile(string path) =>
+        !string.IsNullOrEmpty(Path.GetFileName(path)) && !string.IsNullOrEmpty(Path.GetDirectoryName(path));
 
     /// <summary>The file's list and its rules as read, or why there isn't one (with no list).</summary>
     private static (JsonArray? Rules, RulesRead Read) Load(string path)
@@ -427,6 +439,11 @@ public static class RulesFile
         return text;
     }
 
+    // MIRRORS ROROROBLOX: RowOptions and RuleRow below are copies of the private Options and RuleRow in RoRoRo's
+    // src/ROROROblox.App/Metrics/LocalFileMetricRuleSource.cs, as of RoRoRo commit dc44992 (branch feat/metric-alert-wording).
+    // Ur Score can't reference that assembly, so nothing compiles them together: when RoRoRo changes its row or its options,
+    // change these to match and re-check tests/RulesFileParityTests.cs, which pins each RoRoRo behaviour Ur Score relies on.
+
     /// <summary>RoRoRo's own parser options (<c>LocalFileMetricRuleSource.Options</c>), so a row reads here exactly as it reads there.</summary>
     private static readonly JsonSerializerOptions RowOptions = new()
     {
@@ -453,8 +470,8 @@ public static class RulesFile
 
     /// <summary>
     /// Loads the list, lets <paramref name="edit"/> change it, and writes it back only when the edit says Done and that it changed
-    /// the list (A8): a copy of the file as it was goes beside it first, then the text goes to a temporary file that replaces
-    /// the rules file in one move.
+    /// the list (A8): the text goes to a temporary file beside the rules file, which then replaces it in one swap that keeps the
+    /// file as it was as the backup.
     /// </summary>
     private static RuleWrite Write(string path, Func<JsonArray, RulesRead, (RuleWrite Outcome, bool Changed)> edit)
     {
@@ -491,13 +508,20 @@ public static class RulesFile
             return RuleWrite.NotJson;
         }
 
+        if (!NamesAFile(path)) return RuleWrite.CantWrite;
+
         var temp = path + TempSuffix;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            if (exists) File.Copy(path, path + BackupSuffix, overwrite: true);
             File.WriteAllText(temp, text);
-            File.Move(temp, path, overwrite: true);
+
+            // One swap, not copy-then-move: File.Replace makes the backup only as part of a replace that succeeds, so a write
+            // that fails (the file held open, the backup held open, read-only) leaves the rules file AND the previous backup as
+            // they were, and the last undo point survives. A file that doesn't exist yet has nothing to back up; the move
+            // doesn't overwrite, so a file that appeared since it was read is refused rather than replaced unread.
+            if (exists) File.Replace(temp, path, path + BackupSuffix);
+            else File.Move(temp, path, overwrite: false);
             return RuleWrite.Done;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

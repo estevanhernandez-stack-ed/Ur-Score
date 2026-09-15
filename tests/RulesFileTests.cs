@@ -157,6 +157,7 @@ public sealed class RulesFileTests : IDisposable
     public void AFileSomeoneHoldsOpenCantBeReadAndNothingChanges()
     {
         var path = Rules("[]");
+        File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
         using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             Assert.Equal(RulesProblem.CantOpen, RulesFile.Read(path).Problem);
@@ -164,20 +165,41 @@ public sealed class RulesFileTests : IDisposable
         }
 
         Assert.Equal("[]", File.ReadAllText(path));
-        Assert.False(File.Exists(path + RulesFile.BackupSuffix));
+        Assert.Equal("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
     }
 
     [Fact]
     public void AFileThatCanBeReadButNotReplacedSaysSoAndChangesNothing()
     {
+        // The swap itself fails here (the file can be read but not replaced). The previous backup is the only undo point for
+        // the last write that did land, so a failed write must leave it exactly as it was, not overwrite it.
         var before = $$"""[ { "metricId": "{{Points}}", "kind": "Rate", "threshold": 100, "windowMinutes": 10, "owner": "626labs.ur-score" } ]""";
         var path = Rules(before);
+        File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
+        var bytes = File.ReadAllBytes(path);
         using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             Assert.Equal(RuleWrite.CantWrite, RulesFile.Change(path, Points, Stops with { Threshold = 250 }));
         }
 
-        Assert.Equal(before, File.ReadAllText(path));
+        Assert.Equal(bytes, File.ReadAllBytes(path));
+        Assert.Equal("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
+        Assert.False(File.Exists(path + ".ur-score-writing"));
+    }
+
+    [Fact]
+    public void ABackupSomeoneHoldsOpenFailsTheWriteAndChangesNothing()
+    {
+        var path = Rules($$"""[ { "metricId": "{{Points}}", "kind": "Rate", "threshold": 100, "windowMinutes": 10, "owner": "626labs.ur-score" } ]""");
+        File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
+        var bytes = File.ReadAllBytes(path);
+        using (new FileStream(path + RulesFile.BackupSuffix, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.Equal(RuleWrite.CantWrite, RulesFile.Change(path, Points, Stops with { Threshold = 250 }));
+        }
+
+        Assert.Equal(bytes, File.ReadAllBytes(path));
+        Assert.Equal("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
         Assert.False(File.Exists(path + ".ur-score-writing"));
     }
 
@@ -351,17 +373,22 @@ public sealed class RulesFileTests : IDisposable
     [Fact]
     public void EveryWriteBacksUpTheFileAsItWasJustBefore()
     {
-        // Asserting the backup does NOT hold the new rule is what tells "backed up first" from "backed up last".
-        var path = Rules("""[ { "metricId": "memory.warning", "kind": "Event" } ]""");
+        // Asserting the backup does NOT hold the new rule is what tells "backed up first" from "backed up last". Comparing bytes
+        // shows the backup is the file itself, comments and formatting included, not a re-serialised copy.
+        var path = Rules("""
+            // Mine, by hand.
+            [ { "metricId": "memory.warning", "kind": "Event" }, ]
+            """);
+        var beforeFirst = File.ReadAllBytes(path);
 
         Assert.Equal(RuleWrite.Done, RulesFile.TurnOn(path, Points, Stops));
-        var backup = File.ReadAllText(path + RulesFile.BackupSuffix);
-        Assert.Contains("memory.warning", backup);
-        Assert.DoesNotContain(Points, backup);
+        Assert.Equal(beforeFirst, File.ReadAllBytes(path + RulesFile.BackupSuffix));
+        Assert.DoesNotContain(Points, File.ReadAllText(path + RulesFile.BackupSuffix));
 
-        var beforeSecond = File.ReadAllText(path);
+        var beforeSecond = File.ReadAllBytes(path);
         Assert.Equal(RuleWrite.Done, RulesFile.TurnOn(path, Points, Crosses));
-        Assert.Equal(beforeSecond, File.ReadAllText(path + RulesFile.BackupSuffix));
+        Assert.Equal(beforeSecond, File.ReadAllBytes(path + RulesFile.BackupSuffix));
+        Assert.False(File.Exists(path + ".ur-score-writing"));
     }
 
     [Fact]
@@ -386,6 +413,23 @@ public sealed class RulesFileTests : IDisposable
         Assert.Equal(roRoRo, RulesFile.ResolvePath("   "));
         Assert.Equal(roRoRo, RulesFile.ResolvePath("metric-rules.json"));
         Assert.Equal(scratch, RulesFile.ResolvePath($"  {scratch} "));
+        Assert.Equal(roRoRo, RulesFile.ResolvePath(Path.GetPathRoot(scratch)));
+        Assert.Equal(roRoRo, RulesFile.ResolvePath(_dir.Path + Path.DirectorySeparatorChar));
         Assert.Equal("UR_SCORE_RULES_FILE", RulesFile.PathVariable);
+    }
+
+    [Fact]
+    public void APathThatNamesNoFileIsRefusedWithoutThrowing()
+    {
+        // A drive root, or a folder ending in a separator, names no file to write: that must come back as a result, not an
+        // unhandled throw from the folder it would create.
+        // Safe to aim at the real drive root: it is refused before any file is opened or created.
+        var root = Path.GetPathRoot(_dir.Path)!;
+        var folder = _dir.Path + Path.DirectorySeparatorChar;
+
+        Assert.Equal(RuleWrite.CantWrite, RulesFile.TurnOn(root, Points, Stops));
+        Assert.False(File.Exists(root + ".ur-score-writing"));
+        Assert.Equal(RuleWrite.CantWrite, RulesFile.TurnOn(folder, Points, Stops));
+        Assert.Empty(Directory.GetFileSystemEntries(_dir.Path));
     }
 }
