@@ -30,6 +30,22 @@ public class RecipeStatsTests
         Assert.Null(RecipeStats.Find(Profile, "counter:"));
     }
 
+    [Fact]
+    public void TheSuggestedValuesAreTheOnesMarkedShowInRecipeOrderAndNoneForAGroupList()
+    {
+        Assert.Equal(new[] { "diamonds", "eggs", "rank", "rebirths", "pets", "goals", "playtime" }, RecipeStats.Suggested(Profile).Select(v => v.Id).ToArray());
+        Assert.Empty(RecipeStats.Suggested(Clan));
+
+        // A group list is never shown per account, so even a value marked show suggests nothing, to the ticks and the note alike.
+        var top = RecipeParser.Parse(BoardFixtures.TopListJson).Recipe!;
+        var marked = top with { Steps = [top.LastStep with { Values = [.. top.LastStep.Values.Select(v => v with { Show = true })] }] };
+
+        Assert.True(marked.IsGroupList);
+        Assert.Empty(RecipeStats.Suggested(marked));
+        Assert.Empty(Labs626.UrScore.UI.StatsTableModel.Suggested(marked));
+        Assert.Equal("", Labs626.UrScore.UI.ImportText.SuggestedNote(marked));
+    }
+
     [Theory]
     [InlineData("Huge Pets Opened", "huge-pets-opened")]
     [InlineData("Eggs (x2)", "eggs-x2")]

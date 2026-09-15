@@ -26,7 +26,7 @@ public static class ImportText
     /// <summary>Why some Show boxes start ticked on a first import (D11), or "" when the recipe suggests none.</summary>
     public static string SuggestedNote(Recipe recipe)
     {
-        List<string> labels = recipe.IsGroupList ? [] : [.. recipe.LastStep.Values.Where(v => v.Show).Select(v => v.Label)];
+        List<string> labels = [.. RecipeStats.Suggested(recipe).Select(v => v.Label)];
         if (labels.Count == 0) return "";
 
         var named = labels.Count == 1 ? labels[0] : $"{string.Join(", ", labels.Take(labels.Count - 1))} and {labels[^1]}";

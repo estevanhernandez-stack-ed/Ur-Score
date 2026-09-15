@@ -82,6 +82,13 @@ public static class RecipeStats
         return [.. values, .. counters];
     }
 
+    /// <summary>
+    /// The values a recipe suggests showing on a first import (D11), in recipe order: those marked <c>show</c>. A group
+    /// list suggests none, as its rows are never your accounts. The import screen's ticks and its note both read this.
+    /// </summary>
+    public static IReadOnlyList<RecipeValue> Suggested(Recipe recipe) =>
+        recipe.IsGroupList ? [] : [.. recipe.LastStep.Values.Where(v => v.Show)];
+
     /// <summary>Names containing the query, ignoring case, in the order the source gave them, skipping ones already picked.</summary>
     public static IReadOnlyList<string> MatchCounterNames(IReadOnlyList<string> names, string query, IEnumerable<string> pickedKeys)
     {

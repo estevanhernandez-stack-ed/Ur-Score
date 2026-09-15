@@ -158,8 +158,7 @@ public static class StatsTableModel
     /// Send. An update and Setup › Stats start from your saved choices instead, so a tick you made is never changed.
     /// </summary>
     public static IReadOnlyDictionary<string, StatChoice> Suggested(Recipe recipe) =>
-        recipe.LastStep.Values
-            .Where(v => v.Show)
+        RecipeStats.Suggested(recipe)
             .ToDictionary(v => v.Id, v => new StatChoice(Show: true, MetricId: v.MetricId), StringComparer.Ordinal);
 
     /// <summary>Rows whose label contains the query, ignoring case, plus every ticked row. A blank query shows all.</summary>
