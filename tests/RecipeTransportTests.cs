@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using Labs626.UrScore.Recipes;
 
 namespace UrScore.Tests;
@@ -130,6 +131,73 @@ public class RecipeTransportTests
         using var handler = HttpRecipeTransport.CreateHandler();
         Assert.False(handler.AllowAutoRedirect);
         Assert.False(handler.UseCookies);
+    }
+
+    [Fact]
+    public void NoTransportInSrcKeepsRawResponses()
+    {
+        // A response body holds every row the source returned, other players' ids and values included, and other
+        // players never reach disk. The optional raw directory stays for tests; the app always passes null.
+        var src = Path.Combine(RepoRoot(), "src");
+        var constructions = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .SelectMany(f => ConstructorArguments(File.ReadAllText(f), "HttpRecipeTransport")
+                .Select(args => (Relative: Path.GetRelativePath(src, f), Args: args)))
+            .ToList();
+
+        Assert.True(constructions.Count >= 2, $"Expected the app's and --try's transports; found {constructions.Count}.");
+        var keeping = constructions
+            .Where(c => c.Args.Count < 2 || c.Args[1] is not ("null" or "rawDirectory: null"))
+            .Select(c => $"{c.Relative}: ({string.Join(", ", c.Args)})")
+            .ToList();
+        Assert.True(keeping.Count == 0, $"These transports may keep raw responses: {string.Join("; ", keeping)}. Pass rawDirectory: null.");
+    }
+
+    /// <summary>The top-level arguments of every <c>new [Qualifier.]Type(...)</c> in <paramref name="text"/>, trimmed.</summary>
+    private static IEnumerable<IReadOnlyList<string>> ConstructorArguments(string text, string type)
+    {
+        foreach (Match match in Regex.Matches(text, @"\bnew\s+(?:[\w.]+\.)?" + Regex.Escape(type) + @"\s*\("))
+        {
+            var args = new List<string>();
+            var current = new StringBuilder();
+            var depth = 0;
+            for (var i = match.Index + match.Length; i < text.Length; i++)
+            {
+                var c = text[i];
+                if (c is '(' or '[' or '{') depth++;
+                else if (c is ')' or ']' or '}')
+                {
+                    if (depth == 0)
+                    {
+                        args.Add(current.ToString().Trim());
+                        break;
+                    }
+
+                    depth--;
+                }
+                else if (c == ',' && depth == 0)
+                {
+                    args.Add(current.ToString().Trim());
+                    current.Clear();
+                    continue;
+                }
+
+                current.Append(c);
+            }
+
+            yield return args;
+        }
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Ur-Score.csproj")))
+        {
+            dir = dir.Parent;
+        }
+
+        Assert.False(dir is null, "Could not locate Ur-Score.csproj above the test assembly.");
+        return dir!.FullName;
     }
 
     [Fact]

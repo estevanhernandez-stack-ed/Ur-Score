@@ -1,0 +1,38 @@
+<UserControl x:Class="Labs626.UrScore.UI.AccountCardPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <Border Style="{StaticResource PanelCard}">
+        <StackPanel>
+            <ui:PanelFrame DataContext="{Binding Head}" />
+            <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
+                <TextBlock Text="{Binding BigLabel}" Style="{StaticResource KeyLabel}" />
+                <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" />
+                <ui:LineChart Height="48" Margin="0,6,0,0" Series="{Binding Line}" FromZero="False" ShowLabels="False"
+                              AutomationProperties.Name="{Binding ChartName}" />
+                <ui:RowList ItemsSource="{Binding Numbers}" Margin="0,6,0,0">
+                    <ui:RowList.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="0,3,0,0">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
+                            </DockPanel>
+                        </DataTemplate>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
+                <ui:RowList ItemsSource="{Binding Facts}" Margin="0,6,0,0">
+                    <ui:RowList.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="0,3,0,0">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" TextWrapping="Wrap" MaxWidth="220" TextAlignment="Right" />
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
+                            </DockPanel>
+                        </DataTemplate>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
+            </StackPanel>
+            <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
+                       Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />
+        </StackPanel>
+    </Border>
+</UserControl>

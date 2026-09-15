@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Grpc.Core;
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
 
@@ -9,8 +10,9 @@ namespace Labs626.UrScore.Core;
 /// <summary>
 /// Everything the window renders from one cycle. <see cref="Rows"/> carries every row the recipe
 /// read, the user's own and everyone else's, for the leaderboard; only the user's own are ever
-/// reported, through <see cref="ReportPolicy"/>. <see cref="CellMisses"/> holds only the user's own
-/// accounts, so another member's id never travels further than the leaderboard.
+/// reported, through <see cref="ReportPolicy"/>, or kept, through <see cref="LineBuilder"/>.
+/// <see cref="CellMisses"/> holds only the user's own accounts, so another member's id never travels
+/// further than the leaderboard.
 /// </summary>
 public sealed record RecipeSnapshot(
     WatchState State,
@@ -34,13 +36,27 @@ public sealed record RecipeSnapshot(
 
     /// <summary>The slug of the recipe this cycle actually read, which the window checks against the one it now runs.</summary>
     public string RecipeSlug { get; init; } = "";
+
+    /// <summary>The source this cycle read for, or empty for a watch without one.</summary>
+    public string SourceId { get; init; } = "";
+
+    /// <summary>Whether this cycle wrote a reading line to the score book.</summary>
+    public bool Recorded { get; init; }
+
+    /// <summary>Why this cycle kept nothing, when a book is attached and nothing was kept.</summary>
+    public string? NotRecordingReason { get; init; }
+
+    public ReadingPeriod? Period { get; init; }
+
+    /// <summary>A group list's groups, shown live and never kept.</summary>
+    public IReadOnlyList<GroupRow> Groups { get; init; } = [];
 }
 
 /// <summary>
-/// One cycle: ask RoRoRo for the user's accounts, read the recipe, keep the rows that are the
-/// user's, and hand each sent stat to RoRoRo through the report policy. Carries every guarantee
-/// <c>ScoreWatch</c> earned: one cycle at a time, raw values in UTC, no backlog when RoRoRo returns,
-/// and a named capability when consent is declined.
+/// One cycle for one source: ask for the user's accounts, read the recipe, keep the user's rows in the score
+/// book, and hand each sent stat to RoRoRo through the report policy. Carries every guarantee
+/// <c>ScoreWatch</c> earned: one cycle at a time, raw values in UTC, no backlog when RoRoRo returns, and a
+/// named capability when consent is declined.
 /// </summary>
 public sealed class RecipeWatch(
     IRecipeEngine engine,
@@ -49,19 +65,39 @@ public sealed class RecipeWatch(
     ReportPolicy policy,
     Recipe recipe,
     IReadOnlyDictionary<string, string> inputs,
-    IReadOnlySet<string> trackedStats)
+    IReadOnlySet<string> trackedStats,
+    IScoreBook? book = null,
+    Source? source = null,
+    SharedAccounts? sharedAccounts = null,
+    string recipeText = "",
+    AccountClaims? claims = null,
+    FinalsIndex? finals = null,
+    TimeProvider? time = null)
 {
     internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
 
     internal const string RecipeChangedMidSendDetail = "The recipe changed while this reading was being sent, so the rest of it was not sent.";
 
+    internal const string WatchOnlyDetail = "Watching only: nothing is sent, and no account is kept.";
+
+    internal const string NotRecordingNoAccounts = "None of your accounts were in this read.";
+
+    internal const string NotRecordingEnded = "It has ended, and its final result is saved.";
+
+    internal const string NotRecordingGroups = "Group lists are shown live and never kept.";
+
+    internal const string NotRecordingNothingRead = "Nothing was read this time.";
+
+    internal const string NotRecordingNoText = "The recipe text isn't known, so nothing is kept.";
+
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
     /// <summary>
-    /// <see cref="UpdateRecipe"/> runs on the UI thread while a cycle runs on the pool. Every access to
-    /// the recipe, inputs, tracked stats, <see cref="_lines"/>, <see cref="_context"/> and
-    /// <see cref="_held"/> from both sides goes through this one lock, as does every read of the policy
-    /// that must match a recipe check. Never held across an await.
+    /// <see cref="UpdateRecipe"/> and <see cref="UpdateSource"/> run on the UI thread while a cycle runs on
+    /// the pool. Every access from both sides to these goes through this one lock: the recipe, its text,
+    /// inputs, tracked stats, source, <see cref="_lines"/>, <see cref="_context"/>,
+    /// <see cref="_previousPeriod"/> and <see cref="_held"/>. So does every read of the policy that must
+    /// match a recipe check. Never held across an await.
     /// </summary>
     private readonly object _gate = new();
 
@@ -69,6 +105,9 @@ public sealed class RecipeWatch(
     private readonly SemaphoreSlim _oneAtATime = new(1, 1);
 
     private string? _context;
+
+    /// <summary>The period the last successful read belonged to, so a period that just ended is an "ended" final.</summary>
+    private string? _previousPeriod;
 
     /// <summary>
     /// A stop that retrying cannot fix, and what would release it (plan Ruling 6). A null
@@ -82,9 +121,23 @@ public sealed class RecipeWatch(
 
     public Recipe Recipe => recipe;
 
+    public Source? Source
+    {
+        get
+        {
+            lock (_gate) return source;
+        }
+    }
+
     public void UpdatePolicy(IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects)
     {
         lock (_gate) policy = policy.With(sentStats, allowedSubjects);
+    }
+
+    /// <summary>A role change (make main, watch a clan) applies to the next cycle, with no new watch.</summary>
+    public void UpdateSource(Source newSource)
+    {
+        lock (_gate) source = newSource;
     }
 
     /// <summary>
@@ -92,33 +145,41 @@ public sealed class RecipeWatch(
     /// so they are cleared. The same recipe and inputs, reloaded, keep them. A change to which stats
     /// are tracked only changes what the next read asks for.
     /// </summary>
-    public void UpdateRecipe(Recipe newRecipe, IReadOnlyDictionary<string, string> newInputs, IReadOnlySet<string> newTrackedStats)
+    public void UpdateRecipe(Recipe newRecipe, IReadOnlyDictionary<string, string> newInputs, IReadOnlySet<string> newTrackedStats, string? newRecipeText = null)
     {
         lock (_gate)
         {
-            var same = string.Equals(newRecipe.Slug, recipe.Slug, StringComparison.Ordinal)
+            var slugChanged = !string.Equals(newRecipe.Slug, recipe.Slug, StringComparison.Ordinal);
+            var same = !slugChanged
                        && newInputs.Count == inputs.Count
                        && newInputs.All(kv => inputs.TryGetValue(kv.Key, out var v) && string.Equals(v, kv.Value, StringComparison.Ordinal));
 
             recipe = newRecipe;
             inputs = new Dictionary<string, string>(newInputs, StringComparer.Ordinal);
             trackedStats = new HashSet<string>(newTrackedStats, StringComparer.Ordinal);
+
+            // A different slug with no text supplied must not keep the old recipe's bytes under the
+            // new slug (fix round 1, finding 2): Record hashes and writes whatever recipeText holds,
+            // so an unset text for a changed recipe reads as "unknown" here, never as the previous
+            // recipe's text.
+            recipeText = newRecipeText ?? (slugChanged ? "" : recipeText);
             _held = null;
 
             if (!same)
             {
                 _lines.Clear();
                 _context = null;
+                _previousPeriod = null;
             }
         }
     }
 
-    public async Task<RecipeSnapshot> RunOnceAsync(CancellationToken cancellationToken)
+    public async Task<RecipeSnapshot> RunOnceAsync(CancellationToken cancellationToken, string trigger = BookLine.TriggerTimer)
     {
         await _oneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await RunOnceCoreAsync(cancellationToken).ConfigureAwait(false);
+            return await RunOnceCoreAsync(trigger, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -126,19 +187,23 @@ public sealed class RecipeWatch(
         }
     }
 
-    private async Task<RecipeSnapshot> RunOnceCoreAsync(CancellationToken cancellationToken)
+    private async Task<RecipeSnapshot> RunOnceCoreAsync(string trigger, CancellationToken cancellationToken)
     {
-        // This cycle reads with what is current now, and only that. UpdateRecipe can swap all three
-        // while the read is in flight; RecipeChanged catches it before anything is kept or sent.
+        // This cycle reads with what is current now, and only that. UpdateRecipe can swap these while the
+        // read is in flight; RecipeChanged catches it before anything is kept or sent.
         Recipe readRecipe;
         IReadOnlyDictionary<string, string> readInputs;
         IReadOnlySet<string> readTracked;
+        string readText;
+        Source? readSource;
         (RecipeSnapshot Snapshot, string? KeyFingerprint)? heldNow;
         lock (_gate)
         {
             readRecipe = recipe;
             readInputs = inputs;
             readTracked = trackedStats;
+            readText = recipeText;
+            readSource = source;
             heldNow = _held;
         }
 
@@ -149,24 +214,37 @@ public sealed class RecipeWatch(
 
         lock (_gate) _held = null;
 
-        // Accounts first: a per-account recipe builds its requests from these ids. Read every cycle,
-        // so an account added mid-session is watched without restarting anything.
+        // Accounts first: a per-account recipe builds its requests from these ids. Read every cycle (or from
+        // the shared list), so an account added mid-session is watched without restarting anything.
         IReadOnlyList<HostAccount> accounts = [];
-        var hostUp = await host.IsReachableAsync(cancellationToken).ConfigureAwait(false);
-        if (hostUp)
+        bool hostUp;
+        if (sharedAccounts is not null)
         {
-            try
+            var list = await sharedAccounts.GetAsync(cancellationToken).ConfigureAwait(false);
+            if (list.Denied) return Snapshot(readRecipe, readSource, WatchState.Rejected, RejectedMessage("host.queries.accounts"), 0, []);
+
+            hostUp = list.HostUp;
+            accounts = list.Accounts;
+        }
+        else
+        {
+            hostUp = await host.IsReachableAsync(cancellationToken).ConfigureAwait(false);
+            if (hostUp)
             {
-                accounts = await host.GetAccountsAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
-            {
-                return Snapshot(readRecipe, WatchState.Rejected, RejectedMessage("host.queries.accounts"), 0, []);
+                try
+                {
+                    accounts = await host.GetAccountsAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
+                {
+                    return Snapshot(readRecipe, readSource, WatchState.Rejected, RejectedMessage("host.queries.accounts"), 0, []);
+                }
             }
         }
 
+        var watchOnly = readSource?.Role == SourceRole.Watch;
         var unresolved = AccountMap.Unresolved(accounts);
-        var map = AccountMap.Build(accounts);
+        var map = watchOnly ? new Dictionary<long, Guid>() : AccountMap.Build(accounts);
 
         var reading = await engine.ReadAsync(readRecipe, readInputs, [.. map.Keys], readTracked, cancellationToken).ConfigureAwait(false);
 
@@ -191,14 +269,19 @@ public sealed class RecipeWatch(
             lock (_gate)
             {
                 // A stop read for a recipe that is no longer running must not hold the new one.
-                if (RecipeChanged(readRecipe, readInputs)) return ChangedSnapshot(readRecipe, unresolved);
+                if (RecipeChanged(readRecipe, readInputs)) return ChangedSnapshot(readRecipe, readSource, unresolved);
 
                 // Idle means nothing is live, so no context is current. The remembered values are the
                 // finished thing's final numbers and stay readable until something new replaces them.
                 if (reading.Outcome == ReadingOutcome.Idle) _context = null;
 
                 // An idle clan still has an icon: the engine reads it before deciding the clan sat out.
-                var snapshot = Snapshot(readRecipe, state, reading.Detail, 0, unresolved) with { IconText = reading.IconText };
+                var snapshot = Snapshot(readRecipe, readSource, state, reading.Detail, 0, unresolved) with
+                {
+                    IconText = reading.IconText,
+                    NotRecordingReason = book is null ? null : reading.Detail ?? NotRecordingNothingRead,
+                };
+
                 if (state == WatchState.KeyRejected)
                 {
                     _held = (snapshot, fingerprint);
@@ -215,37 +298,57 @@ public sealed class RecipeWatch(
         lock (_gate)
         {
             // Nor may its context clear, or stand in for, the new recipe's remembered values.
-            if (RecipeChanged(readRecipe, readInputs)) return ChangedSnapshot(readRecipe, unresolved);
+            if (RecipeChanged(readRecipe, readInputs)) return ChangedSnapshot(readRecipe, readSource, unresolved);
 
             if (_context is not null && reading.Context != _context) _lines.Clear();
             _context = reading.Context;
         }
 
         var seen = reading.RowsSeen;
+
+        if (readRecipe.IsGroupList)
+        {
+            return Snapshot(readRecipe, readSource, WatchState.Showing, $"Read {reading.Groups.Count} groups.", seen, unresolved, reading, map) with
+            {
+                NotRecordingReason = book is null ? null : NotRecordingGroups,
+            };
+        }
+
+        // Ruling R6: an account two sources of this recipe both saw belongs to the one that claimed it first.
+        var owned = OwnedMap(readRecipe, readSource, reading, map);
+
+        var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, owned);
+        RecipeSnapshot Kept(RecipeSnapshot snapshot) => snapshot with { Recorded = recorded, NotRecordingReason = notRecording };
+
         var mine = reading.Rows
-            .Where(r => map.ContainsKey(r.UserId))
-            .Select(r => (Subject: map[r.UserId], r.Values))
+            .Where(r => owned.ContainsKey(r.UserId))
+            .Select(r => (Subject: owned[r.UserId], r.Values))
             .ToList();
+
+        if (watchOnly)
+        {
+            return Kept(Snapshot(readRecipe, readSource, WatchState.Showing, WatchOnlyDetail, seen, unresolved, reading, map));
+        }
 
         if (!hostUp)
         {
             // Nothing is fetched from the host and nothing is queued, so there is nothing to replay
-            // when it comes back.
-            return Snapshot(readRecipe, WatchState.HostDown, "RoRoRo is not running. Still watching; nothing is being sent.", seen, unresolved, reading, map);
+            // when it comes back. The book above kept the reading anyway.
+            return Kept(Snapshot(readRecipe, readSource, WatchState.HostDown, "RoRoRo is not running. Still watching; nothing is being sent.", seen, unresolved, reading, map));
         }
 
         if (mine.Count == 0)
         {
             var none = $"Read {seen} row(s); none of them are your accounts.";
             if (reading.Detail is not null) none += " " + reading.Detail;
-            return Snapshot(readRecipe, WatchState.NoMatches, none, seen, unresolved, reading, map);
+            return Kept(Snapshot(readRecipe, readSource, WatchState.NoMatches, none, seen, unresolved, reading, map));
         }
 
         if (policy.SentStats.Count == 0)
         {
             var showing = $"Read {mine.Count} of {seen} row(s). No stat is set to send, so nothing went to RoRoRo.";
             if (reading.Detail is not null) showing += " " + reading.Detail;
-            return Snapshot(readRecipe, WatchState.Showing, showing, seen, unresolved, reading, map);
+            return Kept(Snapshot(readRecipe, readSource, WatchState.Showing, showing, seen, unresolved, reading, map));
         }
 
         // One fixed list for the whole loop. A stat unticked mid-loop is refused by the policy each send
@@ -273,7 +376,7 @@ public sealed class RecipeWatch(
                     lock (_gate)
                     {
                         if (RecipeChanged(readRecipe, readInputs))
-                            return Snapshot(readRecipe, WatchState.Showing, RecipeChangedMidSendDetail, seen, unresolved);
+                            return Kept(Snapshot(readRecipe, readSource, WatchState.Showing, RecipeChangedMidSendDetail, seen, unresolved));
                         current = policy;
                     }
 
@@ -285,13 +388,72 @@ public sealed class RecipeWatch(
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
             {
-                return Snapshot(readRecipe, WatchState.Rejected, RejectedMessage("host.metrics.report"), seen, unresolved, reading, map);
+                return Kept(Snapshot(readRecipe, readSource, WatchState.Rejected, RejectedMessage("host.metrics.report"), seen, unresolved, reading, map));
             }
         }
 
         var detail = $"Reporting {mine.Count} of {seen} row(s).";
         if (reading.Detail is not null) detail += " " + reading.Detail;
-        return Snapshot(readRecipe, WatchState.Reporting, detail, seen, unresolved, reading, map);
+        return Kept(Snapshot(readRecipe, readSource, WatchState.Reporting, detail, seen, unresolved, reading, map));
+    }
+
+    /// <summary>Ruling R6. Accounts not in this read's rows (a private profile) need no claim.</summary>
+    private IReadOnlyDictionary<long, Guid> OwnedMap(Recipe readRecipe, Source? readSource, RecipeReading reading, IReadOnlyDictionary<long, Guid> map)
+    {
+        if (claims is null || readSource is null || map.Count == 0) return map;
+
+        var window = TimeSpan.FromSeconds(readRecipe.EffectiveEverySeconds * 2);
+        var inRows = reading.Rows.Select(r => r.UserId).ToHashSet();
+        return map
+            .Where(kv => !inRows.Contains(kv.Key) || claims.TryClaim(readRecipe.Slug, kv.Key, readSource.Id, window))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+    }
+
+    /// <summary>
+    /// Score book spec §5.4 and §6: finals first, from the same response, then this read's line, unless its
+    /// period has already ended. Returns whether a reading line was kept, and why not.
+    /// </summary>
+    private (bool Recorded, string? Reason) Record(
+        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, IReadOnlySet<string> readTracked, Source? readSource, string trigger,
+        RecipeReading reading, IReadOnlyDictionary<long, Guid> owned)
+    {
+        if (book is null || readSource is null) return (false, null);
+
+        // Fix round 1, finding 2: an unknown recipe text (never given, and cleared on a slug change
+        // by UpdateRecipe) must not be hashed and written under a recipe it doesn't belong to.
+        if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
+
+        var at = (time ?? TimeProvider.System).GetUtcNow();
+        var offset = (int)TimeZoneInfo.Local.GetUtcOffset(at).TotalMinutes;
+        var context = new ReadContext(readSource, readRecipe, BookFiles.Hash(readText), trigger, at, offset);
+
+        if (finals is not null)
+        {
+            string? previous;
+            lock (_gate) previous = _previousPeriod;
+
+            foreach (var final in FinalsPlanner.Plan(context, reading, owned, readTracked, finals, previous))
+            {
+                finals.Add(final);
+                book.Append(final, readText);
+            }
+        }
+
+        lock (_gate)
+        {
+            // Fix round 1, finding 1: a recipe or inputs swap that lands between the top-of-cycle
+            // RecipeChanged check and here must not resurrect its period as "previous" for whatever
+            // now runs under the new recipe. Mirrors the guard Remember already takes.
+            if (reading.Period is { } period && !RecipeChanged(readRecipe, readInputs)) _previousPeriod = period.Value;
+        }
+
+        if (finals is not null && FinalsPlanner.CurrentPeriodEnded(context, reading, finals)) return (false, NotRecordingEnded);
+
+        var line = LineBuilder.Reading(context, reading, owned, readTracked);
+        if (line is null) return (false, NotRecordingNoAccounts);
+
+        book.Append(line, readText);
+        return (true, null);
     }
 
     /// <summary>Whether the recipe or inputs a cycle read with have been replaced since. Call under <see cref="_gate"/>.</summary>
@@ -299,8 +461,8 @@ public sealed class RecipeWatch(
         !ReferenceEquals(recipe, readRecipe) || !ReferenceEquals(inputs, readInputs);
 
     /// <summary>Nothing sent, nothing kept, and no rows, so the window has nothing of the old recipe's to draw.</summary>
-    private RecipeSnapshot ChangedSnapshot(Recipe readRecipe, IReadOnlyList<HostAccount> unresolved) =>
-        Snapshot(readRecipe, WatchState.Showing, RecipeChangedDetail, 0, unresolved);
+    private RecipeSnapshot ChangedSnapshot(Recipe readRecipe, Source? readSource, IReadOnlyList<HostAccount> unresolved) =>
+        Snapshot(readRecipe, readSource, WatchState.Showing, RecipeChangedDetail, 0, unresolved);
 
     /// <summary>
     /// Verified against the running host: the Plugins page's only consent control is Remove. There is
@@ -336,7 +498,7 @@ public sealed class RecipeWatch(
     }
 
     private RecipeSnapshot Snapshot(
-        Recipe readRecipe, WatchState state, string? detail, int seen, IReadOnlyList<HostAccount> unresolved,
+        Recipe readRecipe, Source? readSource, WatchState state, string? detail, int seen, IReadOnlyList<HostAccount> unresolved,
         RecipeReading? reading = null, IReadOnlyDictionary<long, Guid>? map = null)
     {
         IReadOnlyList<AccountLine> lines;
@@ -357,6 +519,9 @@ public sealed class RecipeWatch(
             CounterNames = reading?.CounterNames ?? [],
             IconText = reading?.IconText,
             RecipeSlug = readRecipe.Slug,
+            SourceId = readSource?.Id ?? "",
+            Period = reading?.Period,
+            Groups = reading?.Groups ?? [],
         };
     }
 }

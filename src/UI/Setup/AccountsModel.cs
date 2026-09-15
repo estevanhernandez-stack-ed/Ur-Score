@@ -1,0 +1,148 @@
+using System.ComponentModel;
+using Labs626.UrScore.Board;
+using Labs626.UrScore.Core;
+using Labs626.UrScore.Recipes;
+
+namespace Labs626.UrScore.UI;
+
+using Source = Labs626.UrScore.Core.Source;
+
+/// <summary>One account's Send for one recipe. Raises a change so the page can check the budget and save.</summary>
+public sealed class SendTick : INotifyPropertyChanged
+{
+    private bool _on;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public required string RecipeSlug { get; init; }
+
+    public required Guid AccountId { get; init; }
+
+    /// <summary>The accessible name: "Send &lt;account&gt; for &lt;recipe&gt;".</summary>
+    public required string Name { get; init; }
+
+    public bool On
+    {
+        get => _on;
+        set
+        {
+            if (_on == value) return;
+            _on = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(On)));
+        }
+    }
+}
+
+public sealed record AccountRow(Guid AccountId, string DisplayName, string FoundIn, IReadOnlyList<SendTick> Sends);
+
+/// <summary>A recipe's state after a Send change, or the refusal that undid it.</summary>
+public sealed record SendChange(RecipeState State, string? Refusal);
+
+/// <summary>Setup › Your accounts (spec §7.2).</summary>
+public static class AccountsModel
+{
+    /// <summary>Group lists never send, so they get no Send column.</summary>
+    public static IReadOnlyList<InstalledRecipe> SendingRecipes(IReadOnlyList<InstalledRecipe> installed) =>
+        [.. installed.Where(i => !i.Recipe.IsGroupList)];
+
+    public static IReadOnlyList<AccountRow> Rows(
+        IReadOnlyList<HostAccount> accounts, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
+        IReadOnlyDictionary<string, RecipeSnapshot> latest)
+    {
+        var sending = SendingRecipes(installed);
+        return [.. accounts.Select(account => new AccountRow(
+            account.AccountId,
+            account.DisplayName,
+            FoundIn(account, installed, sources, latest),
+            [.. sending.Select(r => new SendTick
+            {
+                RecipeSlug = r.Recipe.Slug,
+                AccountId = account.AccountId,
+                Name = $"Send {account.DisplayName} for {r.Recipe.Name}",
+                On = !r.State.Excluded.Contains(account.AccountId),
+            })]))];
+    }
+
+    /// <summary>The main and mine sources whose last read had this account, main first; else "Not in a watched clan".</summary>
+    public static string FoundIn(
+        HostAccount account, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
+        IReadOnlyDictionary<string, RecipeSnapshot> latest)
+    {
+        var withInputs = installed.Where(SetupPages.HasClansPage).ToList();
+        if (withInputs.Count == 0) return "";
+        if (account.RobloxUserId == 0) return "Not matched by RoRoRo yet";
+
+        var names = new List<string>();
+        foreach (var source in sources.Where(s => s.Enabled && s.Role != SourceRole.Watch).OrderBy(s => s.Role == SourceRole.Main ? 0 : 1))
+        {
+            if (withInputs.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe) continue;
+            if (latest.GetValueOrDefault(source.Id)?.Rows is not { } rows || rows.All(r => r.UserId != account.RobloxUserId)) continue;
+
+            var name = ClansModel.NameOf(recipe, source);
+            names.Add(source.Role == SourceRole.Main ? $"★ {name}" : name);
+        }
+
+        return names.Count > 0
+            ? string.Join(", ", names.Distinct(StringComparer.Ordinal))
+            : $"Not in a watched {RecipeWords.Group(withInputs[0].Recipe)}";
+    }
+
+    /// <summary>
+    /// Stats design §5.3, unchanged: a Send tick that would pass RoRoRo's history limit is refused. Entries
+    /// for accounts RoRoRo isn't listing right now are kept as they are.
+    /// </summary>
+    public static SendChange ToggleSend(
+        InstalledRecipe recipe, IReadOnlyList<InstalledRecipe> installed, IReadOnlyCollection<Guid> accountIds, Guid accountId, bool on)
+    {
+        var excluded = recipe.State.Excluded.ToHashSet();
+        var sentStats = recipe.State.SentStats(recipe.Recipe).Count;
+        var before = accountIds.Count(id => !excluded.Contains(id));
+
+        if (on) excluded.Remove(accountId);
+        else excluded.Add(accountId);
+
+        var after = accountIds.Count(id => !excluded.Contains(id));
+
+        if (on)
+        {
+            var budget = HistoryBudget.Check(
+                HistoryBudget.Installed(installed, accountIds, exceptSlug: recipe.Recipe.Slug),
+                (before, sentStats), (after, sentStats), accountsKnown: true);
+            if (!budget.Allowed) return new SendChange(recipe.State, budget.Line);
+        }
+
+        var kept = (recipe.State.ExcludedAccountIds ?? [])
+            .Where(id => !Guid.TryParse(id, out var parsed) || parsed != accountId)
+            .ToList();
+        if (!on) kept.Add(accountId.ToString());
+
+        return new SendChange(recipe.State with { ExcludedAccountIds = kept }, null);
+    }
+
+    public static string ListedLine(AccountList? last, DateTimeOffset? savedAt, DateTimeOffset now)
+    {
+        const string Lead = "Accounts come from RoRoRo.";
+
+        if (last is { Denied: true })
+        {
+            return $"{Lead} RoRoRo refused to list them: host.queries.accounts is not granted. "
+                   + "Remove Ur Score from RoRoRo's Plugins page and reinstall it to be asked again.";
+        }
+
+        var listed = last?.ListedAt ?? savedAt;
+        if (listed is null) return $"{Lead} RoRoRo hasn't listed them yet.";
+
+        return last is { FromCache: true }
+            ? $"{Lead} RoRoRo isn't answering, so these are the ones it listed {Ago(listed.Value, now)}."
+            : $"{Lead} Last listed {Ago(listed.Value, now)}.";
+    }
+
+    public static string Ago(DateTimeOffset then, DateTimeOffset now)
+    {
+        var span = now - then;
+        if (span < TimeSpan.FromMinutes(1)) return "just now";
+        if (span < TimeSpan.FromHours(1)) return $"{(int)span.TotalMinutes} min ago";
+        if (span < TimeSpan.FromHours(48)) return $"{(int)span.TotalHours} h ago";
+        return $"{(int)span.TotalDays} days ago";
+    }
+}

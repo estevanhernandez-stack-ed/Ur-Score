@@ -1,0 +1,99 @@
+<UserControl x:Class="Labs626.UrScore.UI.StatsTable"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             AutomationProperties.AutomationId="StatsTable">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+        <Style x:Key="StatLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Offered}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+    <StackPanel>
+        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                   Text="Show puts a stat on your board and in your score book. Send also reports it to RoRoRo, where alerts still need a rule." />
+        <TextBox x:Name="StatsSearchBox" TextChanged="OnSearchChanged" AutomationProperties.Name="Search stats" />
+        <TextBlock x:Name="ShowingLine" Style="{StaticResource Muted}" Margin="0,4,0,0" Visibility="Collapsed" />
+
+        <Grid Margin="8,10,8,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="220" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Stat" Style="{StaticResource Muted}" />
+            <TextBlock Grid.Column="1" Text="Show" Style="{StaticResource Muted}" />
+            <TextBlock Grid.Column="2" Text="Send" Style="{StaticResource Muted}" />
+            <TextBlock Grid.Column="3" Text="Name RoRoRo uses" Style="{StaticResource Muted}" />
+        </Grid>
+
+        <!-- Virtualized: a profile recipe can offer hundreds of statistic names. A fixed height keeps
+             virtualization on inside a scrolling window. -->
+        <ListBox x:Name="StatsRows" Height="300"
+                 Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
+                 Foreground="{DynamicResource WhiteBrush}"
+                 ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                 KeyboardNavigation.TabNavigation="Continue"
+                 AutomationProperties.Name="Stats this recipe offers">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <Border x:Name="Item" Background="Transparent" Padding="8,4">
+                                    <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Item" Property="Background" Value="{DynamicResource RowHoverBrush}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="220" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" Style="{StaticResource StatLabel}" />
+                        <CheckBox Grid.Column="1" IsChecked="{Binding Show}" IsEnabled="{Binding Offered}"
+                                  VerticalAlignment="Center" AutomationProperties.Name="{Binding ShowName}" />
+                        <CheckBox Grid.Column="2" IsChecked="{Binding Send}" IsEnabled="{Binding Offered}"
+                                  VerticalAlignment="Center" AutomationProperties.Name="{Binding SendName}" />
+                        <TextBox Grid.Column="3" Text="{Binding MetricId, UpdateSourceTrigger=PropertyChanged}"
+                                 FontFamily="{StaticResource MonoFont}"
+                                 Visibility="{Binding NameShown, Converter={StaticResource Visible}}"
+                                 AutomationProperties.Name="{Binding MetricIdName}" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <StackPanel x:Name="CounterPanel" Margin="0,8,0,0" Visibility="Collapsed">
+            <Button x:Name="ReadNamesButton" HorizontalAlignment="Left" Click="OnReadNamesClick" />
+            <TextBlock x:Name="NamesLine" Margin="0,4,0,0" Style="{StaticResource Muted}" />
+        </StackPanel>
+
+        <TextBlock x:Name="SlotLine" Margin="0,12,0,0" Style="{StaticResource Muted}" />
+        <TextBlock x:Name="RuleLine" Margin="0,6,0,0" Style="{StaticResource Muted}" />
+        <TextBlock x:Name="RefusalLine" Margin="0,12,0,0" Style="{StaticResource Refusal}" />
+    </StackPanel>
+</UserControl>

@@ -73,9 +73,11 @@ public static class RecipeParser
             var keys = ParseKeys(root, problems);
             var (steps, lastUsesValues) = ParseSteps(root, metricId, valueLabel, problems);
             var headline = ParseHeadline(root, problems);
+            var period = ParsePeriod(root, problems);
+            var groupList = steps.Count > 0 && steps[^1].GroupName is not null;
 
             // The top-level metricId only names a single 'value'. A 'values' list names each of its own.
-            if (metricId is null && !lastUsesValues)
+            if (metricId is null && !lastUsesValues && !groupList)
             {
                 problems.Add("The recipe has no 'metricId'.");
             }
@@ -84,14 +86,14 @@ public static class RecipeParser
             // cascade into three confusing follow-on complaints.
             if (problems.Count == 0)
             {
-                Validate(inputs, keys, steps, headline, icon, placeLabel, problems);
+                Validate(inputs, keys, steps, headline, icon, placeLabel, period, problems);
             }
 
             return problems.Count > 0
                 ? new RecipeParseResult(null, problems)
                 : new RecipeParseResult(
                     new Recipe(version, name!, credit!, author, everySeconds, inputs, keys, steps, headline,
-                        icon, placeLabel ?? Recipe.DefaultPlaceLabel),
+                        icon, placeLabel ?? Recipe.DefaultPlaceLabel, period),
                     []);
         }
     }
@@ -197,7 +199,7 @@ public static class RecipeParser
                 if (url is not null && list is not null) search = new RecipeSearch(url, list);
             }
 
-            if (id is not null && label is not null) inputs.Add(new RecipeInput(id, label, search));
+            if (id is not null && label is not null) inputs.Add(new RecipeInput(id, label, search, OptionalString(item, "plural")));
         }
 
         return inputs;
@@ -318,7 +320,10 @@ public static class RecipeParser
                     perAccount, values,
                     ParseCounters(item, where, problems),
                     ParseUnavailable(item, where, problems),
-                    ParseAbsentMessage(item, where, problems)));
+                    ParseAbsentMessage(item, where, problems),
+                    OptionalString(item, "groupName"),
+                    OptionalString(item, "rank"),
+                    ParseAsOf(item, where, problems)));
             }
         }
 
@@ -427,6 +432,40 @@ public static class RecipeParser
         return element.GetString()!.Trim();
     }
 
+    private static RecipePeriod? ParsePeriod(JsonElement root, List<string> problems)
+    {
+        if (!Present(root, "period", out var period)) return null;
+
+        if (period.ValueKind != JsonValueKind.Object)
+        {
+            problems.Add("'period' must be an object with a value, and optionally starts, ends and past.");
+            return null;
+        }
+
+        var value = OptionalString(period, "value");
+        if (value is null)
+        {
+            problems.Add("The period has no 'value'.");
+            return null;
+        }
+
+        return new RecipePeriod(value, OptionalString(period, "starts"), OptionalString(period, "ends"), OptionalString(period, "past"));
+    }
+
+    private static RecipeAsOf? ParseAsOf(JsonElement step, string where, List<string> problems)
+    {
+        if (!Present(step, "asOf", out var asOf)) return null;
+
+        var time = asOf.ValueKind == JsonValueKind.Object ? OptionalString(asOf, "time") : null;
+        if (time is null)
+        {
+            problems.Add($"{Capitalize(where)}'s 'asOf' must be an object with a 'time' path.");
+            return null;
+        }
+
+        return new RecipeAsOf(time, OptionalString(asOf, "stale"));
+    }
+
     private static List<RecipeHeadline> ParseHeadline(JsonElement root, List<string> problems)
     {
         var headline = new List<RecipeHeadline>();
@@ -435,7 +474,8 @@ public static class RecipeParser
             var label = RequiredString(item, "label", $"headline {number}", problems);
             var path = RequiredString(item, "path", $"headline {number}", problems);
             var sum = OptionalBool(item, "sum", true, $"headline {number}", problems);
-            if (label is not null && path is not null) headline.Add(new RecipeHeadline(label, path, sum));
+            var id = OptionalString(item, "id") ?? (label is null ? null : RecipeStats.Slug(label));
+            if (label is not null && path is not null) headline.Add(new RecipeHeadline(label, path, sum, id!));
         }
 
         if (headline.Count > 2)
@@ -448,10 +488,11 @@ public static class RecipeParser
 
     private static void Validate(
         List<RecipeInput> inputs, List<RecipeKey> keys, List<RecipeStep> steps,
-        List<RecipeHeadline> headline, string? icon, string? placeLabel, List<string> problems)
+        List<RecipeHeadline> headline, string? icon, string? placeLabel, RecipePeriod? period, List<string> problems)
     {
         Duplicates(inputs.Select(i => i.Id), "input id", problems);
         Duplicates(keys.Select(k => k.Id), "key id", problems);
+        Duplicates(headline.Select(h => h.Id), "headline id", problems);
 
         var inputIds = inputs.Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
         if (inputIds.Contains(Placeholders.UserId))
@@ -463,6 +504,7 @@ public static class RecipeParser
         var keyHosts = new Dictionary<string, string>(StringComparer.Ordinal);
         var taken = new HashSet<string>(StringComparer.Ordinal);
         var listForm = false;
+        var groupForm = false;
 
         for (var index = 0; index < steps.Count; index++)
         {
@@ -528,8 +570,24 @@ public static class RecipeParser
                 problems.Add($"{Capitalize(where)} has 'unavailable', but only a perAccount step can.");
             }
 
+            if (step.AsOf is not null && !isLast)
+            {
+                problems.Add($"{Capitalize(where)} has 'asOf', but only the last step can.");
+            }
+
+            if (step.GroupName is not null && step.UserId is not null)
+            {
+                problems.Add($"{Capitalize(where)} has both 'userId' and 'groupName'. A row is a player or a group, not both.");
+            }
+
+            if (step.Rank is not null && step.GroupName is null)
+            {
+                problems.Add($"{Capitalize(where)} has 'rank', which only a groupName step can use.");
+            }
+
             var reads = step.Rows is not null || step.UserId is not null || step.Values.Count > 0
-                        || step.Counters is not null || step.PerAccount;
+                        || step.Counters is not null || step.PerAccount
+                        || step.GroupName is not null || step.Rank is not null;
             if (!isLast && reads)
             {
                 problems.Add($"{Capitalize(where)} reads a value, but only the last step can.");
@@ -537,12 +595,17 @@ public static class RecipeParser
 
             if (isLast)
             {
-                listForm = step.Rows is not null && step.UserId is not null && step.Values.Count > 0 && !step.PerAccount;
-                var perAccountForm = step.PerAccount && step.Values.Count > 0 && step.Rows is null && step.UserId is null;
+                listForm = step.Rows is not null && step.UserId is not null && step.GroupName is null && step.Values.Count > 0 && !step.PerAccount;
+                groupForm = step.Rows is not null && step.GroupName is not null && step.UserId is null && step.Values.Count > 0 && !step.PerAccount;
+                var perAccountForm = step.PerAccount && step.Values.Count > 0 && step.Rows is null && step.UserId is null && step.GroupName is null;
 
-                if (!listForm && !perAccountForm)
+                if (!listForm && !perAccountForm && !groupForm && step.GroupName is null)
                 {
                     problems.Add("The last step needs rows, userId and value, or perAccount and value.");
+                }
+                else if (!groupForm && step.GroupName is not null && step.UserId is null)
+                {
+                    problems.Add("A groupName step needs rows and a value, and can't be perAccount.");
                 }
 
                 if (step.Take.Count > 0)
@@ -619,6 +682,43 @@ public static class RecipeParser
                 problems.Add($"Input '{input.Id}' searches with a placeholder {{{name}}}. A search list's address must be fixed.");
             }
         }
+
+        if (period is not null)
+        {
+            if (!taken.Contains(period.Value))
+            {
+                problems.Add($"The period's value '{period.Value}' is not something an earlier step takes.");
+            }
+
+            foreach (var (name, what) in new[] { (period.Starts, "starts"), (period.Ends, "ends") })
+            {
+                if (name is not null && !taken.Contains(name))
+                {
+                    problems.Add($"The period's {what} '{name}' is not something an earlier step takes.");
+                }
+            }
+
+            if (period.Past is not null)
+            {
+                if (!listForm) problems.Add("A period's 'past' needs a last step with rows and userId.");
+
+                foreach (var name in Placeholders.Names(period.Past).Where(n => !allKnown.Contains(n)))
+                {
+                    problems.Add($"Unknown placeholder {{{name}}} in the period's past path.");
+                }
+            }
+        }
+
+        // Score book spec §3.6: no path may name a particular player.
+        var everyPath = steps.SelectMany((step, index) => PathsOf(step).Select(p => (Where: $"step {index + 1}", Path: p.Path)))
+            .Concat(headline.Select((h, index) => (Where: $"headline {index + 1}", Path: h.Path)))
+            .Concat(icon is null ? [] : new[] { (Where: "the icon path", Path: icon) })
+            .Concat(period?.Past is null ? [] : new[] { (Where: "the period's past path", Path: period.Past) });
+
+        foreach (var (where, path) in everyPath.Where(p => PathRules.HasLiteralNumber(p.Path)))
+        {
+            problems.Add($"{Capitalize(where)}: '{path}' names a number. Recipes can't point at a particular player; use a placeholder instead.");
+        }
     }
 
     private static IEnumerable<(string Label, string Path)> PathsOf(RecipeStep step)
@@ -629,6 +729,10 @@ public static class RecipeParser
         foreach (var value in step.Values) yield return ($"value '{value.Id}'", value.Path);
         if (step.Counters is not null) yield return ("counters path", step.Counters.Path);
         if (step.Unavailable is not null) yield return ("unavailable path", step.Unavailable.Path);
+        if (step.GroupName is not null) yield return ("groupName", step.GroupName);
+        if (step.Rank is not null) yield return ("rank", step.Rank);
+        if (step.AsOf is not null) yield return ("asOf time", step.AsOf.Time);
+        if (step.AsOf?.Stale is not null) yield return ("asOf stale", step.AsOf.Stale);
     }
 
     private static void Duplicates(IEnumerable<string> ids, string what, List<string> problems)

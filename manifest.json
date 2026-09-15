@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "626labs.ur-score",
   "name": "RoRoRo Ur Score",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "contractVersion": "1.0",
   "publisher": "626 Labs LLC",
-  "description": "Reads a number for your own accounts from wherever a recipe says, and hands it to RoRoRo.",
+  "description": "Reads your accounts' numbers from wherever a recipe says, keeps them on your scoreboard and in your score book, and hands them to RoRoRo.",
   "capabilities": [
     "host.metrics.report",
     "host.queries.accounts"

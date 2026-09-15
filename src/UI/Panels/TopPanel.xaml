@@ -1,0 +1,52 @@
+<UserControl x:Class="Labs626.UrScore.UI.TopPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <Border Style="{StaticResource PanelCard}">
+        <StackPanel>
+            <ui:PanelFrame DataContext="{Binding Head}" />
+            <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="44" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="90" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="#" Style="{StaticResource ColumnHeader}" />
+                    <TextBlock Grid.Column="1" Text="{Binding NameColumn}" Style="{StaticResource ColumnHeader}" />
+                    <TextBlock Grid.Column="2" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
+                </Grid>
+                <ui:RowList ItemsSource="{Binding Rows}" AutomationProperties.Name="The leading groups, with yours placed">
+                    <ui:RowList.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="0,2" CornerRadius="3">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Yours}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource RowHoverBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="44" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="90" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Rank}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
+            </StackPanel>
+            <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
+                       Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -1,0 +1,92 @@
+using Labs626.UrScore.Book;
+using Labs626.UrScore.Core;
+using Labs626.UrScore.Recipes;
+using Labs626.UrScore.UI;
+
+namespace Labs626.UrScore.Composition;
+
+using Source = Labs626.UrScore.Core.Source;
+
+/// <summary>
+/// Everything a Setup page may use. <c>AppServices</c> (Task 14) implements it. Every member is used from
+/// the UI thread, and <see cref="Changed"/> is raised on it.
+/// </summary>
+public interface ISetupServices
+{
+    /// <summary>Installed recipes as last loaded, in file order.</summary>
+    IReadOnlyList<InstalledRecipe> Installed { get; }
+
+    /// <summary>Recipe files that could not be read, already redacted.</summary>
+    IReadOnlyList<string> RecipeProblems { get; }
+
+    IReadOnlyList<Source> Sources { get; }
+
+    RecipeStore Store { get; }
+
+    IKeyStore Keys { get; }
+
+    Redactor Redactor { get; }
+
+    Settings Settings { get; }
+
+    SharedAccounts Accounts { get; }
+
+    AccountsCache AccountsCache { get; }
+
+    /// <summary>RoRoRo's last list this session, else the saved one from <c>accounts.json</c>. Your accounts only.</summary>
+    IReadOnlyList<HostAccount> KnownAccounts { get; }
+
+    IScoreBook Book { get; }
+
+    ScoreBookReader Reader { get; }
+
+    bool ReaderLoaded { get; }
+
+    bool Running { get; }
+
+    /// <summary>The newest snapshot per source id, from a timed read, Test now, or a Setup read-once.</summary>
+    IReadOnlyDictionary<string, RecipeSnapshot> Latest { get; }
+
+    DateTimeOffset? LastReadAt(string sourceId);
+
+    /// <summary>Reports sent and dropped this session, summed over a recipe's sources.</summary>
+    (int Sent, int Dropped) PolicyCounts(string recipeSlug);
+
+    /// <summary>The fetched icon file for a recipe, once a read has named one, else null.</summary>
+    string? IconFileFor(string recipeSlug);
+
+    /// <summary>The history-budget warning once RoRoRo's accounts are known, else null.</summary>
+    string? BudgetWarning { get; }
+
+    /// <summary>"host=1.28.0.0 reject=(none)", for diagnostics.</summary>
+    string HostText { get; }
+
+    /// <summary>The newest trail lines, redacted, oldest first.</summary>
+    IReadOnlyList<string> Trail { get; }
+
+    event Action? Changed;
+
+    /// <summary>Saves <c>sources.json</c>, applies it to the running watches at once, and raises <see cref="Changed"/>.</summary>
+    void SaveSources(IReadOnlyList<Source> sources);
+
+    /// <summary>Reloads recipes from disk, migrates sources for any new recipe, applies, and raises <see cref="Changed"/>.</summary>
+    void ReloadRecipes();
+
+    /// <summary>Saves one recipe's state (stats, Send per account, counter names) and updates its watches.</summary>
+    void SaveRecipeState(Recipe recipe, RecipeState state);
+
+    /// <summary>Removes a recipe file and its sources. Never touches its score book.</summary>
+    void RemoveRecipe(string slug);
+
+    /// <summary>Reads one source once, right now, and records it like any read. Null when that source has no watch yet.</summary>
+    Task<RecipeSnapshot?> ReadOnceAsync(string sourceId, CancellationToken cancellationToken);
+
+    Task<SearchListResult> SearchListAsync(RecipeSearch search, CancellationToken cancellationToken);
+
+    /// <summary>One read with every recipe value asked for, so the response can offer its counter names. Sends nothing.</summary>
+    Task<CounterLookup> ReadCounterNamesAsync(Recipe recipe, CancellationToken cancellationToken);
+
+    Task<AccountList> RefreshAccountsAsync(CancellationToken cancellationToken);
+
+    void AddTrail(string text);
+}

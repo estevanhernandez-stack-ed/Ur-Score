@@ -1,0 +1,22 @@
+<UserControl x:Class="Labs626.UrScore.UI.LiveLeaderboardPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <Border Style="{StaticResource PanelCard}">
+        <StackPanel>
+            <ui:PanelFrame DataContext="{Binding Head}" />
+            <DataGrid x:Name="LeaderGrid" Margin="0,10,0,0" MaxHeight="360" AutoGenerateColumns="False" IsReadOnly="True"
+                      ClipboardCopyMode="None"
+                      ItemsSource="{Binding Rows}"
+                      Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}"
+                      AutomationProperties.Name="Every row read, your accounts marked">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="#" Binding="{Binding Position}" Width="50" />
+                    <DataGridTextColumn Header="Member" Binding="{Binding Name}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
+                       Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />
+        </StackPanel>
+    </Border>
+</UserControl>

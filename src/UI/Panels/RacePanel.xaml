@@ -1,0 +1,31 @@
+<UserControl x:Class="Labs626.UrScore.UI.RacePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <Border Style="{StaticResource PanelCard}">
+        <StackPanel>
+            <ui:PanelFrame DataContext="{Binding Head}" />
+            <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
+                <ui:LineChart Height="170" Series="{Binding Series}" FromZero="True" ShowLabels="True"
+                              AutomationProperties.Name="{Binding ChartName}" />
+                <ui:RowList ItemsSource="{Binding Legend}" Margin="0,8,0,0">
+                    <ui:RowList.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ui:RowList.ItemsPanel>
+                    <ui:RowList.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,14,4">
+                                <ui:LegendSwatch Colour="{Binding Colour}" />
+                                <TextBlock Text="{Binding Text}" Style="{StaticResource Muted}" FontSize="12" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
+            </StackPanel>
+            <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
+                       Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />
+        </StackPanel>
+    </Border>
+</UserControl>

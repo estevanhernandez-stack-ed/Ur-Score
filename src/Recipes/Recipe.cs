@@ -21,7 +21,8 @@ public sealed record Recipe(
     IReadOnlyList<RecipeStep> Steps,
     IReadOnlyList<RecipeHeadline> Headline,
     string? Icon = null,
-    string PlaceLabel = Recipe.DefaultPlaceLabel)
+    string PlaceLabel = Recipe.DefaultPlaceLabel,
+    RecipePeriod? Period = null)
 {
     public const int SupportedVersion = 1;
 
@@ -33,6 +34,9 @@ public sealed record Recipe(
     public int EffectiveEverySeconds => Math.Max(MinimumEverySeconds, EverySeconds);
 
     public RecipeStep LastStep => Steps[^1];
+
+    /// <summary>The last step reads groups (clans), not players: never matched to accounts, sent or recorded.</summary>
+    public bool IsGroupList => LastStep.GroupName is not null;
 
     /// <summary>File name and identity. Name plus author, so two people's same-named recipes do not collide.</summary>
     public string Slug => Slugify(Author is null ? Name : $"{Name} {Author}");
@@ -50,7 +54,21 @@ public sealed record Recipe(
     }
 }
 
-public sealed record RecipeInput(string Id, string Label, RecipeSearch? Search);
+public sealed record RecipeInput(string Id, string Label, RecipeSearch? Search, string? Plural = null)
+{
+    /// <summary>The word for several of these, for Setup and panel titles: the recipe's own, else from the label.</summary>
+    public string PluralLabel => Plural ?? DefaultPlural(Label);
+
+    internal static string DefaultPlural(string label)
+    {
+        var text = label.Trim();
+        if (text.StartsWith("Your ", StringComparison.OrdinalIgnoreCase)) text = text[5..].Trim();
+        if (text.Length == 0) return "Items";
+
+        text = char.ToUpperInvariant(text[0]) + text[1..];
+        return text.EndsWith('s') ? text : text + "s";
+    }
+}
 
 public sealed record RecipeSearch(string Url, string List);
 
@@ -75,7 +93,10 @@ public sealed record RecipeStep(
     IReadOnlyList<RecipeValue> Values,
     RecipeCounters? Counters = null,
     RecipeUnavailable? Unavailable = null,
-    string? AbsentMessage = null);
+    string? AbsentMessage = null,
+    string? GroupName = null,
+    string? Rank = null,
+    RecipeAsOf? AsOf = null);
 
 /// <summary>
 /// One stat the user can tick. <see cref="MetricId"/> is only a suggestion: the name RoRoRo gets is
@@ -113,4 +134,5 @@ public sealed record RecipeUnavailable(string Path, JsonValueKind IsKind, string
     };
 }
 
-public sealed record RecipeHeadline(string Label, string Path, bool Sum = true);
+/// <summary><see cref="Id"/> is how the score book keeps this value; the parser always fills it.</summary>
+public sealed record RecipeHeadline(string Label, string Path, bool Sum = true, string Id = "");

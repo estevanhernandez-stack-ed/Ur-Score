@@ -1,0 +1,44 @@
+<UserControl x:Class="Labs626.UrScore.UI.RecipesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+        <TextBlock Text="Recipes" Style="{StaticResource Heading}" />
+        <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,14"
+                   Text="A recipe says where numbers are. Removing a recipe never deletes its score book." />
+        <ui:RowList x:Name="RecipesList" AutomationProperties.Name="Installed recipes">
+            <ui:RowList.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource Card}" Padding="12,10" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Image Grid.Column="0" Width="32" Height="32" Margin="0,0,12,0" VerticalAlignment="Top"
+                                   Source="{Binding IconFile}"
+                                   Visibility="{Binding HasIcon, Converter={StaticResource BoolToVisible}}"
+                                   AutomationProperties.Name="Recipe icon" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Hosts}" FontFamily="{StaticResource MonoFont}" Style="{StaticResource Muted}" Margin="0,2,0,0" />
+                                <TextBlock Text="{Binding Details}" Style="{StaticResource Muted}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="Remove" Tag="{Binding Slug}" Click="OnRemoveClick" VerticalAlignment="Center"
+                                    AutomationProperties.Name="{Binding RemoveName}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ui:RowList.ItemTemplate>
+        </ui:RowList>
+        <TextBlock x:Name="RecipesEmptyLine" Style="{StaticResource Muted}" Margin="0,0,0,8" Visibility="Collapsed"
+                   Text="No recipes yet. Import one to start." />
+        <TextBlock x:Name="RecipeProblemsLine" Style="{StaticResource Refusal}" Margin="0,0,0,8" Visibility="Collapsed" />
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <Button x:Name="ImportRecipeButton" Content="Import recipe…" Style="{StaticResource PrimaryButton}" Click="OnImportClick"
+                    AutomationProperties.Name="Import a recipe file" />
+            <TextBlock x:Name="RecipesLine" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>
