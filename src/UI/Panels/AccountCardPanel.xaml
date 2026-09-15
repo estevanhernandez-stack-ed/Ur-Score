@@ -6,8 +6,14 @@
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
             <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
-                <TextBlock Text="{Binding BigLabel}" Style="{StaticResource KeyLabel}" />
-                <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" Margin="0,5,0,-5" />
+                <DockPanel>
+                    <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" Width="40" Height="40" Margin="0,0,12,0"
+                             VerticalAlignment="Top" />
+                    <StackPanel>
+                        <TextBlock Text="{Binding BigLabel}" Style="{StaticResource KeyLabel}" />
+                        <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" Margin="0,5,0,-5" />
+                    </StackPanel>
+                </DockPanel>
                 <!-- The line over time, only once there is one: with no line yet the chart takes no space. -->
                 <ui:LineChart Height="48" Margin="0,10,0,0" Series="{Binding Line}" FromZero="False" ShowLabels="False"
                               AutomationProperties.Name="{Binding ChartName}"

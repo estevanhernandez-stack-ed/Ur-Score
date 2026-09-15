@@ -46,13 +46,14 @@ anything it reported made your phone ring — that part is entirely RoRoRo's.
 
 ## What leaves your machine
 
-Three separate destinations, and they're not the same boundary:
+Four separate destinations, and they're not the same boundary:
 
 | Destination | What goes | What doesn't |
 | --- | --- | --- |
 | **RoRoRo**, over a local pipe on your own PC | Only your own saved accounts' points, only under the metric id you configured, only if the number is a real finite value. This is the whole point of the plugin and it is checked at one gate in the code (`ReportPolicy`), not scattered around. | Anything about other clan members. Their ids and points are read off the clan leaderboard, compared against your accounts, and dropped — never reported, never written to a file, never logged. |
 | **Pet Simulator 99's own public clan API** (`ps99.biggamesapi.io`, run by Big Games) | The clan name you configure, so it can hand back that clan's current battle standings. No login, no account identifiers of yours. | Nothing about your RoRoRo accounts. This call doesn't know they exist. |
 | **Roblox's own public username-lookup API** (`users.roblox.com`) | Other clan members' Roblox user ids, so the leaderboard can show names instead of a column of numbers. These ids came from the public clan API in the first place, and only names come back — nothing is disclosed about anyone that a public API didn't already show. | Your own accounts' ids — their names are already known locally, from RoRoRo, so they never need this call. |
+| **Roblox's own public picture service** (`thumbnails.roblox.com`, and the picture host it names on `rbxcdn.com`) | Your own accounts' Roblox user ids, so each of your rows can show that account's avatar, and a recipe's icon id when the recipe has one. The pictures are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Any other player's id. The leaderboard and Top of the battle show other members by name only, and no picture of anyone else is ever asked for or kept. |
 
 **You can turn the third one off.** Set `resolveNames` to `false` in settings (see *Configure it*
 below) and the leaderboard still shows positions and points, with everyone but your own accounts
@@ -61,8 +62,9 @@ per poll — both to the game's own API — and none to Roblox for anyone else's
 (the default), that's three: the same two, plus one batched call to Roblox for names.
 
 Ur Score has no webhook of its own, posts nothing anywhere, and cannot type or click inside
-Roblox. Its only outbound calls are the two named above, and its only inbound connection is the
-local pipe to RoRoRo.
+Roblox. Its only outbound calls are the four named above — the game's API, the username lookup,
+and Roblox's picture service for your own accounts' avatars and a recipe's icon — and its only
+inbound connection is the local pipe to RoRoRo.
 
 **Credit where it's due:** clan battle data comes from Big Games' public Pet Simulator 99 API. Ur
 Score is not made by, endorsed by, or affiliated with Big Games or Roblox — the window says this

@@ -121,4 +121,17 @@ public class AccountsModelTests
         rows[1].Sends[0].On = true;
         Assert.Equal(new string?[] { nameof(SendTick.On) }, raised);
     }
+
+    [Fact]
+    public void EachSetupRowCarriesItsOwnAccountsPicture()
+    {
+        var rows = AccountsModel.Rows([Main, Alt], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>(),
+            id => id == Main.RobloxUserId ? @"C:\cache\avatar-101.png" : null);
+
+        Assert.Equal(@"C:\cache\avatar-101.png", rows[0].Avatar);
+        Assert.Null(rows[1].Avatar);
+
+        // With no lookup (a page that hasn't one yet), every row is simply pictureless.
+        Assert.Null(AccountsModel.Rows([Main], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>())[0].Avatar);
+    }
 }

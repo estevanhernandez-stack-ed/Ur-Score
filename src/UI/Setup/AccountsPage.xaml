@@ -7,6 +7,8 @@
         <TextBlock x:Name="ListedLine" Style="{StaticResource Muted}" Margin="0,4,0,4" />
         <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
                    Text="Send reports an account's sent stats to RoRoRo. Reading and keeping your scores happen either way." />
+        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
+                   Text="Each picture comes from Roblox: Ur Score asks Roblox's picture service for your own accounts' pictures and keeps them on this PC. No other player's id is ever sent for a picture, and the leaderboard shows other members by name only." />
         <TextBlock x:Name="AccountsBudgetLine" Style="{StaticResource Refusal}" Margin="0,0,0,10" Visibility="Collapsed" />
 
         <Grid Margin="10,0,10,6">
@@ -41,8 +43,11 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" />
+                            <DockPanel Grid.Column="0">
+                                <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" Width="24" Height="24" />
+                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
                             <TextBlock Grid.Column="1" Text="{Binding FoundIn}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
                             <ui:RowList Grid.Column="2" ItemsSource="{Binding Sends}">
                                 <ui:RowList.ItemsPanel>

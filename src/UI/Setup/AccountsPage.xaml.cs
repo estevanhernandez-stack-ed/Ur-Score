@@ -36,7 +36,7 @@ public partial class AccountsPage : UserControl, ISetupPage
 
         foreach (var tick in _rows.SelectMany(r => r.Sends)) tick.PropertyChanged -= OnTick;
         var accounts = _services.KnownAccounts;
-        _rows = AccountsModel.Rows(accounts, _services.Installed, _services.Sources, _services.Latest);
+        _rows = AccountsModel.Rows(accounts, _services.Installed, _services.Sources, _services.Latest, _services.AvatarFileFor);
         foreach (var tick in _rows.SelectMany(r => r.Sends)) tick.PropertyChanged += OnTick;
 
         RecipeHeaders.ItemsSource = AccountsModel.SendingRecipes(_services.Installed).Select(r => r.Recipe.Name).ToList();

@@ -55,6 +55,9 @@ public interface ISetupServices
     /// <summary>The fetched icon file for a recipe, once a read has named one, else null.</summary>
     string? IconFileFor(string recipeSlug);
 
+    /// <summary>The cached picture for one of your own accounts, once it has been fetched, else null. Never another player's.</summary>
+    string? AvatarFileFor(long userId);
+
     /// <summary>The history-budget warning once RoRoRo's accounts are known, else null.</summary>
     string? BudgetWarning { get; }
 

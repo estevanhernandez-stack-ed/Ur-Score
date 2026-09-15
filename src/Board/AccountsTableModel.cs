@@ -24,7 +24,8 @@ public sealed record AccountSort(string Key, bool Descending)
 }
 
 /// <summary>One of your accounts, or the totals row (user id 0). Cells line up with the columns, the name first.</summary>
-public sealed record AccountRow(long UserId, string Name, IReadOnlyList<string> Cells, string Note, bool Missing, bool Picked, bool IsTotal = false)
+public sealed record AccountRow(
+    long UserId, string Name, IReadOnlyList<string> Cells, string Note, bool Missing, bool Picked, bool IsTotal = false, string? Avatar = null)
 {
     public bool HasNote => Note.Length > 0;
 

@@ -14,6 +14,7 @@ namespace Labs626.UrScore.Composition;
 
 using NameClient = Labs626.UrScore.Source.NameClient;
 using IconClient = Labs626.UrScore.Source.IconClient;
+using AvatarBook = Labs626.UrScore.Source.AvatarBook;
 using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>
@@ -54,6 +55,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     private readonly AccountClaims _claims;
     private readonly ScoreBook _book;
     private readonly IconClient _icons;
+    private readonly AvatarBook _avatars;
     private readonly SearchLists _searchLists;
     private readonly SourceStore _sourceStore = new(SourceStore.DefaultPath);
     private readonly BoardsFile _boardsFile = new(BoardsFile.DefaultPath, TimeProvider.System);
@@ -116,6 +118,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         Names = new NameClient(_namesHttp);
         _icons = new IconClient(HttpRecipeTransport.CreateHandler(), IconClient.DefaultCacheDirectory, () => _time.GetUtcNow());
+        _avatars = new AvatarBook(_icons);
 
         Runner = new SourceHost(CreateWatch, IntervalFor);
         Runner.SnapshotReady += OnSnapshotReady;
@@ -210,11 +213,15 @@ public sealed class AppServices : ISetupServices, IDisposable
         return source is null ? null : _iconFiles[source.Recipe];
     }
 
+    /// <summary>The picture for one of your own accounts (plan A22): an id RoRoRo isn't listing as yours has none.</summary>
+    public string? AvatarFileFor(long userId) =>
+        LiveBoard.UserIdsOf(KnownAccounts).Contains(userId) ? _avatars.FileFor(userId) : null;
+
     public LiveBoard CurrentBoard() => new(
         Sources, Installed,
         new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
         new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
-        KnownAccounts, _time, Runner.Running);
+        KnownAccounts, _time, Runner.Running, _avatars.Files);
 
     /// <summary>
     /// The boards on screen: the saved ones, with each tab that still follows a starter rebuilt from your sources and
@@ -271,6 +278,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         _book.Written += OnWritten;
         Runner.Apply(Sources);
         AddTrail($"BOOK: loaded from {root}.");
+        AskForAvatars();
         RaiseChanged();
     }
 
@@ -433,6 +441,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         RefreshPolicies();
         WarnPastBudget();
+        AskForAvatars();
         RaiseChanged();
         return list;
     }
@@ -731,6 +740,35 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         _boardIcon = icon;
         IconChanged?.Invoke(icon);
+    }
+
+    /// <summary>
+    /// The pictures beside your own accounts, after the numbers (plan A23): the ids RoRoRo lists as yours, once each per
+    /// session, off the UI thread. Anything that fails costs the pictures and nothing else.
+    /// </summary>
+    private void AskForAvatars()
+    {
+        var yours = LiveBoard.UserIdsOf(KnownAccounts);
+        if (yours.Count == 0) return;
+
+        _avatars.Keep(yours);
+        _ = AskForAvatarsAsync(yours);
+    }
+
+    private async Task AskForAvatarsAsync(IReadOnlySet<long> yours)
+    {
+        try
+        {
+            if (await _avatars.AskAsync(yours, _closing.Token)) RaiseChanged();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            // The type only: a message can carry anything. The rows keep their names either way.
+            AddTrail($"AVATARS: your accounts' pictures could not be fetched ({ex.GetType().Name}).");
+        }
     }
 
     // ---- loading ----

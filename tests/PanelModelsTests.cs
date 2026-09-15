@@ -755,4 +755,47 @@ public class PanelModelsTests
         Assert.Equal(new[] { "215,850,364", "586d 5h", "13 Sep 2020" }, model.Rows.Single(r => r.Name == Main.DisplayName).Cells);
         Assert.Equal(new[] { "1,000", StatText.Dash, StatText.Dash }, model.Rows.Single(r => r.Name == AltOne.DisplayName).Cells);
     }
+
+    // ---- Your own accounts' pictures ----
+
+    [Fact]
+    public void YourOwnAccountsRowsCarryTheirPictureAndNobodyElsesDoes()
+    {
+        var pictures = new Dictionary<long, string>
+        {
+            [Main.RobloxUserId] = @"C:\cache\avatar-101.png",
+            [999] = @"C:\cache\avatar-999.png",
+        };
+        var live = ProfileLive("diamonds", "rank") with { Avatars = pictures };
+
+        var table = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort(AccountSort.NameKey, Descending: false));
+        var mine = PanelModels.MyAccounts(live, DiamondsBook(), new PanelSettings(Profile.Slug, Stat: "diamonds"));
+        var card = PanelModels.AccountCard(live, DiamondsBook(), new PanelSettings(Profile.Slug, Stat: "diamonds", UserId: Main.RobloxUserId));
+
+        Assert.Equal(@"C:\cache\avatar-101.png", table.Rows.First(r => r.Name == Main.DisplayName).Avatar);
+        Assert.Null(table.Rows.First(r => r.Name == AltOne.DisplayName).Avatar);
+        Assert.Null(table.Rows[^1].Avatar);
+        Assert.Equal(@"C:\cache\avatar-101.png", mine.Groups.SelectMany(g => g.Rows).First(r => r.UserId == Main.RobloxUserId).Avatar);
+        Assert.Equal(@"C:\cache\avatar-101.png", card.Avatar);
+
+        // A picture for anyone but you is never drawn, whatever the map holds.
+        Assert.Null(live.AvatarFor(999));
+        Assert.Null(live.AvatarFor(0));
+    }
+
+    [Fact]
+    public void ThePromotionCheckShowsYourPictureBesideEachAccountItWouldPlace()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var live = Live([main, alts], [Installed(Clan, "value")],
+            Snaps(Snapshot(main.Id, [Row(5, 900), Row(6, 700)]), Snapshot(alts.Id, [Row(Main.RobloxUserId, 800)]))) with
+        {
+            Avatars = new Dictionary<long, string> { [Main.RobloxUserId] = @"C:\cache\avatar-101.png" },
+        };
+
+        var model = PanelModels.PromotionCheck(live, new PanelSettings(Clan.Slug, SourceId: alts.Id, ToSourceId: main.Id, Stat: "value"));
+
+        Assert.Equal(@"C:\cache\avatar-101.png", Assert.Single(model.Rows).Avatar);
+    }
 }

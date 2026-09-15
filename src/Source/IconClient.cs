@@ -15,13 +15,18 @@ namespace Labs626.UrScore.Source;
 /// wherever Roblox's answer says, and only when that host is on Roblox's picture domain.
 /// </para>
 /// <para>
+/// It also fetches the headshot of each of YOUR OWN accounts (<see cref="HeadshotsAsync"/>), for the rows that name
+/// them. Same host, same handler, same User-Agent, same size cap, same picture-domain check. No other player's id is
+/// ever passed in: <c>AppServices</c> asks with RoRoRo's list of your accounts and nothing else (plan A22).
+/// </para>
+/// <para>
 /// Every request follows the recipe client's rules: the handler must be
 /// <c>HttpRecipeTransport.CreateHandler()</c> (no redirects, no cookies), and each request carries Ur
 /// Score's User-Agent. Never throws for anything but a stop the caller asked for; a failure costs the
 /// icon, and the window keeps Ur Score's own.
 /// </para>
 /// </summary>
-public sealed class IconClient
+public sealed class IconClient : IAvatarSource
 {
     public const string ThumbnailsHost = "thumbnails.roblox.com";
 
@@ -38,6 +43,15 @@ public sealed class IconClient
     public const string AssetScheme = "rbxassetid://";
 
     public const int MaxBytes = 1024 * 1024;
+
+    /// <summary>Roblox's own supported headshot size, the nearest above the 20-40 px a row draws (plan A25).</summary>
+    public const string HeadshotSize = "48x48";
+
+    /// <summary>The endpoint's ceiling, and well above the 256 accounts RoRoRo's history limit allows.</summary>
+    public const int HeadshotBatchLimit = 100;
+
+    /// <summary>What a cached headshot is called in the icon cache, so it can never collide with a recipe's icon (plan A24).</summary>
+    public const string AvatarPrefix = "avatar-";
 
     public static readonly TimeSpan CacheFor = TimeSpan.FromDays(7);
 
@@ -99,6 +113,47 @@ public sealed class IconClient
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The cached headshot of each of <paramref name="userIds"/>, fetching the ones the cache has none younger than
+    /// <see cref="CacheFor"/> for. Only your own accounts' ids are ever passed in (plan A22). A user Roblox has no
+    /// finished picture for, and one whose picture is off Roblox's picture domain, is simply left out. Never throws for
+    /// anything but a stop the caller asked for: a failure costs the pictures, and the rows keep their names.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<long, string>> HeadshotsAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken)
+    {
+        var files = new Dictionary<long, string>();
+        var wanted = userIds.Where(id => id > 0).Distinct().ToList();
+
+        for (var offset = 0; offset < wanted.Count; offset += HeadshotBatchLimit)
+        {
+            var batch = wanted.Skip(offset).Take(HeadshotBatchLimit).ToList();
+            var asked = batch.ToHashSet();
+
+            var missing = new List<long>();
+            foreach (var id in batch)
+            {
+                var cached = CachePath(AvatarKey(id));
+                if (IsFresh(cached)) files[id] = cached;
+                else missing.Add(id);
+            }
+
+            if (missing.Count == 0) continue;
+
+            foreach (var (userId, url) in await HeadshotUrlsAsync(missing, cancellationToken).ConfigureAwait(false))
+            {
+                // Only what this batch asked for, so an answer carrying anyone else cannot reach the cache.
+                if (!asked.Contains(userId) || !IsPictureHost(url)) continue;
+
+                if (await DownloadAsync(url, CachePath(AvatarKey(userId)), cancellationToken).ConfigureAwait(false) is { } file)
+                {
+                    files[userId] = file;
+                }
+            }
+        }
+
+        return files;
     }
 
     /// <summary>https, and a host equal to the picture domain or ending with a dot and the picture domain.</summary>
@@ -211,6 +266,60 @@ public sealed class IconClient
         var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.UserAgent.ParseAdd(UrScoreIdentity.UserAgent);
         return request;
+    }
+
+    private static string AvatarKey(long userId) => AvatarPrefix + userId.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// One batch ask for headshots. Only a row Roblox calls <c>Completed</c> has a picture to fetch: <c>Pending</c>,
+    /// <c>Blocked</c> and the rest mean no icon this time, and no reason to spoil the batch for everyone else.
+    /// </summary>
+    private async Task<IReadOnlyList<(long UserId, Uri Url)>> HeadshotUrlsAsync(IReadOnlyList<long> userIds, CancellationToken cancellationToken)
+    {
+        var ids = string.Join(',', userIds.Select(id => id.ToString(CultureInfo.InvariantCulture)));
+        var address = new Uri(
+            $"https://{ThumbnailsHost}/v1/users/avatar-headshot?userIds={ids}&size={HeadshotSize}&format=Png&isCircular=false");
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(_requestTimeout);
+
+            using var request = Get(address);
+            using var response = await _http.SendAsync(request, timeout.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) return [];
+
+            var body = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(body);
+
+            if (!JsonNav.TryGet(document.RootElement, "data", out var data) || data.ValueKind != JsonValueKind.Array) return [];
+
+            var found = new List<(long, Uri)>();
+            foreach (var row in data.EnumerateArray())
+            {
+                if (!JsonNav.TryGet(row, "state", out var state) || state.ValueKind != JsonValueKind.String
+                    || !string.Equals(state.GetString(), "Completed", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!JsonNav.TryGet(row, "targetId", out var target) || !JsonNav.TryUserId(target, out var userId)) continue;
+                if (!JsonNav.TryGet(row, "imageUrl", out var imageUrl) || imageUrl.ValueKind != JsonValueKind.String) continue;
+                if (!Uri.TryCreate(imageUrl.GetString(), UriKind.Absolute, out var url)) continue;
+
+                found.Add((userId, url));
+            }
+
+            return found;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return [];
+        }
     }
 
     private static bool IsPng(byte[] bytes) =>

@@ -36,12 +36,13 @@
                                                         <ColumnDefinition Width="80" />
                                                         <ColumnDefinition Width="120" />
                                                     </Grid.ColumnDefinitions>
-                                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                                        <Ellipse Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                    <DockPanel Grid.Column="0">
+                                                        <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
+                                                        <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center"
                                                                  Fill="{DynamicResource CyanBrush}"
                                                                  Visibility="{Binding Sent, Converter={StaticResource BoolToVisible}}" />
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
-                                                    </StackPanel>
+                                                    </DockPanel>
                                                     <TextBlock Grid.Column="1" Text="{Binding Value}" Style="{StaticResource NumberCell}" />
                                                     <TextBlock Grid.Column="2" Text="{Binding InGroup}" Style="{StaticResource NumberCell}" />
                                                     <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">

@@ -47,7 +47,8 @@ public sealed record LiveBoard(
     IReadOnlyDictionary<string, DateTimeOffset> LastRead,
     IReadOnlyList<HostAccount> Accounts,
     TimeProvider Time,
-    bool Running)
+    bool Running,
+    IReadOnlyDictionary<long, string>? Avatars = null)
 {
     public DateTimeOffset Now => Time.GetUtcNow();
 
@@ -81,6 +82,13 @@ public sealed record LiveBoard(
     public string AccountName(long userId) =>
         Accounts.FirstOrDefault(a => a.RobloxUserId == userId && userId != 0)?.DisplayName ?? "One of your accounts";
 
+    /// <summary>
+    /// The cached picture for one of YOUR accounts, or null. An id that isn't yours has none, whatever the map holds:
+    /// the leaderboard and Top show other members by name only, and this is the second of the two checks (plan A22).
+    /// </summary>
+    public string? AvatarFor(long userId) =>
+        userId != 0 && MyUserIds.Contains(userId) ? Avatars?.GetValueOrDefault(userId) : null;
+
     /// <summary>Spec §9.6: only while reading runs, and only once the source has been read.</summary>
     public bool IsOverdue(Source source) =>
         Running
@@ -97,13 +105,13 @@ public sealed record LegendItem(string Text, int Colour);
 
 public sealed record RaceModel(PanelHead Head, IReadOnlyList<ChartSeries> Series, IReadOnlyList<LegendItem> Legend, string ChartName);
 
-public sealed record AccountLineModel(long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing);
+public sealed record AccountLineModel(long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing, string? Avatar = null);
 
 public sealed record AccountGroupModel(string Heading, IReadOnlyList<AccountLineModel> Rows);
 
 public sealed record MyAccountsModel(PanelHead Head, string ValueColumn, string GroupColumn, IReadOnlyList<AccountGroupModel> Groups);
 
-public sealed record PromotionRow(string Name, string Value, string WouldPlace, bool Fits, bool Missing);
+public sealed record PromotionRow(string Name, string Value, string WouldPlace, bool Fits, bool Missing, string? Avatar = null);
 
 public sealed record PromotionModel(PanelHead Head, string LowestLabel, string Lowest, string ValueColumn, IReadOnlyList<PromotionRow> Rows);
 
@@ -117,7 +125,7 @@ public sealed record CardSection(string Heading, IReadOnlyList<FactModel> Facts)
 
 public sealed record AccountCardModel(
     PanelHead Head, string BigLabel, string Big, IReadOnlyList<CardSection> Sections, IReadOnlyList<ChartSeries> Line,
-    IReadOnlyList<FactModel> Facts, string ChartName)
+    IReadOnlyList<FactModel> Facts, string ChartName, string? Avatar = null)
 {
     /// <summary>A line to draw: with none yet the card gives the chart no space.</summary>
     public bool HasLine => Line.Count > 0;
@@ -302,7 +310,8 @@ public static class PanelModels
                     RecentChange(series[account.RobloxUserId], stat.Format),
                     sent,
                     Records.Stalled(series[account.RobloxUserId], others),
-                    value is null)));
+                    value is null,
+                    live.AvatarFor(account.RobloxUserId))));
             }
 
             var heading = source.Role == SourceRole.Main ? $"★ {live.SourceName(source)}" : live.SourceName(source);
@@ -315,7 +324,7 @@ public static class PanelModels
             groups.Add(new AccountGroupModel(
                 recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read",
                 [.. rest.OrderBy(a => a.DisplayName, StringComparer.Ordinal)
-                    .Select(a => new AccountLineModel(a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true))]));
+                    .Select(a => new AccountLineModel(a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId)))]));
         }
 
         return new MyAccountsModel(
@@ -365,7 +374,7 @@ public static class PanelModels
 
             if (ValueOf(row, stat.Key) is not { } value)
             {
-                rows.Add((null, new PromotionRow(account.DisplayName, Dash, Dash, false, true)));
+                rows.Add((null, new PromotionRow(account.DisplayName, Dash, Dash, false, true, live.AvatarFor(account.RobloxUserId))));
                 continue;
             }
 
@@ -374,7 +383,7 @@ public static class PanelModels
             var below = lowest is { } low && value < low;
             var text = place is not { } p ? Dash : below ? "below the lowest" : $"{PanelText.Ordinal(p.Place)} of {p.Of}";
             var fits = place is { } q && !below && q.Place <= others.Count;
-            rows.Add((value, new PromotionRow(account.DisplayName, StatText.Abbrev(value), text, fits, false)));
+            rows.Add((value, new PromotionRow(account.DisplayName, StatText.Abbrev(value), text, fits, false, live.AvatarFor(account.RobloxUserId))));
         }
 
         return new PromotionModel(head, lowestLabel, PanelText.Full(lowest), stat.Label, MissingLast(rows));
@@ -464,7 +473,8 @@ public static class PanelModels
         return new AccountCardModel(
             new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}", Overdue: live.IsOverdue(pickedSource)),
             stat.Label, PanelText.Value(ValueOf(pickedRow, stat.Key), stat.Format, zone), sections, line, facts,
-            $"{pickedAccount.DisplayName}'s {stat.Label} over time");
+            $"{pickedAccount.DisplayName}'s {stat.Label} over time",
+            live.AvatarFor(pickedAccount.RobloxUserId));
     }
 
     public static PastPeriodsModel PastPeriods(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
@@ -744,7 +754,8 @@ public static class PanelModels
                 cells,
                 snapshot?.Unavailable.GetValueOrDefault(account.RobloxUserId) ?? "",
                 Missing: row is null,
-                Picked: account.RobloxUserId == pickedUserId)));
+                Picked: account.RobloxUserId == pickedUserId,
+                Avatar: live.AvatarFor(account.RobloxUserId))));
         }
 
         var names = StringComparer.OrdinalIgnoreCase;

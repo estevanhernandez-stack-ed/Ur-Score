@@ -127,6 +127,25 @@
             <!-- Bool to Visibility for bindings. Panels and Setup rows use it. -->
             <BooleanToVisibilityConverter x:Key="BoolToVisible" />
             <ui:UpperCase x:Key="Upper" />
+            <ui:AvatarFill x:Key="Avatar" />
+
+            <!-- One of your own accounts' pictures: round, sized to its row, the same on every surface. The slot is laid
+                 out whether or not a picture is there (Hidden, never Collapsed), so a picture that arrives late, fails or
+                 never comes never moves a row. Only your own accounts ever have one. -->
+            <Style x:Key="AccountAvatar" TargetType="Ellipse">
+                <Setter Property="Width" Value="20" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="Margin" Value="0,0,8,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Stroke" Value="{DynamicResource DividerBrush}" />
+                <Setter Property="StrokeThickness" Value="1" />
+                <Setter Property="Fill" Value="{Binding Avatar, Converter={StaticResource Avatar}}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Avatar}" Value="{x:Null}">
+                        <Setter Property="Visibility" Value="Hidden" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
 
             <!-- A button that reads as a row: no fill or edge until hovered, content on the left. Search
                  matches and panel tools use it. -->
