@@ -178,6 +178,16 @@ public static class ImportReview
             {
                 changes.Add($"Suggests {now.SuggestedMetricId} for {now.Label} instead of {was.SuggestedMetricId}.");
             }
+
+            if (was.Count != now.Count)
+            {
+                changes.Add(now.Count ? $"{now.Label} now counts entries." : $"{now.Label} no longer counts entries.");
+            }
+
+            if (was.Format != now.Format)
+            {
+                changes.Add($"{now.Label} is shown as {FormatWords(now.Format)} instead of {FormatWords(was.Format)}.");
+            }
         }
 
         if (installed.Icon is null && incoming.Icon is not null)
@@ -201,6 +211,13 @@ public static class ImportReview
 
         return new UpdateComparison(true, asks, changes);
     }
+
+    private static string FormatWords(StatFormat format) => format switch
+    {
+        StatFormat.Duration => "a duration",
+        StatFormat.Date => "a date",
+        _ => "a number",
+    };
 
     /// <summary><c>absentMessage</c>, <c>unavailable</c>, <c>sum</c> or <c>placeLabel</c>: what the data means, never what happens with it.</summary>
     private static bool MeaningChanged(

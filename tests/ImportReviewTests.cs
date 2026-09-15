@@ -16,7 +16,10 @@ public class ImportReviewTests
 
     private static Recipe Parse(string json) => RecipeParser.Parse(json).Recipe!;
 
-    private static Recipe Profile => Load("petsim99-profile.recipe.json");
+    /// <summary>The profile fixture's first three values (diamonds, eggs, rank): the update tests below describe that recipe.</summary>
+    private static Recipe Profile => FirstThree(Load("petsim99-profile.recipe.json"));
+
+    private static Recipe FirstThree(Recipe recipe) => WithValues(recipe, [.. recipe.LastStep.Values.Take(3)]);
 
     /// <summary>The same recipe with its last step's values replaced.</summary>
     private static Recipe WithValues(Recipe recipe, params RecipeValue[] values) =>
@@ -248,6 +251,18 @@ public class ImportReviewTests
 
         Assert.True(comparison.AsksAgain);
         Assert.Equal(new[] { "Adds an icon, which asks Roblox for the picture." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void AStatThatNowCountsOrReadsAsTimeIsListedWithoutAsking()
+    {
+        var values = Profile.LastStep.Values;
+        var incoming = WithValues(Profile, values[0], values[1] with { Count = true }, values[2] with { Format = StatFormat.Duration });
+
+        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Eggs hatched now counts entries.", "Player rank is shown as a duration instead of a number." }, comparison.Changes);
     }
 
     [Fact]

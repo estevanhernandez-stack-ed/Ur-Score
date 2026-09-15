@@ -16,17 +16,16 @@ public class StatsTableModelTests
     {
         var saved = Saved(
             ("counter:Zones Unlocked", new StatChoice(true, false, "ps99.stat.zones-unlocked")),
-            ("rebirths", new StatChoice(false, false, "ps99.rebirths")));
+            ("prestige", new StatChoice(false, false, "ps99.prestige")));
 
         var rows = StatsTableModel.Build(Profile, saved, ["Pets Hatched", "Coins Spent", "Pets Hatched", "123456", "Bad.Name"]);
 
-        Assert.Equal(
-            new[] { "diamonds", "eggs", "rank", "counter:Pets Hatched", "counter:Coins Spent", "counter:Zones Unlocked", "rebirths" },
-            rows.Select(r => r.Key).ToArray());
-        Assert.All(rows.Take(6), row => Assert.True(row.Offered));
+        string[] expected = [.. RecipeParserTests.ProfileIds, "counter:Pets Hatched", "counter:Coins Spent", "counter:Zones Unlocked", "prestige"];
+        Assert.Equal(expected, rows.Select(r => r.Key).ToArray());
+        Assert.All(rows.Take(rows.Count - 1), row => Assert.True(row.Offered));
         Assert.False(rows[^1].Offered);
-        Assert.Equal("rebirths (no longer offered)", rows[^1].DisplayLabel);
-        Assert.Equal("Coins Spent", rows[4].DisplayLabel);
+        Assert.Equal("prestige (no longer offered)", rows[^1].DisplayLabel);
+        Assert.Equal("Coins Spent", rows.Single(r => r.Key == "counter:Coins Spent").DisplayLabel);
     }
 
     [Fact]
@@ -46,9 +45,9 @@ public class StatsTableModelTests
     [Fact]
     public void AChoiceTheRecipeNoLongerOffersIsNeverTicked()
     {
-        var rows = StatsTableModel.Build(Profile, Saved(("rebirths", new StatChoice(true, true, "ps99.rebirths"))), []);
+        var rows = StatsTableModel.Build(Profile, Saved(("prestige", new StatChoice(true, true, "ps99.prestige"))), []);
 
-        var gone = rows.Single(r => r.Key == "rebirths");
+        var gone = rows.Single(r => r.Key == "prestige");
         Assert.False(gone.Show);
         Assert.False(gone.Send);
         Assert.False(StatsTableModel.AnyTicked(rows));

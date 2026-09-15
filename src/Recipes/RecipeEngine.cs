@@ -395,7 +395,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                 var result = RecipePath.Resolve(row, stat.Path, values, "this row");
                 if (Absent(step, result) is { } absent) return absent with { IconText = icon };
 
-                var miss = NumberAt(result, Placeholders.Fill(stat.Path, values, encode: false), "in this row", out var value);
+                var miss = StatNumberAt(result, stat, Placeholders.Fill(stat.Path, values, encode: false), "in this row", out var value);
                 if (miss is null)
                 {
                     found[stat.Key] = value;
@@ -489,7 +489,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                     var result = RecipePath.Resolve(root, stat.Path, perRequest);
                     if (Absent(step, result) is { } absent) return absent;
 
-                    var miss = NumberAt(result, Placeholders.Fill(stat.Path, perRequest, encode: false), $"for user id {userId}", out var value);
+                    var miss = StatNumberAt(result, stat, Placeholders.Fill(stat.Path, perRequest, encode: false), $"for user id {userId}", out var value);
                     if (miss is null)
                     {
                         found[stat.Key] = value;
@@ -642,7 +642,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         var found = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var stat in stats)
         {
-            if (NumberAt(RecipePath.Resolve(row, stat.Path, values, "this row"), stat.Path, "in this row", out var value) is null)
+            if (StatNumberAt(RecipePath.Resolve(row, stat.Path, values, "this row"), stat, stat.Path, "in this row", out var value) is null)
             {
                 found[stat.Key] = value;
             }
@@ -661,6 +661,30 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         return result.Value.ValueKind == JsonValueKind.String
             ? $"'{path}' is text {where}, not a number."
             : $"'{path}' is not a finite number {where}.";
+    }
+
+    /// <summary>
+    /// Why a stat has no number here, or null with its number: the value itself, or for a counting stat (D9) how
+    /// many entries its object or list holds. Only the count is read, never the keys.
+    /// </summary>
+    private static string? StatNumberAt(PathResult result, RecipeStat stat, string path, string where, out double number)
+    {
+        if (!stat.Count) return NumberAt(result, path, where, out number);
+
+        number = 0;
+        if (result.Outcome != PathOutcome.Found) return result.Miss ?? $"'{path}' was empty {where}.";
+
+        switch (result.Value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                number = result.Value.EnumerateObject().Count();
+                return null;
+            case JsonValueKind.Array:
+                number = result.Value.GetArrayLength();
+                return null;
+            default:
+                return $"'{path}' is not a list or an object {where}, so its entries can't be counted.";
+        }
     }
 
     private static string? TextAt(JsonElement root, string pathTemplate, IReadOnlyDictionary<string, string> values)

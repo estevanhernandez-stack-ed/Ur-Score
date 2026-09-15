@@ -5,8 +5,11 @@ namespace Labs626.UrScore.Recipes;
 /// <summary>
 /// One stat as Ur Score handles it after parsing: a recipe value, or a counter the user picked.
 /// <see cref="Key"/> is the value's id, or <c>counter:</c> plus the counter's name (stats design §5.1).
+/// A counter reads a number, sums, and sits in its counters' own section.
 /// </summary>
-public sealed record RecipeStat(string Key, string Label, string Path, string SuggestedMetricId, bool Sum);
+public sealed record RecipeStat(
+    string Key, string Label, string Path, string SuggestedMetricId, bool Sum,
+    bool Count = false, StatFormat Format = StatFormat.Number, string? Section = null);
 
 /// <summary>A stat the user set to send, and the metric id RoRoRo gets it under.</summary>
 public sealed record SentStat(string Key, string Label, string MetricId);
@@ -55,11 +58,11 @@ public static class RecipeStats
     {
         var step = recipe.LastStep;
         var value = step.Values.FirstOrDefault(v => string.Equals(v.Id, key, StringComparison.Ordinal));
-        if (value is not null) return new RecipeStat(value.Id, value.Label, value.Path, value.MetricId, value.Sum);
+        if (value is not null) return new RecipeStat(value.Id, value.Label, value.Path, value.MetricId, value.Sum, value.Count, value.Format, value.Section);
 
         if (step.Counters is { } counters && IsCounterKey(key, out var name) && CanPick(name))
         {
-            return new RecipeStat(key, name, $"{counters.Path}.{name}", counters.MetricIdPrefix + Slug(name), Sum: true);
+            return new RecipeStat(key, name, $"{counters.Path}.{name}", counters.MetricIdPrefix + Slug(name), Sum: true, Section: counters.Label);
         }
 
         return null;

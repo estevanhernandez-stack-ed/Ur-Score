@@ -792,6 +792,28 @@ public class RecipeEngineTests
     }
 
     [Fact]
+    public async Task ACountingStatReadsHowManyEntriesItsObjectOrListHolds()
+    {
+        var recipe = Parse("""
+            { "recipe": 1, "name": "Counts", "credit": "Test.", "everySeconds": 60,
+              "steps": [ { "url": "https://example.test/u/{userId}", "perAccount": true,
+                "values": [
+                  { "id": "pets", "label": "Pets", "path": "data.Pets", "metricId": "t.pets", "count": true, "sum": false },
+                  { "id": "zones", "label": "Zones", "path": "data.Zones", "metricId": "t.zones", "count": true, "sum": false } ] } ] }
+            """);
+        var transport = new FakeTransport()
+            .On("https://example.test/u/1", 200, """{ "data": { "Pets": { "Cat": 3, "Dog": 1 }, "Zones": ["a", "b", "c"] } }""")
+            .On("https://example.test/u/2", 200, """{ "data": { "Pets": {}, "Zones": 7 } }""");
+
+        var reading = await Read(transport, recipe, inputs: NoInputs, ids: [1, 2], tracked: new HashSet<string> { "pets", "zones" });
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(new RecipeRow(1, new Dictionary<string, double> { ["pets"] = 2, ["zones"] = 3 }), reading.Rows[0]);
+        Assert.Equal(new RecipeRow(2, new Dictionary<string, double> { ["pets"] = 0 }), reading.Rows[1]);
+        Assert.Equal("'data.Zones' is not a list or an object for user id 2, so its entries can't be counted.", reading.CellMisses[(2, "zones")]);
+    }
+
+    [Fact]
     public async Task AGroupListsAsOfIsRead()
     {
         var recipe = Parse("""
