@@ -19,6 +19,10 @@ public static class BoardEdits
         return $"Board {number}";
     }
 
+    /// <summary>Whether a draft has anything to save: a panel added, removed, moved, resized or re-set, or a new name. Where a pop-out sits doesn't count.</summary>
+    public static bool Changed(BoardDef before, BoardDef after) =>
+        BoardDefs.Key(before) != BoardDefs.Key(after) || before.Name != after.Name;
+
     public static IReadOnlyList<BoardDef> Add(IReadOnlyList<BoardDef> boards, BoardDef board) => [.. boards, board];
 
     public static IReadOnlyList<BoardDef> Replace(IReadOnlyList<BoardDef> boards, BoardDef board) =>

@@ -186,4 +186,18 @@ public class BoardEditsTests
         Assert.Equal(main.Id, BoardEdits.AnchorSourceId(board with { Panels = [] }, [alt, main]));
         Assert.Null(BoardEdits.AnchorSourceId(board with { Panels = [] }, [alt]));
     }
+
+    [Fact]
+    public void DoneHasSomethingToSaveOnlyWhenTheBoardIsDrawnDifferently()
+    {
+        var board = BoardOf("b", PanelType.Standing, PanelType.Race);
+
+        Assert.False(BoardEdits.Changed(board, board with { Panels = [.. board.Panels] }));
+        Assert.True(BoardEdits.Changed(board, BoardEdits.MoveBy(board, "p-b-2", -1)));
+        Assert.True(BoardEdits.Changed(board, BoardEdits.Resize(board, "p-b-1", new PanelSize(6, Tall: true))));
+        Assert.True(BoardEdits.Changed(board, board with { Name = "Other" }));
+
+        var popped = BoardEdits.PopOut(board, "p-b-1", new PopOutRect(1, 2, 300, 200));
+        Assert.False(BoardEdits.Changed(popped, BoardEdits.PopOut(popped, "p-b-1", new PopOutRect(50, 60, 400, 300))));
+    }
 }

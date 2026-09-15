@@ -55,11 +55,21 @@ public partial class BoardWindow
     }
 
     /// <summary>
-    /// Applies one edit to the board on screen, as the boards are once the dialog that asked for it has closed, and
-    /// saves every board. An edit that changes nothing saves nothing.
+    /// Applies one edit to the board on screen: into the draft while editing (R8, R10), else, as the boards are once
+    /// the dialog that asked for it has closed, saved at once. An edit that changes nothing does nothing.
     /// </summary>
     private void ChangeBoard(Func<BoardDef, BoardDef> edit)
     {
+        if (_draft is { } draft)
+        {
+            var edited = edit(draft);
+            if (ReferenceEquals(edited, draft)) return;
+
+            _draft = edited;
+            Render();
+            return;
+        }
+
         var boards = _services.Boards;
         var board = ShownBoard(boards);
         var changed = edit(board);

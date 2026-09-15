@@ -77,6 +77,7 @@ public partial class BoardWindow : Window
         // Panel tools raise one routed event; each concern handles its own tools (Tasks 6-8).
         PanelFrame.SetShowSettings(BoardPanels, true);
         BoardPanels.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnSettingsTool));
+        HookEditing();
 
         _services.Changed += Render;
         _services.IconChanged += ApplyIcon;
@@ -161,9 +162,9 @@ public partial class BoardWindow : Window
         RenderLines(live);
     }
 
-    /// <summary>The board on screen: the selected tab's, else the first (R12).</summary>
+    /// <summary>The board on screen: the draft while editing, else the selected tab's, else the first (R12).</summary>
     private BoardDef ShownBoard(IReadOnlyList<BoardDef> boards) =>
-        boards.FirstOrDefault(b => b.Id == _boardId) ?? boards[0];
+        _draft ?? boards.FirstOrDefault(b => b.Id == _boardId) ?? boards[0];
 
     /// <summary>The panels are rebuilt only when this changes.</summary>
     private string ViewKey(BoardDef board) => BoardDefs.Key(board);
@@ -180,6 +181,7 @@ public partial class BoardWindow : Window
             var view = CreatePanelView(def, ids[i]);
             PanelGrid.SetSpan(view, def.Size.Span);
             PanelGrid.SetTall(view, def.Size.Tall);
+            PanelFrame.SetCurrentSize(view, def.Size);
             BoardPanels.Children.Add(view);
             _panels.Add((def, view, ids[i]));
         }
@@ -269,7 +271,9 @@ public partial class BoardWindow : Window
     private void RenderEmpty(BoardDef board)
     {
         var starter = StarterBoards.Build(_services.Installed, _services.Sources);
-        _empty = BoardText.EmptyFor(starter, _services.BoardsFollowStarter, board);
+        // A draft is a board being shaped, not the starter following your sources: with no panels it says so and
+        // offers Add panel, and a panel added to it shows at once.
+        _empty = BoardText.EmptyFor(starter, _services.BoardsFollowStarter && !Editing, board);
         _emptyRecipe = starter.RecipeSlug;
 
         var recipe = _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _emptyRecipe, StringComparison.Ordinal))?.Recipe;
@@ -291,7 +295,7 @@ public partial class BoardWindow : Window
 
     private void OnTabChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_selectingTab || BoardTabs.SelectedItem is not BoardTabItem tab || tab.Id == _boardId) return;
+        if (_selectingTab || !ButtonStates().Tabs || BoardTabs.SelectedItem is not BoardTabItem tab || tab.Id == _boardId) return;
 
         ShowBoard(tab.Id);
     }
@@ -300,10 +304,13 @@ public partial class BoardWindow : Window
     private void OnTabMenuOpened(object sender, RoutedEventArgs e) => ApplyButtons();
 
     // Each handler that opens a dialog reads the boards again once it closes, and edits that list: something
-    // else (a pop-out coming back, later) may have changed them while it was open.
+    // else (a pop-out coming back, later) may have changed them while it was open. While editing they are all
+    // disabled (R8); each guard only catches a press already on its way.
 
     private void OnAddBoardClick(object sender, RoutedEventArgs e)
     {
+        if (!ButtonStates().AddBoard) return;
+
         var dialog = new AddBoardWindow(_services.Installed, _services.Sources, BoardEdits.NextName(_services.Boards)) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } board) return;
 
@@ -312,6 +319,8 @@ public partial class BoardWindow : Window
 
     private void OnRenameBoardClick(object sender, RoutedEventArgs e)
     {
+        if (!ButtonStates().RenameBoard) return;
+
         var board = ShownBoard(_services.Boards);
         var dialog = new BoardNameWindow(board.Name) { Owner = this };
         if (dialog.ShowDialog() != true) return;
@@ -327,6 +336,8 @@ public partial class BoardWindow : Window
 
     private void OnDuplicateBoardClick(object sender, RoutedEventArgs e)
     {
+        if (!ButtonStates().DuplicateBoard) return;
+
         var boards = _services.Boards;
         var duplicated = BoardEdits.Duplicate(boards, ShownBoard(boards).Id);
         if (ReferenceEquals(duplicated, boards)) return;
@@ -342,8 +353,8 @@ public partial class BoardWindow : Window
     {
         var board = ShownBoard(_services.Boards);
 
-        // The item is disabled for the last board; this only catches a press already on its way.
-        if (!BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing, _services.Boards.Count).DeleteBoard) return;
+        // The item is disabled for the last board and while editing; this only catches a press already on its way.
+        if (!ButtonStates().DeleteBoard) return;
 
         var answer = MessageBox.Show(this,
             $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",
@@ -502,12 +513,23 @@ public partial class BoardWindow : Window
     /// <summary>The one place the board's buttons are enabled or disabled, called after every change to what they depend on.</summary>
     private void ApplyButtons()
     {
-        var states = BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing, _services.Boards.Count);
+        var states = ButtonStates();
         StartStopButton.IsEnabled = states.StartStop;
         TestNowButton.IsEnabled = states.TestNow;
         EmptyStateButton.IsEnabled = states.EmptyState;
+        BoardTabs.IsEnabled = states.Tabs;
+        AddBoardButton.IsEnabled = states.AddBoard;
+        RenameBoardItem.IsEnabled = states.RenameBoard;
+        DuplicateBoardItem.IsEnabled = states.DuplicateBoard;
         DeleteBoardItem.IsEnabled = states.DeleteBoard;
+        EditBoardButton.IsEnabled = states.EditBoard;
+        AddPanelButton.IsEnabled = states.AddPanel;
+        DoneButton.IsEnabled = states.Done;
     }
+
+    /// <summary>What every button, tab and tab menu item takes right now, for <see cref="ApplyButtons"/> and the press guards.</summary>
+    private BoardButtonStates ButtonStates() =>
+        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing, _services.Boards.Count, Editing);
 
     private void OnSetupClick(object sender, RoutedEventArgs e) => OpenSetup(null);
 
