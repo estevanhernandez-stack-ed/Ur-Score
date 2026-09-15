@@ -518,6 +518,97 @@ public class PanelModelsTests
         Assert.Equal(7, PanelModels.Gain([new SeriesPoint(Now.AddHours(-1), 5, null, false, 0), new SeriesPoint(Now, 12, null, false, 0)]));
     }
 
+    // ---- Accounts table ----
+
+    private static readonly Source ProfileSource = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+
+    /// <summary>Your four accounts on the profile recipe: Main and AltOne read, Loose read without diamonds, AltTwo private.</summary>
+    private static LiveBoard ProfileLive(params string[] shown) => Live([ProfileSource], [Installed(Profile, shown)], Snaps(Snapshot(ProfileSource.Id,
+    [
+        new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 215_850_364, ["rank"] = 37, ["playtime"] = 50_651_629 }),
+        new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 3_957_873_882, ["rank"] = 12, ["playtime"] = 3_600 }),
+        new RecipeRow(Loose.RobloxUserId, new Dictionary<string, double> { ["rank"] = 5 }),
+    ]) with
+    {
+        Unavailable = new Dictionary<long, string> { [AltTwo.RobloxUserId] = "Profile is private." },
+    }));
+
+    private static ScoreBookReader DiamondsBook() => Reader(
+        Read(ProfileSource, Now.AddDays(-8), null, null, "diamonds", (Main.RobloxUserId, 200_000_000)),
+        Read(ProfileSource, Now.AddMinutes(-5), null, null, "diamonds", (Main.RobloxUserId, 215_850_364)));
+
+    private static readonly PanelSettings TableSettings = new(Profile.Slug, SourceId: "s-00000009");
+
+    [Fact]
+    public void TheAccountsTableHasAColumnPerShownStatSortedByTheFirstWithItsChangeAndATotal()
+    {
+        var model = PanelModels.AccountsTable(ProfileLive("diamonds", "rank", "playtime"), DiamondsBook(), TableSettings);
+
+        Assert.Equal(new[] { "Account", "Diamonds ↓", "Today", "7 days", "Player rank", "Playtime" }, model.Columns.Select(c => c.Heading).ToArray());
+        Assert.Equal(new[] { AltOne.DisplayName, Main.DisplayName, Loose.DisplayName, AltTwo.DisplayName, "Total" }, model.Rows.Select(r => r.Name).ToArray());
+
+        // Highest first; a missing value sorts last; the change comes from the book, a dash with fewer than two readings.
+        var main = model.Rows[1];
+        Assert.Equal(new[] { Main.DisplayName, "215,850,364", PanelText.Signed(15_850_364), PanelText.Signed(15_850_364), "37", "586d 5h" }, main.Cells);
+        Assert.Equal(new[] { AltOne.DisplayName, "3,957,873,882", StatText.Dash, StatText.Dash, "12", "1h 0m" }, model.Rows[0].Cells);
+        Assert.False(model.Rows[2].Missing);
+
+        // An account the read couldn't reach says why, plainly, with dashes.
+        var hidden = model.Rows[3];
+        Assert.Equal(("Profile is private.", true), (hidden.Note, hidden.Missing));
+        Assert.All(hidden.Cells.Skip(1), cell => Assert.Equal(StatText.Dash, cell));
+
+        // The total adds up what adds up (diamonds, playtime); a rank and the change columns stay blank.
+        var total = model.Rows[^1];
+        Assert.True(total.IsTotal);
+        Assert.Equal(new[] { "Total", "4,173,724,246", "", "", "", "586d 6h" }, total.Cells);
+        Assert.Equal("", model.Head.Note);
+    }
+
+    [Fact]
+    public void AClickedHeadingSortsItsColumnAndTheChangeFollowsIt()
+    {
+        var live = ProfileLive("diamonds", "rank", "playtime");
+
+        var byRank = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort("rank", Descending: false));
+        Assert.Equal(new[] { "Account", "Diamonds", "Player rank ↑", "Today", "7 days", "Playtime" }, byRank.Columns.Select(c => c.Heading).ToArray());
+        Assert.Equal(new[] { Loose.DisplayName, AltOne.DisplayName, Main.DisplayName, AltTwo.DisplayName, "Total" }, byRank.Rows.Select(r => r.Name).ToArray());
+
+        // The sorted heading flips; another stat sorts highest first; Account sorts A to Z; the change columns don't sort.
+        Assert.Equal(new AccountSort("rank", Descending: true), AccountSort.Clicked(byRank.Columns[2]));
+        Assert.Equal(new AccountSort("diamonds", Descending: true), AccountSort.Clicked(byRank.Columns[1]));
+        Assert.Equal(new AccountSort(AccountSort.NameKey, Descending: false), AccountSort.Clicked(byRank.Columns[0]));
+        Assert.False(byRank.Columns[3].CanSort);
+
+        var byName = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort(AccountSort.NameKey, Descending: false));
+        Assert.Equal(new[] { "Account ↑", "Diamonds", "Player rank", "Playtime" }, byName.Columns.Select(c => c.Heading).ToArray());
+        Assert.Equal(new[] { AltOne.DisplayName, Main.DisplayName, Loose.DisplayName, AltTwo.DisplayName, "Total" }, byName.Rows.Select(r => r.Name).ToArray());
+
+        // A sort on a stat you no longer show falls back to the first.
+        var stale = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort("eggs", Descending: false));
+        Assert.Equal("Diamonds ↓", stale.Columns[1].Heading);
+    }
+
+    [Fact]
+    public void TheAccountsTableMarksThePickAndSaysWhatItIsWaitingFor()
+    {
+        var picked = PanelModels.AccountsTable(ProfileLive("diamonds"), DiamondsBook(), TableSettings, pickedUserId: AltOne.RobloxUserId);
+        Assert.Equal(new[] { AltOne.RobloxUserId }, picked.Rows.Where(r => r.Picked).Select(r => r.UserId).ToArray());
+
+        var unread = PanelModels.AccountsTable(Live([ProfileSource], [Installed(Profile, "diamonds")], Snaps()), DiamondsBook(), TableSettings);
+        Assert.Equal("Waiting for the first read.", unread.Head.Note);
+        Assert.All(unread.Rows.Where(r => !r.IsTotal), row => Assert.True(row.Missing));
+
+        var nothingShown = PanelModels.AccountsTable(ProfileLive(), DiamondsBook(), TableSettings);
+        Assert.Equal("Tick Show on a stat to fill this panel.", nothingShown.Head.Note);
+        Assert.Equal(new[] { "Account ↑" }, nothingShown.Columns.Select(c => c.Heading).ToArray());
+        Assert.DoesNotContain(nothingShown.Rows, r => r.IsTotal);
+
+        // A pinned source that's gone is stale; an unpinned table reads the recipe's first source that is on.
+        Assert.True(PanelModels.AccountsTable(ProfileLive("diamonds"), DiamondsBook(), new PanelSettings(Profile.Slug, SourceId: "s-gone")).Head.HasStale);
+        Assert.False(PanelModels.AccountsTable(ProfileLive("diamonds"), DiamondsBook(), new PanelSettings(Profile.Slug)).Head.HasStale);
+    }
+
     // ---- Live leaderboard ----
 
     [Fact]

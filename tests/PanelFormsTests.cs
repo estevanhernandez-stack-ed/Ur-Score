@@ -37,6 +37,8 @@ public class PanelFormsTests
     [InlineData(PanelType.ProfileStat, true, new[] { PanelField.Stat })]
     [InlineData(PanelType.ProfileStat, false, new[] { PanelField.Stat, PanelField.Source })]
     [InlineData(PanelType.LiveLeaderboard, true, new[] { PanelField.Source })]
+    [InlineData(PanelType.AccountsTable, true, new[] { PanelField.Source })]
+    [InlineData(PanelType.AccountsTable, false, new[] { PanelField.Source })]
     public void AddingAsksOnlyForWhatThePanelNeeds(PanelType type, bool adding, PanelField[] expected) =>
         Assert.Equal(expected, PanelForms.Fields(type, adding).ToArray());
 
@@ -238,5 +240,20 @@ public class PanelFormsTests
         Assert.Null(PanelForms.Problem(PanelType.PastPeriods, Clans(MainClan.Id), live));
         Assert.Null(PanelForms.Problem(PanelType.ProfileStat, new PanelSettings(Profile.Slug, Stat: "diamonds"), live));
         Assert.Equal("This panel can't show that clan.", PanelForms.Problem(PanelType.Standing, new PanelSettings(TopList.Slug, SourceId: TopSource.Id), live));
+    }
+
+    [Fact]
+    public void AnAccountsTableReadsASourceWithoutAPeriodAndKeepsNoStat()
+    {
+        var live = Everything();
+
+        Assert.Equal(new[] { ProfileSource.Id }, Keys(PanelForms.SourceChoices(PanelType.AccountsTable, PanelField.Source, live, new FormValues())));
+
+        var settings = PanelForms.Build(PanelType.AccountsTable, new FormValues(Source: ProfileSource.Id, Stat: PanelForms.StatKey(Profile.Slug, "diamonds")), live);
+        Assert.Equal(new PanelSettings(Profile.Slug, SourceId: ProfileSource.Id), settings);
+        Assert.Null(PanelForms.Problem(PanelType.AccountsTable, settings, live));
+        Assert.Null(PanelForms.Problem(PanelType.AccountsTable, new PanelSettings(Profile.Slug), live));
+        Assert.Equal("This panel can't show that clan.", PanelForms.Problem(PanelType.AccountsTable, new PanelSettings(Clan.Slug, SourceId: MainClan.Id), live));
+        Assert.Equal(new PanelSize(PanelSize.Wide), BoardDefs.DefaultSize(PanelType.AccountsTable));
     }
 }

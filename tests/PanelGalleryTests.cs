@@ -17,14 +17,14 @@ public class PanelGalleryTests
     private static GalleryCard Card(IReadOnlyList<GalleryCard> cards, PanelType type) => cards.Single(c => c.Type == type);
 
     [Fact]
-    public void TenCardsInTheSpecsOrderTitledInTheRecipesWords()
+    public void EveryCardInOrderTitledInTheRecipesWords()
     {
         var cards = PanelGallery.Cards(Live(
             [MainClan, AltClan, TopSource, ProfileSource],
             [Installed(Clan, "value"), Installed(TopList), Installed(Profile, "diamonds")], NoReads));
 
         Assert.Equal(
-            new[] { "Clan standing", "Battle race", "My accounts", "Promotion check", "Account card", "Past battles", "Records", "Top of the battle", "Profile stat", "Live leaderboard" },
+            new[] { "Clan standing", "Battle race", "My accounts", "Promotion check", "Account card", "Past battles", "Records", "Top of the battle", "Profile stat", "Accounts table", "Live leaderboard" },
             cards.Select(c => c.Title).ToArray());
         Assert.Equal(PanelGallery.Order, cards.Select(c => c.Type));
         Assert.All(cards, c => Assert.True(c.CanAdd, c.Title));
@@ -39,7 +39,7 @@ public class PanelGalleryTests
         var cards = PanelGallery.Cards(Live([], [], NoReads));
 
         Assert.Equal(
-            new[] { "Standing", "Race", "My accounts", "Promotion check", "Account card", "Past periods", "Records", "Top of the list", "Profile stat", "Live leaderboard" },
+            new[] { "Standing", "Race", "My accounts", "Promotion check", "Account card", "Past periods", "Records", "Top of the list", "Profile stat", "Accounts table", "Live leaderboard" },
             cards.Select(c => c.Title).ToArray());
         Assert.All(cards, c => Assert.False(c.CanAdd, c.Title));
         Assert.All(cards, c => Assert.NotEqual("", c.WhyNot));

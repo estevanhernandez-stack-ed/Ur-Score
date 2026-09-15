@@ -92,8 +92,16 @@ public static class PanelText
         PanelType.Records => "Records",
         PanelType.Top => $"Top of the {(TopPeriodRecipe(recipe, installed) is { } periodRecipe ? RecipeWords.Period(periodRecipe) : "list")}",
         PanelType.ProfileStat => "Profile stat",
+        PanelType.AccountsTable => "Accounts table",
         _ => "Live leaderboard",
     };
+
+    /// <summary>Midnight today in this zone (D16): the boundary a "today" change measures from. Shared so a table and Profile stat agree.</summary>
+    public static DateTimeOffset Midnight(DateTimeOffset now, TimeZoneInfo zone)
+    {
+        var local = TimeZoneInfo.ConvertTime(now, zone);
+        return new DateTimeOffset(local.Date, local.Offset);
+    }
 
     public static string Ago(DateTimeOffset? then, DateTimeOffset now) =>
         then is { } at ? $"{StatText.Span(now - at)} ago" : "never";

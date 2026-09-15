@@ -42,7 +42,7 @@ public static class BoardDefs
     public static PanelSize DefaultSize(PanelType type) => type switch
     {
         PanelType.Standing or PanelType.AccountCard or PanelType.Records => new PanelSize(PanelSize.Small),
-        PanelType.LiveLeaderboard => new PanelSize(PanelSize.Wide),
+        PanelType.LiveLeaderboard or PanelType.AccountsTable => new PanelSize(PanelSize.Wide),
         _ => new PanelSize(PanelSize.Half),
     };
 

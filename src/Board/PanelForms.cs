@@ -55,7 +55,7 @@ public static class PanelForms
         PanelType.Race => recipe.Headline.Any(h => h.Sum),
         PanelType.PromotionCheck or PanelType.LiveLeaderboard => !recipe.LastStep.PerAccount,
         PanelType.PastPeriods => recipe.Period?.Past is not null,
-        PanelType.ProfileStat => recipe.Period is null,
+        PanelType.ProfileStat or PanelType.AccountsTable => recipe.Period is null,
         _ => true,
     };
 
@@ -237,14 +237,12 @@ public static class PanelForms
         var sourceId = type switch
         {
             // The recipe's first source that is on, else its first source: one that is off still shows, it isn't removed (R16).
-            PanelType.ProfileStat => source is not null && source.Recipe == recipe
-                ? source.Id
-                : (live.Sources.FirstOrDefault(s => s.Enabled && s.Recipe == recipe) ?? live.Sources.FirstOrDefault(s => s.Recipe == recipe))?.Id,
+            PanelType.ProfileStat => source is not null && source.Recipe == recipe ? source.Id : FirstSourceOfRecipe(live, recipe)?.Id,
             PanelType.Race or PanelType.MyAccounts or PanelType.Records or PanelType.AccountCard => null,
             _ => source?.Id,
         };
 
-        var keepsStat = type is not (PanelType.Standing or PanelType.Race or PanelType.Top or PanelType.LiveLeaderboard);
+        var keepsStat = type is not (PanelType.Standing or PanelType.Race or PanelType.Top or PanelType.LiveLeaderboard or PanelType.AccountsTable);
         long? userId = type == PanelType.AccountCard
                        && long.TryParse(values.Account, NumberStyles.None, CultureInfo.InvariantCulture, out var id)
             ? id
@@ -290,6 +288,13 @@ public static class PanelForms
     internal static (string Group, string Groups) GroupWords(Recipe? recipe) =>
         recipe is null ? ("source", "sources") : (RecipeWords.Group(recipe), RecipeWords.GroupsLower(recipe));
 
+    /// <summary>
+    /// The recipe's first source that is on, else its first: one that is off still shows, it isn't removed (R16).
+    /// Shared by a saved panel's sourceId (<see cref="Build"/>) and an unpinned Accounts table's read (D17).
+    /// </summary>
+    internal static Source? FirstSourceOfRecipe(LiveBoard live, string recipe) =>
+        live.Sources.FirstOrDefault(s => s.Enabled && s.Recipe == recipe) ?? live.Sources.FirstOrDefault(s => s.Recipe == recipe);
+
     private static string SourceLabel(LiveBoard live, Source source, bool withRecipe)
     {
         var name = live.SourceName(source);
@@ -301,10 +306,10 @@ public static class PanelForms
 
     private static string? SourceProblem(PanelType type, PanelSettings settings, LiveBoard live, string word)
     {
-        // A Profile stat with no source reads the recipe's first source that is on (PanelModels.ProfileStat); with none on, it must pin one.
+        // A Profile stat or an Accounts table with no source reads the recipe's first source that is on; with none on, it must pin one.
         if (settings.SourceId is null)
         {
-            return type == PanelType.ProfileStat && live.Sources.Any(s => s.Enabled && s.Recipe == settings.Recipe) ? null : $"Choose a {word}.";
+            return type is PanelType.ProfileStat or PanelType.AccountsTable && live.Sources.Any(s => s.Enabled && s.Recipe == settings.Recipe) ? null : $"Choose a {word}.";
         }
 
         if (live.FindSource(settings.SourceId) is not { } source) return $"{PanelText.StaleSource(word)} {ChooseAnother}";

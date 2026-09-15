@@ -16,7 +16,7 @@ public static class PanelGallery
     public static IReadOnlyList<PanelType> Order { get; } =
     [
         PanelType.Standing, PanelType.Race, PanelType.MyAccounts, PanelType.PromotionCheck, PanelType.AccountCard,
-        PanelType.PastPeriods, PanelType.Records, PanelType.Top, PanelType.ProfileStat, PanelType.LiveLeaderboard,
+        PanelType.PastPeriods, PanelType.Records, PanelType.Top, PanelType.ProfileStat, PanelType.AccountsTable, PanelType.LiveLeaderboard,
     ];
 
     /// <summary>The title <see cref="PanelModels"/> gives a panel of this type on the card's recipe (<see cref="CardRecipe"/>), for a panel not yet added.</summary>
@@ -57,6 +57,9 @@ public static class PanelGallery
                     "Import a recipe that lists groups, and turn it on in Setup."),
                 PanelType.ProfileStat => ("Needs a stat from a recipe that reads without a period.", "Your accounts with value, today's gain and 7-day gain.",
                     "Needs a ticked stat from a recipe that reads without a period."),
+                PanelType.AccountsTable => ($"Needs a {group} whose recipe reads without a period.",
+                    "Your accounts side by side: a column per stat you show, sorted by any column, with totals and change.",
+                    $"Add a {group} whose recipe reads without a period, in Setup first."),
                 _ => ($"Needs a {group}.", "Every row live, your accounts marked. Never saved.", $"Add a {group} in Setup first."),
             };
 
