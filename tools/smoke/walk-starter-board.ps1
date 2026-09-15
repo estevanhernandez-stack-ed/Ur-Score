@@ -72,7 +72,12 @@ try {
     Check '2b The state line counts the sources or names one in trouble' ($state -match '^(Reading \d+ sources?\.|.+: )') $state
 
     Invoke-Element (Find-ByAutomationId $board 'TestNowButton')
-    Start-Sleep -Seconds 20
+    # Test now is disabled for exactly as long as its read runs (several sources, 2 s apart per host), so wait on
+    # the button rather than a fixed sleep. The press lands on the dispatcher after Invoke returns, so first let
+    # it go disabled; a read that finished between polls just skips ahead.
+    Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10 | Out-Null
+    $tested = Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240
+    Check '2c Test now finishes and takes a press again' $tested "TestNowButton enabled=$tested"
     $accounts = @(Get-AllTexts (Find-ByAutomationId $board 'MyAccountsPanel1'))
     $grouped = @($accounts | Where-Object { $_ -like "*$Main" -or $_ -eq $Alt -or $_ -eq 'Not in a watched clan' }).Count -gt 0
     Check '3 My accounts groups your accounts by clan' $grouped ($accounts -join ' | ')
