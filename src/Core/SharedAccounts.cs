@@ -61,6 +61,13 @@ public sealed class SharedAccounts(IHostClient host, AccountsCache cache, TimePr
 
     public AccountList? Last { get; private set; }
 
+    /// <summary>
+    /// Raised inside <see cref="GetAsync"/> each time a new list is taken (not for a reuse within the window),
+    /// after <see cref="Last"/> is set and before the caller gets it, on the caller's thread. So an allow list
+    /// can follow an account RoRoRo just listed before the read that fetched it sends (F8).
+    /// </summary>
+    public event Action<AccountList>? Listed;
+
     public async Task<AccountList> GetAsync(CancellationToken cancellationToken)
     {
         await _one.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -91,11 +98,29 @@ public sealed class SharedAccounts(IHostClient host, AccountsCache cache, TimePr
 
             Last = list;
             _fetchedAt = now;
+            RaiseListed(list);
             return list;
         }
         finally
         {
             _one.Release();
+        }
+    }
+
+    /// <summary>Each subscriber on its own: one that throws costs neither the others nor the fetch.</summary>
+    private void RaiseListed(AccountList list)
+    {
+        if (Listed is not { } listed) return;
+
+        foreach (var handler in listed.GetInvocationList().Cast<Action<AccountList>>())
+        {
+            try
+            {
+                handler(list);
+            }
+            catch (Exception)
+            {
+            }
         }
     }
 

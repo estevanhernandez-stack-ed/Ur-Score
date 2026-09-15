@@ -1,7 +1,10 @@
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
+
+using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>One sent stat in the Rule for list. Its text is its string, so a screen reader names the pick.</summary>
 public sealed record RuleChoice(string MetricId, string Text)
@@ -67,17 +70,22 @@ public static class AlertsModel
     public static string Preview(bool canAdd) =>
         canAdd ? $"Rate, below {DefaultThreshold} per minute over {DefaultWindowMinutes} minutes" : "";
 
-    /// <summary>One report policy card line per sending recipe, in <see cref="ReportPolicy.Describe"/>'s words.</summary>
+    /// <summary>A recipe whose sources are all watched sends nothing, whatever its ticks say.</summary>
+    public static string WatchOnly(Recipe recipe) => $"Nothing is sent to RoRoRo: you only watch its {RecipeWords.GroupsLower(recipe)}.";
+
+    /// <summary>
+    /// One report policy card line per sending recipe, in <see cref="ReportPolicy.Describe"/>'s words, with the
+    /// allow list the running watches use (<see cref="ReportPolicies.Allowed"/>).
+    /// </summary>
     public static IReadOnlyList<PolicyItem> Policies(
-        IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<HostAccount> accounts, bool resolveNames,
+        IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<HostAccount> accounts, IReadOnlyList<Source> sources, bool resolveNames,
         Func<string, (int Sent, int Dropped)> counts) =>
         [.. installed.Where(i => !i.Recipe.IsGroupList).Select(i =>
         {
-            var allowed = accounts.Select(a => a.AccountId).Where(id => !i.State.Excluded.Contains(id)).ToHashSet();
             var (sent, dropped) = counts(i.Recipe.Slug);
-            return new PolicyItem(
-                i.Recipe.Name,
-                new ReportPolicy(i.State.SentStats(i.Recipe), allowed).Describe(accounts.Count, resolveNames),
-                $"Sent {sent}, dropped {dropped} this session.");
+            var line = ReportPolicies.SendsByRole(i, sources)
+                ? new ReportPolicy(i.State.SentStats(i.Recipe), ReportPolicies.Allowed(i, accounts, sources)).Describe(accounts.Count, resolveNames)
+                : WatchOnly(i.Recipe);
+            return new PolicyItem(i.Recipe.Name, line, $"Sent {sent}, dropped {dropped} this session.");
         })];
 }

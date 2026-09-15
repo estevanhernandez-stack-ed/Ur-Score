@@ -92,6 +92,56 @@ public class SourcesTests
     }
 
     [Fact]
+    public void TheStoreTellsAMissingFileFromAnUnreadableOne()
+    {
+        using var dir = TempDir.Create("urscore-sources");
+        var path = Path.Combine(dir.Path, "sources.json");
+        var store = new SourceStore(path);
+
+        static (int Count, bool Exists, bool Readable) Shape(SourceLoad load) => (load.Sources.Count, load.Exists, load.Readable);
+
+        Assert.Equal((0, false, true), Shape(store.LoadResult()));
+
+        store.Save(SourceRules.Add([], "clan-recipe", Clan("CCGP"), SourceRole.Main));
+        Assert.Equal((1, true, true), Shape(store.LoadResult()));
+
+        File.WriteAllText(path, "{ not json");
+        Assert.Equal((0, true, false), Shape(store.LoadResult()));
+    }
+
+    [Fact]
+    public void OnlyANewlyInstalledRecipeWithNoInputsGetsASource()
+    {
+        // A 2a clan's saved inputs are never turned into a source again after the first start.
+        var clan = Installed("petsim99-clan-battle.recipe.json", new RecipeState(Inputs: Clan("CCGP")));
+        var profile = Installed("petsim99-profile.recipe.json");
+        var top = Installed("petsim99-top-clans.recipe.json");
+
+        Assert.Empty(SourceRules.ForNewRecipes([], [], [clan]));
+
+        var added = SourceRules.ForNewRecipes([], [clan], [clan, profile, top]);
+
+        Assert.Equal(
+            new[] { (profile.Recipe.Slug, SourceRole.Mine), (top.Recipe.Slug, SourceRole.Watch) },
+            added.Select(s => (s.Recipe, s.Role)).ToArray());
+        Assert.All(added, s => Assert.Empty(s.Inputs));
+    }
+
+    [Fact]
+    public void ARecipeAlreadyInstalledOrAlreadyReadGetsNoSourceAndTheListIsUnchanged()
+    {
+        var profile = Installed("petsim99-profile.recipe.json");
+
+        // Its source was removed on purpose: an update or a reload must not bring it back.
+        IReadOnlyList<Source> none = [];
+        Assert.Same(none, SourceRules.ForNewRecipes(none, [profile], [profile]));
+
+        // Newly loaded, but a source kept from before (say the file failed to parse once) already reads it.
+        IReadOnlyList<Source> kept = [new Source("s-00000001", profile.Recipe.Slug, new Dictionary<string, string>(), SourceRole.Mine)];
+        Assert.Same(kept, SourceRules.ForNewRecipes(kept, [], [profile]));
+    }
+
+    [Fact]
     public void TheStoreRoundTripsAndABrokenFileLoadsAsNoSources()
     {
         var dir = Path.Combine(Path.GetTempPath(), "urscore-sources-" + Guid.NewGuid().ToString("N"));

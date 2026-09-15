@@ -26,6 +26,9 @@ public sealed class AppServices : ISetupServices, IDisposable
 {
     public const string PluginId = "626labs.ur-score";
 
+    public const string SourcesNotWritten =
+        "Your sources file couldn't be read when Ur Score started, so it isn't written over. Fix or remove sources.json, then restart Ur Score.";
+
     /// <summary>
     /// The longest a caller waits for RoRoRo's accounts. Each host call is bounded at 5 s already; this also
     /// covers a watch's fetch holding the shared one. Past it, the saved list stands in.
@@ -70,6 +73,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     private bool _changePending;
     private string? _boardIcon;
 
+    /// <summary><c>sources.json</c> was there at start but could not be read: this session never writes over it.</summary>
+    private bool _sourcesUnreadable;
+
     public AppServices(Dispatcher ui)
     {
         _ui = ui;
@@ -86,6 +92,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         AccountsCache = new AccountsCache(AccountsCache.DefaultPath);
         _savedAccounts = LoadSavedAccounts(AccountsCache);
         Accounts = new SharedAccounts(_host, AccountsCache, _time);
+        Accounts.Listed += OnListed;
         _claims = new AccountClaims(_time);
 
         _book = new ScoreBook(BookFiles.DefaultRoot);
@@ -97,7 +104,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         Runner = new SourceHost(CreateWatch, IntervalFor);
         Runner.SnapshotReady += OnSnapshotReady;
 
-        LoadRecipesAndSources();
+        LoadAtStart();
     }
 
     // ---- ISetupServices ----
@@ -249,14 +256,30 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public void SaveSources(IReadOnlyList<Source> sources)
     {
+        // Refused before anything changes, so the page says why and the running sources stay what the file would hold.
+        if (_sourcesUnreadable) throw new InvalidOperationException(SourcesNotWritten);
+
         _sourceStore.Save(sources);
         Sources = sources;
         ApplySources();
     }
 
+    /// <summary>
+    /// After an import or update: recipes come from disk again, sources don't. Only a newly installed recipe
+    /// with no inputs gets a source (<see cref="SourceRules.ForNewRecipes"/>), and the file is saved only then.
+    /// </summary>
     public void ReloadRecipes()
     {
-        LoadRecipesAndSources();
+        var before = Installed;
+        LoadInstalled();
+
+        var sources = SourceRules.ForNewRecipes(Sources, before, Installed);
+        if (!ReferenceEquals(sources, Sources))
+        {
+            Sources = sources;
+            TrySaveSources(sources);
+        }
+
         ApplySources();
     }
 
@@ -273,7 +296,12 @@ public sealed class AppServices : ISetupServices, IDisposable
         Store.Remove(slug);
         LoadInstalled();
         var sources = SourceRules.ForgetRecipe(Sources, slug);
-        _sourceStore.Save(sources);
+        if (sources.Count != Sources.Count)
+        {
+            if (_sourcesUnreadable) AddTrail($"SOURCES NOT SAVED: {SourcesNotWritten}");
+            else _sourceStore.Save(sources);
+        }
+
         Sources = sources;
         _iconFiles.Remove(slug);
         _iconTexts.Remove(slug);
@@ -379,6 +407,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     public void Dispose()
     {
         _closing.Cancel();
+        Accounts.Listed -= OnListed;
         Runner.SnapshotReady -= OnSnapshotReady;
         Runner.Stop();
         Runner.Dispose();
@@ -426,16 +455,27 @@ public sealed class AppServices : ISetupServices, IDisposable
             : installed.State.TrackedStats(installed.Recipe);
 
     /// <summary>
-    /// A watched source and a group list send nothing, whatever the recipe's ticks say (spec §4.1, §3.5).
-    /// Otherwise the same derivation Setup › Alerts shows (<see cref="AlertsModel.Policies"/>): the known
-    /// accounts minus the recipe's excluded ones, so the card and what is actually sent agree.
+    /// A watched source, a group list, and a recipe whose sources are all watched send nothing, whatever the
+    /// recipe's ticks say (spec §4.1, §3.5). Otherwise the allow list is <see cref="ReportPolicies.Allowed"/>,
+    /// the one Setup › Alerts describes, so the card and what is actually sent agree.
     /// </summary>
     private ReportPolicy PolicyFor(InstalledRecipe installed, Source source)
     {
-        if (source.Role == SourceRole.Watch || installed.Recipe.IsGroupList) return new ReportPolicy([], new HashSet<Guid>());
+        var sources = Sources;
+        if (source.Role == SourceRole.Watch || !ReportPolicies.SendsByRole(installed, sources)) return new ReportPolicy([], new HashSet<Guid>());
 
-        var allowed = KnownAccounts.Select(a => a.AccountId).Where(id => !installed.State.Excluded.Contains(id)).ToHashSet();
-        return new ReportPolicy(installed.State.SentStats(installed.Recipe), allowed);
+        return new ReportPolicy(installed.State.SentStats(installed.Recipe), ReportPolicies.Allowed(installed, KnownAccounts, sources));
+    }
+
+    /// <summary>
+    /// RoRoRo just listed accounts, inside a watch's fetch or a caller's refresh, before that read sends: every
+    /// running watch's allow list takes them now (F8). On the fetching thread; the lists it reads are immutable
+    /// references, and <see cref="RecipeWatch.UpdatePolicy"/> takes the watch's lock.
+    /// </summary>
+    private void OnListed(AccountList list)
+    {
+        if (list.Accounts.Count > 0) _savedAccounts = list.Accounts;
+        RefreshPolicies();
     }
 
     /// <summary>
@@ -508,13 +548,31 @@ public sealed class AppServices : ISetupServices, IDisposable
     private void OnSnapshotReady(string sourceId, RecipeSnapshot snapshot)
     {
         var at = _time.GetUtcNow();
-        _ui.BeginInvoke(() => Record(sourceId, snapshot, at));
+        _ui.BeginInvoke(() =>
+        {
+            try
+            {
+                Record(sourceId, snapshot, at);
+            }
+            catch (Exception ex)
+            {
+                // A read that can't be shown must never take the app down. The type only: a message can carry anything.
+                AddTrail($"READ NOT SHOWN: {sourceId} {ex.GetType().Name}");
+            }
+        });
     }
 
     private void OnWritten(BookLine line) => _ui.BeginInvoke(() =>
     {
-        Reader.Apply(line);
-        RaiseChanged();
+        try
+        {
+            Reader.Apply(line);
+            RaiseChanged();
+        }
+        catch (Exception ex)
+        {
+            AddTrail($"BOOK LINE NOT SHOWN: {ex.GetType().Name}");
+        }
     });
 
     private void Record(string sourceId, RecipeSnapshot snapshot, DateTimeOffset at)
@@ -631,33 +689,52 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     // ---- loading ----
 
-    private void LoadRecipesAndSources()
+    /// <summary>
+    /// Recipes, then sources. Part 2a's saved inputs become sources only on the first start, when there is no
+    /// <c>sources.json</c> yet (spec §4.1); after that the file is the truth, so a source the user removed stays
+    /// removed. A file that exists but can't be read leaves no sources this session and is never written over.
+    /// </summary>
+    private void LoadAtStart()
     {
         LoadInstalled();
 
-        IReadOnlyList<Source> existing;
+        var load = _sourceStore.LoadResult();
+        if (!load.Exists)
+        {
+            var migrated = SourceRules.Migrate(Installed, []);
+            Sources = migrated;
+            TrySaveSources(migrated);
+            return;
+        }
+
+        if (!load.Readable)
+        {
+            _sourcesUnreadable = true;
+            AddTrail($"SOURCES NOT READ: {SourcesNotWritten}");
+            Sources = [];
+            return;
+        }
+
+        Sources = load.Sources;
+    }
+
+    /// <summary>Saves what changed without an import or reload failing over it; a file that couldn't be read is left alone.</summary>
+    private void TrySaveSources(IReadOnlyList<Source> sources)
+    {
+        if (_sourcesUnreadable)
+        {
+            AddTrail($"SOURCES NOT SAVED: {SourcesNotWritten}");
+            return;
+        }
+
         try
         {
-            existing = _sourceStore.Load();
+            _sourceStore.Save(sources);
         }
         catch (Exception ex)
         {
-            AddTrail($"SOURCES NOT READ: {ex.Message}");
-            existing = [];
+            AddTrail($"SOURCES NOT SAVED: {ex.GetType().Name}");
         }
-
-        // Part 2a's single state.json inputs become sources; a recipe without inputs gets its one source (spec §4.1).
-        var migrated = SourceRules.Migrate(Installed, existing);
-        try
-        {
-            _sourceStore.Save(migrated);
-        }
-        catch (Exception ex)
-        {
-            AddTrail($"SOURCES NOT SAVED: {ex.Message}");
-        }
-
-        Sources = migrated;
     }
 
     private void LoadInstalled()
@@ -691,7 +768,20 @@ public sealed class AppServices : ISetupServices, IDisposable
         _ui.BeginInvoke(() =>
         {
             _changePending = false;
-            Changed?.Invoke();
+            if (Changed is not { } changed) return;
+
+            // Each subscriber on its own, so a page that fails to redraw doesn't stop the board redrawing.
+            foreach (var handler in changed.GetInvocationList().Cast<Action>())
+            {
+                try
+                {
+                    handler();
+                }
+                catch (Exception ex)
+                {
+                    AddTrail($"NOT REDRAWN: {ex.GetType().Name}");
+                }
+            }
         }, DispatcherPriority.Background);
     }
 

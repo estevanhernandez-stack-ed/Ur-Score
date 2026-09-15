@@ -32,6 +32,9 @@ public sealed record Source(string Id, string Recipe, IReadOnlyDictionary<string
             .Select(kv => $"{kv.Key}={kv.Value.Trim().ToLowerInvariant()}"));
 }
 
+/// <summary>What loading <c>sources.json</c> found: a file that isn't there is not the same as one that can't be read.</summary>
+public sealed record SourceLoad(IReadOnlyList<Source> Sources, bool Exists, bool Readable);
+
 /// <summary><c>sources.json</c>. Holds recipe slugs, input values and roles: never a key, never an account.</summary>
 public sealed class SourceStore(string path)
 {
@@ -46,19 +49,24 @@ public sealed class SourceStore(string path)
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "sources.json");
 
-    /// <summary>A missing or hand-broken file is no sources; migration rebuilds what it can from recipe state.</summary>
-    public IReadOnlyList<Source> Load()
+    /// <summary>A missing or hand-broken file is no sources. <see cref="LoadResult"/> says which it was.</summary>
+    public IReadOnlyList<Source> Load() => LoadResult().Sources;
+
+    /// <summary>The sources, whether the file exists, and whether it could be read (a broken or locked file can't).</summary>
+    public SourceLoad LoadResult()
     {
         try
         {
-            if (!File.Exists(path)) return [];
+            if (!File.Exists(path)) return new SourceLoad([], Exists: false, Readable: true);
 
             var loaded = JsonSerializer.Deserialize<List<Source>>(File.ReadAllText(path), Options) ?? [];
-            return [.. loaded.Where(s => !string.IsNullOrWhiteSpace(s.Id) && !string.IsNullOrWhiteSpace(s.Recipe) && s.Inputs is not null)];
+            return new SourceLoad(
+                [.. loaded.Where(s => !string.IsNullOrWhiteSpace(s.Id) && !string.IsNullOrWhiteSpace(s.Recipe) && s.Inputs is not null)],
+                Exists: true, Readable: true);
         }
         catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
-            return [];
+            return new SourceLoad([], Exists: true, Readable: false);
         }
     }
 
@@ -103,6 +111,31 @@ public static class SourceRules
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// After an import or reload: a recipe that wasn't installed before, has no inputs and has no source yet
+    /// gets one (watch for a group list, mine otherwise). A recipe with inputs gets nothing (its values are
+    /// picked in Setup, and part 2a's saved inputs are never migrated again), and an already installed recipe
+    /// whose source was removed doesn't get it back. Returns <paramref name="sources"/> itself when nothing is added.
+    /// </summary>
+    public static IReadOnlyList<Source> ForNewRecipes(
+        IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> before, IReadOnlyList<InstalledRecipe> after)
+    {
+        var known = before.Select(i => i.Recipe.Slug).ToHashSet(StringComparer.Ordinal);
+        List<Source>? result = null;
+
+        foreach (var item in after)
+        {
+            var recipe = item.Recipe;
+            if (known.Contains(recipe.Slug) || recipe.Inputs.Count > 0) continue;
+            if ((result ?? sources).Any(s => string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal))) continue;
+
+            result ??= [.. sources];
+            result.Add(new Source(NewId(), recipe.Slug, new Dictionary<string, string>(), recipe.IsGroupList ? SourceRole.Watch : SourceRole.Mine));
+        }
+
+        return result ?? sources;
     }
 
     /// <summary>The same recipe and inputs update the existing source's role; a new pair becomes a new source.</summary>

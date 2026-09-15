@@ -35,6 +35,7 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+        DispatcherUnhandledException += OnUnhandled;
         Theming.ThemeService.Start();
 
         ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -42,6 +43,19 @@ public partial class App : Application
         var board = new UI.BoardWindow(_services);
         MainWindow = board;
         board.Show();
+    }
+
+    /// <summary>
+    /// The last net under every UI-thread callback: once the board is up, a failure goes to the trail (its type
+    /// only) and the app keeps running, so it can still flush the score book on exit. Before that there is no
+    /// window to keep, so a startup failure is left to end the process.
+    /// </summary>
+    private void OnUnhandled(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    {
+        if (_services is null || MainWindow is null) return;
+
+        _services.AddTrail($"UNHANDLED: {e.Exception.GetType().Name}");
+        e.Handled = true;
     }
 
     protected override void OnExit(ExitEventArgs e)

@@ -76,7 +76,20 @@ public partial class BoardWindow : Window
         if (SetupPages.FirstRunPage(_services.Installed, _services.Sources) is { } page) OpenSetup(page);
     }
 
+    /// <summary>The window must never die on a redraw: what fails goes to the trail, by type only, and the last drawing stays.</summary>
     private void Render()
+    {
+        try
+        {
+            RenderBoard();
+        }
+        catch (Exception ex)
+        {
+            _services.AddTrail($"BOARD NOT DRAWN: {ex.GetType().Name}");
+        }
+    }
+
+    private void RenderBoard()
     {
         var board = StarterBoards.Build(_services.Installed, _services.Sources);
         _board = board;
@@ -113,8 +126,8 @@ public partial class BoardWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    // A panel never takes the window down.
-                    _services.AddTrail($"PANEL NOT DRAWN: {spec.Type}: {ex.Message}");
+                    // A panel never takes the window down. The type only: a message could name another player's id.
+                    _services.AddTrail($"PANEL NOT DRAWN: {spec.Type}: {ex.GetType().Name}");
                 }
             }
         }
@@ -125,8 +138,18 @@ public partial class BoardWindow : Window
 
     private void RenderLines(LiveBoard? live = null)
     {
-        live ??= _services.CurrentBoard();
+        try
+        {
+            RenderLinesCore(live ?? _services.CurrentBoard());
+        }
+        catch (Exception ex)
+        {
+            _services.AddTrail($"LINES NOT DRAWN: {ex.GetType().Name}");
+        }
+    }
 
+    private void RenderLinesCore(LiveBoard live)
+    {
         PeriodLine.Text = BoardText.TopLine(live, _board?.AnchorSourceId);
         LiveDot.Visibility = live.Running ? Visibility.Visible : Visibility.Collapsed;
         StartStopButton.Content = live.Running ? "Stop" : "Start";

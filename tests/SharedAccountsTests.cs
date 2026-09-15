@@ -60,6 +60,82 @@ public class SharedAccountsTests
     }
 
     [Fact]
+    public async Task ListedFiresWithTheFetchedListBeforeGetAsyncReturnsAndAThrowingHandlerBreaksNothing()
+    {
+        using var dir = TempDir.Create("urscore-accounts");
+        var time = new ManualTime(Start);
+        var shared = new SharedAccounts(new StubHost(true, Alt), new AccountsCache(Path.Combine(dir.Path, "accounts.json")), time);
+        var returned = false;
+        var fired = 0;
+        AccountList? seen = null;
+        var beforeReturn = false;
+        var lastWasSet = false;
+
+        shared.Listed += _ => throw new InvalidOperationException("a broken subscriber");
+        shared.Listed += list =>
+        {
+            fired++;
+            seen = list;
+            beforeReturn = !returned;
+            lastWasSet = ReferenceEquals(shared.Last, list);
+        };
+
+        var result = await shared.GetAsync(CancellationToken.None);
+        returned = true;
+
+        Assert.Same(result, seen);
+        Assert.True(beforeReturn);
+        Assert.True(lastWasSet);
+        Assert.Equal(Alt, Assert.Single(result.Accounts));
+
+        // Within the shared window nothing new is fetched, so nothing new is listed.
+        time.Advance(TimeSpan.FromSeconds(5));
+        await shared.GetAsync(CancellationToken.None);
+        Assert.Equal(1, fired);
+    }
+
+    private sealed class OneRowEngine(long userId, double value) : IRecipeEngine
+    {
+        public Task<RecipeReading> ReadAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs,
+            IReadOnlyCollection<long> accountUserIds, IReadOnlySet<string> trackedStats, CancellationToken ct) =>
+            Task.FromResult(new RecipeReading(ReadingOutcome.Read, null, [RecipeEngineTests.Row(userId, value)], [], "battle=A", 1));
+    }
+
+    private sealed class NoKeys : IKeyStore
+    {
+        public SavedKey? Find(string keyId) => null;
+
+        public void Save(string keyId, string host, string value) => throw new NotSupportedException();
+
+        public bool Remove(string keyId) => false;
+
+        public IReadOnlyCollection<string> Values() => [];
+    }
+
+    [Fact]
+    public async Task AWatchWhosePolicyFollowsListedSendsANewlyListedAccountOnItsFirstRead()
+    {
+        // F8: the allow list must know an account RoRoRo just listed before that same read sends, not a cycle later.
+        using var dir = TempDir.Create("urscore-accounts");
+        var host = new StubHost(true, Alt);
+        var shared = new SharedAccounts(host, new AccountsCache(Path.Combine(dir.Path, "accounts.json")), new ManualTime(Start));
+        var recipe = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+        var points = new SentStat("value", "Points", "clan.battle.points");
+
+        RecipeWatch? watch = null;
+        shared.Listed += list => watch!.UpdatePolicy(watch.Policy.SentStats, list.Accounts.Select(a => a.AccountId).ToHashSet());
+        watch = new RecipeWatch(
+            new OneRowEngine(Alt.RobloxUserId, 5), host, new NoKeys(), new ReportPolicy([points], new HashSet<Guid>()), recipe,
+            new Dictionary<string, string> { ["clan"] = "Noodle Clan" }, new HashSet<string> { "value" }, sharedAccounts: shared);
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.Reporting, snapshot.State);
+        Assert.Equal((Alt.AccountId, "clan.battle.points", 5.0), host.Reported.Select(r => (r.Subject, r.MetricId, r.Value)).Single());
+        Assert.Equal((1, 0), (watch.Policy.Sent, watch.Policy.Dropped));
+    }
+
+    [Fact]
     public void ACacheThatIsMissingOrBrokenLoadsEmpty()
     {
         using var dir = TempDir.Create("urscore-accounts");
