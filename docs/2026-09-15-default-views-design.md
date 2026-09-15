@@ -14,12 +14,13 @@ The single-panel views proposed earlier (Live, Rivals, History) are not tabs: th
 
 ### Battle (the tab you watch on battle day)
 
-Rows fill all 12 columns, so there are no gaps. When a source is missing, its row closes up rather than leaving a hole.
+Rows fill all 12 columns across. When a source is missing, its row closes up rather than leaving a hole. Each panel keeps its natural height, top-aligned in its row, as in the approved mock.
 
-1. Your main clan's standing · the standing of a clan your accounts are in (the alts' clan) · Top of the battle
-2. Battle race (wide) · Promotion check (alts' clan to main)
-3. My accounts, full width, grouped by clan with points and change
-4. Past battles (main clan) · Records
+1. Your main clan's standing · the standing of a clan your accounts are in (the alts' clan) · Battle race
+2. My accounts, grouped by clan with points and change · Promotion check (alts' clan to main) · Top of the battle
+3. Past battles (main clan) · Records
+
+> Changed during execution (2026-09-16): the first draft had four rows (standings and Top, then race and Promotion, then My accounts full width, then Past battles and Records) with every panel stretched to its row's height. Screenshots next to the mock showed the first row lopsided and the race below the fold, so the controller moved to the mock's arrangement and natural heights. Same panels.
 
 ### Alts (your accounts side by side, like the Big Games database)
 
