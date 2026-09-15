@@ -9,9 +9,16 @@ public static class AccountsTableFocus
     /// <summary>
     /// Only a redraw answering the table's own heading click or row pick puts keyboard focus back, and only when focus was
     /// in the table. A data refresh keeps the selection and the sort but never moves focus, so it never scrolls the board
-    /// or a pop-out back to the table while you read what is under it.
+    /// or a pop-out back to the table while you read what is under it. Whether a redraw answers the table is
+    /// <see cref="FocusRestoreGate"/>'s to say.
     /// </summary>
     public static bool RestoresFocus(bool answersTable, bool focusInTable) => answersTable && focusInTable;
+
+    /// <summary>The account a selected row picks; the totals row, or no row, picks nothing.</summary>
+    public static long? PickOf(AccountRow? selected) => selected is { IsTotal: false } row ? row.UserId : null;
+
+    /// <summary>A pick changes the board only when it names another account than the one picked; only then is a redraw queued.</summary>
+    public static bool PickChanges(long? current, long picked) => current != picked;
 
     /// <summary>The row selected after a redraw: the picked account, or the totals row when the keyboard was on it (it picks nothing).</summary>
     public static AccountRow? SelectedRow(AccountsTableModel model, bool totalSelected) =>
@@ -45,5 +52,34 @@ public static class AccountsTableFocus
         }
 
         return Math.Clamp(wasIndex, 0, columns.Count - 1);
+    }
+}
+
+/// <summary>
+/// Which redraw may put a table's keyboard focus back (D14). A sort or pick that queues a redraw arms the gate and that
+/// redraw carries the token it got; the redraw restores focus only with the token still pending, and uses it up. A
+/// refresh carries no token, a sort or pick that changed nothing armed nothing, and a later arm supersedes an earlier
+/// one whose redraw was folded into the same pass.
+/// </summary>
+public sealed class FocusRestoreGate
+{
+    private int _generation;
+    private int? _pending;
+
+    /// <summary>A sort or pick queued a redraw: the token that redraw carries.</summary>
+    public int Arm()
+    {
+        _generation++;
+        _pending = _generation;
+        return _generation;
+    }
+
+    /// <summary>Whether the redraw carrying <paramref name="token"/> (null for a refresh) restores focus; a match is used up.</summary>
+    public bool Restores(int? token)
+    {
+        if (token is null || token != _pending) return false;
+
+        _pending = null;
+        return true;
     }
 }

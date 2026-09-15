@@ -27,10 +27,10 @@ public sealed class AccountPickEventArgs(RoutedEvent routedEvent, long userId) :
 /// <summary>
 /// Your accounts side by side (D14). It decides nothing: a heading click and a row pick are raised for the board, which
 /// keeps them for the session and draws the table again from <see cref="PanelModels.AccountsTable"/>, after the grid's
-/// own handler has returned. A redraw replaces every row; when it answers the table's own sort or pick, keyboard focus
-/// that was in the table goes back to the same row and column once the new rows are laid out, so the arrow keys carry on
-/// from there. A data refresh keeps the selection and the sort and leaves focus and scrolling alone
-/// (<see cref="AccountsTableFocus"/>).
+/// own handler has returned. A redraw replaces every row; the one redraw that answers a sort or pick that changed the
+/// board puts keyboard focus that was in the table back on the same row and column once the new rows are laid out, so
+/// the arrow keys carry on from there. A data refresh keeps the selection and the sort and leaves focus and scrolling
+/// alone (<see cref="AccountsTableFocus"/>, <see cref="FocusRestoreGate"/>).
 /// </summary>
 public partial class AccountsTablePanel : UserControl
 {
@@ -45,19 +45,16 @@ public partial class AccountsTablePanel : UserControl
     /// <summary>Set while a model is drawn, so selecting its picked row isn't taken for a new pick.</summary>
     private bool _rendering;
 
-    /// <summary>
-    /// Set as the table raises a sort or a pick, until the dispatcher is idle again: after the board's queued redraw
-    /// (Background), which is the redraw that answers it, and after any input already waiting. A pick the board already
-    /// had queues no redraw, and the flag lapses with nothing restored.
-    /// </summary>
-    private bool _answering;
+    /// <summary>Which redraw may put focus back: the one the board queued for this table's own sort or pick.</summary>
+    private readonly FocusRestoreGate _restore = new();
+
+    /// <summary>Where keyboard focus was as the last armed sort or pick was raised; null when it wasn't in the table.</summary>
+    private FocusPlace? _armedPlace;
 
     public AccountsTablePanel() => InitializeComponent();
 
     public void Render(AccountsTableModel model)
     {
-        // Read before the rows go: the cell with focus is torn down with them.
-        FocusPlace? focus = AccountsTableFocus.RestoresFocus(_answering, AccountsGrid.IsKeyboardFocusWithin) ? CurrentPlace() : null;
         var onTotal = AccountsGrid.SelectedItem is TableRow { IsTotal: true };
 
         _rendering = true;
@@ -83,8 +80,31 @@ public partial class AccountsTablePanel : UserControl
         {
             _rendering = false;
         }
+    }
 
-        if (focus is { } place) Dispatcher.BeginInvoke(() => RestoreFocus(place), DispatcherPriority.Loaded);
+    /// <summary>
+    /// The board has queued a redraw for a sort or pick this table raised, one that changed the board: the token that
+    /// redraw carries. Where focus is now is kept, before any refresh can tear the focused cell down.
+    /// </summary>
+    public int ArmFocusRestore()
+    {
+        _armedPlace = AccountsGrid.IsKeyboardFocusWithin ? CurrentPlace() : null;
+        return _restore.Arm();
+    }
+
+    /// <summary>
+    /// The redraw carrying <paramref name="token"/> has drawn this table: focus goes back where it was, once the new rows
+    /// are laid out, if the token is still the pending one and focus was in the table. Nothing else restores focus.
+    /// </summary>
+    public void AnswerRedraw(int token)
+    {
+        if (!_restore.Restores(token)) return;
+
+        var place = _armedPlace;
+        _armedPlace = null;
+        if (!AccountsTableFocus.RestoresFocus(answersTable: true, focusInTable: place is not null)) return;
+
+        Dispatcher.BeginInvoke(() => RestoreFocus(place!.Value), DispatcherPriority.Loaded);
     }
 
     /// <summary>One grid column per model column; a column's sort member is its index, so a click names the model column.</summary>
@@ -126,7 +146,6 @@ public partial class AccountsTablePanel : UserControl
         e.Handled = true;
         if (int.TryParse(e.Column.SortMemberPath, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && index < _columns.Count)
         {
-            Answering();
             RaiseEvent(new AccountSortEventArgs(SortEvent, _columns[index]));
         }
     }
@@ -135,19 +154,9 @@ public partial class AccountsTablePanel : UserControl
     {
         // Selector's SelectionChanged bubbles; nothing above the table is asking about it.
         e.Handled = true;
-        if (_rendering || AccountsGrid.SelectedItem is not TableRow { IsTotal: false } row) return;
+        if (_rendering || AccountsTableFocus.PickOf(AccountsGrid.SelectedItem as TableRow) is not { } userId) return;
 
-        Answering();
-        RaiseEvent(new AccountPickEventArgs(PickEvent, row.UserId));
-    }
-
-    /// <summary>The redraws until the dispatcher is idle answer this sort or pick (<see cref="_answering"/>).</summary>
-    private void Answering()
-    {
-        if (_answering) return;
-
-        _answering = true;
-        Dispatcher.BeginInvoke(() => { _answering = false; }, DispatcherPriority.ContextIdle);
+        RaiseEvent(new AccountPickEventArgs(PickEvent, userId));
     }
 
     /// <summary>The table grows to all its rows and never scrolls up or down itself, so the wheel scrolls the board.</summary>

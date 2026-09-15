@@ -16,6 +16,9 @@ public partial class BoardWindow
     /// <summary>A redraw for a sort or a pick is waiting; more of them before it runs are drawn by that one.</summary>
     private bool _accountsRedrawQueued;
 
+    /// <summary>The tables whose sort or pick the waiting redraw answers, each with the token that lets it put focus back.</summary>
+    private readonly List<(AccountsTablePanel Table, int Token)> _answers = [];
+
     private void HookAccounts()
     {
         BoardPanels.AddHandler(AccountsTablePanel.SortEvent, new EventHandler<AccountSortEventArgs>(OnAccountSort));
@@ -38,7 +41,7 @@ public partial class BoardWindow
 
         e.Handled = true;
         _sorts[at.PanelId] = AccountSort.Clicked(e.Column);
-        RedrawAccountsLater();
+        RedrawAccountsLater(e.OriginalSource as AccountsTablePanel);
     }
 
     private void OnAccountPick(object? sender, AccountPickEventArgs e)
@@ -46,27 +49,33 @@ public partial class BoardWindow
         if (TableAt(e.OriginalSource) is not { } at) return;
 
         e.Handled = true;
-        if (_picked.TryGetValue(at.BoardId, out var current) && current == e.UserId) return;
+        // A pick that changes nothing queues nothing, and so arms nothing: no later redraw moves focus for it.
+        if (!AccountsTableFocus.PickChanges(_picked.TryGetValue(at.BoardId, out var current) ? current : null, e.UserId)) return;
 
         _picked[at.BoardId] = e.UserId;
-        RedrawAccountsLater();
+        RedrawAccountsLater(e.OriginalSource as AccountsTablePanel);
     }
 
     /// <summary>
     /// The sort or pick is kept at once; the board is drawn again once the grid's own Sorting or SelectionChanged has
     /// returned, and after input already waiting (the rest of a click, the next arrow key), so the grid is never
-    /// rebuilt under its own handler. The table puts keyboard focus back on its row once the new rows are laid out,
-    /// and the Account cards on the same board show the pick in the same redraw.
+    /// rebuilt under its own handler. The Account cards on the same board show the pick in the same redraw. The asking
+    /// table is armed now and handed its token once that redraw is done, so it, and no refresh, puts focus back.
     /// </summary>
-    private void RedrawAccountsLater()
+    private void RedrawAccountsLater(AccountsTablePanel? asking)
     {
+        if (asking is not null) _answers.Add((asking, asking.ArmFocusRestore()));
         if (_accountsRedrawQueued) return;
 
         _accountsRedrawQueued = true;
         Dispatcher.BeginInvoke(() =>
         {
             _accountsRedrawQueued = false;
+            var answers = _answers.ToList();
+            _answers.Clear();
+
             Render();
+            foreach (var (table, token) in answers) table.AnswerRedraw(token);
         }, DispatcherPriority.Background);
     }
 

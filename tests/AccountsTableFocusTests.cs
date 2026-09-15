@@ -26,6 +26,80 @@ public class AccountsTableFocusTests
     }
 
     [Fact]
+    public void ASelectedAccountIsAPickAndTheTotalsRowIsNot()
+    {
+        Assert.Equal(22, AccountsTableFocus.PickOf(Row(22, "Bravo")));
+        Assert.Null(AccountsTableFocus.PickOf(Total));
+        Assert.Null(AccountsTableFocus.PickOf(null));
+    }
+
+    [Fact]
+    public void OnlyAPickOfAnotherAccountChangesTheBoard()
+    {
+        Assert.True(AccountsTableFocus.PickChanges(null, 22));
+        Assert.True(AccountsTableFocus.PickChanges(11, 22));
+        Assert.False(AccountsTableFocus.PickChanges(22, 22));
+    }
+
+    [Fact]
+    public void ARealPickRestoresFocusOnceAndARefreshAfterItDoesNot()
+    {
+        var gate = new FocusRestoreGate();
+
+        // The pick changes the board, so its redraw is queued carrying a token.
+        Assert.True(AccountsTableFocus.PickChanges(null, AccountsTableFocus.PickOf(Row(22, "Bravo"))!.Value));
+        var token = gate.Arm();
+
+        // A refresh landing before that redraw carries no token.
+        Assert.False(gate.Restores(null));
+
+        Assert.True(gate.Restores(token));
+
+        // The next refresh, or the same token a second time, restores nothing.
+        Assert.False(gate.Restores(null));
+        Assert.False(gate.Restores(token));
+    }
+
+    [Fact]
+    public void ATotalRowRoundTripThenARefreshRestoresNothing()
+    {
+        var gate = new FocusRestoreGate();
+        long? picked = 22;
+        var earlier = gate.Arm();
+        Assert.True(gate.Restores(earlier));
+
+        // Onto the totals row: no pick at all. Back onto the picked account: a pick that changes nothing, so nothing is armed.
+        Assert.Null(AccountsTableFocus.PickOf(Total));
+        var back = AccountsTableFocus.PickOf(Row(22, "Bravo"))!.Value;
+        Assert.False(AccountsTableFocus.PickChanges(picked, back));
+
+        Assert.False(gate.Restores(null));
+        Assert.False(gate.Restores(earlier));
+    }
+
+    [Fact]
+    public void ASameAccountPickThenARefreshRestoresNothing()
+    {
+        var gate = new FocusRestoreGate();
+
+        Assert.False(AccountsTableFocus.PickChanges(22, 22));
+
+        Assert.False(gate.Restores(null));
+    }
+
+    [Fact]
+    public void OnlyTheLatestOfTwoPicksDrawnByOneRedrawRestores()
+    {
+        var gate = new FocusRestoreGate();
+        var first = gate.Arm();
+        var second = gate.Arm();
+
+        Assert.NotEqual(first, second);
+        Assert.False(gate.Restores(first));
+        Assert.True(gate.Restores(second));
+    }
+
+    [Fact]
     public void TheRedrawSelectsThePickedRow()
     {
         var model = Model(Row(11, "Alpha"), Row(22, "Bravo", picked: true), Total);
