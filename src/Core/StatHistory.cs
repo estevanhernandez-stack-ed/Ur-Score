@@ -52,4 +52,32 @@ public static class StatText
     /// <summary>The recipe's unavailable message for this account, else which shown stats it couldn't read, else nothing.</summary>
     public static string Note(string? unavailable, IReadOnlyList<string> missedLabels) =>
         unavailable ?? (missedLabels.Count == 0 ? "" : $"can't read {string.Join(", ", missedLabels)}");
+
+    private static readonly (double Divisor, string Suffix)[] Units = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")];
+
+    /// <summary>Short numbers for panels: 950, 1.23K, 220K, 12.4M, 9.17B. A value that would round up to 1000 of a unit moves to the next.</summary>
+    public static string Abbrev(double value)
+    {
+        var sign = value < 0 ? "-" : "";
+        var abs = Math.Abs(value);
+
+        foreach (var (divisor, suffix) in Units)
+        {
+            if (abs < divisor * 0.9995) continue;
+
+            var scaled = abs / divisor;
+            var format = scaled >= 99.95 ? "0" : scaled >= 9.995 ? "0.#" : "0.##";
+            return sign + scaled.ToString(format, CultureInfo.InvariantCulture) + suffix;
+        }
+
+        return sign + abs.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>How long a change took: under an hour in minutes, under two days in hours, else days.</summary>
+    public static string Span(TimeSpan span)
+    {
+        if (span < TimeSpan.FromHours(1)) return $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))}m";
+        if (span < TimeSpan.FromHours(48)) return $"{(int)Math.Round(span.TotalHours)}h";
+        return $"{(int)Math.Round(span.TotalDays)}d";
+    }
 }
