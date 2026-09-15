@@ -58,7 +58,6 @@ public partial class BoardWindow
             : PopOutPlacement.Default(BoardRect(), _popOuts.Count, areas);
 
         ChangeBoard(board => BoardEdits.PopOut(board, def.Id, rect));
-        Render();
 
         // The ⧉ pressed went with the redraw; focus goes to the slot's Bring back, the keyboard path home.
         FocusToolLater(def.Id, PanelTool.PopOut);
