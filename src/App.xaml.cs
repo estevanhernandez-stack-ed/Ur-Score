@@ -31,7 +31,8 @@ public partial class App : Application
 
             using var http = new System.Net.Http.HttpClient(Recipes.HttpRecipeTransport.CreateHandler());
             var keys = new Recipes.KeyStore(Recipes.KeyStore.DefaultPath);
-            var transport = new Recipes.HttpRecipeTransport(http, rawDirectory: null, new Recipes.Redactor(() => keys.Values()));
+            var inner = new Recipes.HttpRecipeTransport(http, rawDirectory: null, new Recipes.Redactor(() => keys.Values()));
+            var transport = new Recipes.SpacedTransport(inner, TimeProvider.System, Recipes.SpacedTransport.DefaultSpacing);
             var code = Cli.TryCommand.RunAsync(e.Args, Console.Out, transport, keys, CancellationToken.None).GetAwaiter().GetResult();
             Console.Out.Flush();
             Shutdown(code);
