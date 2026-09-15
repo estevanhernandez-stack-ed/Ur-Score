@@ -150,6 +150,24 @@ public class StatsTableModelTests
     }
 
     [Fact]
+    public void AFirstImportStartsWithShowTickedOnWhatTheRecipeSuggestsAndNothingSent()
+    {
+        var suggested = StatsTableModel.Suggested(Profile);
+
+        Assert.Equal(new[] { "diamonds", "eggs", "goals", "pets", "playtime", "rank", "rebirths" }, suggested.Keys.Order(StringComparer.Ordinal).ToArray());
+        Assert.All(suggested.Values, choice => Assert.True(choice.Show && !choice.Send));
+        Assert.Equal("ps99.playtime", suggested["playtime"].MetricId);
+
+        // Rows built from them are ticked, and what Import saves is exactly them: a fresh import has no saved choices.
+        var rows = StatsTableModel.Build(Profile, suggested, []);
+        Assert.True(StatsTableModel.AnyTicked(rows));
+        Assert.Equal(suggested.Keys.Order(StringComparer.Ordinal), StatsTableModel.Choices(new Dictionary<string, StatChoice>(), rows).Keys.Order(StringComparer.Ordinal));
+
+        var clan = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+        Assert.Empty(StatsTableModel.Suggested(clan));
+    }
+
+    [Fact]
     public void TheNamesLinesSayWhereNamesComeFrom()
     {
         Assert.Equal("Reading stat names once from ps99.biggamesapi.io…", StatsTableModel.ReadingNamesLine(Profile));

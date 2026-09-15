@@ -12,17 +12,24 @@ try {
     Start-Import $profileFixture
     $screen = Wait-UrWindow '^Import recipe$' 30
 
+    # 1b. A first import ticks what the recipe suggests, to show only; untick them so the rest of this
+    # walk starts from a clean table, as it did before D11.
+    $suggested = @('Diamonds', 'Eggs hatched', 'Player rank', 'Rebirths', 'Different pets hatched', 'Goals completed', 'Playtime')
+    $ticked = @($suggested | Where-Object { $c = Get-Check $screen "Show $_"; $c -and $c.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On })
+    Check '1b A first import starts with the suggested stats shown' ($ticked.Count -eq $suggested.Count) ($ticked -join ', ')
+    foreach ($label in $suggested) { Set-Tick (Get-Check $screen "Show $label") $false }
+
     $read = Find-ByAutomationId $screen 'ReadNamesButton'
     Check '1 A counters recipe offers one read of every game statistic' ($read -and $read.Current.Name -like 'Show every game statistic*') "button='$($read.Current.Name)'"
 
     Set-ElementValue (Find-ByAutomationId $screen 'StatsSearchBox') 'EGGS'
     $showing = Wait-Line $screen 'ShowingLine' '^Showing ' 5
-    Check '2 Search filters by label ignoring case' (($showing -match '^Showing 1 of 3 ') -and [bool](Get-Check $screen 'Show Eggs hatched') -and -not (Get-Check $screen 'Show Diamonds')) $showing
+    Check '2 Search filters by label ignoring case' (($showing -match '^Showing 1 of 16 ') -and [bool](Get-Check $screen 'Show Eggs hatched') -and -not (Get-Check $screen 'Show Diamonds')) $showing
 
     Set-Tick (Get-Check $screen 'Show Eggs hatched') $true
     Set-ElementValue (Find-ByAutomationId $screen 'StatsSearchBox') 'dia'
-    $showing = Wait-Line $screen 'ShowingLine' '^Showing 2 of 3 ' 5
-    Check '3 A ticked row stays visible under another search' (($showing -match '^Showing 2 of 3 ') -and [bool](Get-Check $screen 'Show Eggs hatched')) $showing
+    $showing = Wait-Line $screen 'ShowingLine' '^Showing 3 of 16 ' 5
+    Check '3 A ticked row stays visible under another search' (($showing -match '^Showing 3 of 16 ') -and [bool](Get-Check $screen 'Show Eggs hatched')) $showing
 
     Check '4 No name column before Send' (-not (Get-Edit $screen 'Name RoRoRo uses for Eggs hatched')) 'absent'
     Set-Tick (Get-Check $screen 'Send Eggs hatched') $true

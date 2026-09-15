@@ -44,11 +44,12 @@ public partial class StatsTable : UserControl
     /// <param name="accountIds">Asked each time the budget is worked out, so accounts listed later are counted.</param>
     /// <param name="readNames">The one read of counter names, or null when this host offers none.</param>
     /// <param name="extraRefusals">The host's own refusals, shown first in the refusal line.</param>
+    /// <param name="startTicks">The ticks the rows start with when they aren't your saved ones: a first import's suggestions (D11).</param>
     public void Load(
         Recipe recipe, RecipeState existing, IReadOnlyList<InstalledRecipe> installed,
         Func<IReadOnlyCollection<Guid>> accountIds, Func<string, string> ruleSentence,
         Func<CancellationToken, Task<CounterLookup>>? readNames, string readNamesLabel,
-        IReadOnlyList<string>? extraRefusals = null)
+        IReadOnlyList<string>? extraRefusals = null, IReadOnlyDictionary<string, StatChoice>? startTicks = null)
     {
         _recipe = recipe;
         _existing = existing;
@@ -66,7 +67,7 @@ public partial class StatsTable : UserControl
         Show(NamesLine, StatsTableModel.NamesLine(recipe, _counterNames.Count));
 
         StatsSearchBox.Text = "";
-        Rebuild(existing.StatChoices);
+        Rebuild(startTicks ?? existing.StatChoices);
     }
 
     /// <summary>Reads counter names once and rebuilds the rows, keeping every tick made so far.</summary>

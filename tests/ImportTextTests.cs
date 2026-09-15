@@ -44,6 +44,19 @@ public class ImportTextTests
     }
 
     [Fact]
+    public void TheImportScreenSaysWhichStatsStartTickedAndThatNothingIsSent()
+    {
+        var profile = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-profile.recipe.json")).Recipe!;
+        var clan = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+
+        Assert.Equal(
+            "The recipe suggests showing Diamonds, Eggs hatched, Player rank, Rebirths, Different pets hatched, Goals completed and Playtime, "
+            + "so they start ticked. Untick any you don't want. Nothing is sent to RoRoRo unless you tick Send.",
+            ImportText.SuggestedNote(profile));
+        Assert.Equal("", ImportText.SuggestedNote(clan));
+    }
+
+    [Fact]
     public void AGroupListKeepsNothing()
     {
         var parsed = RecipeParser.Parse(GroupList);

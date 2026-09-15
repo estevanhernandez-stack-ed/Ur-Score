@@ -1,5 +1,10 @@
 # Ur Score stats, games and icons: design
 
+> **Amended 2026-09-15 (default views, v0.3.1).** A recipe value may carry `"show": true`. On a first import only, it
+> starts that stat's Show box ticked, never Send, and the import screen says so; an update keeps §7.2. §2's "Nothing is
+> ticked by default" now reads "nothing is sent by default". The same release adds `count`, `format` and `section` to a
+> value. See `docs/plans/2026-09-15-default-views.md`, rulings D9 to D12.
+
 > An addendum to `2026-09-13-recipes-design.md`, the recipes design. Everything there still holds
 > except where a section below says it replaces something: §3.1's single `metricId`, §3.2's single
 > `value`, §6.2's import screen, §8's window and §13's build order.
