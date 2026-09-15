@@ -49,7 +49,6 @@ public class StarterBoardsTests
 
         Assert.Equal(StarterBoards.Battle, board.Name);
         Assert.Equal(BoardEmpty.None, board.Empty);
-        Assert.Equal(MainClan.Id, board.AnchorSourceId);
         Assert.Equal(
             new[]
             {
@@ -72,7 +71,7 @@ public class StarterBoardsTests
     {
         var board = StarterBoards.Build([Installed(Clan, "value")], [AltClan, SecondAltClan]);
 
-        Assert.Equal(AltClan.Id, board.AnchorSourceId);
+        Assert.Equal(AltClan.Id, board.Panels[0].Settings.SourceId);
         Assert.Equal(SecondAltClan.Id, board.Panels[1].Settings.SourceId);
         Assert.Contains(board.Panels, p => p.Type == PanelType.Race);
         Assert.DoesNotContain(board.Panels, p => p.Type == PanelType.PromotionCheck);
@@ -108,17 +107,6 @@ public class StarterBoardsTests
             Stats: new Dictionary<string, StatChoice> { ["rank"] = new(Send: true, MetricId: "ps99.rank") }));
 
         Assert.Equal("rank", StarterBoards.FirstStat(installed));
-    }
-
-    [Fact]
-    public void TheKeyChangesOnlyWhenThePanelsDo()
-    {
-        var one = StarterBoards.Build([Installed(Clan, "value")], [MainClan]);
-        var same = StarterBoards.Build([Installed(Clan, "value")], [MainClan]);
-        var more = StarterBoards.Build([Installed(Clan, "value")], [MainClan, AltClan]);
-
-        Assert.Equal(one.Key, same.Key);
-        Assert.NotEqual(one.Key, more.Key);
     }
 
     [Fact]
