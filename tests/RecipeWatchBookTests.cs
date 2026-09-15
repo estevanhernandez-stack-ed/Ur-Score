@@ -215,4 +215,29 @@ public class RecipeWatchBookTests
         Assert.False(snapshot.Recorded);
         Assert.Equal(RecipeWatch.NotRecordingNoText, snapshot.NotRecordingReason);
     }
+
+    [Fact]
+    public async Task FinalsComeFirstAndReadingsStopOnceTheBattleHasEnded()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero));
+        var book = new MemoryBook();
+        var reading = new RecipeReading(ReadingOutcome.Read, null, [EngineRow(111, 4200)],
+            [new HeadlineValue("Clan place", "14") { Id = "clan-place", Number = 14 }], "battle=B", 1)
+        {
+            Period = new ReadingPeriod("B", null, time.Now.AddMinutes(-10)),
+            Past =
+            [
+                new PastPeriodReading("A", [EngineRow(111, 300)], [new HeadlineValue("Clan place", "40") { Id = "clan-place", Number = 40 }], true),
+                new PastPeriodReading("B", [EngineRow(111, 4200)], [new HeadlineValue("Clan place", "14") { Id = "clan-place", Number = 14 }], true),
+            ],
+        };
+
+        var snapshot = await Watch(new StubEngine(() => reading), new StubHost(true, AltAccount), book, SourceOf(SourceRole.Mine),
+            finals: new FinalsIndex(), time: time).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { ("A", BookLine.TriggerBackfill), ("B", BookLine.TriggerEnded) }, book.Lines.Select(l => (l.Period!.Value, l.Trigger)).ToArray());
+        Assert.All(book.Lines, l => Assert.Equal(BookLine.KindFinal, l.Kind));
+        Assert.False(snapshot.Recorded);
+        Assert.Equal(RecipeWatch.NotRecordingEnded, snapshot.NotRecordingReason);
+    }
 }
