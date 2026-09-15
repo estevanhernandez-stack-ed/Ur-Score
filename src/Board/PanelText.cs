@@ -34,6 +34,32 @@ public static class PanelText
         _ => "watching",
     };
 
+    /// <summary>A source by its role: "★ CCGP", "K0i2", "NovaForge · watching".</summary>
+    public static string SourceLabel(string name, SourceRole role) => role switch
+    {
+        SourceRole.Main => $"★ {name}",
+        SourceRole.Watch => $"{name} · watching",
+        _ => name,
+    };
+
+    /// <summary>
+    /// A panel's title in its recipe's words: "Clan standing", "Battle race", "Past battles". Top names its
+    /// list recipe's period, else the first installed recipe's that has one: "Top of the battle".
+    /// </summary>
+    public static string Title(PanelType type, Recipe? recipe, IReadOnlyList<InstalledRecipe> installed) => type switch
+    {
+        PanelType.Standing => recipe is null ? "Standing" : $"{RecipeWords.Capital(RecipeWords.Group(recipe))} standing",
+        PanelType.Race => recipe is null ? "Race" : $"{RecipeWords.Capital(RecipeWords.Period(recipe))} race",
+        PanelType.MyAccounts => "My accounts",
+        PanelType.PromotionCheck => "Promotion check",
+        PanelType.AccountCard => "Account card",
+        PanelType.PastPeriods => recipe is null ? "Past periods" : $"Past {RecipeWords.Periods(recipe)}",
+        PanelType.Records => "Records",
+        PanelType.Top => $"Top of the {(TopPeriodRecipe(recipe, installed) is { } periodRecipe ? RecipeWords.Period(periodRecipe) : "list")}",
+        PanelType.ProfileStat => "Profile stat",
+        _ => "Live leaderboard",
+    };
+
     public static string Ago(DateTimeOffset? then, DateTimeOffset now) =>
         then is { } at ? $"{StatText.Span(now - at)} ago" : "never";
 
@@ -55,4 +81,7 @@ public static class PanelText
     }
 
     public static string StaleSource(string group) => $"This panel's {group} was removed.";
+
+    private static Recipe? TopPeriodRecipe(Recipe? list, IReadOnlyList<InstalledRecipe> installed) =>
+        list?.Period is not null ? list : installed.FirstOrDefault(i => i.Recipe.Period is not null && !i.Recipe.IsGroupList)?.Recipe;
 }

@@ -139,7 +139,7 @@ public static class PanelModels
     public static StandingModel Standing(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var recipe = live.FindRecipe(settings.Recipe)?.Recipe;
-        var title = recipe is null ? "Standing" : $"{RecipeWords.Capital(RecipeWords.Group(recipe))} standing";
+        var title = PanelText.Title(PanelType.Standing, recipe, live.Installed);
 
         if (recipe is null || live.FindSource(settings.SourceId) is not { } source)
         {
@@ -178,7 +178,7 @@ public static class PanelModels
     public static RaceModel Race(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var recipe = live.FindRecipe(settings.Recipe)?.Recipe;
-        var title = recipe is null ? "Race" : $"{RecipeWords.Capital(RecipeWords.Period(recipe))} race";
+        var title = PanelText.Title(PanelType.Race, recipe, live.Installed);
         var totalId = recipe is null ? null : TotalId(recipe);
         var sources = (settings.SourceIds ?? []).Select(live.FindSource).OfType<Source>().Take(MaxRace).ToList();
 
@@ -211,13 +211,7 @@ public static class PanelModels
                 points.Add(new ChartPoint(at, now));
             }
 
-            var name = live.SourceName(source);
-            var label = source.Role switch
-            {
-                SourceRole.Main => $"★ {name}",
-                SourceRole.Watch => $"{name} · watching",
-                _ => name,
-            };
+            var label = PanelText.SourceLabel(live.SourceName(source), source.Role);
 
             series.Add(new ChartSeries(label, points, i));
             legend.Add(new LegendItem($"{label} {(points.Count > 0 ? StatText.Abbrev(points[^1].Value) : Dash)}", i));
@@ -238,13 +232,13 @@ public static class PanelModels
 
     public static MyAccountsModel MyAccounts(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
-        const string Title = "My accounts";
-        if (live.FindRecipe(settings.Recipe) is not { } installed) return new MyAccountsModel(StaleSource(live, settings, Title), "", "", []);
+        var title = PanelText.Title(PanelType.MyAccounts, null, live.Installed);
+        if (live.FindRecipe(settings.Recipe) is not { } installed) return new MyAccountsModel(StaleSource(live, settings, title), "", "", []);
 
         var recipe = installed.Recipe;
         if (settings.Stat is null || RecipeStats.Find(recipe, settings.Stat) is not { } stat)
         {
-            return new MyAccountsModel(new PanelHead(Title, Stale: PanelText.StaleStat), "", "", []);
+            return new MyAccountsModel(new PanelHead(title, Stale: PanelText.StaleStat), "", "", []);
         }
 
         var group = RecipeWords.Group(recipe);
@@ -301,27 +295,27 @@ public static class PanelModels
         }
 
         return new MyAccountsModel(
-            new PanelHead(Title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: "● sent to RoRoRo"),
+            new PanelHead(title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: "● sent to RoRoRo"),
             stat.Label, $"In {group}", groups);
     }
 
     /// <summary>Where each account in one source would place among another source's live rows (spec §9.4, §14). Live only.</summary>
     public static PromotionModel PromotionCheck(LiveBoard live, PanelSettings settings)
     {
-        const string Title = "Promotion check";
+        var title = PanelText.Title(PanelType.PromotionCheck, null, live.Installed);
         var installed = live.FindRecipe(settings.Recipe);
         var from = live.FindSource(settings.SourceId);
         var to = live.FindSource(settings.ToSourceId);
 
-        if (installed is null || from is null || to is null) return new PromotionModel(StaleSource(live, settings, Title), "", Dash, "", []);
+        if (installed is null || from is null || to is null) return new PromotionModel(StaleSource(live, settings, title), "", Dash, "", []);
         if (settings.Stat is null || RecipeStats.Find(installed.Recipe, settings.Stat) is not { } stat)
         {
-            return new PromotionModel(new PanelHead(Title, Stale: PanelText.StaleStat), "", Dash, "", []);
+            return new PromotionModel(new PanelHead(title, Stale: PanelText.StaleStat), "", Dash, "", []);
         }
 
         var fromName = live.SourceName(from);
         var toName = live.SourceName(to);
-        var head = new PanelHead(Title, $"{fromName} → {toName}", Overdue: live.IsOverdue(from) || live.IsOverdue(to),
+        var head = new PanelHead(title, $"{fromName} → {toName}", Overdue: live.IsOverdue(from) || live.IsOverdue(to),
             Note: $"Where each account would place if it were in {toName} now. Live only; other members' numbers are never saved.");
         var lowestLabel = $"{toName}'s lowest now";
 
@@ -364,13 +358,13 @@ public static class PanelModels
 
     public static AccountCardModel AccountCard(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
-        const string Title = "Account card";
-        if (live.FindRecipe(settings.Recipe) is not { } installed) return EmptyCard(StaleSource(live, settings, Title));
+        var title = PanelText.Title(PanelType.AccountCard, null, live.Installed);
+        if (live.FindRecipe(settings.Recipe) is not { } installed) return EmptyCard(StaleSource(live, settings, title));
 
         var recipe = installed.Recipe;
         if (settings.Stat is null || RecipeStats.Find(recipe, settings.Stat) is not { } stat)
         {
-            return EmptyCard(new PanelHead(Title, Stale: PanelText.StaleStat));
+            return EmptyCard(new PanelHead(title, Stale: PanelText.StaleStat));
         }
 
         // Where each of your accounts was read; the first source wins, main first.
@@ -388,7 +382,7 @@ public static class PanelModels
             ? found.Where(f => f.Account.RobloxUserId == userId).ToList()
             : [.. found.OrderBy(f => ValueOf(f.Row, stat.Key) is null).ThenByDescending(f => ValueOf(f.Row, stat.Key) ?? 0)];
 
-        if (picked.Count == 0) return EmptyCard(new PanelHead(Title, Note: "No reading of your accounts yet."));
+        if (picked.Count == 0) return EmptyCard(new PanelHead(title, Note: "No reading of your accounts yet."));
 
         var (pickedAccount, pickedSource, pickedRow) = picked[0];
         var snapshot = live.SnapshotOf(pickedSource.Id)!;
@@ -432,7 +426,7 @@ public static class PanelModels
             : [];
 
         return new AccountCardModel(
-            new PanelHead(Title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}", Overdue: live.IsOverdue(pickedSource)),
+            new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}", Overdue: live.IsOverdue(pickedSource)),
             stat.Label, PanelText.Full(ValueOf(pickedRow, stat.Key)), numbers, line, facts,
             $"{pickedAccount.DisplayName}'s {stat.Label} over time");
     }
@@ -440,7 +434,7 @@ public static class PanelModels
     public static PastPeriodsModel PastPeriods(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var installed = live.FindRecipe(settings.Recipe);
-        var title = installed is null ? "Past periods" : $"Past {RecipeWords.Periods(installed.Recipe)}";
+        var title = PanelText.Title(PanelType.PastPeriods, installed?.Recipe, live.Installed);
         if (installed is null || live.FindSource(settings.SourceId) is not { } source)
         {
             return new PastPeriodsModel(StaleSource(live, settings, title), "", []);
@@ -494,13 +488,13 @@ public static class PanelModels
 
     public static RecordsModel RecordsPanel(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
-        const string Title = "Records";
-        if (live.FindRecipe(settings.Recipe) is not { } installed) return new RecordsModel(StaleSource(live, settings, Title), []);
+        var title = PanelText.Title(PanelType.Records, null, live.Installed);
+        if (live.FindRecipe(settings.Recipe) is not { } installed) return new RecordsModel(StaleSource(live, settings, title), []);
 
         var recipe = installed.Recipe;
         if (settings.Stat is null || RecipeStats.Find(recipe, settings.Stat) is not { } stat)
         {
-            return new RecordsModel(new PanelHead(Title, Stale: PanelText.StaleStat), []);
+            return new RecordsModel(new PanelHead(title, Stale: PanelText.StaleStat), []);
         }
 
         var all = (
@@ -531,18 +525,15 @@ public static class PanelModels
         facts.Add(new FactModel("Biggest day", Highest(r => r.BiggestDay, (a, _, v) => $"{a.DisplayName} · {PanelText.Signed(v)}")));
         facts.Add(new FactModel("Fastest 7 days", Highest(r => r.FastestWeek, (a, _, v) => $"{a.DisplayName} · {PanelText.Signed(v)}")));
 
-        return new RecordsModel(new PanelHead(Title, stat.Label), facts);
+        return new RecordsModel(new PanelHead(title, stat.Label), facts);
     }
 
     /// <summary>A group list's rows live, with your sources' groups placed where they'd rank. Live only.</summary>
     public static TopModel Top(LiveBoard live, PanelSettings settings)
     {
         var installed = live.FindRecipe(settings.Recipe);
-        var periodRecipe = installed?.Recipe.Period is not null
-            ? installed.Recipe
-            : live.Installed.FirstOrDefault(i => i.Recipe.Period is not null && !i.Recipe.IsGroupList)?.Recipe;
         var groupRecipe = live.Installed.FirstOrDefault(i => i.Recipe.Inputs.Count > 0 && !i.Recipe.IsGroupList)?.Recipe;
-        var title = $"Top of the {(periodRecipe is null ? "list" : RecipeWords.Period(periodRecipe))}";
+        var title = PanelText.Title(PanelType.Top, installed?.Recipe, live.Installed);
         var nameColumn = groupRecipe is null ? "Name" : RecipeWords.Capital(RecipeWords.Group(groupRecipe));
 
         if (installed is not { Recipe.IsGroupList: true } || live.FindSource(settings.SourceId) is not { } source)
@@ -608,18 +599,18 @@ public static class PanelModels
 
     public static ProfileStatModel ProfileStat(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
-        const string Title = "Profile stat";
-        if (live.FindRecipe(settings.Recipe) is not { } installed) return new ProfileStatModel(StaleSource(live, settings, Title), "", []);
+        var title = PanelText.Title(PanelType.ProfileStat, null, live.Installed);
+        if (live.FindRecipe(settings.Recipe) is not { } installed) return new ProfileStatModel(StaleSource(live, settings, title), "", []);
 
         var recipe = installed.Recipe;
         if (settings.Stat is null || RecipeStats.Find(recipe, settings.Stat) is not { } stat)
         {
-            return new ProfileStatModel(new PanelHead(Title, Stale: PanelText.StaleStat), "", []);
+            return new ProfileStatModel(new PanelHead(title, Stale: PanelText.StaleStat), "", []);
         }
 
         var source = live.FindSource(settings.SourceId)
                      ?? live.Sources.FirstOrDefault(s => s.Enabled && string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal));
-        if (source is null) return new ProfileStatModel(StaleSource(live, settings, Title), "", []);
+        if (source is null) return new ProfileStatModel(StaleSource(live, settings, title), "", []);
 
         var snapshot = live.SnapshotOf(source.Id);
         var now = live.Now;
@@ -645,21 +636,21 @@ public static class PanelModels
                 value is null)));
         }
 
-        return new ProfileStatModel(new PanelHead(Title, stat.Label, Overdue: live.IsOverdue(source)), stat.Label, MissingLast(rows));
+        return new ProfileStatModel(new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source)), stat.Label, MissingLast(rows));
     }
 
     /// <summary>Every row of a source live, your accounts marked (spec §9.4). Other members' names come from memory only.</summary>
     public static LeaderboardModel LiveLeaderboard(LiveBoard live, PanelSettings settings, IReadOnlyDictionary<long, string> names)
     {
-        const string Title = "Live leaderboard";
+        var title = PanelText.Title(PanelType.LiveLeaderboard, null, live.Installed);
         var installed = live.FindRecipe(settings.Recipe);
         if (installed is null || live.FindSource(settings.SourceId) is not { } source)
         {
-            return new LeaderboardModel(StaleSource(live, settings, Title), [], []);
+            return new LeaderboardModel(StaleSource(live, settings, title), [], []);
         }
 
         var shown = installed.State.ShownStats(installed.Recipe);
-        var head = new PanelHead(Title, live.SourceName(source), PanelText.Chip(source.Role), live.IsOverdue(source), Note: "Live only. Never saved.");
+        var head = new PanelHead(title, live.SourceName(source), PanelText.Chip(source.Role), live.IsOverdue(source), Note: "Live only. Never saved.");
         if (shown.Count == 0) return new LeaderboardModel(head with { Note = "Tick Show on a stat to fill this panel." }, [], []);
 
         IReadOnlyList<string> columns = [.. shown.Select(s => s.Label)];
