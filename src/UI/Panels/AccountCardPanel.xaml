@@ -10,13 +10,23 @@
                 <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" />
                 <ui:LineChart Height="48" Margin="0,6,0,0" Series="{Binding Line}" FromZero="False" ShowLabels="False"
                               AutomationProperties.Name="{Binding ChartName}" />
-                <ui:RowList ItemsSource="{Binding Numbers}" Margin="0,6,0,0">
+                <ui:RowList ItemsSource="{Binding Sections}" Margin="0,6,0,0" AutomationProperties.Name="This account's stats">
                     <ui:RowList.ItemTemplate>
                         <DataTemplate>
-                            <DockPanel Margin="0,3,0,0">
-                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
-                            </DockPanel>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Heading}" Style="{StaticResource ColumnHeader}" Margin="0,8,0,2"
+                                           Visibility="{Binding HasHeading, Converter={StaticResource BoolToVisible}}" />
+                                <ui:RowList ItemsSource="{Binding Facts}">
+                                    <ui:RowList.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,3,0,0">
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ui:RowList.ItemTemplate>
+                                </ui:RowList>
+                            </StackPanel>
                         </DataTemplate>
                     </ui:RowList.ItemTemplate>
                 </ui:RowList>

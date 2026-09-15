@@ -39,6 +39,26 @@ public class PanelTextTests
     }
 
     [Fact]
+    public void DurationsAndDatesReadAsTimeNotRawNumbers()
+    {
+        var utc = TimeZoneInfo.Utc;
+
+        Assert.Equal("586d 5h", PanelText.Value(50_651_629, StatFormat.Duration, utc));
+        Assert.Equal("5h 12m", PanelText.Value(18_720, StatFormat.Duration, utc));
+        Assert.Equal("12m", PanelText.Value(720, StatFormat.Duration, utc));
+        Assert.Equal("13 Sep 2020", PanelText.Value(1_600_000_000, StatFormat.Date, utc));
+        Assert.Equal("14,020,550", PanelText.Value(14_020_550, StatFormat.Number, utc));
+        Assert.Equal(StatText.Dash, PanelText.Value(null, StatFormat.Duration, utc));
+        Assert.Equal(StatText.Dash, PanelText.Value(-5, StatFormat.Date, utc));
+
+        Assert.Equal("+2h 0m", PanelText.Change(7_200, StatFormat.Duration));
+        Assert.Equal("-12m", PanelText.Change(-720, StatFormat.Duration));
+        Assert.Equal(StatText.Dash, PanelText.Change(86_400, StatFormat.Date));
+        Assert.Equal(PanelText.Signed(220_000), PanelText.Change(220_000, StatFormat.Number));
+        Assert.Equal(StatText.Dash, PanelText.Change(null, StatFormat.Duration));
+    }
+
+    [Fact]
     public void RolesHaveChips()
     {
         Assert.Equal("★ main", PanelText.Chip(SourceRole.Main));

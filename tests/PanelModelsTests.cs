@@ -266,6 +266,64 @@ public class PanelModelsTests
         Assert.Equal(series.Count, Assert.Single(model.Line).Points.Count);
     }
 
+    [Fact]
+    public void TheAccountCardShowsThePickedAccountInTheRecipesSections()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id,
+        [
+            new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 215_850_364, ["rebirths"] = 9, ["playtime"] = 50_651_629, ["first-join"] = 1_600_000_000 }),
+            new RecipeRow(AltOne.RobloxUserId, new Dictionary<string, double> { ["diamonds"] = 3_957_873_882, ["rebirths"] = 11, ["playtime"] = 3_600 }),
+        ]) with
+        {
+            Unavailable = new Dictionary<long, string> { [AltTwo.RobloxUserId] = "Profile is private." },
+        };
+        var live = Live([profile], [Installed(Profile, "diamonds", "rebirths", "playtime", "first-join")], Snaps(snapshot));
+        var settings = new PanelSettings(Profile.Slug, Stat: "diamonds");
+
+        var top = PanelModels.AccountCard(live, Reader(), settings);
+        var picked = PanelModels.AccountCard(live, Reader(), settings, pickedUserId: Main.RobloxUserId);
+        var pinned = PanelModels.AccountCard(live, Reader(), settings with { UserId = AltOne.RobloxUserId }, pickedUserId: Main.RobloxUserId);
+        var unread = PanelModels.AccountCard(live, Reader(), settings, pickedUserId: AltTwo.RobloxUserId);
+        var gone = PanelModels.AccountCard(live, Reader(), settings, pickedUserId: 999);
+
+        // With nothing picked, the top account; a pick shows that account; a card pinned to an account stays on it.
+        Assert.StartsWith(AltOne.DisplayName, top.Head.Subtitle);
+        Assert.StartsWith(Main.DisplayName, picked.Head.Subtitle);
+        Assert.StartsWith(AltOne.DisplayName, pinned.Head.Subtitle);
+        Assert.StartsWith(AltOne.DisplayName, gone.Head.Subtitle);
+
+        // The big number is the card's stat; the other shown stats sit in the recipe's sections, in its order, read as time.
+        Assert.Equal("215,850,364", picked.Big);
+        Assert.Equal(new[] { "Account", "Progression" }, picked.Sections.Select(s => s.Heading).ToArray());
+        Assert.Equal(new[] { new FactModel("Playtime", "586d 5h"), new FactModel("First joined", "13 Sep 2020") }, picked.Sections[0].Facts);
+        Assert.Equal(new[] { new FactModel("Rebirths", "9") }, picked.Sections[1].Facts);
+
+        // A picked account the read couldn't reach says why, in the recipe's words.
+        Assert.Equal(AltTwo.DisplayName, unread.Head.Subtitle);
+        Assert.Equal("Profile is private.", unread.Head.Note);
+        Assert.Empty(unread.Sections);
+    }
+
+    [Fact]
+    public void TheAccountCardsHighestAndBiggestDayFactsReadAsTime()
+    {
+        // Controller ruling: besides the sections, the card's own value facts (Highest, Biggest day) read
+        // through the stat's format too, and a duration's gain reads as a duration ("+3h 20m"), not seconds.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id, [Row(AltOne.RobloxUserId, 22_000, "playtime")]);
+        var reader = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "playtime", (AltOne.RobloxUserId, 10_000)),
+            Read(profile, Now.AddHours(-2), null, null, "playtime", (AltOne.RobloxUserId, 22_000)));
+        var live = Live([profile], [Installed(Profile, "playtime")], Snaps(snapshot));
+
+        var model = PanelModels.AccountCard(live, reader, new PanelSettings(Profile.Slug, Stat: "playtime"));
+
+        Assert.Equal(PanelText.Duration(22_000), model.Big);
+        Assert.Equal(new FactModel("Highest", PanelText.Duration(22_000)), model.Facts[0]);
+        Assert.Equal(new FactModel("Biggest day", "+3h 20m"), model.Facts[1]);
+    }
+
     // ---- Past periods ----
 
     [Fact]
@@ -327,6 +385,36 @@ public class PanelModelsTests
 
         Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · -1.5K"), model.Facts[1]);
         Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · -1.5K"), model.Facts[2]);
+    }
+
+    [Fact]
+    public void RecordsReadDurationsAndOmitAMeaninglessGainForADate()
+    {
+        // Controller ruling: RecordsPanel's values read through the stat's format too. A duration's own
+        // reading and its gains both read as a duration; a date's gain is meaningless, so it's a dash.
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+
+        var durationReader = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "playtime", (201, 10_000)),
+            Read(profile, Now.AddHours(-2), null, null, "playtime", (201, 22_000)));
+        var durationLive = Live([profile], [Installed(Profile, "playtime")], Snaps());
+
+        var durations = PanelModels.RecordsPanel(durationLive, durationReader, new PanelSettings(Profile.Slug, Stat: "playtime"));
+
+        Assert.Equal(new FactModel("Highest", $"{AltOne.DisplayName} · {PanelText.Duration(22_000)}"), durations.Facts[0]);
+        Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · +3h 20m"), durations.Facts[1]);
+        Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · +3h 20m"), durations.Facts[2]);
+
+        var dateReader = Reader(
+            Read(profile, Now.AddHours(-3), null, null, "first-join", (201, 1_600_000_000)),
+            Read(profile, Now.AddHours(-2), null, null, "first-join", (201, 1_600_003_600)));
+        var dateLive = Live([profile], [Installed(Profile, "first-join")], Snaps());
+
+        var dates = PanelModels.RecordsPanel(dateLive, dateReader, new PanelSettings(Profile.Slug, Stat: "first-join"));
+
+        Assert.Equal(new FactModel("Highest", $"{AltOne.DisplayName} · {PanelText.Value(1_600_003_600, StatFormat.Date, TimeZoneInfo.Utc)}"), dates.Facts[0]);
+        Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · {StatText.Dash}"), dates.Facts[1]);
+        Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · {StatText.Dash}"), dates.Facts[2]);
     }
 
     // ---- Top ----
@@ -404,6 +492,22 @@ public class PanelModelsTests
         Assert.Equal("Profile is private.", model.Rows[2].Note);
         Assert.True(model.Rows[3].Missing);
         Assert.Equal(StatText.Dash, model.Rows[3].Value);
+    }
+
+    [Fact]
+    public void AProfileStatOfPlaytimeReadsAsADuration()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id, [Row(Main.RobloxUserId, 50_651_629, "playtime")]);
+        var reader = Reader(
+            Read(profile, Now.AddDays(-8), null, null, "playtime", (Main.RobloxUserId, 50_644_429)),
+            Read(profile, Now.AddMinutes(-5), null, null, "playtime", (Main.RobloxUserId, 50_651_629)));
+        var live = Live([profile], [Installed(Profile, "playtime")], Snaps(snapshot));
+
+        var row = PanelModels.ProfileStat(live, reader, new PanelSettings(Profile.Slug, SourceId: profile.Id, Stat: "playtime")).Rows[0];
+
+        Assert.Equal("586d 5h", row.Value);
+        Assert.Equal("+2h 0m", row.Today);
     }
 
     [Fact]
