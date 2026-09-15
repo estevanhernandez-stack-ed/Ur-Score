@@ -61,6 +61,9 @@ public interface ISetupServices
     /// <summary>"host=1.28.0.0 reject=(none)", for diagnostics.</summary>
     string HostText { get; }
 
+    /// <summary>The metric rules file Setup › Alerts reads and writes: RoRoRo's, unless a walk names a scratch copy (plan A1).</summary>
+    string RulesPath { get; }
+
     /// <summary>The newest trail lines, redacted, oldest first.</summary>
     IReadOnlyList<string> Trail { get; }
 

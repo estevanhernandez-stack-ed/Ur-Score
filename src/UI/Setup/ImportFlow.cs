@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
 using Microsoft.Win32;
 
@@ -94,10 +95,11 @@ public static class ImportFlow
                 status?.Invoke("");
             }
 
+            var rules = RulesFile.Read(services.RulesPath);
             var window = new ImportWindow(
                 recipe, review, comparison, installed?.State, services.Installed,
                 () => [.. services.KnownAccounts.Select(a => a.AccountId)],
-                metricId => AlertsModel.RuleSentence(metricId).Text,
+                metricId => AlertCards.StatLine(rules, metricId),
                 recipe.LastStep.Counters is null ? null : () => services.ReadCounterNamesAsync(recipe, CancellationToken.None))
             {
                 Owner = owner,

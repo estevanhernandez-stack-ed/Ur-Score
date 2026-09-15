@@ -2,31 +2,124 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <UserControl.Resources>
+        <!-- A word of an editable sentence, lined up with the boxes beside it. -->
+        <Style x:Key="SentenceText" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+        </Style>
+
+        <!-- One alert (plan A5, A6): its sentence, whose it is when it isn't Ur Score's own, and Change and Remove on the one Ur Score manages. -->
+        <DataTemplate x:Key="AlertLineTemplate">
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" AutomationProperties.AutomationId="AlertSentence" Text="{Binding Sentence}"
+                           TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Border Grid.Column="1" BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1" CornerRadius="9"
+                        Padding="7,1" Margin="10,0,0,0" VerticalAlignment="Center"
+                        Visibility="{Binding HasMark, Converter={StaticResource BoolToVisible}}">
+                    <TextBlock AutomationProperties.AutomationId="AlertMark" Text="{Binding Mark}" FontFamily="{StaticResource MonoFont}"
+                               FontSize="10.5" Foreground="{DynamicResource MutedTextBrush}" />
+                </Border>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <Button Content="Change" Tag="{Binding Target}" Click="OnChangeClick" Margin="0,0,8,0"
+                            Visibility="{Binding ShowChange, Converter={StaticResource BoolToVisible}}"
+                            AutomationProperties.Name="{Binding ChangeName}" />
+                    <Button Content="Remove" Tag="{Binding Target}" Click="OnRemoveClick"
+                            Visibility="{Binding ShowRemove, Converter={StaticResource BoolToVisible}}"
+                            AutomationProperties.Name="{Binding RemoveName}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <!-- One sent stat's card: its alerts, + Add an alert, the kind choice, the sentence to fill in, and what happened. -->
+        <DataTemplate x:Key="AlertCardTemplate">
+            <Border Style="{StaticResource Card}" Padding="12,10" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock AutomationProperties.AutomationId="AlertCardTitle" Text="{Binding Title}" FontWeight="SemiBold"
+                               FontSize="14" Margin="0,0,0,6" />
+                    <TextBlock AutomationProperties.AutomationId="AlertCardNote" Text="{Binding Note}" Style="{StaticResource Muted}"
+                               Margin="0,0,0,6" Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}" />
+                    <ui:RowList ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource AlertLineTemplate}"
+                                AutomationProperties.Name="{Binding LinesName}" />
+                    <TextBlock AutomationProperties.AutomationId="AlertNoAlertsLine" Text="{Binding NoAlerts}" Style="{StaticResource Muted}"
+                               Margin="0,0,0,6" Visibility="{Binding HasNoAlerts, Converter={StaticResource BoolToVisible}}" />
+
+                    <!-- Which kind? -->
+                    <WrapPanel Margin="0,4,0,0" Visibility="{Binding ShowKinds, Converter={StaticResource BoolToVisible}}">
+                        <TextBlock Text="Which kind of alert?" Style="{StaticResource SentenceText}" Margin="0,0,10,6" />
+                        <Button Content="Stops climbing" Tag="{Binding RateTarget}" Click="OnKindClick" Margin="0,0,8,6"
+                                Visibility="{Binding ShowRateKind, Converter={StaticResource BoolToVisible}}"
+                                AutomationProperties.Name="{Binding RateKindName}" />
+                        <Button Content="Crosses a number" Tag="{Binding LevelTarget}" Click="OnKindClick" Margin="0,0,8,6"
+                                Visibility="{Binding ShowLevelKind, Converter={StaticResource BoolToVisible}}"
+                                AutomationProperties.Name="{Binding LevelKindName}" />
+                        <Button Content="Cancel" Click="OnCancelClick" Margin="0,0,0,6" AutomationProperties.Name="{Binding CancelName}" />
+                    </WrapPanel>
+
+                    <!-- Stops climbing, in words: the number and the minutes are the parts you fill in. -->
+                    <WrapPanel Margin="0,4,0,0" Visibility="{Binding ShowRateEditor, Converter={StaticResource BoolToVisible}}">
+                        <TextBlock Text="Alert me when an account's" Style="{StaticResource SentenceText}" />
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Style="{StaticResource SentenceText}" />
+                        <TextBlock Text="gains fewer than" Style="{StaticResource SentenceText}" />
+                        <TextBox Text="{Binding Draft.Number, UpdateSourceTrigger=PropertyChanged}" Width="110" Margin="0,0,6,6"
+                                 KeyDown="OnEditorKeyDown" AutomationProperties.Name="{Binding NumberName}" />
+                        <TextBlock Text="a minute for" Style="{StaticResource SentenceText}" />
+                        <ComboBox ItemsSource="{Binding MinuteChoices}" SelectedItem="{Binding Draft.Minutes, Mode=OneWay}" Width="72"
+                                  Margin="0,0,6,6" SelectionChanged="OnMinutesChanged" KeyDown="OnEditorKeyDown"
+                                  AutomationProperties.Name="{Binding MinutesName}" />
+                        <TextBlock Text="minutes." Style="{StaticResource SentenceText}" />
+                    </WrapPanel>
+
+                    <!-- Crosses a number, in words: above or below, and the number. -->
+                    <WrapPanel Margin="0,4,0,0" Visibility="{Binding ShowLevelEditor, Converter={StaticResource BoolToVisible}}">
+                        <TextBlock Text="Alert me when an account's" Style="{StaticResource SentenceText}" />
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Style="{StaticResource SentenceText}" />
+                        <TextBlock Text="goes" Style="{StaticResource SentenceText}" />
+                        <ComboBox ItemsSource="{Binding DirectionChoices}" SelectedItem="{Binding Draft.Direction, Mode=OneWay}" Width="90"
+                                  Margin="0,0,6,6" SelectionChanged="OnDirectionChanged" KeyDown="OnEditorKeyDown"
+                                  AutomationProperties.Name="{Binding DirectionName}" />
+                        <TextBox Text="{Binding Draft.Number, UpdateSourceTrigger=PropertyChanged}" Width="110" Margin="0,0,2,6"
+                                 KeyDown="OnEditorKeyDown" AutomationProperties.Name="{Binding NumberName}" />
+                        <TextBlock Text="." Style="{StaticResource SentenceText}" />
+                    </WrapPanel>
+
+                    <TextBlock AutomationProperties.AutomationId="AlertEditorProblemLine" Text="{Binding Problem}" Style="{StaticResource Refusal}"
+                               Margin="0,0,0,6" Visibility="{Binding HasProblem, Converter={StaticResource BoolToVisible}}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0" Visibility="{Binding ShowEditor, Converter={StaticResource BoolToVisible}}">
+                        <Button Content="{Binding ConfirmText}" Style="{StaticResource PrimaryButton}" Click="OnConfirmClick" Margin="0,0,8,0"
+                                AutomationProperties.Name="{Binding ConfirmName}" />
+                        <Button Content="Cancel" Click="OnCancelClick" AutomationProperties.Name="{Binding CancelName}" />
+                    </StackPanel>
+
+                    <Button Content="+ Add an alert" Tag="{Binding MetricId}" Click="OnAddClick" HorizontalAlignment="Left" Margin="0,6,0,0"
+                            Visibility="{Binding ShowAdd, Converter={StaticResource BoolToVisible}}" AutomationProperties.Name="{Binding AddName}" />
+
+                    <TextBlock AutomationProperties.AutomationId="AlertResultLine" Text="{Binding Result}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Visibility="{Binding ShowResult, Converter={StaticResource BoolToVisible}}" />
+                    <TextBlock AutomationProperties.AutomationId="AlertResultProblemLine" Text="{Binding Result}" Style="{StaticResource Refusal}"
+                               Margin="0,8,0,0" Visibility="{Binding ShowResultProblem, Converter={StaticResource BoolToVisible}}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <StackPanel MaxWidth="820" HorizontalAlignment="Left">
         <TextBlock Text="Alerts" Style="{StaticResource Heading}" />
         <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,14"
-                   Text="RoRoRo does the judging. Ur Score hands it the stats you send, and can add a starting rule for one." />
+                   Text="RoRoRo does the judging. Every stat you send gets a card here: turn on the alerts you want, in your own words." />
 
-        <!-- The rule in RoRoRo, for one sent stat at a time, and the click that adds it. -->
-        <Border Style="{StaticResource Card}" Padding="12,10" Margin="0,0,0,12">
-            <StackPanel>
-                <TextBlock Text="ALERT RULE" Style="{StaticResource SectionLabel}" />
-                <TextBlock Style="{StaticResource Muted}" FontStyle="Italic" Margin="0,0,0,6"
-                           Text="{x:Static ui:AlertsModel.MetricAlertsOff}" />
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                    <TextBlock Text="Rule for" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <ComboBox x:Name="RuleStatBox" MinWidth="280" DisplayMemberPath="Text"
-                              SelectionChanged="OnRuleStatChanged" AutomationProperties.Name="Rule for" />
-                </StackPanel>
-                <TextBlock x:Name="RuleLine" TextWrapping="Wrap" />
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                    <Button x:Name="AddRuleButton" Content="Add this rule to RoRoRo"
-                            Click="OnAddRuleClick" AutomationProperties.Name="Add this rule to RoRoRo" />
-                    <TextBlock x:Name="RulePreview" Margin="12,0,0,0" FontFamily="{StaticResource MonoFont}"
-                               Style="{StaticResource Muted}" VerticalAlignment="Center" />
-                </StackPanel>
-            </StackPanel>
-        </Border>
+        <TextBlock Text="YOUR ALERTS" Style="{StaticResource SectionLabel}" />
+        <ui:RowList x:Name="AlertCardList" ItemTemplate="{StaticResource AlertCardTemplate}"
+                    AutomationProperties.Name="Your sent stats and their alerts" />
+        <TextBlock x:Name="AlertsEmptyLine" Style="{StaticResource Muted}" Margin="0,0,0,12" Visibility="Collapsed" />
+        <TextBlock x:Name="AlertsResultLine" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed" />
+        <TextBlock x:Name="AlertsNextLine" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,0,18" Visibility="Collapsed"
+                   Text="{x:Static ui:AlertCards.NextInRoRoRo}" />
 
         <!-- The report policy, in the words ReportPolicy.Describe itself composes (F6), one card line per recipe. -->
         <Border Style="{StaticResource Card}" Padding="12,10">

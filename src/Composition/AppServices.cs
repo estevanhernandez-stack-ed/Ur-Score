@@ -92,6 +92,12 @@ public sealed class AppServices : ISetupServices, IDisposable
         Store = new RecipeStore(RecipeStore.DefaultDirectory);
         Settings = Settings.Load();
 
+        // A walk's scratch rules file is never silent: Diagnostics' trail says which file alerts use.
+        if (!string.Equals(RulesPath, RulesFile.DefaultPath, StringComparison.OrdinalIgnoreCase))
+        {
+            AddTrail($"RULES: alerts use the file {RulesFile.PathVariable} names, not RoRoRo's.");
+        }
+
         // No raw responses kept: a response body holds every row the source returned, other players' ids and values
         // included, and other players never reach disk.
         DeleteOldRawResponses();
@@ -153,6 +159,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     public string? BudgetWarning { get; private set; }
 
     public string HostText => $"host={_host.HostVersion ?? "(not connected)"} reject={_host.RejectReason ?? "(none)"}";
+
+    /// <summary>RoRoRo's rules file, or the full path <c>UR_SCORE_RULES_FILE</c> names: the Setup › Alerts walk's scratch copy (plan A1).</summary>
+    public string RulesPath { get; } = RulesFile.ResolvePath(Environment.GetEnvironmentVariable(RulesFile.PathVariable));
 
     public IReadOnlyList<string> Trail
     {

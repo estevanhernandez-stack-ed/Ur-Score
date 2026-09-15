@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
@@ -78,10 +79,11 @@ public partial class StatsPage : UserControl, ISetupPage
         if (Current is not { } installed) return;
 
         var recipe = installed.Recipe;
+        var rules = RulesFile.Read(_services.RulesPath);
         StatsTable.Load(
             recipe, installed.State, _services.Installed,
             () => [.. _services.KnownAccounts.Select(a => a.AccountId)],
-            metricId => AlertsModel.RuleSentence(metricId).Text,
+            metricId => AlertCards.StatLine(rules, metricId),
             recipe.LastStep.Counters is null ? null : ct => _services.ReadCounterNamesAsync(recipe, ct),
             "Read stat names again");
 
