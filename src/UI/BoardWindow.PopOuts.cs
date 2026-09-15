@@ -1,7 +1,9 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
 
@@ -50,10 +52,10 @@ public partial class BoardWindow
         if (e.Tool != PanelTool.PopOut || Editing || PanelAt(e.OriginalSource) is not { } def || def.PopOut is not null) return;
 
         e.Handled = true;
-        var screen = VirtualScreen();
+        var areas = WorkAreas();
         var rect = _lastPopOut.TryGetValue(def.Id, out var last)
-            ? PopOutPlacement.Clamp(last, screen)
-            : PopOutPlacement.Default(BoardRect(), _popOuts.Count, screen);
+            ? PopOutPlacement.Clamp(last, areas)
+            : PopOutPlacement.Default(BoardRect(), _popOuts.Count, areas);
 
         ChangeBoard(board => BoardEdits.PopOut(board, def.Id, rect));
         Render();
@@ -82,17 +84,23 @@ public partial class BoardWindow
             window.Close();
         }
 
-        var screen = VirtualScreen();
+        // A pop-out's panel keeps the id its slot has now, as panels of its type come and go around it; while editing
+        // that is the draft's numbering, as the slot's is.
+        var shown = _draft is { } draft ? BoardEdits.Replace(boards, draft) : boards;
+        foreach (var (id, window) in _popOuts) AutomationProperties.SetAutomationId(window.View, AutomationIdIn(shown, id));
+
+        IReadOnlyList<PopOutRect>? areas = null;
         var live = _services.CurrentBoard();
         foreach (var (id, def) in wanted)
         {
             if (_popOuts.ContainsKey(id) || def.PopOut is not { } rect) continue;
 
             var view = PanelViews.Create(def.Type);
-            AutomationProperties.SetAutomationId(view, AutomationIdIn(boards, id));
+            AutomationProperties.SetAutomationId(view, AutomationIdIn(shown, id));
 
             // Drawn with the board's panels, straight after this (RenderPopOuts).
-            var window = new PanelPopOutWindow(id, view, PopOutPlacement.Clamp(rect, screen));
+            areas ??= WorkAreas();
+            var window = new PanelPopOutWindow(id, view, PopOutPlacement.Clamp(rect, areas));
             window.ShowTitle(PanelGallery.Title(def.Type, live));
             window.Moved += OnPopOutMoved;
             window.Closed += OnPopOutClosed;
@@ -206,6 +214,70 @@ public partial class BoardWindow
     private static PopOutRect VirtualScreen() => new(
         SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
         SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+
+    /// <summary>
+    /// Every monitor's work area, the main one first, in device-independent pixels at the board's DPI (R18: a pop-out
+    /// must land on a screen, not in a gap between screens of different sizes). Should Windows not say, the whole
+    /// virtual screen stands in, and the trail says why.
+    /// </summary>
+    private IReadOnlyList<PopOutRect> WorkAreas()
+    {
+        var areas = new List<PopOutRect>();
+        try
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (monitor, _, _, _) =>
+            {
+                var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+                if (!GetMonitorInfo(monitor, ref info)) return true;
+
+                var work = info.Work;
+                var area = new PopOutRect(
+                    work.Left / dpi.DpiScaleX, work.Top / dpi.DpiScaleY,
+                    (work.Right - work.Left) / dpi.DpiScaleX, (work.Bottom - work.Top) / dpi.DpiScaleY);
+                if ((info.Flags & MonitorInfoPrimary) != 0) areas.Insert(0, area);
+                else areas.Add(area);
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch (Exception ex)
+        {
+            _services.AddTrail($"SCREENS NOT LISTED: {ex.GetType().Name}; using the whole virtual screen.");
+            areas.Clear();
+        }
+
+        return areas.Count > 0 ? areas : [VirtualScreen()];
+    }
+
+    private const int MonitorInfoPrimary = 1;
+
+    private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr hdc, IntPtr clip, IntPtr data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int Size;
+        public NativeRect Monitor;
+        public NativeRect Work;
+        public int Flags;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
+
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
     /// <summary>Where the board is on screen. Maximized, Left and Top are where it goes back to, so its corner comes from its content.</summary>
     private PopOutRect BoardRect()
