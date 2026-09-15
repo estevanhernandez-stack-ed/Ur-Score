@@ -23,6 +23,27 @@ public static class BoardEdits
     public static bool Changed(BoardDef before, BoardDef after) =>
         BoardDefs.Key(before) != BoardDefs.Key(after) || before.Name != after.Name;
 
+    /// <summary>
+    /// Done in edit mode: the boards with the draft in its board's place, when the draft is drawn differently from
+    /// the board as editing began. Compared with that, not with the boards now, so an untouched draft writes nothing
+    /// even when the following starter was rebuilt meanwhile (R1). Nothing to write, or no board to replace, returns
+    /// <paramref name="boards"/> itself.
+    /// </summary>
+    public static IReadOnlyList<BoardDef> Finish(IReadOnlyList<BoardDef> boards, BoardDef atEdit, BoardDef draft) =>
+        Changed(atEdit, draft) ? Replace(boards, draft) : boards;
+
+    /// <summary>After a panel is removed in edit mode, whose tool takes keyboard focus (R7): the next panel's, else the previous one's, else none.</summary>
+    public static string? FocusAfterRemove(BoardDef board, string panelId)
+    {
+        var index = PanelIndex(board, panelId);
+        if (index < 0) return null;
+
+        return index + 1 < board.Panels.Count ? board.Panels[index + 1].Id : index > 0 ? board.Panels[index - 1].Id : null;
+    }
+
+    /// <summary>Which tool a resize came from, so focus goes back to it: Tall keeps the span and flips Tall; the size box picks a span.</summary>
+    public static bool IsTallTick(PanelSize before, PanelSize after) => before.Span == after.Span && before.Tall != after.Tall;
+
     public static IReadOnlyList<BoardDef> Add(IReadOnlyList<BoardDef> boards, BoardDef board) => [.. boards, board];
 
     public static IReadOnlyList<BoardDef> Replace(IReadOnlyList<BoardDef> boards, BoardDef board) =>

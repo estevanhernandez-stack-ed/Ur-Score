@@ -54,7 +54,10 @@ public static class BoardText
     public static string DetailLine(LiveBoard live, string? budgetWarning, string? boardsProblem) =>
         boardsProblem ?? DetailLine(live, budgetWarning);
 
-    /// <summary>A board change that couldn't be written, in plain words. No stack; an unknown IO reason is Windows' own sentence.</summary>
+    /// <summary>
+    /// A board change that couldn't be written, in plain words. No stack; an unknown IO reason is Windows' own
+    /// sentence. Anything that isn't IO says only that it was unexpected: its message was never meant for you.
+    /// </summary>
     public static string BoardsNotSaved(Exception ex)
     {
         const string NotSaved = "Your change to the boards wasn't saved: ";
@@ -66,7 +69,8 @@ public static class BoardText
             UnauthorizedAccessException => NotSaved + "Windows didn't let Ur Score write to its data folder.",
             IOException { HResult: SharingViolation or LockViolation } => NotSaved + "another program has your boards file open. Close it, then try again.",
             IOException { HResult: DiskFull or HandleDiskFull } => NotSaved + "the disk is full.",
-            _ => NotSaved + ex.Message,
+            IOException => NotSaved + ex.Message,
+            _ => NotSaved + "something unexpected went wrong.",
         };
     }
 
@@ -87,7 +91,8 @@ public static class BoardText
         : board.Panels.Count == 0 ? BoardEmpty.NoPanels
         : BoardEmpty.None;
 
-    public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe)
+    /// <param name="editing">In edit mode an empty board is told to press Done, not Edit board, which is where you are.</param>
+    public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe, bool editing = false)
     {
         var group = recipe is null ? "source" : RecipeWords.Group(recipe);
         return empty switch
@@ -102,7 +107,7 @@ public static class BoardText
                 "Type a few letters of its name in Setup, and Ur Score finds which of your accounts are in it.",
                 $"Choose your main {group}"),
             BoardEmpty.NoPanels => ("This board has no panels yet",
-                "Add panels from the gallery, then arrange them with Edit board.",
+                editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Edit board.",
                 "Add panel"),
             _ => ("", "", ""),
         };

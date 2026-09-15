@@ -47,6 +47,9 @@ public partial class BoardWindow
         _draft = _draftBase = ShownBoard(_services.Boards);
         ShowEditMode();
         Render();
+
+        // Edit board has just hidden itself; focus goes to what replaced it.
+        FocusLater(DoneButton);
     }
 
     private void OnAddPanelClick(object sender, RoutedEventArgs e)
@@ -54,24 +57,26 @@ public partial class BoardWindow
         if (Editing) AddPanelFromGallery();
     }
 
-    private void OnDoneClick(object sender, RoutedEventArgs e) => FinishEditing();
+    private void OnDoneClick(object sender, RoutedEventArgs e)
+    {
+        FinishEditing();
+
+        // Done has hidden itself, unless the save failed and edit mode stays.
+        if (!Editing) FocusLater(EditBoardButton);
+    }
 
     /// <summary>
-    /// Done: a draft that changed replaces its board and is saved through <see cref="SaveBoards"/>. A draft that
-    /// didn't writes nothing. A save that fails stays in edit mode, so the arrangement isn't lost.
+    /// Done: a draft drawn differently from the board as editing began replaces its board and is saved through
+    /// <see cref="SaveBoards"/> (<see cref="BoardEdits.Finish"/>). One that isn't writes nothing. A save that fails
+    /// stays in edit mode, so the arrangement isn't lost.
     /// </summary>
     private void FinishEditing()
     {
         if (_draft is not { } draft) return;
 
-        if (_draftBase is not { } before || BoardEdits.Changed(before, draft))
-        {
-            var boards = _services.Boards;
-            var replaced = BoardEdits.Replace(boards, draft);
-
-            // A board that is no longer there has nothing to replace (tabs are off while editing, so this is a guard).
-            if (!ReferenceEquals(replaced, boards) && !SaveBoards(replaced)) return;
-        }
+        var boards = _services.Boards;
+        var finished = _draftBase is { } atEdit ? BoardEdits.Finish(boards, atEdit, draft) : BoardEdits.Replace(boards, draft);
+        if (!ReferenceEquals(finished, boards) && !SaveBoards(finished)) return;
 
         _draft = _draftBase = null;
         ShowEditMode();
@@ -95,23 +100,39 @@ public partial class BoardWindow
     {
         if (!Editing || PanelAt(e.OriginalSource) is not { } def) return;
 
+        // Every tool but the drag rebuilds the grid, destroying the control that was pressed; focus goes back to the
+        // same tool on the redrawn panel (R7), so a keyboard user can press it again.
         switch (e.Tool)
         {
             case PanelTool.MoveEarlier:
                 e.Handled = true;
                 ChangeBoard(board => BoardEdits.MoveBy(board, def.Id, -1));
+                FocusToolLater(def.Id, PanelTool.MoveEarlier);
                 break;
             case PanelTool.MoveLater:
                 e.Handled = true;
                 ChangeBoard(board => BoardEdits.MoveBy(board, def.Id, 1));
+                FocusToolLater(def.Id, PanelTool.MoveLater);
                 break;
             case PanelTool.Resize when e.Size is { } size:
                 e.Handled = true;
-                ChangeBoard(board => BoardEdits.Resize(board, def.Id, size));
+                var tall = BoardEdits.IsTallTick(def.Size, size);
+
+                // After the size box's SelectionChanged (or Tall's Checked) returns, as the drop waits for its drag:
+                // the redraw tears that control down.
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (!Editing) return;
+
+                    ChangeBoard(board => BoardEdits.Resize(board, def.Id, size));
+                    FocusToolLater(def.Id, PanelTool.Resize, tall);
+                }, DispatcherPriority.Background);
                 break;
             case PanelTool.Remove:
                 e.Handled = true;
+                var next = _draft is { } shown ? BoardEdits.FocusAfterRemove(shown, def.Id) : null;
                 ChangeBoard(board => BoardEdits.RemovePanel(board, def.Id));
+                FocusToolLater(next, PanelTool.Remove);
                 break;
             case PanelTool.DragStart:
                 e.Handled = true;
@@ -120,10 +141,40 @@ public partial class BoardWindow
         }
     }
 
+    /// <summary>
+    /// Once a redraw has laid the grid out, puts keyboard focus on <paramref name="tool"/> of the panel
+    /// <paramref name="panelId"/> and brings that panel into view. A panel that wasn't redrawn and still holds focus
+    /// (a press that changed nothing, a dialog closed unchanged) keeps it. With no such panel, focus goes to
+    /// + Add panel while editing.
+    /// </summary>
+    private void FocusToolLater(string? panelId, PanelTool tool, bool tall = false)
+    {
+        var before = ViewOf(panelId);
+        Dispatcher.BeginInvoke(() =>
+        {
+            var view = ViewOf(panelId);
+            if (view is null)
+            {
+                if (Editing) AddPanelButton.Focus();
+                return;
+            }
+
+            if (ReferenceEquals(view, before) && view.IsKeyboardFocusWithin) return;
+
+            PanelFrame.Of(view)?.FocusTool(tool, tall);
+            view.BringIntoView();
+        }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Focus on a top bar button once it shows: Edit board and Done hide themselves when pressed.</summary>
+    private void FocusLater(UIElement element) => Dispatcher.BeginInvoke(() => { element.Focus(); }, DispatcherPriority.Loaded);
+
+    private FrameworkElement? ViewOf(string? panelId) =>
+        panelId is null ? null : _panels.FirstOrDefault(p => p.Def.Id == panelId).View;
+
     private void StartDrag(PanelDef def)
     {
-        var view = _panels.FirstOrDefault(p => p.Def.Id == def.Id).View;
-        if (view is null) return;
+        if (ViewOf(def.Id) is not { } view) return;
 
         DragDrop.DoDragDrop(view, new DataObject(PanelDragFormat, def.Id), DragDropEffects.Move);
     }

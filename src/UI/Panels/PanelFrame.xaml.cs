@@ -63,6 +63,38 @@ public partial class PanelFrame : UserControl
 
     public static void SetCurrentSize(DependencyObject element, PanelSize? value) => element.SetValue(CurrentSizeProperty, value);
 
+    /// <summary>The frame in a panel's view (its header), or null when it has none.</summary>
+    public static PanelFrame? Of(DependencyObject view)
+    {
+        if (view is PanelFrame frame) return frame;
+
+        foreach (var child in LogicalTreeHelper.GetChildren(view).OfType<DependencyObject>())
+        {
+            if (Of(child) is { } found) return found;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gives keyboard focus to one of this panel's tools, for the board to call once it has redrawn the panel under
+    /// a press (R7). <paramref name="tall"/> picks Tall over the size box for a resize. False when it can't take focus.
+    /// </summary>
+    public bool FocusTool(PanelTool tool, bool tall = false)
+    {
+        Control? target = tool switch
+        {
+            PanelTool.MoveEarlier => MoveEarlierButton,
+            PanelTool.MoveLater => MoveLaterButton,
+            PanelTool.Resize => tall ? TallBox : SizeBox,
+            PanelTool.Remove => RemovePanelButton,
+            PanelTool.Settings or PanelTool.ChooseAnother => PanelSettingsButton,
+            _ => null,
+        };
+
+        return target?.Focus() == true;
+    }
+
     private static DependencyProperty RegisterFlag(string name) => DependencyProperty.RegisterAttached(
         name, typeof(bool), typeof(PanelFrame),
         new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits, OnToolsChanged));

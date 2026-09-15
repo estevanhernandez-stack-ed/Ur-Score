@@ -127,4 +127,15 @@ public class BoardTextTests
         Assert.Equal(
             ("This board has no panels yet", "Add panels from the gallery, then arrange them with Edit board.", "Add panel"),
             BoardText.EmptyState(BoardEmpty.NoPanels, Clan));
+
+    [Fact]
+    public void InEditModeAnEmptyBoardSaysWhatToDoFromThere() =>
+        Assert.Equal(
+            ("This board has no panels yet", "Add panels from the gallery with Add panel, then press Done.", "Add panel"),
+            BoardText.EmptyState(BoardEmpty.NoPanels, Clan, editing: true));
+
+    [Fact]
+    public void AnUnexpectedSaveFailureSaysSoWithoutItsMessage() =>
+        Assert.Equal("Your change to the boards wasn't saved: something unexpected went wrong.",
+            BoardText.BoardsNotSaved(new InvalidOperationException("p-1 at C:\\somewhere")));
 }

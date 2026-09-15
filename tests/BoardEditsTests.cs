@@ -200,4 +200,41 @@ public class BoardEditsTests
         var popped = BoardEdits.PopOut(board, "p-b-1", new PopOutRect(1, 2, 300, 200));
         Assert.False(BoardEdits.Changed(popped, BoardEdits.PopOut(popped, "p-b-1", new PopOutRect(50, 60, 400, 300))));
     }
+
+    [Fact]
+    public void DoneComparesTheDraftWithTheBoardAsEditingBegan()
+    {
+        // The following starter is rebuilt from your sources while you edit: a clan added in Setup adds a panel.
+        var atEdit = BoardOf("b-starter", PanelType.Standing);
+        IReadOnlyList<BoardDef> rebuilt = [BoardOf("b-starter", PanelType.Standing, PanelType.Race)];
+
+        Assert.Same(rebuilt, BoardEdits.Finish(rebuilt, atEdit, atEdit with { Panels = [.. atEdit.Panels] }));
+
+        var resized = BoardEdits.Resize(atEdit, "p-b-starter-1", new PanelSize(PanelSize.Wide));
+        Assert.Equal(new[] { resized }, BoardEdits.Finish(rebuilt, atEdit, resized));
+
+        IReadOnlyList<BoardDef> gone = [BoardOf("b-other")];
+        Assert.Same(gone, BoardEdits.Finish(gone, atEdit, resized));
+    }
+
+    [Fact]
+    public void AfterARemoveFocusGoesToTheNextPanelElseThePreviousElseNone()
+    {
+        var board = BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Top);
+
+        Assert.Equal("p-b-2", BoardEdits.FocusAfterRemove(board, "p-b-1"));
+        Assert.Equal("p-b-3", BoardEdits.FocusAfterRemove(board, "p-b-2"));
+        Assert.Equal("p-b-2", BoardEdits.FocusAfterRemove(board, "p-b-3"));
+        Assert.Null(BoardEdits.FocusAfterRemove(BoardOf("b", PanelType.Standing), "p-b-1"));
+        Assert.Null(BoardEdits.FocusAfterRemove(board, "p-gone"));
+    }
+
+    [Fact]
+    public void AResizeThatKeepsTheSpanAndFlipsTallCameFromTheTallTick()
+    {
+        Assert.True(BoardEdits.IsTallTick(new PanelSize(4), new PanelSize(4, Tall: true)));
+        Assert.True(BoardEdits.IsTallTick(new PanelSize(6, Tall: true), new PanelSize(6)));
+        Assert.False(BoardEdits.IsTallTick(new PanelSize(4), new PanelSize(PanelSize.Half)));
+        Assert.False(BoardEdits.IsTallTick(new PanelSize(3, Tall: true), new PanelSize(PanelSize.Wide, Tall: true)));
+    }
 }

@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -277,7 +276,7 @@ public partial class BoardWindow : Window
         _emptyRecipe = starter.RecipeSlug;
 
         var recipe = _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _emptyRecipe, StringComparison.Ordinal))?.Recipe;
-        var (line, detail, button) = BoardText.EmptyState(_empty, recipe);
+        var (line, detail, button) = BoardText.EmptyState(_empty, recipe, Editing);
         var empty = _empty != BoardEmpty.None;
 
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
@@ -394,8 +393,9 @@ public partial class BoardWindow : Window
             _services.SaveBoards(boards);
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
+            // Any failure, not only IO: a save that silently did nothing is the one thing this must never be.
             _boardsNote = _services.Redactor.Redact(BoardText.BoardsNotSaved(ex));
             _services.AddTrail($"BOARDS NOT SAVED: {ex.GetType().Name}");
             RenderLines();

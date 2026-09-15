@@ -13,6 +13,9 @@ public partial class BoardWindow
 
         e.Handled = true;
         OpenPanelSettings(def);
+
+        // A saved change (or a draft one) redraws the panel; focus goes back to its ⋯, on the board or in edit mode.
+        FocusToolLater(def.Id, PanelTool.Settings);
     }
 
     /// <summary>The panel on the grid that holds <paramref name="source"/>, walking up from it; null when none does.</summary>
