@@ -6,10 +6,10 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 149** (44 you'd notice, 105 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.1 to V3-S.9)
+- **OPEN: 150** (45 you'd notice, 105 code, tests, performance or docs only), including 10 found in the v0.3.0 smoke and the owner's first look (V3-S.1 to V3-S.10)
 - **FIXED: 46**
 - **GONE: 6**
-- Total: 201 distinct items (duplicates merged; every source is named on the line)
+- Total: 202 distinct items (duplicates merged; every source is named on the line)
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
 
 ## Open, and you'd notice
@@ -22,6 +22,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - V3-S.7 The board's icon can be another clan's: it follows whichever clan on the recipe was read last, not your main clan.
 - V3-S.8 Rename, Duplicate and Delete for a board are only on a right-click menu on its tab, so they're easy to miss.
 - V3-S.9 Editing a board feels clumsy: panels only flow in reading order on a fixed grid, and moving and sizing them takes several small steps.
+- V3-S.10 Popups aren't all themed: confirmations and errors (Delete board, Remove recipe, add a 6th clan, failed saves) are plain Windows boxes, and tooltips use the Windows look. Owner rule: every popup and toast is themed.
 - S1-6.8 Setup › Score book can give the wrong "not recording" reason when another clan source has claimed your account.
 - S1-6.9 "#rank of N" counts players with no value for that stat, so it disagrees with Promotion check.
 - S1-9.3 Records can double-count "biggest day" / "fastest week" when two sources read the same account.
@@ -344,6 +345,7 @@ v0.3.0 installed from the GitHub release into RoRoRo 1.28 (Store) and walked: al
 - V3-S.7 **OPEN** — you'd notice: the icon is kept per recipe, not per source, so every clan read on the clan battle recipe (main, a clan your accounts are in, a watched clan) replaces it, and the board shows whichever read last instead of the main clan's (this is how K0i2's icon appeared) — src/Composition/AppServices.cs:193-201, 688-722 — owner's first look, 2026-09-15
 - V3-S.8 **OPEN** — you'd notice: Rename…, Duplicate and Delete… for a board exist only on the tab's right-click menu (or Shift+F10); nothing on screen says they're there — src/UI/BoardWindow.xaml:76-83 — owner's first look, 2026-09-15
 - V3-S.9 **OPEN** — you'd notice: editing a board is clumsy. Panels flow in reading order on a 12-column grid (R6), so resizing one reflows everything after it; there's no free placement, no drop marker while dragging (R9), and moving and sizing are separate small steps (Move earlier/later, a size menu, a Tall tick). Needs a design pass with the owner before it's planned — src/Board/BoardLayout.cs, src/UI/BoardWindow.Editing.cs, docs/plans/2026-09-14-score-book-stage-2.md R5-R9 — owner's first look, 2026-09-15
+- V3-S.10 **OPEN** — you'd notice (owner rule, 2026-09-15: every popup and toast is themed): nine stock `MessageBox.Show` calls — BoardWindow.xaml.cs:376 (Delete board) and :420 (a failed board save), AlertsPage.xaml.cs:74 and :90, ImportFlow.cs:120 and :137, RecipesPage.xaml.cs:58, ClansPage.xaml.cs:288-289 (add a 6th clan; S1-11.4) — and the default-styled ToolTips on PanelFrame.xaml:8 ("Drag to move") and PanelPopOutWindow.xaml:19 ("Return to the board"). All eight Ur Score windows already follow the theme and Ur Score has no toasts; the recipe file picker (ImportFlow.cs:26) is Windows' own dialog and follows the Windows theme, which Ur Score can't restyle — owner's first look, 2026-09-15
 
 Owner actions noted in the smoke, not Ur Score defects:
 - RoRoRo has no alert rules file yet ("nothing can alert until a rule is added"): add a rule for `clan.battle.points` in RoRoRo before the battle.
