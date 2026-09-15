@@ -325,6 +325,36 @@ public class AlertCardsTests
         Assert.True(AlertCards.AfterRemove(target, line, "Player rank", RuleWrite.CantOpen).ResultIsProblem);
     }
 
+    [Fact]
+    public void ChangeAndRemovePickTheAlertFromTheFileAsItIsNowNotTheDrawnCard()
+    {
+        using var dir = TempDir.Create("urscore-alertcards");
+        var path = Path.Combine(dir.Path, "metric-rules.json");
+        var target = new AlertTarget(Diamonds, AlertKind.Rate);
+        File.WriteAllText(path,
+            $$"""[ { "metricId": "{{Diamonds}}", "kind": "Rate", "threshold": 100, "windowMinutes": 10, "owner": "{{RulesFile.Owner}}" } ]""");
+
+        var drawn = AlertCards.Build([Sending("diamonds")], RulesFile.Read(path));
+        Assert.NotNull(AlertCards.Managed(drawn, target));
+
+        // The same rule, given to another plugin by hand while the card sat on screen: the click says so and writes nothing.
+        File.WriteAllText(path,
+            $$"""[ { "metricId": "{{Diamonds}}", "kind": "Rate", "threshold": 50, "windowMinutes": 15, "owner": "another.plugin" } ]""");
+        Assert.Null(AlertCards.Managed(AlertCards.Build([Sending("diamonds")], RulesFile.Read(path)), target));
+        Assert.Equal(
+            new AlertsUi(ResultMetricId: Diamonds, Result: "That alert isn't in RoRoRo's rules file any more, so nothing was changed.", ResultIsProblem: true),
+            AlertCards.Gone(target));
+
+        // Still Ur Score's, with numbers changed by hand: Change opens on what the file says now, never on the drawn card.
+        File.WriteAllText(path,
+            $$"""[ { "metricId": "{{Diamonds}}", "kind": "Rate", "threshold": 50, "windowMinutes": 15, "owner": "{{RulesFile.Owner}}" } ]""");
+        var now = AlertCards.Managed(AlertCards.Build([Sending("diamonds")], RulesFile.Read(path)), target);
+        Assert.NotNull(now);
+        var editor = AlertCards.OpenChange(now);
+        Assert.Equal(("50", "15"), (editor.Draft!.Number, editor.Draft!.Minutes));
+        Assert.Equal("100", AlertCards.OpenChange(AlertCards.Managed(drawn, target)!).Draft!.Number);
+    }
+
     [Theory]
     [InlineData(AlertKind.Level, double.PositiveInfinity, false, "Alert me when an account's Rank goes above a number too big to show.")]
     [InlineData(AlertKind.Level, double.NegativeInfinity, true, "Alert me when an account's Rank goes below a negative number too big to show.")]

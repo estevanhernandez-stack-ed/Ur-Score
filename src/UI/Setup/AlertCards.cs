@@ -373,6 +373,13 @@ public static partial class AlertCards
             : Said(target.MetricId, Failed(outcome, label), true);
     }
 
+    /// <summary>
+    /// What a Change or Remove click says when the file, read again at the click, no longer holds the alert the card was drawn
+    /// with: a hand edit removed it or gave it another owner since. The card says so, in the theme, and nothing is written
+    /// (Task 3 review, Minor 1). <see cref="Managed"/> against that fresh view is what picks the alert, and null is this.
+    /// </summary>
+    public static AlertsUi Gone(AlertTarget target) => Said(target.MetricId, Failed(RuleWrite.NotThere, ""), true);
+
     private static AlertsUi Said(string? metricId, string result, bool problem) => new(ResultMetricId: metricId, Result: result, ResultIsProblem: problem);
 
     // ---- rows ----

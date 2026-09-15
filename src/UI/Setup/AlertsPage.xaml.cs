@@ -84,7 +84,17 @@ public partial class AlertsPage : UserControl, ISetupPage
 
     private void OnChangeClick(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.Tag is not AlertTarget target || AlertCards.Managed(_view, target) is not { } line) return;
+        if ((sender as FrameworkElement)?.Tag is not AlertTarget target) return;
+
+        // The file as it is now, not the drawn card: a hand edit since the last draw must never start the editor from stale
+        // values, and an alert that went in the meantime is said on the card instead (review Minor 1).
+        _view = Read();
+        if (AlertCards.Managed(_view, target) is not { } line)
+        {
+            _ui = AlertCards.Gone(target);
+            Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
+            return;
+        }
 
         _ui = AlertCards.OpenChange(line);
         Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
@@ -124,10 +134,14 @@ public partial class AlertsPage : UserControl, ISetupPage
 
     private void OnRemoveClick(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.Tag is not AlertTarget target
-            || AlertCards.CardFor(_view, target.MetricId) is not { } card
-            || AlertCards.Managed(_view, target) is not { } line)
+        if ((sender as FrameworkElement)?.Tag is not AlertTarget target) return;
+
+        // Read again first, so the sentence this says was removed is the one the file actually held (review Minor 1).
+        _view = Read();
+        if (AlertCards.CardFor(_view, target.MetricId) is not { } card || AlertCards.Managed(_view, target) is not { } line)
         {
+            _ui = AlertCards.Gone(target);
+            Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
             return;
         }
 
