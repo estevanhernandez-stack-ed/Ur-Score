@@ -94,6 +94,46 @@ public class ScoreBookReaderTests
     }
 
     [Fact]
+    public void FastestWeekComparesAgainstTheLowestPointInWindowNotTheOldest()
+    {
+        // A dip then a rise: the true fastest week is the rise from the low point (100 -> 5000 = 4900),
+        // not from the first reading (1000 -> 5000 = 4000).
+        var reader = Reader(Read(Now.AddDays(-2), 1000), Read(Now.AddDays(-1).AddHours(12), 100), Read(Now, 5000));
+
+        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), ["s-1"], 111, "value", new ManualTime(Now));
+
+        Assert.Equal(4900, records.FastestWeek);
+    }
+
+    [Fact]
+    public void FastestWeekCanBeNegativeWhenNothingRises()
+    {
+        // FastestWeek is the largest rise within any 7-day span; when every pair only falls, it's the
+        // largest (least negative) difference, per the doc comment on Records.FastestWeek.
+        var reader = Reader(Read(Now.AddDays(-1), 500), Read(Now, 400));
+
+        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), ["s-1"], 111, "value", new ManualTime(Now));
+
+        Assert.Equal(-100, records.FastestWeek);
+    }
+
+    [Fact]
+    public void OldReadingsAreEvictedAsTheClockAdvancesEvenWithoutAFullReload()
+    {
+        // Ruling R5: the cutoff moves forward on every Apply, so a reading kept on an earlier call must
+        // still age out later, even though it is never re-added.
+        var time = new ManualTime(Now);
+        var reader = new ScoreBookReader("unused-root", time);
+
+        reader.Apply(Read(Now, 1));
+        time.Advance(TimeSpan.FromDays(36));
+        reader.Apply(Read(time.Now, 2));
+
+        Assert.Equal(new[] { 2d }, reader.Series("s-1", 111, "value", null, DateTimeOffset.MinValue).Select(p => p.Value).ToArray());
+        Assert.Equal(2, reader.Readings(Slug));
+    }
+
+    [Fact]
     public void ADayIsTheAccountsLocalDayFromTheLinesOffset()
     {
         // 03:30 UTC is 22:30 the evening before at UTC-5, so both readings share one local day.

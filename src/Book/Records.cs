@@ -95,14 +95,26 @@ public static class Records
         return days.Count == 0 ? null : days.Max();
     }
 
+    /// <summary>
+    /// The biggest rise from any earlier point to a later one within 7 days: for each point, against the
+    /// lowest point still in its 7-day window, not merely the oldest one (a dip then a rise is a bigger
+    /// week than the dip alone). When nothing ever rises, this is the largest (least negative) fall,
+    /// matching <see cref="Change"/>'s "delta, whichever sign" contract rather than clamping to zero.
+    /// Sliding-window minimum via a monotonic deque of indices, values increasing front to back.
+    /// </summary>
     private static double? FastestWeek(IReadOnlyList<SeriesPoint> series)
     {
         double? best = null;
-        var start = 0;
+        var window = new List<int>();
+
         for (var i = 0; i < series.Count; i++)
         {
-            while (series[i].T - series[start].T > TimeSpan.FromDays(7)) start++;
-            if (start < i) best = Math.Max(best ?? double.MinValue, series[i].Value - series[start].Value);
+            while (window.Count > 0 && series[i].T - series[window[0]].T > TimeSpan.FromDays(7)) window.RemoveAt(0);
+
+            if (window.Count > 0) best = Math.Max(best ?? double.MinValue, series[i].Value - series[window[0]].Value);
+
+            while (window.Count > 0 && series[window[^1]].Value >= series[i].Value) window.RemoveAt(window.Count - 1);
+            window.Add(i);
         }
 
         return best;

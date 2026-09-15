@@ -157,6 +157,12 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
             ReadingCount++;
             if (First is null || line.T < First) First = line.T;
             if (line.T >= cutoff) Readings.Add(line);
+
+            // The cutoff moves forward on every call, so a reading kept on an earlier call can age out on
+            // a later one without ever being re-added; prune it here rather than let Series/HeadlineSeries
+            // keep scanning it forever. RemoveAll rather than trimming the front: callers of Apply don't
+            // guarantee strict time order.
+            Readings.RemoveAll(l => l.T < cutoff);
         }
     }
 }
