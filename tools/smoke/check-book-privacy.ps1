@@ -9,7 +9,10 @@ $bookRoot = Join-Path $DataFolder 'scorebook'
 if (-not (Test-Path $accountsFile)) { "No accounts.json in $DataFolder. Start RoRoRo while Ur Score runs, then check again."; exit 2 }
 if (-not (Test-Path $bookRoot)) { "No score book in $DataFolder yet."; exit 2 }
 
-$mine = @(Get-Content $accountsFile -Raw | ConvertFrom-Json | ForEach-Object { [string]$_.robloxUserId } | Where-Object { $_ -and $_ -ne '0' })
+# Windows PowerShell 5.1 passes a parsed JSON array down the pipeline as one object, so unroll it first;
+# otherwise every id is joined into one string and every account reads as not yours.
+$parsed = Get-Content $accountsFile -Raw | ConvertFrom-Json
+$mine = @(@($parsed) | ForEach-Object { [string]$_.robloxUserId } | Where-Object { $_ -and $_ -ne '0' })
 if ($mine.Count -eq 0) { "accounts.json lists no Roblox user ids."; exit 2 }
 
 $lines = 0; $reads = 0; $finals = 0; $broken = 0
