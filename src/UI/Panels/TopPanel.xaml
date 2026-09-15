@@ -23,13 +23,12 @@
                         <DataTemplate>
                             <!-- Your clan's row is tinted cyan across the row, as the Accounts table tints its picked row. -->
                             <Grid>
-                                <Border IsHitTestVisible="False" Background="{DynamicResource CyanBrush}">
+                                <Border>
                                     <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Opacity" Value="0" />
+                                        <Style TargetType="Border" BasedOn="{StaticResource PanelRowTint}">
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Yours}" Value="True">
-                                                    <Setter Property="Opacity" Value="0.14" />
+                                                    <Setter Property="Opacity" Value="{StaticResource PanelRowTintOpacity}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>

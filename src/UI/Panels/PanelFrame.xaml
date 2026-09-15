@@ -34,9 +34,9 @@
             </StackPanel>
             <TextBlock x:Name="PanelTitle" DockPanel.Dock="Left" Text="{Binding Title, Converter={StaticResource Upper}}"
                        AutomationProperties.Name="{Binding Title}" Style="{StaticResource PanelTitleText}" />
-            <!-- The chip (the mock's .chip): a pill coloured by the source's role (PanelHead.ChipRole), never by its words:
-                 your main in white on the interactive edge, a clan your accounts are in cyan, a watched one magenta; a chip
-                 with no role in muted text on the divider. -->
+            <!-- The chip (the mock's .chip): a pill whose edge is the source's role (PanelHead.ChipRole), never its words: your
+                 main on the interactive edge, a clan your accounts are in cyan, a watched one magenta. Its text is always white,
+                 which small role-coloured text isn't in every theme (magenta measured under 4.5:1). -->
             <Border DockPanel.Dock="Left" Margin="8,0,0,0" Padding="7,3" CornerRadius="999" BorderThickness="1" VerticalAlignment="Center"
                     Visibility="{Binding HasChip, Converter={StaticResource BoolToVisible}}">
                 <Border.Style>
@@ -55,24 +55,8 @@
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <TextBlock Text="{Binding Chip}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" FontWeight="SemiBold">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Main}">
-                                    <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Mine}">
-                                    <Setter Property="Foreground" Value="{DynamicResource CyanBrush}" />
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ChipRole}" Value="{x:Static core:SourceRole.Watch}">
-                                    <Setter Property="Foreground" Value="{DynamicResource MagentaBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <TextBlock Text="{Binding Chip}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource WhiteBrush}" />
             </Border>
             <TextBlock x:Name="PanelOverdue" DockPanel.Dock="Left" Text="overdue" Margin="8,0,0,0" FontSize="11"
                        VerticalAlignment="Center" Foreground="{DynamicResource MagentaBrush}"

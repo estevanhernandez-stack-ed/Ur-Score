@@ -66,10 +66,7 @@ public sealed class PanelGrid : Panel
             var slot = new Rect(
                 placement.Column * (column + Gap), tops[placement.Row], CellWidth(finalSize.Width, placement.Span), BoardLayout.CellHeight(placement, rows, Gap));
 
-            // The mock's align-items: start. A one-row panel keeps its own height at the top of its row, so a short card
-            // doesn't stretch beside a tall neighbour; a tall panel still fills both its rows, which is what Tall asks for.
-            var height = placement.Rows > 1 ? slot.Height : Math.Min(child.DesiredSize.Height, slot.Height);
-            child.Arrange(new Rect(slot.X, slot.Y, slot.Width, height));
+            child.Arrange(new Rect(slot.X, slot.Y, slot.Width, BoardLayout.ArrangedHeight(placement, rows, Gap, child.DesiredSize.Height)));
 
             // A drop is placed by the whole slot, so the space under a short panel still counts as that panel's.
             cells.Add(new CellRect(slot.X, slot.Y, slot.Width, slot.Height));

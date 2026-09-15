@@ -94,6 +94,17 @@ public static class BoardLayout
         Enumerable.Range(placement.Row, placement.Rows).Sum(r => rows[r]) + gap * (placement.Rows - 1);
 
     /// <summary>
+    /// How tall a panel is drawn in its slot (the mock's align-items: start): a one-row panel at its own height, never
+    /// taller than the slot, so a short card doesn't stretch beside a tall neighbour; a tall panel fills its slot, which is
+    /// what Tall asks for.
+    /// </summary>
+    public static double ArrangedHeight(PanelPlacement placement, IReadOnlyList<double> rows, double gap, double desired)
+    {
+        var slot = CellHeight(placement, rows, gap);
+        return placement.Rows > 1 ? slot : Math.Min(desired, slot);
+    }
+
+    /// <summary>
     /// The insertion index for a drop at (x, y), counting the dragged panel itself (<see cref="BoardEdits.MoveTo"/>).
     /// Over a panel: before it on its left half, after it on its right half. Elsewhere: after every panel that ends
     /// above the point or sits to its left on the same line.

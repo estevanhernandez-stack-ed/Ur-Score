@@ -1,8 +1,7 @@
 <UserControl x:Class="Labs626.UrScore.UI.AccountCardPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:ui="clr-namespace:Labs626.UrScore.UI"
-             xmlns:col="clr-namespace:System.Collections;assembly=System.Runtime">
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
     <Border Style="{StaticResource PanelCard}">
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
@@ -11,46 +10,19 @@
                 <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" Margin="0,5,0,-5" />
                 <!-- The line over time, only once there is one: with no line yet the chart takes no space. -->
                 <ui:LineChart Height="48" Margin="0,10,0,0" Series="{Binding Line}" FromZero="False" ShowLabels="False"
-                              AutomationProperties.Name="{Binding ChartName}">
-                    <ui:LineChart.Style>
-                        <Style TargetType="ui:LineChart">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Line.(col:ICollection.Count)}" Value="0">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ui:LineChart.Style>
-                </ui:LineChart>
-                <!-- Sections share the card's width in equal columns, 24 apart: one section takes the width, two or more sit two
-                     to a row, which keeps every column over 200 px wherever the board shows the card (at least 576 px inside).
-                     The list's -24 right margin takes the last column's trailing gap. -->
-                <ui:RowList ItemsSource="{Binding Sections}" Margin="0,10,-24,0" AutomationProperties.Name="This account's stats">
-                    <ui:RowList.Style>
-                        <Style TargetType="ui:RowList">
-                            <Setter Property="ItemsPanel">
-                                <Setter.Value>
-                                    <ItemsPanelTemplate>
-                                        <UniformGrid Columns="2" />
-                                    </ItemsPanelTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Sections.(col:ICollection.Count)}" Value="1">
-                                    <Setter Property="ItemsPanel">
-                                        <Setter.Value>
-                                            <ItemsPanelTemplate>
-                                                <UniformGrid Columns="1" />
-                                            </ItemsPanelTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ui:RowList.Style>
+                              AutomationProperties.Name="{Binding ChartName}"
+                              Visibility="{Binding HasLine, Converter={StaticResource BoolToVisible}}" />
+                <!-- Sections in equal columns across the card, as many as fit at 200 px (CardLayout), each column stacking its own. -->
+                <ui:RowList ItemsSource="{Binding Sections}" Margin="0,10,0,0" AutomationProperties.Name="This account's stats"
+                            Visibility="{Binding HasSections, Converter={StaticResource BoolToVisible}}">
+                    <ui:RowList.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ui:SectionColumnsPanel />
+                        </ItemsPanelTemplate>
+                    </ui:RowList.ItemsPanel>
                     <ui:RowList.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel Margin="0,0,24,10">
+                            <StackPanel>
                                 <!-- A section heading reads as a table heading, lined up with the facts under it. -->
                                 <Border Style="{StaticResource PanelTableHeadingRow}" Padding="0,5"
                                         Visibility="{Binding HasHeading, Converter={StaticResource BoolToVisible}}">

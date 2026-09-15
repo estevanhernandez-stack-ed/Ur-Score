@@ -11,6 +11,19 @@
                       ItemsSource="{Binding Rows}"
                       Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}"
                       AutomationProperties.Name="Every row read, your accounts marked">
+                <!-- Selecting a row means nothing here and "Yours" is its own column, so a clicked row keeps no tint: only the hover fill. -->
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="Transparent" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource RowHoverBrush}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="#" Binding="{Binding Position}" Width="50" />
                     <DataGridTextColumn Header="Member" Binding="{Binding Name}" Width="*" />

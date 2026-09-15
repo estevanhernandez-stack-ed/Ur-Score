@@ -30,6 +30,13 @@ public class PanelModelsTests
 
     // ---- Standing ----
 
+    [Fact]
+    public void AChipsWordsComeFromItsRoleSoTheTwoCanNeverDisagree()
+    {
+        Assert.Equal((PanelText.Chip(SourceRole.Watch), true), (new PanelHead("Clan standing", ChipRole: SourceRole.Watch).Chip, new PanelHead("Clan standing", ChipRole: SourceRole.Watch).HasChip));
+        Assert.Equal(("", false), (new PanelHead("Account card").Chip, new PanelHead("Account card").HasChip));
+    }
+
     [Theory]
     [InlineData(SourceRole.Main)]
     [InlineData(SourceRole.Mine)]
@@ -62,7 +69,7 @@ public class PanelModelsTests
 
         var model = PanelModels.Standing(live, reader, new PanelSettings(Clan.Slug, SourceId: main.Id));
 
-        Assert.Equal(new PanelHead("Clan standing", "CCGP", "★ main", ChipRole: SourceRole.Main), model.Head);
+        Assert.Equal(new PanelHead("Clan standing", "CCGP", SourceRole.Main), model.Head);
         Assert.Equal("14th", model.Place);
         Assert.Equal("in the battle", model.PlaceSuffix);
         Assert.Equal("Clan points", model.TotalLabel);
@@ -284,6 +291,8 @@ public class PanelModelsTests
         Assert.Contains(new FactModel("Battles played", records.PeriodsPlayed.ToString()), model.Facts);
         Assert.Contains(new FactModel("Last read", PanelText.Ago(series[^1].T, Now)), model.Facts);
         Assert.Equal(series.Count, Assert.Single(model.Line).Points.Count);
+        Assert.True(model.HasLine);
+        Assert.False(model.HasSections);
     }
 
     [Fact]
@@ -318,11 +327,17 @@ public class PanelModelsTests
         Assert.Equal(new[] { "Account", "Progression" }, picked.Sections.Select(s => s.Heading).ToArray());
         Assert.Equal(new[] { new FactModel("Playtime", "586d 5h"), new FactModel("First joined", "13 Sep 2020") }, picked.Sections[0].Facts);
         Assert.Equal(new[] { new FactModel("Rebirths", "9") }, picked.Sections[1].Facts);
+        Assert.True(picked.HasSections);
+
+        // With no book yet there is no line, so the card draws no chart.
+        Assert.Empty(picked.Line);
+        Assert.False(picked.HasLine);
 
         // A picked account the read couldn't reach says why, in the recipe's words.
         Assert.Equal(AltTwo.DisplayName, unread.Head.Subtitle);
         Assert.Equal("Profile is private.", unread.Head.Note);
         Assert.Empty(unread.Sections);
+        Assert.False(unread.HasSections);
     }
 
     [Fact]

@@ -41,6 +41,18 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- + Board (the mock's .tab.add): cyan, medium, lined up with the tabs' text; muted when BoardButtons turns it off. -->
+        <Style x:Key="AddBoardButtonStyle" TargetType="Button" BasedOn="{StaticResource FlatButton}">
+            <Setter Property="Foreground" Value="{DynamicResource CyanBrush}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Padding" Value="12,7" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <DockPanel>
         <!-- The top bar (spec §8): tabs and the period line on the left; Start, Test now and Setup on the right. -->
@@ -86,8 +98,7 @@
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
-                <Button x:Name="AddBoardButton" DockPanel.Dock="Left" Content="+ Board" Style="{StaticResource FlatButton}"
-                        Foreground="{DynamicResource CyanBrush}" FontWeight="Medium" Padding="12,7"
+                <Button x:Name="AddBoardButton" DockPanel.Dock="Left" Content="+ Board" Style="{StaticResource AddBoardButtonStyle}"
                         HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,14,0" Click="OnAddBoardClick"
                         AutomationProperties.Name="Add a board" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

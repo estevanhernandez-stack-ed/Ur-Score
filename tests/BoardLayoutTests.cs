@@ -61,6 +61,19 @@ public class BoardLayoutTests
     }
 
     [Fact]
+    public void AOneRowPanelKeepsItsOwnHeightAndATallPanelFillsItsSlot()
+    {
+        IReadOnlyList<double> rows = [120, 80];
+
+        // One row: its own height at the top of the row, never taller than the row (Task 8, the mock's align-items: start).
+        Assert.Equal(70, BoardLayout.ArrangedHeight(new PanelPlacement(0, 0, 0, 6), rows, 12, desired: 70));
+        Assert.Equal(120, BoardLayout.ArrangedHeight(new PanelPlacement(0, 0, 0, 6), rows, 12, desired: 150));
+
+        // Tall: both rows and the gap, however short its content.
+        Assert.Equal(212, BoardLayout.ArrangedHeight(new PanelPlacement(2, 0, 6, 6, Rows: 2), rows, 12, desired: 70));
+    }
+
+    [Fact]
     public void APanelsSlotIsAsTallAsItsRowsAndTheGapsBetweenThem()
     {
         IReadOnlyList<double> rows = [120, 80];

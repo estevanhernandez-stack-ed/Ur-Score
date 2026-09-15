@@ -1,7 +1,8 @@
 <Application x:Class="Labs626.UrScore.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime">
     <Application.Resources>
         <ResourceDictionary>
             <!-- RoRoRo's Brand palette, painted before any connection exists. ThemeService replaces
@@ -547,6 +548,14 @@
                 <!-- As PanelTableRowLine: the mock's 6 px cell padding at WPF's shorter line. -->
                 <Setter Property="Padding" Value="6,7" />
             </Style>
+            <!-- The cyan tint across a marked row: the Accounts table's picked row, Top of the battle's own clan. Lay it under
+                 the row's content and set its Opacity to PanelRowTintOpacity when the row is marked. -->
+            <sys:Double x:Key="PanelRowTintOpacity">0.14</sys:Double>
+            <Style x:Key="PanelRowTint" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource CyanBrush}" />
+                <Setter Property="Opacity" Value="0" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
             <!-- A row: the hover fill, and the picked row tinted cyan across the whole width. -->
             <Style x:Key="PanelTableRow" TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
                 <Setter Property="Template">
@@ -554,12 +563,12 @@
                         <ControlTemplate TargetType="DataGridRow">
                             <Grid>
                                 <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True" />
-                                <Border x:Name="Tint" Background="{DynamicResource CyanBrush}" Opacity="0" IsHitTestVisible="False" />
+                                <Border x:Name="Tint" Style="{StaticResource PanelRowTint}" />
                                 <DataGridCellsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter TargetName="Tint" Property="Opacity" Value="0.14" />
+                                    <Setter TargetName="Tint" Property="Opacity" Value="{StaticResource PanelRowTintOpacity}" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -594,7 +603,6 @@
                 <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
                 <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
                 <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
-                <Setter Property="CellStyle" Value="{StaticResource PanelTableCell}" />
                 <Setter Property="RowStyle" Value="{StaticResource PanelTableRow}" />
             </Style>
 
