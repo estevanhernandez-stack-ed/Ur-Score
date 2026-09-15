@@ -27,7 +27,15 @@ public partial class BoardWindow : Window
     private SetupWindow? _setup;
     private StarterBoard? _board;
     private string? _boardKey;
-    private bool _busy;
+
+    /// <summary>Start is asking RoRoRo for accounts before the loops begin.</summary>
+    private bool _starting;
+
+    /// <summary>A Test now read is in flight. Stop still works; see <see cref="BoardButtons"/>.</summary>
+    private bool _testing;
+
+    /// <summary>The empty state's Import recipe… is in flight.</summary>
+    private bool _importing;
 
     public BoardWindow(AppServices services)
     {
@@ -45,8 +53,7 @@ public partial class BoardWindow : Window
             _services.IconChanged -= ApplyIcon;
         };
 
-        StartStopButton.IsEnabled = false;
-        TestNowButton.IsEnabled = false;
+        ApplyButtons();
         Render();
         StateLine.Text = "Reading your score book…";
     }
@@ -68,8 +75,7 @@ public partial class BoardWindow : Window
             return;
         }
 
-        StartStopButton.IsEnabled = true;
-        TestNowButton.IsEnabled = true;
+        ApplyButtons();
         Render();
 
         // Spec §7.1: a recipe with inputs and no sources opens Setup on its Clans page.
@@ -138,6 +144,8 @@ public partial class BoardWindow : Window
 
     private void RenderLines(LiveBoard? live = null)
     {
+        ApplyButtons();
+
         try
         {
             RenderLinesCore(live ?? _services.CurrentBoard());
@@ -197,25 +205,39 @@ public partial class BoardWindow : Window
 
     private async void OnStartStopClick(object sender, RoutedEventArgs e)
     {
-        if (_busy) return;
-        _busy = true;
-        StartStopButton.IsEnabled = false;
-
-        try
+        if (_services.Running)
         {
-            if (_services.Running)
+            // Never gated on a Test now read: Stop only ends the timed loops, and the read in flight finishes
+            // on its own token, as a Test now pressed while stopped would.
+            try
             {
                 _services.Stop();
             }
-            else if (_services.Installed.Count == 0)
+            catch (Exception ex)
             {
-                StateLine.Text = "No recipe to run.";
-                DetailLine.Text = "Import a recipe first.";
+                ShowFailure(ex);
             }
-            else
-            {
-                await _services.StartAsync();
-            }
+
+            RenderLines();
+            return;
+        }
+
+        // The button is disabled for these; this only catches a press already on its way.
+        if (!BoardButtons.For(_services.ReaderLoaded, running: false, _starting, _testing, _importing).StartStop) return;
+
+        if (_services.Installed.Count == 0)
+        {
+            StateLine.Text = "No recipe to run.";
+            DetailLine.Text = "Import a recipe first.";
+            return;
+        }
+
+        _starting = true;
+        ApplyButtons();
+
+        try
+        {
+            await _services.StartAsync();
         }
         catch (Exception ex)
         {
@@ -223,15 +245,14 @@ public partial class BoardWindow : Window
         }
         finally
         {
-            _busy = false;
-            StartStopButton.IsEnabled = _services.ReaderLoaded;
+            _starting = false;
             RenderLines();
         }
     }
 
     private async void OnTestNowClick(object sender, RoutedEventArgs e)
     {
-        if (_busy) return;
+        if (!BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing).TestNow) return;
         if (_services.Installed.Count == 0)
         {
             StateLine.Text = "No recipe to test.";
@@ -239,8 +260,8 @@ public partial class BoardWindow : Window
             return;
         }
 
-        _busy = true;
-        TestNowButton.IsEnabled = false;
+        _testing = true;
+        ApplyButtons();
         StateLine.Text = "Reading every source once…";
 
         try
@@ -253,17 +274,25 @@ public partial class BoardWindow : Window
         }
         finally
         {
-            _busy = false;
-            TestNowButton.IsEnabled = _services.ReaderLoaded;
+            _testing = false;
             RenderLines();
         }
+    }
+
+    /// <summary>The one place the board's buttons are enabled or disabled, called after every change to what they depend on.</summary>
+    private void ApplyButtons()
+    {
+        var states = BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing);
+        StartStopButton.IsEnabled = states.StartStop;
+        TestNowButton.IsEnabled = states.TestNow;
+        EmptyStateButton.IsEnabled = states.EmptyState;
     }
 
     private void OnSetupClick(object sender, RoutedEventArgs e) => OpenSetup(null);
 
     private async void OnEmptyStateClick(object sender, RoutedEventArgs e)
     {
-        if (_board is null || _busy) return;
+        if (_board is null || _importing) return;
 
         if (_board.Empty == BoardEmpty.NoStats)
         {
@@ -279,7 +308,8 @@ public partial class BoardWindow : Window
 
         if (_board.Empty != BoardEmpty.NoRecipes) return;
 
-        _busy = true;
+        _importing = true;
+        ApplyButtons();
         try
         {
             var outcome = await ImportFlow.RunAsync(this, _services, text => DetailLine.Text = text);
@@ -290,7 +320,8 @@ public partial class BoardWindow : Window
         }
         finally
         {
-            _busy = false;
+            _importing = false;
+            ApplyButtons();
         }
     }
 
