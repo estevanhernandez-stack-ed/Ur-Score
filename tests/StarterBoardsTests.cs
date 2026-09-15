@@ -41,7 +41,7 @@ public class StarterBoardsTests
     }
 
     [Fact]
-    public void TheBattleTabHasTheDesignsFourRowsEachFillingTwelveColumns()
+    public void TheBattleTabHasTheMocksThreeRowsEachFillingTwelveColumns()
     {
         var slug = Clan.Slug;
 
@@ -51,46 +51,55 @@ public class StarterBoardsTests
         Assert.Equal(
             new[]
             {
-                (PanelType.Standing, 4), (PanelType.Standing, 4), (PanelType.Top, 4),
-                (PanelType.Race, 8), (PanelType.PromotionCheck, 4),
-                (PanelType.MyAccounts, 12),
-                (PanelType.PastPeriods, 7), (PanelType.Records, 5),
+                (PanelType.Standing, 3), (PanelType.Standing, 3), (PanelType.Race, 6),
+                (PanelType.MyAccounts, 5), (PanelType.PromotionCheck, 4), (PanelType.Top, 3),
+                (PanelType.PastPeriods, 6), (PanelType.Records, 6),
             },
             board.Panels.Select(p => (p.Type, p.Span)).ToArray());
         Assert.Equal(new PanelSettings(slug, SourceId: MainClan.Id), board.Panels[0].Settings);
         Assert.Equal(new PanelSettings(slug, SourceId: AltClan.Id), board.Panels[1].Settings);
-        Assert.Equal(new PanelSettings(TopList.Slug, SourceId: TopSource.Id), board.Panels[2].Settings);
-        Assert.Equal(new[] { MainClan.Id, AltClan.Id, SecondAltClan.Id, Rival.Id }, board.Panels[3].Settings.SourceIds!.ToArray());
+        Assert.Equal(new[] { MainClan.Id, AltClan.Id, SecondAltClan.Id, Rival.Id }, board.Panels[2].Settings.SourceIds!.ToArray());
+        Assert.Equal(new PanelSettings(slug, Stat: "value"), board.Panels[3].Settings);
         Assert.Equal(new PanelSettings(slug, SourceId: AltClan.Id, ToSourceId: MainClan.Id, Stat: "value"), board.Panels[4].Settings);
-        Assert.Equal(new PanelSettings(slug, Stat: "value"), board.Panels[5].Settings);
+        Assert.Equal(new PanelSettings(TopList.Slug, SourceId: TopSource.Id), board.Panels[5].Settings);
         Assert.Equal(new PanelSettings(slug, SourceId: MainClan.Id, Stat: "value"), board.Panels[6].Settings);
         Assert.Equal(new PanelSettings(slug, Stat: "value"), board.Panels[7].Settings);
 
         var rows = BoardLayout.Flow(board.Panels.Select(p => p.Span).ToList(), 1280).GroupBy(p => p.Row);
+        Assert.Equal(3, rows.Count());
         Assert.All(rows, row => Assert.Equal(BoardLayout.Columns, row.Sum(p => p.Span)));
     }
 
     [Fact]
     public void ARowWithAPanelMissingClosesUpIntoEqualShares()
     {
-        // One clan and a switched-off top list: its standing takes row 1 alone; there's no race or promotion check.
+        // One clan and a switched-off top list: its standing takes row 1 alone (no race), My accounts row 2 alone.
         var one = StarterBoards.Build([Installed(Clan, "value"), Installed(TopList)], [MainClan, TopSource with { Enabled = false }], StarterBoards.Battle);
-        Assert.Equal(new[] { (PanelType.Standing, 12), (PanelType.MyAccounts, 12), (PanelType.PastPeriods, 7), (PanelType.Records, 5) },
+        Assert.Equal(new[] { (PanelType.Standing, 12), (PanelType.MyAccounts, 12), (PanelType.PastPeriods, 6), (PanelType.Records, 6) },
             one.Panels.Select(p => (p.Type, p.Span)).ToArray());
 
-        // Two clans your accounts are in and no main: the first leads, both share row 1, the race takes row 2 alone.
+        // Two clans your accounts are in and no main: both standings and the race keep row 1; with no promotion check
+        // and no top list, My accounts has row 2.
         var two = StarterBoards.Build([Installed(Clan, "value")], [AltClan, SecondAltClan], StarterBoards.Battle);
         Assert.Equal(
-            new[] { (PanelType.Standing, 6), (PanelType.Standing, 6), (PanelType.Race, 12), (PanelType.MyAccounts, 12), (PanelType.PastPeriods, 7), (PanelType.Records, 5) },
+            new[] { (PanelType.Standing, 3), (PanelType.Standing, 3), (PanelType.Race, 6), (PanelType.MyAccounts, 12), (PanelType.PastPeriods, 6), (PanelType.Records, 6) },
             two.Panels.Select(p => (p.Type, p.Span)).ToArray());
         Assert.Equal(AltClan.Id, two.Panels[0].Settings.SourceId);
+
+        // Your main and a clan your accounts are in, with no rival and no top list: two clans still race in row 1, and
+        // My accounts and the promotion check split row 2.
+        var noTop = StarterBoards.Build([Installed(Clan, "value")], [MainClan, AltClan], StarterBoards.Battle);
+        Assert.Equal(
+            new[] { (PanelType.Standing, 3), (PanelType.Standing, 3), (PanelType.Race, 6), (PanelType.MyAccounts, 6), (PanelType.PromotionCheck, 6), (PanelType.PastPeriods, 6), (PanelType.Records, 6) },
+            noTop.Panels.Select(p => (p.Type, p.Span)).ToArray());
     }
 
     [Fact]
     public void WithNoAltsClanAndNoPastPeriodsAWatchedClanStillRacesAndRecordsTakesItsRow()
     {
         // A recipe that reads no past periods, your main and a clan you watch, and a top list on: no alts' clan means
-        // no second standing and no promotion check, so the main shares row 1 with the top and the race has row 2.
+        // no second standing and no promotion check, so the main shares row 1 with the race, My accounts shares row 2
+        // with the top, and Records has row 3.
         var noPast = Clan with { Period = Clan.Period! with { Past = null } };
         var main = SourceOf("s-00000001", noPast, "CCGP", SourceRole.Main);
         var rival = SourceOf("s-00000003", noPast, "NovaForge", SourceRole.Watch);
@@ -98,9 +107,9 @@ public class StarterBoardsTests
         var board = StarterBoards.Build([Installed(noPast, "value"), Installed(TopList)], [main, rival, TopSource], StarterBoards.Battle);
 
         Assert.Equal(
-            new[] { (PanelType.Standing, 6), (PanelType.Top, 6), (PanelType.Race, 12), (PanelType.MyAccounts, 12), (PanelType.Records, 12) },
+            new[] { (PanelType.Standing, 6), (PanelType.Race, 6), (PanelType.MyAccounts, 6), (PanelType.Top, 6), (PanelType.Records, 12) },
             board.Panels.Select(p => (p.Type, p.Span)).ToArray());
-        Assert.Equal(new[] { main.Id, rival.Id }, board.Panels[2].Settings.SourceIds!.ToArray());
+        Assert.Equal(new[] { main.Id, rival.Id }, board.Panels[1].Settings.SourceIds!.ToArray());
 
         var rows = BoardLayout.Flow(board.Panels.Select(p => p.Span).ToList(), 1280).GroupBy(p => p.Row);
         Assert.All(rows, row => Assert.Equal(BoardLayout.Columns, row.Sum(p => p.Span)));

@@ -106,26 +106,24 @@ public static class StarterBoards
 
         var panels = new List<PanelSpec>();
 
-        // 1. Your main clan's standing, a clan your accounts are in, and the top of the battle.
+        // 1. Your main clan's standing, a clan your accounts are in, and the race beside them (the mock's first row).
         panels.AddRange(Row(
-            (PanelType.Standing, 4, anchor is null ? null : new PanelSettings(slug, SourceId: anchor.Id)),
-            (PanelType.Standing, 4, otherMine is null ? null : new PanelSettings(slug, SourceId: otherMine.Id)),
-            (PanelType.Top, 4, top is null ? null : new PanelSettings(top.Recipe, SourceId: top.Id))));
+            (PanelType.Standing, 3, anchor is null ? null : new PanelSettings(slug, SourceId: anchor.Id)),
+            (PanelType.Standing, 3, otherMine is null ? null : new PanelSettings(slug, SourceId: otherMine.Id)),
+            (PanelType.Race, 6, race.Count >= 2 ? new PanelSettings(slug, SourceIds: race) : null)));
 
-        // 2. The race, wide, and the promotion check from that clan to the main.
+        // 2. My accounts, the promotion check from that clan to the main, and the top of the battle.
         panels.AddRange(Row(
-            (PanelType.Race, 8, race.Count >= 2 ? new PanelSettings(slug, SourceIds: race) : null),
+            (PanelType.MyAccounts, 5, stat is null ? null : new PanelSettings(slug, Stat: stat)),
             (PanelType.PromotionCheck, 4, main is not null && otherMine is not null && stat is not null
                 ? new PanelSettings(slug, SourceId: otherMine.Id, ToSourceId: main.Id, Stat: stat)
-                : null)));
+                : null),
+            (PanelType.Top, 3, top is null ? null : new PanelSettings(top.Recipe, SourceId: top.Id))));
 
-        // 3. My accounts, full width.
-        panels.AddRange(Row((PanelType.MyAccounts, 12, stat is null ? null : new PanelSettings(slug, Stat: stat))));
-
-        // 4. Past battles of the main clan, and records.
+        // 3. Past battles of the main clan, and records.
         panels.AddRange(Row(
-            (PanelType.PastPeriods, 7, anchor is not null && recipe.Recipe.Period?.Past is not null ? new PanelSettings(slug, SourceId: anchor.Id, Stat: stat) : null),
-            (PanelType.Records, 5, stat is null ? null : new PanelSettings(slug, Stat: stat))));
+            (PanelType.PastPeriods, 6, anchor is not null && recipe.Recipe.Period?.Past is not null ? new PanelSettings(slug, SourceId: anchor.Id, Stat: stat) : null),
+            (PanelType.Records, 6, stat is null ? null : new PanelSettings(slug, Stat: stat))));
 
         return new StarterBoard(Battle, BoardEmpty.None, panels, slug);
     }
