@@ -20,7 +20,7 @@ Rows fill all 12 columns across. When a source is missing, its row closes up rat
 2. My accounts, grouped by clan with points and change · Promotion check (alts' clan to main) · Top of the battle
 3. Past battles (main clan) · Records
 
-> Changed during execution (2026-09-16): the first draft had four rows (standings and Top, then race and Promotion, then My accounts full width, then Past battles and Records) with every panel stretched to its row's height. Screenshots next to the mock showed the first row lopsided and the race below the fold, so the controller moved to the mock's arrangement and natural heights. Same panels.
+> Changed during execution (2026-09-15): the first draft had four rows (standings and Top, then race and Promotion, then My accounts full width, then Past battles and Records) with every panel stretched to its row's height. Screenshots next to the mock showed the first row lopsided and the race below the fold, so the controller moved to the mock's arrangement and natural heights. Same panels.
 
 ### Alts (your accounts side by side, like the Big Games database)
 
