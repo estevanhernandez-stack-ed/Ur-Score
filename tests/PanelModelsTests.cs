@@ -680,6 +680,23 @@ public class PanelModelsTests
     }
 
     [Fact]
+    public void AnAccountsTableOnAListRecipeShowsOnlyYourAccountsNeverTheOtherPlayersItRead()
+    {
+        // Global Constraint 2 (final review Minor 8): a list recipe's read holds other members' rows; the table's rows, cells
+        // and total come from your accounts alone.
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var live = Live([main], [Installed(Clan, "value")], Snaps(Snapshot(main.Id,
+            [Row(5, 20_000_000), Row(Main.RobloxUserId, 14_020_550), Row(6, 1_000), Row(AltOne.RobloxUserId, 12_418_220), Row(7, 999_999_999)])));
+
+        var model = PanelModels.AccountsTable(live, Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
+
+        Assert.Equal(new[] { Main.RobloxUserId, AltOne.RobloxUserId, AltTwo.RobloxUserId, Loose.RobloxUserId }, model.Rows.Where(r => !r.IsTotal).Select(r => r.UserId).Order().ToArray());
+        Assert.Equal(new[] { Main.DisplayName, AltOne.DisplayName, AltTwo.DisplayName, Loose.DisplayName, "Total" }.Order(), model.Rows.Select(r => r.Name).Order());
+        Assert.DoesNotContain(model.Rows.SelectMany(r => r.Cells), cell => cell is "20,000,000" or "1,000" or "999,999,999");
+        Assert.Equal("26,438,770", model.Rows.Single(r => r.IsTotal).Cells[1]);
+    }
+
+    [Fact]
     public void AnUnpinnedTableAndProfileStatReadTheRecipesFirstSourceThatIsOnElseItsFirst()
     {
         // Final review Minors 3 and 4: one rule for the recipe's source (PanelForms.FirstSourceOfRecipe). The first source

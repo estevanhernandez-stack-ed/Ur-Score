@@ -34,6 +34,13 @@ public class BoardsFileTests
         AssertSameBoard(Battle(), load.Boards[0]);
         AssertSameBoard(second, load.Boards[1]);
         Assert.False(File.Exists(Path.Combine(dir.Path, "boards.json.tmp")));
+
+        // The panel type 0.3.0 drops (R4), which a changed Alts tab depends on, reads back as itself.
+        var alts = new BoardDef("b-starter-alts", "Alts",
+        [
+            new PanelDef("p-alts-1", PanelType.AccountsTable, new PanelSize(12), new PanelSettings(Profile.Slug, SourceId: "s-00000009")),
+        ]);
+        AssertSameBoard(alts, Assert.Single(BoardsFile.Parse(BoardsFile.Serialize([alts]))));
     }
 
     [Fact]
