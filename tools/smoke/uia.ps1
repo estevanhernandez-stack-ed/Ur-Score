@@ -104,10 +104,11 @@ function Invoke-Element($el) {
 # first poll; invoking straight off Find-ByAutomationId in that window races it, and Invoke-Element's own
 # 'element not found' doesn't say which element was missing. This names it instead.
 function Invoke-WhenReady($root, [string]$id, [int]$seconds = 15) {
-    $el = $null
-    $ok = Wait-Until { $el = Find-ByAutomationId $root $id; [bool]$el } $seconds
+    # The wait's script block runs in its own scope, so an assignment inside it never reaches this function:
+    # wait for the element, then find it again here.
+    $ok = Wait-Until { [bool](Find-ByAutomationId $root $id) } $seconds
     if (-not $ok) { throw "$id never showed up" }
-    Invoke-Element $el
+    Invoke-Element (Find-ByAutomationId $root $id)
 }
 
 function Set-ElementValue($el, [string]$value) {
