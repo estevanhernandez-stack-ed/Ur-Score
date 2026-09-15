@@ -102,7 +102,7 @@ public partial class AccountsTablePanel : UserControl
 
         var place = _armedPlace;
         _armedPlace = null;
-        if (!AccountsTableFocus.RestoresFocus(answersTable: true, focusInTable: place is not null)) return;
+        if (!AccountsTableFocus.RestoresFocus(focusInTable: place is not null)) return;
 
         Dispatcher.BeginInvoke(() => RestoreFocus(place!.Value), DispatcherPriority.Loaded);
     }

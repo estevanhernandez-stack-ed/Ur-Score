@@ -7,12 +7,12 @@ namespace Labs626.UrScore.Board;
 public static class AccountsTableFocus
 {
     /// <summary>
-    /// Only a redraw answering the table's own heading click or row pick puts keyboard focus back, and only when focus was
-    /// in the table. A data refresh keeps the selection and the sort but never moves focus, so it never scrolls the board
-    /// or a pop-out back to the table while you read what is under it. Whether a redraw answers the table is
-    /// <see cref="FocusRestoreGate"/>'s to say.
+    /// A redraw answering the table's own heading click or row pick puts keyboard focus back only when focus was in the
+    /// table. Whether a redraw answers the table is <see cref="FocusRestoreGate"/>'s to say, and it is asked first: a data
+    /// refresh keeps the selection and the sort but never moves focus, so it never scrolls the board or a pop-out back to
+    /// the table while you read what is under it.
     /// </summary>
-    public static bool RestoresFocus(bool answersTable, bool focusInTable) => answersTable && focusInTable;
+    public static bool RestoresFocus(bool focusInTable) => focusInTable;
 
     /// <summary>The account a selected row picks; the totals row, or no row, picks nothing.</summary>
     public static long? PickOf(AccountRow? selected) => selected is { IsTotal: false } row ? row.UserId : null;

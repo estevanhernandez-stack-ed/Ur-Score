@@ -13,16 +13,18 @@ public class AccountsTableFocusTests
     private static AccountsTableModel Model(params AccountRow[] rows) => new(new PanelHead("Accounts table"), [Name], rows);
 
     [Fact]
-    public void OnlyARedrawAnsweringTheTablesOwnSortOrPickRestoresFocus()
+    public void OnlyARedrawAnsweringTheTablesOwnSortOrPickRestoresFocusAndOnlyWhenFocusWasInTheTable()
     {
-        Assert.True(AccountsTableFocus.RestoresFocus(answersTable: true, focusInTable: true));
+        // A data refresh carries no token, so the gate stops it before focus is asked about: it never scrolls the board back.
+        var gate = new FocusRestoreGate();
+        var token = gate.Arm();
+        Assert.False(gate.Restores(null));
 
-        // A data refresh never moves keyboard focus, so it never scrolls the board back to the table.
-        Assert.False(AccountsTableFocus.RestoresFocus(answersTable: false, focusInTable: true));
+        // The redraw that answers the table's own sort or pick restores focus when focus was in the table...
+        Assert.True(gate.Restores(token) && AccountsTableFocus.RestoresFocus(focusInTable: true));
 
-        // A heading clicked while focus was elsewhere doesn't take it.
-        Assert.False(AccountsTableFocus.RestoresFocus(answersTable: true, focusInTable: false));
-        Assert.False(AccountsTableFocus.RestoresFocus(answersTable: false, focusInTable: false));
+        // ...and a heading clicked while focus was elsewhere doesn't take it.
+        Assert.False(AccountsTableFocus.RestoresFocus(focusInTable: false));
     }
 
     [Fact]
