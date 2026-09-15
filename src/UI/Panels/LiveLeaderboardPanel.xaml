@@ -6,6 +6,7 @@
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
             <DataGrid x:Name="LeaderGrid" Margin="0,10,0,0" MaxHeight="360" AutoGenerateColumns="False" IsReadOnly="True"
+                      ClipboardCopyMode="None"
                       ItemsSource="{Binding Rows}"
                       Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}"
                       AutomationProperties.Name="Every row read, your accounts marked">
