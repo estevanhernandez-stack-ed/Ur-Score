@@ -403,8 +403,13 @@ Every OPEN item in `docs/backlog.md`, once. "W1 T4" is wave 1 Task 4 below; "W2-
 | S2-FR.2 | notice: a Profile stat's form picks an off source while the board says "removed" | W1 T5 |
 | S2-FR.3 | test: walk-pop-outs step 3 skips when reads are broken | W2-7 |
 | S2-FR.4 | tidy: the menu item style handles flat items only | W3-7 |
+| V3-S.1 | notice: a clan outside the current battle gets no past battles backfilled | W1, planned in T0 (new task) |
+| V3-S.2 | notice: updating an old recipe starts with every stat unticked | W1, planned in T0 (with T10) |
+| V3-S.3 | notice: "What changed" omits battle tracking | W1, planned in T0 (with T10) |
+| V3-S.4 | notice: the footer repeats one credit per recipe | W1, planned in T0 (with T7) |
+| V3-S.5 | test: smoke scripts can't target the installed exe | W2 |
 
-Totals: wave 1, 37 items (35 you'd notice, S2-P.3, S1-14.17); wave 2, 33; wave 3, 64 (S1-9.3 included); won't fix, 6. 140 in all.
+Totals: wave 1, 41 items (39 you'd notice, S2-P.3, S1-14.17); wave 2, 34; wave 3, 64 (S1-9.3 included); won't fix, 6. 145 in all. The five V3-S items came from the v0.3.0 smoke on 2026-09-15; T0 writes their detailed steps before wave 1 starts, and V3-S.1 is its own task.
 
 ---
 
