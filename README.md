@@ -6,8 +6,11 @@
 > whether that number is worth ringing your phone. Ur Score knows no game of its own: it reads
 > whatever a recipe file describes.
 
-**You can install this.** The latest release is **v0.3.1**, on the
-[releases page](https://github.com/estevanhernandez-stack-ed/Ur-Score/releases).
+**You can install this.** The newest release is always on the
+[releases page](https://github.com/estevanhernandez-stack-ed/Ur-Score/releases). In RoRoRo, use
+**Plugins → Install from URL** with
+`https://github.com/estevanhernandez-stack-ed/Ur-Score/releases/latest/download/` — that address
+always points at the newest release, so it never goes stale.
 
 You need **RoRoRo v1.28.0.0 or newer** — that is the release that added the `ReportMetric` call
 this plugin depends on, and the manifest declares `minHostVersion: 1.28.0.0` on purpose. Against

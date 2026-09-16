@@ -25,6 +25,12 @@ public static class BoardText
 {
     public const string HostDown = "RoRoRo is not running. Still reading and keeping your scores; nothing is being sent.";
 
+    /// <summary>
+    /// The same news while Ur Score is stopped. "Still reading" was true only while running, so a stopped board said it
+    /// was reading on the detail line and that it was not on the state line, on the same screen.
+    /// </summary>
+    public const string HostDownStopped = "RoRoRo wasn't running at the last read, so nothing was sent.";
+
     public const string Starting = "Starting. Asking RoRoRo for your accounts…";
 
     public const string ReadingOnce = "Reading every source once…";
@@ -137,7 +143,7 @@ public static class BoardText
         $"The numbers on screen are the last ones Ur Score read, from {StatText.Span(now - oldest)} ago.";
 
     public static string DetailLine(LiveBoard live, string? budgetWarning) =>
-        live.Snapshots.Values.Any(s => s.State == WatchState.HostDown) ? HostDown : budgetWarning ?? "";
+        live.Snapshots.Values.Any(s => s.State == WatchState.HostDown) ? (live.Running ? HostDown : HostDownStopped) : budgetWarning ?? "";
 
     /// <summary>
     /// The detail line on the board: why your boards aren't saved or aren't showing comes first (R3), since a

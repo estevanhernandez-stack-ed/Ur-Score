@@ -55,7 +55,11 @@ public class BoardTextTests
             [MainClan.Id] = new RecipeSnapshot(WatchState.HostDown, null, [], [], 0) { SourceId = MainClan.Id },
         };
 
+        // Running: Ur Score really is still reading, so it may say so.
         Assert.Equal("RoRoRo is not running. Still reading and keeping your scores; nothing is being sent.",
+            BoardText.DetailLine(Live([MainClan], [Installed(Clan, "value")], down, running: true), "over budget"));
+        // Stopped: it is not reading, and the state line says so, so the detail line may not claim otherwise.
+        Assert.Equal("RoRoRo wasn't running at the last read, so nothing was sent.",
             BoardText.DetailLine(Live([MainClan], [Installed(Clan, "value")], down), "over budget"));
         Assert.Equal("over budget",
             BoardText.DetailLine(Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>()), "over budget"));
@@ -126,7 +130,7 @@ public class BoardTextTests
 
         Assert.Equal("Your boards file couldn't be read.", BoardText.DetailLine(down, "over budget", "Your boards file couldn't be read."));
         Assert.Equal("Your boards file couldn't be read.", BoardText.DetailLine(up, "over budget", "Your boards file couldn't be read."));
-        Assert.Equal(BoardText.HostDown, BoardText.DetailLine(down, "over budget", boardsProblem: null));
+        Assert.Equal(BoardText.HostDownStopped, BoardText.DetailLine(down, "over budget", boardsProblem: null));
         Assert.Equal("over budget", BoardText.DetailLine(up, "over budget", boardsProblem: null));
         Assert.Equal("", BoardText.DetailLine(up, null, boardsProblem: null));
     }
@@ -352,7 +356,7 @@ public class BoardTextTests
 
         Assert.Equal("Imported Clan.", BoardText.DetailLine(down, "over budget", boardsProblem: null, note: "Imported Clan."));
         Assert.Equal("Your boards file couldn't be read.", BoardText.DetailLine(down, "over budget", "Your boards file couldn't be read.", note: "Imported Clan."));
-        Assert.Equal(BoardText.HostDown, BoardText.DetailLine(down, "over budget", boardsProblem: null, note: null));
+        Assert.Equal(BoardText.HostDownStopped, BoardText.DetailLine(down, "over budget", boardsProblem: null, note: null));
     }
 
     /// <summary>A41: every new branch the line can take still carries the sentence about remembered numbers.</summary>

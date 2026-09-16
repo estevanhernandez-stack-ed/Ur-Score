@@ -57,8 +57,14 @@ try {
     Check '6 The board shows the main clan standing' ((Line $standing 'PanelTitle') -eq 'Clan standing' -and (Line $standing 'PanelSubtitle') -eq $Main) "title='$(Line $standing 'PanelTitle')' subtitle='$(Line $standing 'PanelSubtitle')'"
 
     Invoke-Element (Find-ByAutomationId $board 'TestNowButton')
-    $state = Wait-Line $board 'StateLine' '^(Not started\.|Stopped\.|Reading|.+: )' 120
-    Check '7 Test now reads without a failure' ($state -notmatch 'Something unexpected') "state='$state' detail='$(Line $board 'DetailLine')'"
+    # Wait for the read to END before judging it. This step used to accept any state line starting "Reading", which the
+    # in-flight "Reading every source once..." matches at once: it returned before the read finished and then checked a
+    # read that could not have failed yet, so it passed while proving nothing. Test now is off while a read runs and back
+    # on after, so wait for off, then for on. (No assignment inside the blocks: one there would not escape them.)
+    $null = Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10
+    $finished = Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240
+    $state = Line (Get-BoardWindow) 'StateLine'
+    Check '7 Test now reads without a failure' ($finished -and $state -notmatch 'Something unexpected' -and $state -notmatch '^Reading every source') "state='$state' detail='$(Line $board 'DetailLine')'"
 
     $setup = Open-SetupPage 'Diagnostics'
     $saved = Get-Clipboard -Raw
