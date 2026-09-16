@@ -38,26 +38,33 @@
                                                         <ColumnDefinition Width="80" />
                                                         <ColumnDefinition Width="120" />
                                                     </Grid.ColumnDefinitions>
-                                                    <DockPanel Grid.Column="0">
-                                                        <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
-                                                        <!-- Hidden, never Collapsed, for the same reason the avatar slot is (A26): the
-                                                             dot's 12 px is laid out whether or not the account is sent, so every name in
-                                                             the column starts at the same x, the heading sits over all of them, and a row
-                                                             doesn't move when its sent state changes. -->
-                                                        <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center"
-                                                                 Fill="{DynamicResource CyanBrush}">
-                                                            <Ellipse.Style>
-                                                                <Style TargetType="Ellipse">
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding Sent}" Value="False">
-                                                                            <Setter Property="Visibility" Value="Hidden" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Ellipse.Style>
-                                                        </Ellipse>
-                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
-                                                    </DockPanel>
+                                                    <StackPanel Grid.Column="0">
+                                                        <DockPanel>
+                                                            <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
+                                                            <!-- Hidden, never Collapsed, for the same reason the avatar slot is (A26): the
+                                                                 dot's 12 px is laid out whether or not the account is sent, so every name in
+                                                                 the column starts at the same x, the heading sits over all of them, and a row
+                                                                 doesn't move when its sent state changes. -->
+                                                            <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                     Fill="{DynamicResource CyanBrush}">
+                                                                <Ellipse.Style>
+                                                                    <Style TargetType="Ellipse">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Sent}" Value="False">
+                                                                                <Setter Property="Visibility" Value="Hidden" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Ellipse.Style>
+                                                            </Ellipse>
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                                                        </DockPanel>
+                                                        <!-- Indented past the avatar slot and the sent dot (28 + 12 px, A26), so the
+                                                             reason lines up under the name it is about. -->
+                                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontSize="11"
+                                                                   Margin="40,3,0,0"
+                                                                   Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}" />
+                                                    </StackPanel>
                                                     <TextBlock Grid.Column="1" Text="{Binding Value}" Style="{StaticResource NumberCell}" />
                                                     <TextBlock Grid.Column="2" Text="{Binding InGroup}" Style="{StaticResource NumberCell}" />
                                                     <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">

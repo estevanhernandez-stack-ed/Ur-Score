@@ -33,7 +33,12 @@ public sealed class SendTick : INotifyPropertyChanged
     }
 }
 
-public sealed record AccountRow(Guid AccountId, string DisplayName, string FoundIn, IReadOnlyList<SendTick> Sends, string? Avatar = null);
+public sealed record AccountRow(
+    Guid AccountId, string DisplayName, string FoundIn, IReadOnlyList<SendTick> Sends, string? Avatar = null, string Note = "")
+{
+    /// <summary>Why a source can't read this account, in that recipe's own words (plan A44).</summary>
+    public bool HasNote => Note.Length > 0;
+}
 
 /// <summary>A recipe's state after a Send change, or the refusal that undid it.</summary>
 public sealed record SendChange(RecipeState State, string? Refusal);
@@ -61,7 +66,8 @@ public static class AccountsModel
                 Name = $"Send {account.DisplayName} for {r.Recipe.Name}",
                 On = !r.State.Excluded.Contains(account.AccountId),
             })],
-            avatar?.Invoke(account.RobloxUserId)))];
+            avatar?.Invoke(account.RobloxUserId),
+            PanelText.CannotRead(account.RobloxUserId, installed, sources, latest, nameTheRecipe: true)))];
     }
 
     /// <summary>The main and mine sources whose last read had this account, main first; else "Not in a watched clan".</summary>

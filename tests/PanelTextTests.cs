@@ -104,4 +104,57 @@ public class PanelTextTests
         Assert.Equal("This panel's clan was removed.", PanelText.StaleSource("clan"));
         Assert.Equal("This panel's stat was removed.", PanelText.StaleStat);
     }
+
+    private static RecipeSnapshot CouldNotRead(string sourceId, params (long UserId, string Why)[] said) =>
+        BoardFixtures.Snapshot(sourceId, []) with { Unavailable = said.ToDictionary(x => x.UserId, x => x.Why) };
+
+    /// <summary>Plan A44/A46: the recipe's own sentence, not a new one, and only the recipe's name added to it.</summary>
+    [Fact]
+    public void AnAccountASourceCouldNotReadCarriesTheRecipesOwnWords()
+    {
+        var profile = BoardFixtures.SourceOf("s-00000009", BoardFixtures.Profile, null, SourceRole.Mine);
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [profile.Id] = CouldNotRead(profile.Id, (BoardFixtures.AltOne.RobloxUserId, "Profile is private. Link this account on db.biggames.io and turn on its Profile view.")),
+        };
+        var installed = new[] { BoardFixtures.Installed(BoardFixtures.Profile, "diamonds") };
+
+        Assert.Equal(
+            "Profile is private. Link this account on db.biggames.io and turn on its Profile view.",
+            PanelText.CannotRead(BoardFixtures.AltOne.RobloxUserId, installed, [profile], latest, nameTheRecipe: false));
+        Assert.Equal(
+            "Pet Sim 99 profile: Profile is private. Link this account on db.biggames.io and turn on its Profile view.",
+            PanelText.CannotRead(BoardFixtures.AltOne.RobloxUserId, installed, [profile], latest, nameTheRecipe: true));
+        Assert.Equal("", PanelText.CannotRead(BoardFixtures.Main.RobloxUserId, installed, [profile], latest, nameTheRecipe: true));
+    }
+
+    [Fact]
+    public void EveryRecipeThatCouldNotReadItGetsItsOwnLineMainFirst()
+    {
+        var clan = BoardFixtures.SourceOf("s-00000001", BoardFixtures.Clan, "CCGP", SourceRole.Main);
+        var profile = BoardFixtures.SourceOf("s-00000009", BoardFixtures.Profile, null, SourceRole.Mine);
+        var id = BoardFixtures.AltOne.RobloxUserId;
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [profile.Id] = CouldNotRead(profile.Id, (id, "Profile is private.")),
+            [clan.Id] = CouldNotRead(clan.Id, (id, "Not in this clan right now.")),
+        };
+        var installed = new[] { BoardFixtures.Installed(BoardFixtures.Clan, "value"), BoardFixtures.Installed(BoardFixtures.Profile, "diamonds") };
+
+        Assert.Equal(
+            "Pet Sim 99 clan battle points: Not in this clan right now." + Environment.NewLine + "Pet Sim 99 profile: Profile is private.",
+            PanelText.CannotRead(id, installed, [profile, clan], latest, nameTheRecipe: true));
+    }
+
+    [Fact]
+    public void ASwitchedOffSourceAndAnIdThatIsNotYoursSayNothing()
+    {
+        // Unavailable only ever holds your own ids; this pins that nothing here would print one if it didn't.
+        var profile = BoardFixtures.SourceOf("s-00000009", BoardFixtures.Profile, null, SourceRole.Mine) with { Enabled = false };
+        var latest = new Dictionary<string, RecipeSnapshot> { [profile.Id] = CouldNotRead(profile.Id, (999_999, "Profile is private.")) };
+        var installed = new[] { BoardFixtures.Installed(BoardFixtures.Profile, "diamonds") };
+
+        Assert.Equal("", PanelText.CannotRead(999_999, installed, [profile], latest, nameTheRecipe: true));
+        Assert.Equal("", PanelText.CannotRead(0, installed, [profile], latest, nameTheRecipe: true));
+    }
 }

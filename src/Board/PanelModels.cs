@@ -125,7 +125,13 @@ public sealed record LegendItem(string Text, int Colour);
 
 public sealed record RaceModel(PanelHead Head, IReadOnlyList<ChartSeries> Series, IReadOnlyList<LegendItem> Legend, string ChartName);
 
-public sealed record AccountLineModel(long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing, string? Avatar = null);
+public sealed record AccountLineModel(
+    long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing,
+    string? Avatar = null, string Note = "")
+{
+    /// <summary>Why this row has no numbers, in the recipe's own words (plan A44). Empty for a row that was read.</summary>
+    public bool HasNote => Note.Length > 0;
+}
 
 public sealed record AccountGroupModel(string Heading, IReadOnlyList<AccountLineModel> Rows);
 
@@ -349,8 +355,12 @@ public static class PanelModels
         {
             groups.Add(new AccountGroupModel(
                 recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read",
+                // live.Snapshots, not live.SnapshotOf: a remembered snapshot never carries an Unavailable entry (A39), so
+                // this reads what was actually read, and says nothing at all before the first read.
                 [.. rest.OrderBy(a => a.DisplayName, StringComparer.Ordinal)
-                    .Select(a => new AccountLineModel(a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId)))]));
+                    .Select(a => new AccountLineModel(
+                        a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId),
+                        PanelText.CannotRead(a.RobloxUserId, live.Installed, live.Sources, live.Snapshots, nameTheRecipe: false)))]));
         }
 
         return new MyAccountsModel(

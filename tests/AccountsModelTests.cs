@@ -134,4 +134,23 @@ public class AccountsModelTests
         // With no lookup (a page that hasn't one yet), every row is simply pictureless.
         Assert.Null(AccountsModel.Rows([Main], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>())[0].Avatar);
     }
+
+    [Fact]
+    public void SetupSaysWhyAnAccountsNumbersAreEmpty()
+    {
+        var profile = new Source("s-00000009", Profile.Slug, new Dictionary<string, string>(), SourceRole.Mine);
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [profile.Id] = Read(Main.RobloxUserId) with { Unavailable = new Dictionary<long, string> { [Alt.RobloxUserId] = "Profile is private. Link this account on db.biggames.io and turn on its Profile view." } },
+        };
+        var installed = new[] { Sending(Profile) };
+
+        var rows = AccountsModel.Rows([Main, Alt], installed, [profile], latest);
+
+        Assert.Equal("", rows.Single(r => r.AccountId == Main.AccountId).Note);
+        Assert.Equal(
+            "Pet Sim 99 profile: Profile is private. Link this account on db.biggames.io and turn on its Profile view.",
+            rows.Single(r => r.AccountId == Alt.AccountId).Note);
+        Assert.True(rows.Single(r => r.AccountId == Alt.AccountId).HasNote);
+    }
 }

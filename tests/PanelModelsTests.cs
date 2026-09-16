@@ -262,6 +262,70 @@ public class PanelModelsTests
         Assert.Equal(PanelText.StaleStat, model.Head.Stale);
     }
 
+    /// <summary>Plan A44: the panel with the dashes is the panel that says why.</summary>
+    [Fact]
+    public void MyAccountsSaysWhyARowHasNoNumbers()
+    {
+        var snapshot = Snapshot(ProfileSource.Id, [Row(Main.RobloxUserId, 4200, "diamonds")])
+            with { Unavailable = new Dictionary<long, string> { [AltOne.RobloxUserId] = "Profile is private. Link this account on db.biggames.io and turn on its Profile view." } };
+        var live = Live([ProfileSource], [Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot> { [ProfileSource.Id] = snapshot });
+
+        var model = PanelModels.MyAccounts(live, Reader(), new PanelSettings(Profile.Slug, ProfileSource.Id, Stat: "diamonds"));
+        var rows = model.Groups.SelectMany(g => g.Rows).ToList();
+
+        var unread = rows.Single(r => r.UserId == AltOne.RobloxUserId);
+        Assert.True(unread.Missing);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", unread.Note);
+        Assert.True(unread.HasNote);
+
+        // An account that was read says nothing, and no row repeats the recipe's name on a panel drawn per recipe.
+        var read = rows.Single(r => r.UserId == Main.RobloxUserId);
+        Assert.Equal("", read.Note);
+        Assert.False(read.HasNote);
+    }
+
+    /// <summary>
+    /// Plans A39 and A44 meet without arguing. The remembered mark is the panel's, about the numbers it is showing;
+    /// the reason is one row's, about numbers it hasn't got. A remembered snapshot carries no Unavailable entry, and
+    /// the note is read from the live map alone, so a row drawn from the book is never also told it can't be read.
+    /// </summary>
+    [Fact]
+    public void ARememberedPanelStillSaysWhyARowWithNoNumbersIsEmpty()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var mine = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        // Nothing builds a remembered snapshot with an Unavailable entry (A39); the second one pins that the panel
+        // would not print it if something ever did, rather than assuming the map stays empty.
+        var kept = Snapshot(main.Id, [Row(Main.RobloxUserId, 14_020_550)])
+            with
+            {
+                RememberedAt = Now.AddHours(-2),
+                Unavailable = new Dictionary<long, string> { [AltTwo.RobloxUserId] = "Not in this clan right now." },
+            };
+        var read = Snapshot(mine.Id, [])
+            with { Unavailable = new Dictionary<long, string> { [AltOne.RobloxUserId] = "Profile is private." } };
+        var live = Live([main, mine], [Installed(Clan, "value")], Snaps(read),
+            remembered: new Dictionary<string, RecipeSnapshot> { [main.Id] = kept });
+
+        var model = PanelModels.MyAccounts(live, Reader(), new PanelSettings(Clan.Slug, Stat: "value"));
+        var rows = model.Groups.SelectMany(g => g.Rows).ToList();
+
+        Assert.True(model.Head.Remembered);
+
+        // The row the book remembers keeps its number, and says nothing about being unreadable.
+        var fromTheBook = rows.Single(r => r.UserId == Main.RobloxUserId);
+        Assert.False(fromTheBook.Missing);
+        Assert.Equal("", fromTheBook.Note);
+
+        // The row with no numbers carries its reason, inside that same remembered panel.
+        var empty = rows.Single(r => r.UserId == AltOne.RobloxUserId);
+        Assert.True(empty.Missing);
+        Assert.Equal("Profile is private.", empty.Note);
+
+        // Read from what was actually read: a reason only the remembered snapshot carries is never shown.
+        Assert.Equal("", rows.Single(r => r.UserId == AltTwo.RobloxUserId).Note);
+    }
+
     // ---- Promotion check ----
 
     [Fact]

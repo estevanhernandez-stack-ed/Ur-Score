@@ -4,6 +4,10 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
+// The bare name Source would find the Labs626.UrScore.Source namespace from in here, so the type is aliased where the
+// namespace's own members can't reach: after the namespace line, which is consulted first.
+using Source = Labs626.UrScore.Core.Source;
+
 /// <summary>How panels write numbers, places and times (spec §9.6: change states its span; a missing value is a dash).</summary>
 public static class PanelText
 {
@@ -124,6 +128,34 @@ public static class PanelText
     }
 
     public static string StaleSource(string group) => $"This panel's {group} was removed.";
+
+    /// <summary>
+    /// Why a source could not read one of your accounts at its last read, in the recipe's own words, or empty
+    /// (plan A44, A46). One line per recipe that said so, main source first.
+    /// <para>
+    /// The sentence is the recipe's: <c>unavailable.message</c>, which is the only thing here that knows what it
+    /// reads and what you must do about it. The only words Ur Score adds are the recipe's own name, and only when
+    /// <paramref name="nameTheRecipe"/> — a screen that already shows one recipe at a time doesn't need telling.
+    /// </para>
+    /// </summary>
+    public static string CannotRead(
+        long userId, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
+        IReadOnlyDictionary<string, RecipeSnapshot> latest, bool nameTheRecipe)
+    {
+        if (userId == 0) return "";
+
+        var lines = new List<string>();
+        foreach (var source in sources.Where(s => s.Enabled).OrderBy(s => s.Role == SourceRole.Main ? 0 : 1))
+        {
+            if (installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe) continue;
+            if (latest.GetValueOrDefault(source.Id)?.Unavailable.GetValueOrDefault(userId) is not { Length: > 0 } why) continue;
+
+            var line = nameTheRecipe ? $"{recipe.Name}: {why}" : why;
+            if (!lines.Contains(line, StringComparer.Ordinal)) lines.Add(line);
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
 
     /// <summary>The recipe whose period a Top panel names: its list recipe's own, else the first installed recipe that has one.</summary>
     internal static Recipe? TopPeriodRecipe(Recipe? list, IReadOnlyList<InstalledRecipe> installed) =>
