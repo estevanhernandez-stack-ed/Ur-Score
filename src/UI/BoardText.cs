@@ -113,6 +113,20 @@ public static class BoardText
             .Select(s => s.EndsWith('.') ? s : s + ".");
 
     /// <summary>
+    /// What a panel's ⧉ is called. A board of five panels gave a screen reader five buttons named "Pop out" with no
+    /// way to tell which was which, and an automation caller had to reach past the name to the panel's id to press
+    /// the right one (owner's look, 2026-09-16). The panel's own title goes on the end, as it does on the popped-out
+    /// slot's "Bring back {title}" and "Remove {title}" and the gallery's "Add {title}". A frame with no head behind
+    /// it keeps the general word rather than no name at all.
+    /// </summary>
+    public static string PopOutName(string? title) =>
+        string.IsNullOrWhiteSpace(title) ? "Pop out" : $"Pop out {title.Trim()}";
+
+    /// <summary>As <see cref="PopOutName"/>, for the ⋯ beside it, which had the same one name on every panel.</summary>
+    public static string PanelSettingsName(string? title) =>
+        string.IsNullOrWhiteSpace(title) ? "Panel settings" : $"Settings for {title.Trim()}";
+
+    /// <summary>
     /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
     /// (D4); a board with no panels, including a following tab being edited; else none.
     /// </summary>

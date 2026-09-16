@@ -53,14 +53,29 @@ public partial class BoardWindow
 
         e.Handled = true;
         var areas = WorkAreas();
+
+        // A first pop-out opens at what the panel has here: the width its span holds on this board's grid and the
+        // height it asked for there (R18). One that has been out already this session opens where it was left.
+        var size = PopOutPlacement.SizeFor(def.Size.Span, BoardPanels.ActualWidth, BoardPanels.Gap, PanelHeight(def.Id));
         var rect = _lastPopOut.TryGetValue(def.Id, out var last)
             ? PopOutPlacement.Clamp(last, areas)
-            : PopOutPlacement.Default(BoardRect(), _popOuts.Count, areas);
+            : PopOutPlacement.Default(BoardRect(), _popOuts.Count, areas, size.Width, size.Height);
 
         ChangeBoard(board => BoardEdits.PopOut(board, def.Id, rect));
 
         // The ⧉ pressed went with the redraw; focus goes to the slot's Bring back, the keyboard path home.
         FocusToolLater(def.Id, PanelTool.PopOut);
+    }
+
+    /// <summary>The height the panel asked for where it sits on the grid, or 0 when nothing has measured it.</summary>
+    private double PanelHeight(string panelId)
+    {
+        foreach (var (def, view, _) in _panels)
+        {
+            if (string.Equals(def.Id, panelId, StringComparison.Ordinal)) return view.DesiredSize.Height;
+        }
+
+        return 0;
     }
 
     /// <summary>

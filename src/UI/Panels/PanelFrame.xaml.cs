@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Labs626.UrScore.Board;
@@ -109,6 +110,13 @@ public partial class PanelFrame : UserControl
     {
         var editing = GetShowEditTools(this);
         var settings = GetShowSettings(this);
+
+        // Each of the panel's own tools says which panel it belongs to, as the popped-out slot's Bring back and
+        // Remove do. A board of five panels otherwise offers five buttons called "Pop out" and five called
+        // "Panel settings", which a screen reader cannot tell apart and an automation caller has to reach past.
+        var title = (DataContext as PanelHead)?.Title;
+        AutomationProperties.SetName(PopOutButton, BoardText.PopOutName(title));
+        AutomationProperties.SetName(PanelSettingsButton, BoardText.PanelSettingsName(title));
 
         EditTools.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
         PopOutButton.Visibility = GetShowPopOut(this) && !editing ? Visibility.Visible : Visibility.Collapsed;

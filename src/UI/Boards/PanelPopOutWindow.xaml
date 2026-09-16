@@ -6,8 +6,11 @@
         AutomationProperties.AutomationId="PopOutWindow"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
         BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1"
-        FontFamily="{StaticResource BodyFont}">
-    <!-- Spec §9.3: no system title bar; the strip is the caption, so it drags the window, and the edges resize it. -->
+        FontFamily="{StaticResource BodyFont}" FontSize="13">
+    <!-- Spec §9.3: no system title bar; the strip is the caption, so it drags the window, and the edges resize it.
+         FontSize is the board's 13, not WPF's 12 as the other windows take: this window holds a panel lifted off the
+         board, and the size it opens at is worked out from the height that panel had there (PopOutPlacement.SizeFor),
+         which only holds if it is drawn the same size here. -->
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="30" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>

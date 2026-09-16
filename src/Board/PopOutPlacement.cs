@@ -8,8 +8,19 @@ public static class PopOutPlacement
 {
     public const double MinWidth = 260;
     public const double MinHeight = 180;
+
+    /// <summary>What a pop-out opens at when nothing has measured the board or the panel. Everything else is sized from the panel.</summary>
     public const double DefaultWidth = 360;
     public const double DefaultHeight = 300;
+
+    /// <summary>
+    /// What <c>PanelPopOutWindow</c> puts around the panel, in device-independent pixels: its 1 px border on each
+    /// side, its 30 px title strip, and the scroller's 6 px padding — plus, across the width, the room a vertical
+    /// scroll bar takes, allowed for whether or not the window ends up having to scroll, so a table keeps its
+    /// columns either way. <c>PopOutPlacementTests</c> holds these against the window's own XAML.
+    /// </summary>
+    public const double ChromeWidth = 1 + 1 + 6 + 6 + 17;
+    public const double ChromeHeight = 1 + 1 + 30 + 6 + 6;
 
     /// <summary>How far each further new pop-out steps from the last.</summary>
     public const double Cascade = 28;
@@ -57,17 +68,39 @@ public static class PopOutPlacement
         return holding is { } on ? SizeTo(rect, on) : Fit(rect, Nearest(rect, workAreas));
     }
 
+    /// <summary>
+    /// The size a panel's first pop-out opens at: what the panel already has on the board it was popped out of, and
+    /// nothing guessed per panel. Its width is the width its own span (<see cref="PanelSize.Span"/>) has on that
+    /// board's grid, through the same column maths the board arranges it with — so a four-column table opens as wide
+    /// as it is on the board, a short list of label/value pairs stays small, and a narrow board, which widens every
+    /// panel, widens its pop-outs too. Its height is the height the panel asked for at that width, so a table opens
+    /// on its rows rather than five of them. Both then carry the window's own furniture
+    /// (<see cref="ChromeWidth"/>, <see cref="ChromeHeight"/>). A board or a panel nothing has measured yet — no
+    /// window on screen to ask — falls back to <see cref="DefaultWidth"/> by <see cref="DefaultHeight"/>.
+    /// The result is only a starting size: <see cref="Default(PopOutRect, int, IReadOnlyList{PopOutRect}, double, double)"/>
+    /// caps it to the screen, and the window stays freely resizable, with where the user leaves it saved as before.
+    /// </summary>
+    public static (double Width, double Height) SizeFor(int span, double boardWidth, double gap, double panelHeight) => (
+        double.IsFinite(boardWidth) && boardWidth > 0
+            ? BoardLayout.CellWidth(boardWidth, BoardLayout.EffectiveSpan(span, boardWidth), gap) + ChromeWidth
+            : DefaultWidth,
+        double.IsFinite(panelHeight) && panelHeight > 0 ? panelHeight + ChromeHeight : DefaultHeight);
+
     /// <summary>A panel's first pop-out: inside the board's top-right corner, each further one stepped down and left.</summary>
     public static PopOutRect Default(PopOutRect board, int openCount, PopOutRect screen) => Default(board, openCount, [screen]);
 
     /// <summary>As <see cref="Default(PopOutRect, int, PopOutRect)"/>, wholly on the work area most of it falls on, else the nearest.</summary>
-    public static PopOutRect Default(PopOutRect board, int openCount, IReadOnlyList<PopOutRect> workAreas)
+    public static PopOutRect Default(PopOutRect board, int openCount, IReadOnlyList<PopOutRect> workAreas) =>
+        Default(board, openCount, workAreas, DefaultWidth, DefaultHeight);
+
+    /// <summary>As <see cref="Default(PopOutRect, int, IReadOnlyList{PopOutRect})"/>, at a size <see cref="SizeFor"/> worked out from the panel.</summary>
+    public static PopOutRect Default(PopOutRect board, int openCount, IReadOnlyList<PopOutRect> workAreas, double width, double height)
     {
         var rect = new PopOutRect(
-            board.X + board.W - DefaultWidth - 24 - openCount * Cascade,
+            board.X + board.W - width - 24 - openCount * Cascade,
             board.Y + 72 + openCount * Cascade,
-            DefaultWidth,
-            DefaultHeight);
+            width,
+            height);
 
         if (!IsFinite(rect) || workAreas.Count == 0) return Clamp(rect, workAreas);
         return Fit(rect, Nearest(rect, workAreas));

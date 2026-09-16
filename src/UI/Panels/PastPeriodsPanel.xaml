@@ -7,18 +7,20 @@
             <ui:PanelFrame DataContext="{Binding Head}" />
             <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
                 <!-- Four columns, and every one of them can be full: a long period name, a place, a total, and a
-                     value with an account name after it. So each column past the first opens with a 12 px gutter,
-                     and no two cells can run together the way Total and Your best did (32 beside 32 read as 3232).
-                     The numbers take what they need and no more (an ordinal, and an abbreviated total), which
-                     leaves the two columns that carry names the rest to share; Your best gets the larger share,
-                     since it carries a number and a name where the period column carries one word. -->
+                     value with an account name after it. So each column past the first opens with a 12 px gutter
+                     no cell is drawn into, and no two can run together the way Total and Your best did (32 beside
+                     32 read as 3232). The gutters do all of the separating, so the widths need only cover what
+                     each column carries: an ordinal up to "1,234th" under "Place", an abbreviated total up to
+                     "312.5M" under "Total", and the rest shared equally by the two columns that carry names —
+                     equally, because starving the period column is what a 1.4 share to Your best did, and a row
+                     whose name is gone can't be read at all (PastPeriodsColumnsTests). -->
                 <Border Style="{StaticResource PanelTableHeadingRow}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="56" />
                             <ColumnDefinition Width="64" />
-                            <ColumnDefinition Width="76" />
-                            <ColumnDefinition Width="1.4*" />
+                            <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{Binding PeriodColumn}" Style="{StaticResource ColumnHeader}" />
                         <TextBlock Grid.Column="1" Text="Place" Style="{StaticResource ColumnHeader}" TextAlignment="Right" Margin="12,0,0,0" />
@@ -33,9 +35,9 @@
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="56" />
                                         <ColumnDefinition Width="64" />
-                                        <ColumnDefinition Width="76" />
-                                        <ColumnDefinition Width="1.4*" />
+                                        <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{Binding Period}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="1" Text="{Binding Place}" TextAlignment="Right" VerticalAlignment="Center" Margin="12,0,0,0" />

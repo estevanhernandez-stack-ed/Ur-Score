@@ -17,6 +17,16 @@ public static class BoardLayout
     public const double NarrowWidth = 1100;
     public const double SingleWidth = 720;
 
+    /// <summary>One of the twelve columns on a board of <paramref name="width"/>: the width less the gaps, shared twelve ways.</summary>
+    public static double ColumnWidth(double width, double gap) => Math.Max(0, (width - gap * (Columns - 1)) / Columns);
+
+    /// <summary>
+    /// The width a panel of <paramref name="span"/> columns takes on a board of <paramref name="width"/>: its own
+    /// columns and the gaps inside it. The grid arranges by this (<c>PanelGrid</c>), and a pop-out opens at it
+    /// (<see cref="PopOutPlacement.SizeFor"/>), so a panel is the same width in its own window as on the board.
+    /// </summary>
+    public static double CellWidth(double width, int span, double gap) => ColumnWidth(width, gap) * span + gap * (span - 1);
+
     public static int EffectiveSpan(int span, double width) =>
         width < SingleWidth ? Columns
         : width < NarrowWidth ? span switch { <= 4 => 6, 6 => 6, _ => Columns }

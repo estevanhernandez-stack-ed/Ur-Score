@@ -82,7 +82,7 @@ public sealed class PanelGrid : Panel
     private static List<double> Heights(IEnumerable<UIElement> children) =>
         children.Select(child => child.DesiredSize.Height).ToList();
 
-    private double ColumnWidth(double width) => Math.Max(0, (width - Gap * (BoardLayout.Columns - 1)) / BoardLayout.Columns);
+    private double ColumnWidth(double width) => BoardLayout.ColumnWidth(width, Gap);
 
-    private double CellWidth(double width, int span) => ColumnWidth(width) * span + Gap * (span - 1);
+    private double CellWidth(double width, int span) => BoardLayout.CellWidth(width, span, Gap);
 }

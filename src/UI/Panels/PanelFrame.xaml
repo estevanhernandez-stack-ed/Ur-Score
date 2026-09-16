@@ -27,10 +27,12 @@
         <!-- The title line (the mock's .p-head): title, chip and tools centred on one line; the tools in the muted text colour. -->
         <DockPanel LastChildFill="False">
             <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Both are named in UpdateTools from the panel's own title ("Pop out Past battles"), so five panels
+                     don't give a screen reader five identical buttons; no name here, which would go stale beside it. -->
                 <Button x:Name="PopOutButton" Content="⧉" Tag="PopOut" Style="{StaticResource FlatButton}" Padding="6,2" Visibility="Collapsed"
-                        Foreground="{DynamicResource MutedTextBrush}" Click="OnToolClick" AutomationProperties.Name="Pop out" />
+                        Foreground="{DynamicResource MutedTextBrush}" Click="OnToolClick" />
                 <Button x:Name="PanelSettingsButton" Content="⋯" Tag="Settings" Style="{StaticResource FlatButton}" Padding="6,2" Visibility="Collapsed"
-                        Foreground="{DynamicResource MutedTextBrush}" Click="OnToolClick" AutomationProperties.Name="Panel settings" />
+                        Foreground="{DynamicResource MutedTextBrush}" Click="OnToolClick" />
             </StackPanel>
             <TextBlock x:Name="PanelTitle" DockPanel.Dock="Left" Text="{Binding Title, Converter={StaticResource Upper}}"
                        AutomationProperties.Name="{Binding Title}" Style="{StaticResource PanelTitleText}" />
