@@ -3,6 +3,37 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.3.3 - 2026-09-16
+
+### Added
+
+- **Your finished battles fill in on their own.** A clan between battles used to read as
+  "nothing to see": the read stopped before it reached the finished ones, so the Past battles panel
+  stayed empty however long a clan had been playing. It now hands over the finished periods either
+  way, and a first read backfills every one the source still remembers - 23 of them on the clan this
+  was found on. Only your own accounts' numbers are kept, exactly as before.
+- **Rename, Duplicate and Delete are on screen.** They were only ever on a board tab's right-click
+  menu, so they read as missing. A `...` button now sits on the tab row beside + Board and opens the
+  same menu. Right-click and Shift+F10 still work.
+
+### Changed
+
+- **Every popup is Ur Score's own.** The seven remaining stock Windows message boxes are gone.
+  Three questions that need asking - delete a board, remove a recipe, add a clan past the limit -
+  share one themed confirmation whose safe answer is the default. The two that were only reporting a
+  failure say it where you are looking instead: a board that would not save keeps its reason on the
+  board until a save works, and a recipe that would not import says why under Import recipe.
+- **The import screen fits its window again.** The stats list was a fixed height whatever the recipe
+  offered, so a recipe with one stat pushed Cancel, Import, and the line telling you to tick a stat
+  off the bottom of the screen. It now grows to its rows.
+- **A popped-out panel opens at its panel's size** rather than one size for all of them, so a table
+  opens as a table. Each panel's Pop out and Settings buttons now say which panel they belong to.
+- **Past battles reads as a table.** Total and Your best no longer run together, the battle name
+  keeps its width, and the panel says what it is ordered by instead of inheriting an order by
+  accident.
+- The line for a clan with no finished battles yet said you had none. It now says Ur Score has not
+  read them yet, and that the next read fills them in.
+
 ## 0.3.2 - 2026-09-15
 
 ### Added
