@@ -77,6 +77,26 @@ public class BoardTextTests
     public void TheAttributionCreditsRecipesThatAreRead() =>
         Assert.Equal(Clan.Credit, BoardText.Attribution(Live([MainClan], [Installed(Clan, "value"), Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>())));
 
+    /// <summary>
+    /// Two recipes read at once credit the same source, and the clan recipe's whole credit is the first sentence of
+    /// the profile recipe's. Whole-string Distinct cannot see that, so the footer said "Data from Big Games' public
+    /// Pet Simulator 99 API." twice on the owner's own board (backlog V3-S.4, seen on screen 2026-09-15). A sentence
+    /// is said once, and the ones that only the second recipe carries still get said.
+    /// </summary>
+    [Fact]
+    public void ASentenceTwoRecipesShareIsCreditedOnce()
+    {
+        var profile = SourceOf("s-00000003", Profile, "estehernandez", SourceRole.Mine);
+        var live = Live([MainClan, profile], [Installed(Clan, "value"), Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>());
+
+        var said = BoardText.Attribution(live);
+
+        Assert.Equal(
+            "Data from Big Games' public Pet Simulator 99 API. Each account must be linked on db.biggames.io with its Profile view public.",
+            said);
+        Assert.Equal(1, said.Split("Data from Big Games'").Length - 1);
+    }
+
     [Fact]
     public void NoRecipesShowsOverEveryBoardAndAStartersStatesOnlyOnATabThatFollowsIt()
     {

@@ -74,12 +74,23 @@ public static class BoardText
         };
     }
 
-    /// <summary>Each recipe being read credits its data (spec §6.1 of the first design).</summary>
+    /// <summary>
+    /// Each recipe being read credits its data (spec §6.1 of the first design), and a sentence two recipes share is
+    /// said once. Deduplicating whole credits is not enough: recipes for the same service open with the same
+    /// sentence and then add their own, so the shared opening was printed once per recipe (backlog V3-S.4). Splitting
+    /// on the sentence break — a full stop followed by a space — leaves a host name inside a sentence intact, because
+    /// the stops within one are not followed by a space.
+    /// </summary>
     public static string Attribution(LiveBoard live) =>
         string.Join(" ", live.Installed
             .Where(i => live.Sources.Any(s => s.Enabled && string.Equals(s.Recipe, i.Recipe.Slug, StringComparison.Ordinal)))
-            .Select(i => i.Recipe.Credit)
+            .SelectMany(i => Sentences(i.Recipe.Credit))
             .Distinct(StringComparer.Ordinal));
+
+    /// <summary>One credit's sentences, each keeping its own full stop.</summary>
+    private static IEnumerable<string> Sentences(string credit) =>
+        credit.Split(". ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => s.EndsWith('.') ? s : s + ".");
 
     /// <summary>
     /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
