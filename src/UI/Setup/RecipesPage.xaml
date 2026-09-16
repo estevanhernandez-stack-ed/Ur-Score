@@ -40,6 +40,8 @@
                     AutomationProperties.Name="Import a recipe file" />
             <TextBlock x:Name="RecipesLine" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
         </StackPanel>
+        <!-- An import that couldn't happen is said here, under the button that started it. -->
+        <TextBlock x:Name="ImportProblemLine" Style="{StaticResource Refusal}" Margin="0,8,0,0" Visibility="Collapsed" />
         <TextBlock Text="WHEN UR SCORE OPENS" Style="{StaticResource SectionLabel}" Margin="0,22,0,6" />
         <!-- Checked and Unchecked, not Click: a UI Automation toggle changes IsChecked without a click. -->
         <CheckBox x:Name="StartOnOpenBox" Content="Start reading as soon as Ur Score opens"

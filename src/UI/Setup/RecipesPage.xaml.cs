@@ -44,8 +44,17 @@ public partial class RecipesPage : UserControl, ISetupPage
 
         try
         {
+            Show(ImportProblemLine, "");
             var outcome = await ImportFlow.RunAsync(_window, _services, text => Show(RecipesLine, text));
             if (outcome is null) return;
+
+            // An import that couldn't happen is said here, under the button that started it, not in a stock box.
+            if (outcome.IsProblem)
+            {
+                Show(RecipesLine, "");
+                Show(ImportProblemLine, outcome.Message);
+                return;
+            }
 
             Show(RecipesLine, outcome.Message);
             if (outcome.ChooseSources) _window.ShowPage(SetupPages.ClansId(outcome.Slug));
@@ -84,9 +93,8 @@ public partial class RecipesPage : UserControl, ISetupPage
         if (sender is not Button { Tag: string slug }) return;
         if (_services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, slug, StringComparison.Ordinal))?.Recipe is not { } recipe) return;
 
-        var answer = MessageBox.Show(_window, RecipesModel.ConfirmRemove(recipe), "Ur Score",
-            MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
-        if (answer != MessageBoxResult.OK) return;
+        // Asked in Ur Score's own window, in the theme, never a stock Windows box (owner rule, backlog V3-S.10).
+        if (!ConfirmWindow.Ask(_window, RecipesModel.RemoveQuestion(recipe))) return;
 
         try
         {

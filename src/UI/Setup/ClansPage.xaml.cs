@@ -169,10 +169,11 @@ public partial class ClansPage : UserControl, ISetupPage
             return;
         }
 
-        if (before.All(s => s.Id != change.SourceId) && ClansModel.NeedsConfirmation(before, recipe.Slug))
+        // Asked in Ur Score's own window, in the theme, never a stock Windows box (owner rule, backlog V3-S.10).
+        if (ClansModel.AddQuestion(before, change, recipe, _services.Installed, _services.KnownAccounts.Count, name) is { } question
+            && !ConfirmWindow.Ask(Window.GetWindow(this), question))
         {
-            var after = ClansModel.RequestsPerHour(change.Sources, _services.Installed, _services.KnownAccounts.Count);
-            if (!Confirm(ClansModel.ConfirmText(recipe, after))) return;
+            return;
         }
 
         try
@@ -279,15 +280,6 @@ public partial class ClansPage : UserControl, ISetupPage
             Show(RequestsLine, _services.Redactor.Redact($"Could not save that change: {ex.Message}"));
             return false;
         }
-    }
-
-    private bool Confirm(string text)
-    {
-        var owner = Window.GetWindow(this);
-        var answer = owner is null
-            ? MessageBox.Show(text, "Ur Score", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel)
-            : MessageBox.Show(owner, text, "Ur Score", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
-        return answer == MessageBoxResult.OK;
     }
 
     private static void Show(TextBlock line, string text)

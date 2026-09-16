@@ -7,8 +7,11 @@ using Microsoft.Win32;
 
 namespace Labs626.UrScore.UI;
 
-/// <summary>What an import did, and whether Setup should go on to that recipe's Clans page.</summary>
-public sealed record ImportOutcome(string Slug, string Message, bool ChooseSources);
+/// <summary>
+/// What an import did, and whether Setup should go on to that recipe's Clans page. <paramref name="IsProblem"/>
+/// marks a message the page says as a refusal rather than as news: nothing was installed.
+/// </summary>
+public sealed record ImportOutcome(string Slug, string Message, bool ChooseSources, bool IsProblem = false);
 
 /// <summary>
 /// Import recipe…, moved from the retired main window with the same rules (spec §6.3, stats design §7.2):
@@ -119,11 +122,14 @@ public static class ImportFlow
         }
         catch (Exception ex)
         {
-            MessageBox.Show(owner, services.Redactor.Redact($"Could not save that recipe: {ex.Message}"), "Ur Score",
-                MessageBoxButton.OK, MessageBoxImage.Error);
-            return null;
+            // Said on the page the click came from, where the eye already is, not in a stock box that has to be
+            // dismissed before you can see what you were doing (owner rule, backlog V3-S.10).
+            return Problem(services.Redactor.Redact($"Could not save that recipe: {ex.Message}"));
         }
     }
+
+    /// <summary>An import that couldn't happen, for the page to say as a refusal. Nothing was installed.</summary>
+    private static ImportOutcome Problem(string message) => new("", message, ChooseSources: false, IsProblem: true);
 
     /// <summary>A recipe with inputs and no sources goes on to its Clans page, where the search replaces a plain text box.</summary>
     private static ImportOutcome Outcome(ISetupServices services, Recipe recipe, string message)
@@ -135,6 +141,13 @@ public static class ImportFlow
         return new ImportOutcome(recipe.Slug, message, choose);
     }
 
+    /// <summary>
+    /// The one stock box left in the import flow, held back on purpose (backlog V3-S.10, still open for this).
+    /// tools/smoke/window-smoke.ps1 step 2 refuses an invalid recipe and reads this box's words through Win32 —
+    /// <c>Get-MessageBoxText</c> wants a <c>Static</c> control and <c>Close-MessageBox</c> posts BM_CLICK to a
+    /// control's window handle, neither of which a WPF window has. Saying this in place needs that script changed
+    /// in the same commit. <c>MessageBoxFenceTests</c> holds it by name so no new one can join it.
+    /// </summary>
     private static void Warn(Window owner, string text) =>
         MessageBox.Show(owner, text, "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
 }

@@ -180,6 +180,22 @@ public static class ClansModel
         $"That makes more than {ConfirmAbove} {RecipeWords.GroupsLower(recipe)} for {recipe.Name}. {RequestsLine(after)} Add it anyway?"
             .Replace("  ", " ", StringComparison.Ordinal);
 
+    /// <summary>
+    /// What a pick asks before it is saved, or null when it needs no asking — a source already on the list, or a
+    /// recipe still under <see cref="ConfirmAbove"/> groups. Null means save it straight away; nothing is written
+    /// by this either way.
+    /// </summary>
+    public static Confirm? AddQuestion(
+        IReadOnlyList<Source> before, SourceChange change, Recipe recipe,
+        IReadOnlyList<InstalledRecipe> installed, int accountCount, string picked)
+    {
+        if (before.Any(s => s.Id == change.SourceId) || !NeedsConfirmation(before, recipe.Slug)) return null;
+
+        var after = RequestsPerHour(change.Sources, installed, accountCount);
+        var group = RecipeWords.Group(recipe);
+        return new Confirm($"Add another {group}", ConfirmText(recipe, after), "Add anyway", $"Add {picked} anyway");
+    }
+
     private static IReadOnlyList<Source> Replace(IReadOnlyList<Source> sources, Source updated) =>
         [.. sources.Select(s => s.Id == updated.Id ? updated : s)];
 

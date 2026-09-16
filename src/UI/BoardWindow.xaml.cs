@@ -407,6 +407,10 @@ public partial class BoardWindow : Window
         // The item is disabled for the last board and while editing; this only catches a press already on its way.
         if (!ButtonStates().DeleteBoard) return;
 
+        // The one stock box left on the board, held back on purpose (backlog V3-S.10, still open for this).
+        // tools/smoke/walk-board-editing.ps1 step 9 confirms this delete through Win32: Close-MessageBox posts
+        // BM_CLICK to a control's window handle, which a WPF window has none of. Asking this through ConfirmWindow
+        // needs that walk changed in the same commit. MessageBoxFenceTests holds it by name so no new one can join it.
         var answer = MessageBox.Show(this,
             $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",
             "Ur Score", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
@@ -434,15 +438,24 @@ public partial class BoardWindow : Window
     }
 
     /// <summary>
-    /// Saves through the services. A file that can't be written is never silent: a message box says the change
-    /// wasn't saved and why, and the board stays as it was. Once the box closes the detail line goes back to what
-    /// it was saying, so "RoRoRo is not running" or the budget line isn't hidden behind an old note.
+    /// Saves through the services. A file that can't be written is never silent: the detail line says the change
+    /// wasn't saved and why, in the theme, where the eye already is — the way Setup › Alerts says a failed write on
+    /// the card, and not a stock box to dismiss (owner rule, backlog V3-S.10). The note takes that line over (R3)
+    /// and stays until a save works, so a change that silently didn't happen can't be clicked away and forgotten.
     /// </summary>
     private bool SaveBoards(IReadOnlyList<BoardDef> boards)
     {
         try
         {
             _services.SaveBoards(boards);
+            if (_boardsNote is not null)
+            {
+                // A save that worked takes the last failure's note off the line, so "RoRoRo is not running" or the
+                // budget line isn't hidden behind an old one.
+                _boardsNote = null;
+                RenderLines();
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -450,10 +463,6 @@ public partial class BoardWindow : Window
             // Any failure, not only IO: a save that silently did nothing is the one thing this must never be.
             _boardsNote = _services.Redactor.Redact(BoardText.BoardsNotSaved(ex));
             _services.AddTrail($"BOARDS NOT SAVED: {ex.GetType().Name}");
-            RenderLines();
-            MessageBox.Show(this, _boardsNote, "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-            _boardsNote = null;
             RenderLines();
             return false;
         }

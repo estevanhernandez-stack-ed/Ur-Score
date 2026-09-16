@@ -44,4 +44,8 @@ public static class RecipesModel
 
     public static string ConfirmRemove(Recipe recipe) =>
         $"Remove {recipe.Name}? It stops being read. Its score book stays on this PC, so importing it again carries on where it left off.";
+
+    /// <summary>What Remove asks before it removes, for the themed confirmation to draw.</summary>
+    public static Confirm RemoveQuestion(Recipe recipe) =>
+        new("Remove recipe", ConfirmRemove(recipe), "Remove", $"Remove {recipe.Name}");
 }

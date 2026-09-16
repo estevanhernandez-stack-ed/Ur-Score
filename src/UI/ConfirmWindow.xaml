@@ -1,0 +1,17 @@
+<Window x:Class="Labs626.UrScore.UI.ConfirmWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ur Score" Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
+        FontFamily="{StaticResource BodyFont}">
+    <StackPanel Margin="20,18,20,18">
+        <TextBlock x:Name="QuestionLine" TextWrapping="Wrap" />
+        <!-- Cancel sits where the default sits in every other Ur Score window, and it is the default: the button
+             that acts is plain, never the primary one, so the eye isn't pulled to the answer that can't be undone. -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button x:Name="DoButton" Margin="0,0,8,0" Click="OnDoClick" />
+            <Button x:Name="CancelButton" IsCancel="True" IsDefault="True" AutomationProperties.Name="Cancel" />
+        </StackPanel>
+    </StackPanel>
+</Window>
