@@ -14,8 +14,9 @@
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="120" />
                         </Grid.ColumnDefinitions>
-                        <!-- Indented by the avatar slot's constant 28 px, so the heading sits over the names. -->
-                        <TextBlock Grid.Column="0" Text="Account" Style="{StaticResource ColumnHeader}" Margin="28,0,0,0" />
+                        <!-- Indented by everything the column lays out before a name: the avatar slot's 28 px and the sent
+                             dot's 12 px, both unconditional, so this sits over every row's name. -->
+                        <TextBlock Grid.Column="0" Text="Account" Style="{StaticResource ColumnHeader}" Margin="40,0,0,0" />
                         <TextBlock Grid.Column="1" Text="{Binding ValueColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                         <TextBlock Grid.Column="2" Text="{Binding GroupColumn}" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
                         <TextBlock Grid.Column="3" Text="Change" Style="{StaticResource ColumnHeader}" TextAlignment="Right" />
@@ -39,9 +40,22 @@
                                                     </Grid.ColumnDefinitions>
                                                     <DockPanel Grid.Column="0">
                                                         <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
+                                                        <!-- Hidden, never Collapsed, for the same reason the avatar slot is (A26): the
+                                                             dot's 12 px is laid out whether or not the account is sent, so every name in
+                                                             the column starts at the same x, the heading sits over all of them, and a row
+                                                             doesn't move when its sent state changes. -->
                                                         <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center"
-                                                                 Fill="{DynamicResource CyanBrush}"
-                                                                 Visibility="{Binding Sent, Converter={StaticResource BoolToVisible}}" />
+                                                                 Fill="{DynamicResource CyanBrush}">
+                                                            <Ellipse.Style>
+                                                                <Style TargetType="Ellipse">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Sent}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Ellipse.Style>
+                                                        </Ellipse>
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
                                                     </DockPanel>
                                                     <TextBlock Grid.Column="1" Text="{Binding Value}" Style="{StaticResource NumberCell}" />

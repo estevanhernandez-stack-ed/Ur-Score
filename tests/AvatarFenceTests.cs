@@ -88,6 +88,20 @@ public class AvatarFenceTests
         Assert.DoesNotContain("Collapsed", style, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A26's rule reaches the dot beside the picture, not just the picture. My accounts is the one column with a second
+    /// mark before the name; drawn <c>Collapsed</c>, a sent row's name sat 12 px right of an unsent row's, so the column
+    /// had two left edges and the heading could only line up with one. Everything before a name is laid out either way.
+    /// </summary>
+    [Fact]
+    public void TheSentDotIsLaidOutWhetherOrNotAnAccountIsSent()
+    {
+        var text = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", "MyAccountsPanel.xaml"));
+
+        Assert.Contains("<DataTrigger Binding=\"{Binding Sent}\" Value=\"False\">", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding Sent, Converter={StaticResource BoolToVisible}}", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void EverySurfaceThatDrawsAPictureDrawsTheSharedOne()
     {
