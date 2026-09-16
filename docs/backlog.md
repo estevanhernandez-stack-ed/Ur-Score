@@ -320,7 +320,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 ## Stage 2 final re-review
 - S2-F.8 **OPEN** — you'd notice: duplicating the empty first-run starter makes the original tab disappear (disclosed, accepted with the F4 ruling) — src/Board/BoardEdits.cs:123-124 — final re-review ("not counted")
 - S2-FR.1 **OPEN** — you'd notice: a Past periods panel whose stat was removed can't be saved when its recipe has no ticked stat left (only Cancel, another clan, or Remove) — src/UI/Boards/PanelSettingsWindow.xaml.cs:125, 136 — final re-review Minor 1, parked
-- S2-FR.2 **OPEN** — you'd notice: when every source of a Profile stat's recipe is off, the form preselects an off source with no warning while the board shows "was removed" — src/Board/PanelForms.cs:242 vs src/Board/PanelModels.cs:616 — final re-review Minor 2, T4 re-review, parked
+- S2-FR.2 **OPEN** — half of it closed by the true-reason wave (17dbf9c): the board no longer says "was removed" for a source that is only switched off. Still open: the settings form preselects an off source with no warning. Original finding — you'd notice: when every source of a Profile stat's recipe is off, the form preselects an off source with no warning while the board shows "was removed" — src/Board/PanelForms.cs:242 vs src/Board/PanelModels.cs:616 — final re-review Minor 2, T4 re-review, parked
 - S2-FR.3 **OPEN** — test gap: walk-pop-outs step 3 skips instead of failing when reads are broken — tools/smoke/walk-pop-outs.ps1:48-57 — final re-review Minor 3, parked
 - S2-FR.4 **OPEN** — code tidiness: the app-wide menu item style handles flat items only (no submenus or check marks); the light-theme menu wasn't seen live — src/App.xaml:364-393 — final re-review Minor 4, parked
 

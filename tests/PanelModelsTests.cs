@@ -818,7 +818,9 @@ public class PanelModelsTests
         Assert.Empty(gone.Rows);
 
         var pinned = PanelModels.ProfileStat(live, Reader(), new PanelSettings(Profile.Slug, SourceId: other.Id, Stat: "diamonds"));
-        Assert.Equal(Miss, pinned.Rows.Single(r => r.Name == Main.DisplayName).Note);
+        // The row says it plainly; the path and the keys that came back are Diagnostics' to show, not a panel's.
+        Assert.Equal(PanelText.NotInLastRead, pinned.Rows.Single(r => r.Name == Main.DisplayName).Note);
+        Assert.DoesNotContain("Keys present", pinned.Rows.Single(r => r.Name == Main.DisplayName).Note);
         Assert.Equal("", pinned.Head.Note);
 
         var off = other with { Enabled = false };

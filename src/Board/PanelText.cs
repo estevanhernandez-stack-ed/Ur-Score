@@ -149,6 +149,12 @@ public static class PanelText
     public const string NotMatched = "Not matched by RoRoRo yet";
 
     /// <summary>
+    /// A row whose stat the last read did not bring back (S1-13.7). True, and in words a reader can use; the path the recipe
+    /// looked in and the keys that came back instead are listed in Setup › Diagnostics, which is where they help.
+    /// </summary>
+    public const string NotInLastRead = "Not in the last read.";
+
+    /// <summary>
     /// Where one of your accounts is when no read of your own sources placed it (backlog S1-13.4, S1-12.7): the one decision
     /// My accounts and Setup › Your accounts share, so the two screens can't disagree.
     /// <para>

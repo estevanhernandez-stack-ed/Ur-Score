@@ -90,7 +90,12 @@ try {
     $tested = Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240
     Check '2c Test now finishes and takes a press again' $tested "TestNowButton enabled=$tested"
     $accounts = @(Get-AllTexts (Find-ByAutomationId $board 'MyAccountsPanel1'))
-    $grouped = @($accounts | Where-Object { $_ -like "*$Main" -or $_ -eq $Alt -or $_ -eq 'Not in a watched clan' }).Count -gt 0
+    # Every heading My accounts can file an account under. Only once every source has a reading from this session may it
+    # say 'Not in a watched clan'; before that it says how much has been read (PanelText.NotFound), and a main clan with no
+    # live battle is not 'read now'. The step proves the panel groups your accounts, so any true heading counts.
+    $headings = @('Not in a watched clan', 'Not found in the clans read so far', 'No clans read yet',
+                  "Only in clans you're watching", 'Not matched by RoRoRo yet')
+    $grouped = @($accounts | Where-Object { $_ -like "*$Main" -or $_ -eq $Alt -or $headings -contains $_ }).Count -gt 0
     Check '3 My accounts groups your accounts by clan' $grouped ($accounts -join ' | ')
 
     & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'starter-board.png') | Out-Null

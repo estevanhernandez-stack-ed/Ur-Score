@@ -793,9 +793,10 @@ public static class PanelModels
                 PanelText.Value(value, stat.Format, live.Time.LocalTimeZone),
                 WindowGain(series, midnight, stat.Format),
                 WindowGain(series, now.AddDays(-7), stat.Format),
-                // The recipe's own sentence, else the miss this read recorded for the cell, which is the reason; "can't
-                // read" named no cause at all (S1-13.7).
-                unavailable ?? (value is null ? missed ?? "" : ""),
+                // The recipe's own sentence when it has one. Otherwise, a value this read did not bring back says so
+                // plainly: "can't read" named no cause (S1-13.7), but the recorded miss is a path and a list of keys,
+                // which is true and unreadable. That detail stays in Setup > Diagnostics.
+                unavailable ?? (value is null && missed is not null ? PanelText.NotInLastRead : ""),
                 value is null)));
         }
 
