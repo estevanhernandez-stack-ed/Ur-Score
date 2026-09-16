@@ -199,6 +199,52 @@ public class RememberedTests
         Assert.Equal("9,001", PanelModels.AccountsTable(read, Reader(), settings).Rows.Single(r => r.UserId == Main.RobloxUserId).Cells[1]);
     }
 
+    /// <summary>
+    /// Review round 3. <c>LastRead</c> stamps every ATTEMPT, so once a failed read stopped clearing the remembered
+    /// numbers, the race chart began plotting an hours-old total at the current minute — a flat line drawn out to
+    /// "now" for a reading that never happened. On a chart the line to "now" is the claim itself, which makes this the
+    /// fabricated rank again in another costume. A point is plotted only for a reading that came back.
+    /// </summary>
+    [Fact]
+    public void TheRaceChartPlotsNoPointForAReadThatBroughtNothingBack()
+    {
+        var line = Kept(Now.AddHours(-3), (Main.RobloxUserId, 4200));
+        var kept = Remembered.From(line, MainClan, Clan, Yours)!;
+        var failed = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id };
+        var live = Live([MainClan], [Installed(Clan, "value")],
+            new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = failed },
+            running: true,
+            lastRead: new Dictionary<string, DateTimeOffset> { [MainClan.Id] = Now },
+            remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        var race = PanelModels.Race(live, Reader(line), new PanelSettings(Clan.Slug, SourceIds: [MainClan.Id]));
+
+        // The one point the book actually holds, at the time it was actually read. Nothing at "now".
+        var point = Assert.Single(Assert.Single(race.Series).Points);
+        Assert.Equal((Now.AddHours(-3), 14_020_550d), (point.T, point.Value));
+        Assert.True(race.Head.Remembered);
+    }
+
+    /// <summary>
+    /// The same inheritance, found on the other surface that keys off <c>LastRead</c>: a remembered card falling back
+    /// to the attempt stamp would answer "Last read 0m ago" beside numbers read hours before.
+    /// </summary>
+    [Fact]
+    public void ARememberedCardNeverCallsAnAttemptStampItsLastRead()
+    {
+        var kept = Remembered.From(Kept(Now.AddHours(-3), (Main.RobloxUserId, 4200)), MainClan, Clan, Yours)!;
+        var live = Live([MainClan], [Installed(Clan, "value")],
+            new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id } },
+            running: true,
+            lastRead: new Dictionary<string, DateTimeOffset> { [MainClan.Id] = Now },
+            remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        // An empty book, so the card has no series of its own to date itself by and must fall back.
+        var card = PanelModels.AccountCard(live, Reader(), new PanelSettings(Clan.Slug, MainClan.Id, Stat: "value", UserId: Main.RobloxUserId));
+
+        Assert.Equal("3h ago", card.Facts.Single(f => f.Label == "Last read").Value);
+    }
+
     [Fact]
     public void AReadingOfThisSessionStillCountsItsOwnRows()
     {

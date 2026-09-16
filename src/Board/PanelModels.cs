@@ -281,8 +281,13 @@ public static class PanelModels
                 ? reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value).Select(p => new ChartPoint(p.T, p.Value)).ToList()
                 : new List<ChartPoint>();
 
-            // The live read, until the book has a line for it.
-            if (HeadlineNumber(snapshot, totalId) is { } now && live.LastRead.TryGetValue(source.Id, out var at)
+            // The live read, until the book has a line for it — and from LIVE alone (review round 3). This point is
+            // plotted at live.LastRead, which stamps every ATTEMPT, a read that brought nothing back included. Taking
+            // its value from SnapshotOf would therefore draw an hours-old remembered total flat out to the current
+            // minute, and on a chart a line to "now" IS the claim that it was read now. A reading that failed carries
+            // no headline, so it plots nothing; a remembered one needs no help, since the reading behind it is already
+            // on this chart at its own time, out of the book.
+            if (HeadlineNumber(live.LiveOf(source.Id), totalId) is { } now && live.LastRead.TryGetValue(source.Id, out var at)
                 && (points.Count == 0 || points[^1].T < at.AddSeconds(-30)))
             {
                 points.Add(new ChartPoint(at, now));
@@ -518,8 +523,11 @@ public static class PanelModels
             facts.Add(new FactModel("Biggest day", PanelText.Change(records.BiggestDay, stat.Format)));
         }
 
+        // This account's own last reading first; then, for a remembered card, the reading behind it. Only a card drawing
+        // a LIVE reading may fall back to live.LastRead, which stamps every attempt and so would answer "0m ago" beside
+        // numbers that were read hours before (review round 3, the same inheritance as the chart point above).
         DateTimeOffset? lastRead = series.Count > 0 ? series[^1].T
-            : live.LastRead.TryGetValue(pickedSource.Id, out var at) ? at : null;
+            : snapshot.RememberedAt ?? (live.LastRead.TryGetValue(pickedSource.Id, out var at) ? at : null);
         facts.Add(new FactModel("Last read", PanelText.Ago(lastRead, live.Now)));
 
         if (snapshot.CellMisses.GetValueOrDefault((pickedAccount.RobloxUserId, stat.Key)) is { } miss) facts.Add(new FactModel("Note", miss));
