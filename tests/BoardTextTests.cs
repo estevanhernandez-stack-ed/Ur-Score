@@ -77,6 +77,26 @@ public class BoardTextTests
     public void TheAttributionCreditsRecipesThatAreRead() =>
         Assert.Equal(Clan.Credit, BoardText.Attribution(Live([MainClan], [Installed(Clan, "value"), Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>())));
 
+    /// <summary>
+    /// Two recipes read at once credit the same source, and the clan recipe's whole credit is the first sentence of
+    /// the profile recipe's. Whole-string Distinct cannot see that, so the footer said "Data from Big Games' public
+    /// Pet Simulator 99 API." twice on the owner's own board (backlog V3-S.4, seen on screen 2026-09-15). A sentence
+    /// is said once, and the ones that only the second recipe carries still get said.
+    /// </summary>
+    [Fact]
+    public void ASentenceTwoRecipesShareIsCreditedOnce()
+    {
+        var profile = SourceOf("s-00000003", Profile, "estehernandez", SourceRole.Mine);
+        var live = Live([MainClan, profile], [Installed(Clan, "value"), Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>());
+
+        var said = BoardText.Attribution(live);
+
+        Assert.Equal(
+            "Data from Big Games' public Pet Simulator 99 API. Each account must be linked on db.biggames.io with its Profile view public.",
+            said);
+        Assert.Equal(1, said.Split("Data from Big Games'").Length - 1);
+    }
+
     [Fact]
     public void NoRecipesShowsOverEveryBoardAndAStartersStatesOnlyOnATabThatFollowsIt()
     {
@@ -140,4 +160,79 @@ public class BoardTextTests
     public void AnUnexpectedSaveFailureSaysSoWithoutItsMessage() =>
         Assert.Equal("Your change to the boards wasn't saved: something unexpected went wrong.",
             BoardText.BoardsNotSaved(new InvalidOperationException("p-1 at C:\\somewhere")));
+
+    [Fact]
+    public void TheStateLineSaysTheNumbersOnScreenAreTheLastOnesItRead()
+    {
+        var kept = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 4200)]) with { RememberedAt = Now.AddHours(-3) };
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.Equal("Not started. The numbers on screen are the last ones Ur Score read, from 3h ago.",
+            BoardText.StateLine(live, everStarted: false));
+    }
+
+    [Fact]
+    public void TheStateLineTakesTheOldestRememberedReadingSoItNeverSoundsFresherThanItIs()
+    {
+        var snaps = new Dictionary<string, RecipeSnapshot>
+        {
+            [MainClan.Id] = Snapshot(MainClan.Id, []) with { RememberedAt = Now.AddMinutes(-20) },
+            [AltClan.Id] = Snapshot(AltClan.Id, []) with { RememberedAt = Now.AddDays(-2) },
+        };
+        var live = Live([MainClan, AltClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(), remembered: snaps);
+
+        Assert.EndsWith("from 2d ago.", BoardText.StateLine(live, everStarted: true));
+    }
+
+    /// <summary>
+    /// Review I1. A failing read is exactly when the numbers beside it go stale, so the branch that names a source in
+    /// trouble is the last one that may drop the sentence. A41's promise is that this mark cannot be forgotten.
+    /// </summary>
+    [Fact]
+    public void ASourceInTroubleNeverSwallowsTheSentenceAboutTheNumbersOnScreen()
+    {
+        var snaps = new Dictionary<string, RecipeSnapshot>
+        {
+            [AltClan.Id] = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = AltClan.Id },
+        };
+        var kept = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 4200)]) with { RememberedAt = Now.AddHours(-3) };
+        var live = Live([MainClan, AltClan], [Installed(Clan, "value")], snaps,
+            running: true, remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.Equal("K0i2: Could not reach the data. The numbers on screen are the last ones Ur Score read, from 3h ago.",
+            BoardText.StateLine(live, everStarted: true));
+
+        // And every other branch that can return while remembered numbers are drawn says it too.
+        Assert.EndsWith("from 3h ago.", BoardText.StateLine(live with { Running = false }, everStarted: true));
+        Assert.EndsWith("from 3h ago.", BoardText.StateLine(live, everStarted: false));
+    }
+
+    /// <summary>
+    /// Review round 2: the source whose own read failed is still drawing its remembered numbers, so the line has to
+    /// carry both — the fault, and how old the numbers beside it are.
+    /// </summary>
+    [Fact]
+    public void ASourceWhoseOwnReadFailedStillSaysHowOldTheNumbersItIsDrawingAre()
+    {
+        var failed = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id };
+        var kept = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 4200)]) with { RememberedAt = Now.AddHours(-3) };
+        var live = Live([MainClan], [Installed(Clan, "value")],
+            new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = failed },
+            running: true, remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.Equal("CCGP: Could not reach the data. The numbers on screen are the last ones Ur Score read, from 3h ago.",
+            BoardText.StateLine(live, everStarted: true));
+    }
+
+    [Fact]
+    public void ARememberedSnapshotIsNeverAStateUrScoreIsIn()
+    {
+        // Nothing in this map describes what is happening now, so the state line must not read one as a fault.
+        var kept = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id, RememberedAt = Now.AddHours(-1) };
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            running: true, remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.StartsWith("Reading 1 source.", BoardText.StateLine(live, everStarted: true));
+    }
 }

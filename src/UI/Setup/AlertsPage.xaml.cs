@@ -1,15 +1,25 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.UI;
 
-/// <summary>Setup › Alerts (spec §7.5): the rule helper and the report policy, as the main window had them.</summary>
+/// <summary>
+/// Setup › Alerts: a card per sent stat whose alerts read as sentences and are edited in place, then the report policy card.
+/// Every decision is <see cref="AlertCards"/>'s. This page reads the rules file, writes through <see cref="RulesFile"/>, draws
+/// the rows and moves keyboard focus where <see cref="AlertCards"/> says (plan A13 to A15). It opens no window.
+/// </summary>
 public partial class AlertsPage : UserControl, ISetupPage
 {
     private readonly ISetupServices _services;
-    private IReadOnlyList<RuleChoice> _choices = [];
+    private AlertsView _view = AlertCards.Empty;
+    private AlertsUi _ui = AlertsUi.Closed;
+    private bool _drawn;
 
     public AlertsPage(ISetupServices services)
     {
@@ -18,78 +28,178 @@ public partial class AlertsPage : UserControl, ISetupPage
         Refresh();
     }
 
-    private string? RuleMetricId => (RuleStatBox.SelectedItem as RuleChoice)?.MetricId;
-
     public void Refresh()
     {
-        var choices = AlertsModel.Choices(_services.Installed);
-        if (!choices.SequenceEqual(_choices))
-        {
-            var picked = RuleMetricId;
-            _choices = choices;
-            RuleStatBox.ItemsSource = choices;
-            RuleStatBox.SelectedItem = choices.FirstOrDefault(c => c.MetricId == picked) ?? choices.FirstOrDefault();
-        }
-
-        RuleStatBox.IsEnabled = choices.Count > 0;
-        RenderRule();
-
         var policies = AlertsModel.Policies(_services.Installed, _services.KnownAccounts, _services.Sources, _services.Settings.ResolveNames, _services.PolicyCounts);
         PolicyList.ItemsSource = policies;
         PolicyEmptyLine.Visibility = policies.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-    }
 
-    private void OnRuleStatChanged(object sender, SelectionChangedEventArgs e) => RenderRule();
+        // A14: a read or a book line never redraws the cards under an open editor, and a redraw that changes nothing is skipped.
+        if (_ui.Mode != AlertEditMode.None) return;
 
-    private void RenderRule()
-    {
-        if (_services.Installed.Count == 0)
+        var view = Read();
+        if (_drawn && AlertCards.Same(_view, view))
         {
-            RuleLine.Text = AlertsModel.NoRecipe;
-            AddRuleButton.IsEnabled = false;
-            RulePreview.Text = "";
+            DrawLines();
             return;
         }
 
-        if (RuleMetricId is not { } metricId)
+        _view = view;
+        Draw("");
+    }
+
+    private AlertsView Read() => AlertCards.Build(_services.Installed, RulesFile.Read(_services.RulesPath));
+
+    private void Draw(string focus)
+    {
+        _drawn = true;
+        AlertCardList.ItemsSource = AlertCards.Rows(_view, _ui);
+        DrawLines();
+        if (focus.Length > 0) _ = Dispatcher.InvokeAsync(() => FocusNamed(AlertCardList, focus), DispatcherPriority.Loaded);
+    }
+
+    private void DrawLines()
+    {
+        Show(AlertsEmptyLine, AlertCards.EmptyLine(_services.Installed, _view));
+        Show(AlertsResultLine, AlertCards.OrphanResult(_view, _ui));
+        AlertsNextLine.Visibility = _view.ShowNext ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnAddClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string metricId) return;
+
+        _view = Read();
+        _ui = AlertCards.OpenAdd(metricId);
+        Draw(AlertCards.FocusName(_view, metricId, _ui, AlertKind.Rate));
+    }
+
+    private void OnKindClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not AlertTarget target) return;
+
+        _ui = AlertCards.ChooseKind(target);
+        Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
+    }
+
+    private void OnChangeClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not AlertTarget target) return;
+
+        // The file as it is now, not the drawn card: a hand edit since the last draw must never start the editor from stale
+        // values, and an alert that went in the meantime is said on the card instead (review Minor 1).
+        _view = Read();
+        if (AlertCards.Managed(_view, target) is not { } line)
         {
-            RuleLine.Text = AlertsModel.NoSentStat;
-            AddRuleButton.IsEnabled = false;
-            RulePreview.Text = "";
+            _ui = AlertCards.Gone(target);
+            Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
             return;
         }
 
-        var (text, canAdd) = AlertsModel.RuleSentence(metricId);
-        RuleLine.Text = text;
-        AddRuleButton.IsEnabled = canAdd;
-        RulePreview.Text = AlertsModel.Preview(canAdd);
+        _ui = AlertCards.OpenChange(line);
+        Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
     }
 
-    private void OnAddRuleClick(object sender, RoutedEventArgs e)
+    private void OnCancelClick(object sender, RoutedEventArgs e) => Cancel();
+
+    private void Cancel()
     {
-        if (RuleMetricId is not { } metricId) return;
-        var owner = Window.GetWindow(this)!;
+        var open = _ui;
+        _ui = AlertsUi.Closed;
+        _view = Read();
+        Draw(AlertCards.FocusAfterCancel(_view, open));
+    }
 
-        var preview = RulesFile.Preview(metricId, AlertsModel.DefaultThreshold, AlertsModel.DefaultWindowMinutes);
-        var answer = MessageBox.Show(owner,
-            $"Add this rule to RoRoRo's metric-rules.json?\n\n{preview}\n\n"
-            + "Your existing rules are kept, and the file is backed up first.",
-            "Ur Score", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+    private void OnConfirmClick(object sender, RoutedEventArgs e) => Confirm();
 
-        if (answer != MessageBoxResult.OK) return;
+    private void Confirm()
+    {
+        if (_ui.MetricId is not { } metricId || _ui.Draft is not { } draft || AlertCards.CardFor(_view, metricId) is not { } card) return;
 
-        try
+        var (spec, problem) = AlertCards.Check(_ui.Kind, draft, card.Stat.Label);
+        if (spec is null)
         {
-            if (RulesFile.AddRule(null, metricId, AlertsModel.DefaultThreshold, AlertsModel.DefaultWindowMinutes))
+            _ui = _ui with { Problem = problem };
+            Draw(AlertCards.NumberName(card.Stat.Label));
+            return;
+        }
+
+        var outcome = _ui.Mode == AlertEditMode.Changing
+            ? RulesFile.Change(_services.RulesPath, metricId, spec)
+            : RulesFile.TurnOn(_services.RulesPath, metricId, spec);
+        _ui = AlertCards.AfterWrite(_ui, outcome, spec);
+        _view = Read();
+        Draw(AlertCards.FocusName(_view, metricId, _ui, spec.Kind));
+    }
+
+    private void OnRemoveClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not AlertTarget target) return;
+
+        // Read again first, so the sentence this says was removed is the one the file actually held (review Minor 1).
+        _view = Read();
+        if (AlertCards.CardFor(_view, target.MetricId) is not { } card || AlertCards.Managed(_view, target) is not { } line)
+        {
+            _ui = AlertCards.Gone(target);
+            Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
+            return;
+        }
+
+        var outcome = RulesFile.Remove(_services.RulesPath, target.MetricId, target.Kind);
+        _ui = AlertCards.AfterRemove(target, line, card.Stat.Label, outcome);
+        _view = Read();
+        Draw(AlertCards.FocusName(_view, target.MetricId, _ui, target.Kind));
+    }
+
+    /// <summary>Enter in the sentence does Turn on or Save; Escape cancels (A15). An open drop-down handles both keys itself first.</summary>
+    private void OnEditorKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            Confirm();
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            Cancel();
+        }
+    }
+
+    // The boxes' selections are bound one way and copied into the draft here, so a box that is being rebuilt can never
+    // push an empty choice back into what you picked.
+    private void OnMinutesChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { DataContext: AlertCardRow { Draft: { } draft }, SelectedItem: string minutes }) draft.Minutes = minutes;
+    }
+
+    private void OnDirectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { DataContext: AlertCardRow { Draft: { } draft }, SelectedItem: string direction }) draft.Direction = direction;
+    }
+
+    /// <summary>Moves keyboard focus to the visible control with this accessible name, selecting a number box's text (A15).</summary>
+    private static bool FocusNamed(DependencyObject parent, string name)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is Control { IsVisible: true, Focusable: true } control && AutomationProperties.GetName(control) == name)
             {
-                RuleInventory.Record(metricId, AlertsModel.DefaultThreshold);
+                control.Focus();
+                if (control is TextBox box) box.SelectAll();
+                return true;
             }
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(owner, $"Could not add the rule: {ex.Message}", "Ur Score", MessageBoxButton.OK, MessageBoxImage.Error);
+
+            if (FocusNamed(child, name)) return true;
         }
 
-        RenderRule();
+        return false;
+    }
+
+    private static void Show(TextBlock line, string text)
+    {
+        line.Text = text;
+        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

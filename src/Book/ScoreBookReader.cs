@@ -114,6 +114,22 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
         lock (_gate) return _slugs.TryGetValue(slug, out var data) ? data.First : null;
     }
 
+    /// <summary>
+    /// The newest reading this source kept, or null. Finals are not readings, and a line older than
+    /// <see cref="KeepReadings"/> was never loaded, so an untouched source eventually has nothing to give back.
+    /// </summary>
+    public BookLine? LastReading(string sourceId)
+    {
+        lock (_gate)
+        {
+            return _slugs.Values
+                .SelectMany(d => d.Readings)
+                .Where(l => string.Equals(l.Source, sourceId, StringComparison.Ordinal))
+                .OrderBy(l => l.T)
+                .LastOrDefault();
+        }
+    }
+
     public long Bytes(string slug) => BookFiles.Bytes(root, slug);
 
     private List<BookLine> Readings(string sourceId, string? period, DateTimeOffset since)

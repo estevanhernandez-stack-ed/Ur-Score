@@ -4,6 +4,8 @@
 
 > **Do not start yet.** This plan was written on 2026-09-15 while v0.3.0 was still PR #6 on `feat/boards` (20ab152). Execution starts only after v0.3.0 is merged, released, installed into RoRoRo from the GitHub release, and walked by the owner. Task 0 then re-checks every item against `master` (names and line numbers may have moved) and folds in anything that smoke found. Until the owner says the release smoke is done, nothing below runs.
 
+> **Versions, 2026-09-15:** 0.3.1 shipped the default views and 0.3.2 the Alerts page, avatars, start-on-open, remembered numbers and the unavailable message (docs/plans/2026-09-15-alerts-card.md). Wave 1 of this plan ships as **0.3.3**. Task 0's re-check covers both branches: RulesFile, AlertsModel, AlertsPage, StatsPage, ImportFlow, Settings, PanelModels, PanelText, BoardText and AppServices changed, RuleInventory was deleted, and V3-S.10's two Alerts message boxes are gone.
+
 **Goal:** Ur Score v0.3.1: every backlog item you'd notice on screen is fixed, the backlog's remaining 104 code, test, performance and docs items are triaged into two later waves, and six are closed as won't fix with a reason.
 
 **Architecture:**
@@ -4148,7 +4150,7 @@ Everything is in `%LOCALAPPDATA%\626labs.ur-score\`:
 | `scorebook\` | The score book |
 | `keys.dat` | Keys you saved for a recipe's host, encrypted for your Windows account |
 | `settings.json` | `resolveNames` (below) |
-| `icon-cache\` | Recipe icons |
+| `icon-cache\` | Recipe icons, and your own accounts' avatars (`avatar-<id>.png`); never another player's picture |
 
 A `boards.json` that can't be read is never lost: the starter board shows, and the next board change keeps a copy of the old file beside the new one.
 

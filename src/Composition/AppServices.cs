@@ -14,6 +14,7 @@ namespace Labs626.UrScore.Composition;
 
 using NameClient = Labs626.UrScore.Source.NameClient;
 using IconClient = Labs626.UrScore.Source.IconClient;
+using AvatarBook = Labs626.UrScore.Source.AvatarBook;
 using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>
@@ -54,6 +55,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     private readonly AccountClaims _claims;
     private readonly ScoreBook _book;
     private readonly IconClient _icons;
+    private readonly AvatarBook _avatars;
     private readonly SearchLists _searchLists;
     private readonly SourceStore _sourceStore = new(SourceStore.DefaultPath);
     private readonly BoardsFile _boardsFile = new(BoardsFile.DefaultPath, TimeProvider.System);
@@ -66,6 +68,10 @@ public sealed class AppServices : ISetupServices, IDisposable
     private readonly List<string> _trail = [];
     private readonly Dictionary<string, RecipeSnapshot> _latest = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _lastRead = new(StringComparer.Ordinal);
+
+    /// <summary>The last numbers the score book kept, per source, until that source is read this session (plan A38).</summary>
+    private IReadOnlyDictionary<string, RecipeSnapshot> _remembered = new Dictionary<string, RecipeSnapshot>(StringComparer.Ordinal);
+
     private readonly Dictionary<string, string> _iconFiles = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _iconTexts = new(StringComparer.Ordinal);
     private readonly HashSet<string> _missesInTrail = new(StringComparer.Ordinal);
@@ -92,6 +98,12 @@ public sealed class AppServices : ISetupServices, IDisposable
         Store = new RecipeStore(RecipeStore.DefaultDirectory);
         Settings = Settings.Load();
 
+        // A walk's scratch rules file is never silent: Diagnostics' trail says which file alerts use.
+        if (!string.Equals(RulesPath, RulesFile.DefaultPath, StringComparison.OrdinalIgnoreCase))
+        {
+            AddTrail($"RULES: alerts use the file {RulesFile.PathVariable} names, not RoRoRo's.");
+        }
+
         // No raw responses kept: a response body holds every row the source returned, other players' ids and values
         // included, and other players never reach disk.
         DeleteOldRawResponses();
@@ -110,6 +122,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         Names = new NameClient(_namesHttp);
         _icons = new IconClient(HttpRecipeTransport.CreateHandler(), IconClient.DefaultCacheDirectory, () => _time.GetUtcNow());
+        _avatars = new AvatarBook(_icons);
 
         Runner = new SourceHost(CreateWatch, IntervalFor);
         Runner.SnapshotReady += OnSnapshotReady;
@@ -132,7 +145,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public Redactor Redactor { get; }
 
-    public Settings Settings { get; }
+    public Settings Settings { get; private set; }
 
     public SharedAccounts Accounts { get; }
 
@@ -153,6 +166,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     public string? BudgetWarning { get; private set; }
 
     public string HostText => $"host={_host.HostVersion ?? "(not connected)"} reject={_host.RejectReason ?? "(none)"}";
+
+    /// <summary>RoRoRo's rules file, or the full path <c>UR_SCORE_RULES_FILE</c> names: the Setup › Alerts walk's scratch copy (plan A1).</summary>
+    public string RulesPath { get; } = RulesFile.ResolvePath(Environment.GetEnvironmentVariable(RulesFile.PathVariable));
 
     public IReadOnlyList<string> Trail
     {
@@ -201,11 +217,15 @@ public sealed class AppServices : ISetupServices, IDisposable
         return source is null ? null : _iconFiles[source.Recipe];
     }
 
+    /// <summary>The picture for one of your own accounts (plan A22): an id RoRoRo isn't listing as yours has none.</summary>
+    public string? AvatarFileFor(long userId) =>
+        LiveBoard.UserIdsOf(KnownAccounts).Contains(userId) ? _avatars.FileFor(userId) : null;
+
     public LiveBoard CurrentBoard() => new(
         Sources, Installed,
         new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
         new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
-        KnownAccounts, _time, Runner.Running);
+        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered);
 
     /// <summary>
     /// The boards on screen: the saved ones, with each tab that still follows a starter rebuilt from your sources and
@@ -262,6 +282,48 @@ public sealed class AppServices : ISetupServices, IDisposable
         _book.Written += OnWritten;
         Runner.Apply(Sources);
         AddTrail($"BOOK: loaded from {root}.");
+        AskForAvatars();
+        RaiseChanged();
+
+        // Not awaited: BoardWindow awaits LoadBookAsync before the window is usable, and asking RoRoRo must never
+        // hold that up.
+        _ = OpenOnLastNumbersAsync();
+    }
+
+    /// <summary>
+    /// Fills the remembered map for the first time, once RoRoRo has been asked who your accounts are (review I2).
+    /// <para>
+    /// Which ids are yours decides which of the book's rows may come back (A42), and on window open nothing has asked
+    /// RoRoRo yet — <see cref="RefreshAccountsAsync"/> runs from Start, Test now, Setup and the import flow, all of
+    /// them later than this. Filling from Ur Score's own cache alone would put an account RoRoRo dropped between
+    /// sessions back on the board with its last number, so the map stays empty until the answer lands: a beat of
+    /// "waiting for the first read" beats a number for an account you no longer have.
+    /// </para>
+    /// <para>
+    /// The ask is bounded and never fails for RoRoRo's sake; when RoRoRo doesn't answer, the saved list stands in, as
+    /// it does everywhere else, and the numbers are marked <c>remembered</c> either way. Every later listing
+    /// re-filters through <see cref="OnListed"/>.
+    /// </para>
+    /// </summary>
+    private async Task OpenOnLastNumbersAsync()
+    {
+        try
+        {
+            await RefreshAccountsAsync(_closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            // The type only: a message can carry anything. The board opens on the saved list's ids either way.
+            AddTrail($"ACCOUNTS NOT LISTED AT START: {ex.GetType().Name}.");
+        }
+
+        // Explicit rather than relying on OnListed: a fetch that threw before it raised Listed must still leave the
+        // window with something real in it.
+        RememberLastNumbers();
+        AddTrail($"OPENED ON: {_remembered.Count} source(s) drawing their last kept numbers.");
         RaiseChanged();
     }
 
@@ -299,6 +361,17 @@ public sealed class AppServices : ISetupServices, IDisposable
         _sourceStore.Save(sources);
         Sources = sources;
         ApplySources();
+    }
+
+    /// <summary>
+    /// Writes <c>settings.json</c> and redraws. Nothing running changes: the only key a page writes is read when the
+    /// board next opens (plan A33). Qualified as <c>Core.Settings</c> because the property beside it has that name.
+    /// </summary>
+    public void SaveSettings(Settings settings)
+    {
+        Core.Settings.Save(settings);
+        Settings = settings;
+        RaiseChanged();
     }
 
     /// <summary>
@@ -424,6 +497,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         RefreshPolicies();
         WarnPastBudget();
+        AskForAvatars();
         RaiseChanged();
         return list;
     }
@@ -513,6 +587,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         if (list.Accounts.Count > 0) _savedAccounts = list.Accounts;
         RefreshPolicies();
+        RememberLastNumbers();
     }
 
     /// <summary>
@@ -575,6 +650,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         foreach (var gone in _given.Keys.Where(id => Runner.WatchFor(id) is null).ToList()) _given.Remove(gone);
 
+        RememberLastNumbers();
         WarnPastBudget();
         RaiseIconIfChanged();
         RaiseChanged();
@@ -722,6 +798,51 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         _boardIcon = icon;
         IconChanged?.Invoke(icon);
+    }
+
+    /// <summary>
+    /// The pictures beside your own accounts, after the numbers (plan A23): the ids RoRoRo lists as yours, once each per
+    /// session, off the UI thread. Anything that fails costs the pictures and nothing else.
+    /// </summary>
+    private void AskForAvatars()
+    {
+        var yours = LiveBoard.UserIdsOf(KnownAccounts);
+
+        // Unconditional, and before the early return: an account that stops being yours is forgotten even when it was the
+        // last one RoRoRo listed (review Minor 5).
+        _avatars.Keep(yours);
+        if (yours.Count == 0) return;
+
+        _ = AskForAvatarsAsync(yours);
+    }
+
+    /// <summary>
+    /// The last numbers each source kept, so the window has something real in it before the first read lands (plan
+    /// A37). Read from the loaded book, never from disk again: after the book loads, when the sources change, and
+    /// when RoRoRo's account list changes, since which ids are yours decides which rows come back. A reading from
+    /// this session always wins (<see cref="LiveBoard.SnapshotOf"/>), so nothing here needs clearing.
+    /// </summary>
+    private void RememberLastNumbers()
+    {
+        if (!ReaderLoaded) return;
+
+        _remembered = Remembered.ForSources(Reader, Sources, Installed, LiveBoard.UserIdsOf(KnownAccounts));
+    }
+
+    private async Task AskForAvatarsAsync(IReadOnlySet<long> yours)
+    {
+        try
+        {
+            if (await _avatars.AskAsync(yours, _closing.Token)) RaiseChanged();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            // The type only: a message can carry anything. The rows keep their names either way.
+            AddTrail($"AVATARS: your accounts' pictures could not be fetched ({ex.GetType().Name}).");
+        }
     }
 
     // ---- loading ----

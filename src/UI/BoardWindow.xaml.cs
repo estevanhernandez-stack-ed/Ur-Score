@@ -118,7 +118,20 @@ public partial class BoardWindow : Window
         Render();
 
         // Spec §7.1: a recipe with inputs and no sources opens Setup on its Clans page.
-        if (SetupPages.FirstRunPage(_services.Installed, _services.Sources) is { } page) OpenSetup(page);
+        var firstRun = SetupPages.FirstRunPage(_services.Installed, _services.Sources);
+        if (firstRun is not null) OpenSetup(firstRun);
+
+        // Plan A33: with "Start reading as soon as Ur Score opens" ticked, the board does once what pressing Start
+        // does — after the book is read, and never while Setup has just opened on a recipe that has no source yet.
+        if (!BoardButtons.StartsOnOpen(
+                _services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
+                _services.Installed.Count, _services.Sources.Any(s => s.Enabled), firstRun is not null))
+        {
+            return;
+        }
+
+        _services.AddTrail("START ON OPEN: reading started because Setup > Recipes has it ticked.");
+        await StartReadingAsync();
     }
 
     /// <summary>The window must never die on a redraw: what fails goes to the trail, by type only, and the last drawing stays.</summary>
@@ -474,6 +487,15 @@ public partial class BoardWindow : Window
         // The button is disabled for these; this only catches a press already on its way.
         if (!BoardButtons.For(_services.ReaderLoaded, running: false, _starting, _testing, _importing).StartStop) return;
 
+        await StartReadingAsync();
+    }
+
+    /// <summary>
+    /// Start, from the button or from opening (plan A33): the same gate above it, the same in-flight flag, the same
+    /// failure line. One path, so "from open" can never become a second, subtly different way to start.
+    /// </summary>
+    private async Task StartReadingAsync()
+    {
         if (_services.Installed.Count == 0)
         {
             StateLine.Text = "No recipe to run.";

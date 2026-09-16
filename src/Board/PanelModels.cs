@@ -24,7 +24,8 @@ public sealed record PanelSettings(
 /// so words and colour can never disagree.
 /// </summary>
 public sealed record PanelHead(
-    string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "")
+    string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "",
+    bool Remembered = false)
 {
     public string Chip => ChipRole is { } role ? PanelText.Chip(role) : "";
 
@@ -47,7 +48,9 @@ public sealed record LiveBoard(
     IReadOnlyDictionary<string, DateTimeOffset> LastRead,
     IReadOnlyList<HostAccount> Accounts,
     TimeProvider Time,
-    bool Running)
+    bool Running,
+    IReadOnlyDictionary<long, string>? Avatars = null,
+    IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null)
 {
     public DateTimeOffset Now => Time.GetUtcNow();
 
@@ -63,7 +66,43 @@ public sealed record LiveBoard(
     public InstalledRecipe? FindRecipe(string? slug) =>
         slug is null ? null : Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, slug, StringComparison.Ordinal));
 
-    public RecipeSnapshot? SnapshotOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
+    /// <summary>
+    /// What a panel draws for a source: the reading from this session, else the last one the score book kept (plan
+    /// A38). A remembered one carries <see cref="RecipeSnapshot.RememberedAt"/>; a panel that needs another member's
+    /// row takes <see cref="LiveOf"/> instead (plan A40).
+    /// <para>
+    /// A read that FAILED has replaced nothing, so it does not take the remembered numbers with it (review round 2).
+    /// A source that cannot be reached is exactly when the last numbers are worth most, and going blank there would
+    /// leave the board worse off than before it remembered anything. The failed reading is still what
+    /// <see cref="LiveOf"/> answers with, so the state line goes on naming the fault while the numbers beside it stay
+    /// honestly marked as remembered. Only a reading that came back clears them.
+    /// </para>
+    /// </summary>
+    public RecipeSnapshot? SnapshotOf(string sourceId)
+    {
+        var live = Snapshots.GetValueOrDefault(sourceId);
+        return live is not null && BroughtNumbers(live) ? live : Remembered?.GetValueOrDefault(sourceId) ?? live;
+    }
+
+    /// <summary>The reading from this session alone. What Ur Score is DOING is only ever answered from this one.</summary>
+    public RecipeSnapshot? LiveOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
+
+    /// <summary>
+    /// Whether a reading came back with numbers at all. A read that failed carries its state and its reason and
+    /// nothing else — <see cref="RecipeSnapshot.Rows"/> and <see cref="RecipeSnapshot.Headline"/> are both null,
+    /// because no reading was ever attached to it — so it replaces nothing a panel is drawing.
+    /// </summary>
+    private static bool BroughtNumbers(RecipeSnapshot snapshot) =>
+        snapshot.Rows is not null || snapshot.Headline is not null || snapshot.Groups.Count > 0;
+
+    public bool IsRemembered(string sourceId) => SnapshotOf(sourceId)?.RememberedAt is not null;
+
+    /// <summary>
+    /// The oldest reading behind anything on screen, so a line about them never claims they are fresher than the
+    /// oldest one a panel is showing. Null once every enabled source has been read this session.
+    /// </summary>
+    public DateTimeOffset? OldestRemembered =>
+        Sources.Where(s => s.Enabled).Select(s => SnapshotOf(s.Id)?.RememberedAt).Min();
 
     /// <summary>The source's main input value ("CCGP"), else its recipe's name.</summary>
     public string SourceName(Source source)
@@ -81,6 +120,13 @@ public sealed record LiveBoard(
     public string AccountName(long userId) =>
         Accounts.FirstOrDefault(a => a.RobloxUserId == userId && userId != 0)?.DisplayName ?? "One of your accounts";
 
+    /// <summary>
+    /// The cached picture for one of YOUR accounts, or null. An id that isn't yours has none, whatever the map holds:
+    /// the leaderboard and Top show other members by name only, and this is the second of the two checks (plan A22).
+    /// </summary>
+    public string? AvatarFor(long userId) =>
+        userId != 0 && MyUserIds.Contains(userId) ? Avatars?.GetValueOrDefault(userId) : null;
+
     /// <summary>Spec §9.6: only while reading runs, and only once the source has been read.</summary>
     public bool IsOverdue(Source source) =>
         Running
@@ -97,13 +143,19 @@ public sealed record LegendItem(string Text, int Colour);
 
 public sealed record RaceModel(PanelHead Head, IReadOnlyList<ChartSeries> Series, IReadOnlyList<LegendItem> Legend, string ChartName);
 
-public sealed record AccountLineModel(long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing);
+public sealed record AccountLineModel(
+    long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing,
+    string? Avatar = null, string Note = "")
+{
+    /// <summary>Why this row has no numbers, in the recipe's own words (plan A44). Empty for a row that was read.</summary>
+    public bool HasNote => Note.Length > 0;
+}
 
 public sealed record AccountGroupModel(string Heading, IReadOnlyList<AccountLineModel> Rows);
 
 public sealed record MyAccountsModel(PanelHead Head, string ValueColumn, string GroupColumn, IReadOnlyList<AccountGroupModel> Groups);
 
-public sealed record PromotionRow(string Name, string Value, string WouldPlace, bool Fits, bool Missing);
+public sealed record PromotionRow(string Name, string Value, string WouldPlace, bool Fits, bool Missing, string? Avatar = null);
 
 public sealed record PromotionModel(PanelHead Head, string LowestLabel, string Lowest, string ValueColumn, IReadOnlyList<PromotionRow> Rows);
 
@@ -117,7 +169,7 @@ public sealed record CardSection(string Heading, IReadOnlyList<FactModel> Facts)
 
 public sealed record AccountCardModel(
     PanelHead Head, string BigLabel, string Big, IReadOnlyList<CardSection> Sections, IReadOnlyList<ChartSeries> Line,
-    IReadOnlyList<FactModel> Facts, string ChartName)
+    IReadOnlyList<FactModel> Facts, string ChartName, string? Avatar = null)
 {
     /// <summary>A line to draw: with none yet the card gives the chart no space.</summary>
     public bool HasLine => Line.Count > 0;
@@ -182,11 +234,12 @@ public static class PanelModels
         var gap = Gap(live, name);
 
         var rows = snapshot?.Rows;
-        var hasAccounts = source.Role != SourceRole.Watch && rows is not null;
+        // Your own rows are all a remembered snapshot has, so "4 of 4" would be a clan this never read (plan A40).
+        var hasAccounts = source.Role != SourceRole.Watch && rows is not null && snapshot?.RememberedAt is null;
         var mine = rows?.Count(r => live.MyUserIds.Contains(r.UserId)) ?? 0;
 
         return new StandingModel(
-            new PanelHead(title, name, source.Role, live.IsOverdue(source)),
+            new PanelHead(title, name, source.Role, live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)),
             place is { } p ? PanelText.Ordinal((int)p) : Dash,
             recipe.Period is null || place is null ? "" : $"in the {RecipeWords.Period(recipe)}",
             recipe.Headline.FirstOrDefault(h => h.Id == totalId)?.Label ?? "Total",
@@ -213,6 +266,7 @@ public static class PanelModels
         var series = new List<ChartSeries>();
         var legend = new List<LegendItem>();
         var overdue = false;
+        var remembered = false;
         var anyPeriodKnown = recipe.Period is null;
 
         for (var i = 0; i < sources.Count; i++)
@@ -227,8 +281,13 @@ public static class PanelModels
                 ? reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value).Select(p => new ChartPoint(p.T, p.Value)).ToList()
                 : new List<ChartPoint>();
 
-            // The live read, until the book has a line for it.
-            if (HeadlineNumber(snapshot, totalId) is { } now && live.LastRead.TryGetValue(source.Id, out var at)
+            // The live read, until the book has a line for it — and from LIVE alone (review round 3). This point is
+            // plotted at live.LastRead, which stamps every ATTEMPT, a read that brought nothing back included. Taking
+            // its value from SnapshotOf would therefore draw an hours-old remembered total flat out to the current
+            // minute, and on a chart a line to "now" IS the claim that it was read now. A reading that failed carries
+            // no headline, so it plots nothing; a remembered one needs no help, since the reading behind it is already
+            // on this chart at its own time, out of the book.
+            if (HeadlineNumber(live.LiveOf(source.Id), totalId) is { } now && live.LastRead.TryGetValue(source.Id, out var at)
                 && (points.Count == 0 || points[^1].T < at.AddSeconds(-30)))
             {
                 points.Add(new ChartPoint(at, now));
@@ -239,10 +298,12 @@ public static class PanelModels
             series.Add(new ChartSeries(label, points, i));
             legend.Add(new LegendItem($"{label} {(points.Count > 0 ? StatText.Abbrev(points[^1].Value) : Dash)}", i));
             overdue |= live.IsOverdue(source);
+            remembered |= live.IsRemembered(source.Id);
         }
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
-        var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started", Overdue: overdue);
+        var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started",
+            Overdue: overdue, Remembered: remembered);
 
         // No source's period is known yet: every point in "series" would be mixing periods together.
         if (!anyPeriodKnown)
@@ -269,10 +330,12 @@ public static class PanelModels
         var assigned = new HashSet<long>();
         var groups = new List<AccountGroupModel>();
         var overdue = false;
+        var remembered = false;
 
         foreach (var source in SourcesYoursIn(live, recipe))
         {
             overdue |= live.IsOverdue(source);
+            remembered |= live.IsRemembered(source.Id);
             var snapshot = live.SnapshotOf(source.Id);
             if (snapshot?.Rows is not { } rows) continue;
 
@@ -281,7 +344,9 @@ public static class PanelModels
                 .ToList();
             if (mine.Count == 0) continue;
 
-            var ranks = Ranking.Competition(rows, stat.Key);
+            // Counted here only for a reading of this session, which holds every row. A remembered one holds your own
+            // accounts alone, so InGroup answers it from the book instead (review C1).
+            var ranks = snapshot.RememberedAt is null ? Ranking.Competition(rows, stat.Key) : null;
             var period = snapshot.Period?.Value;
             var since = Since(recipe, live.Now);
             var series = mine.ToDictionary(a => a.RobloxUserId, a => reader.Series(source.Id, a.RobloxUserId, stat.Key, period, since));
@@ -298,11 +363,12 @@ public static class PanelModels
                     account.RobloxUserId,
                     account.DisplayName,
                     PanelText.Value(value, stat.Format, zone),
-                    value is not null && ranks.TryGetValue(account.RobloxUserId, out var rank) ? $"#{rank} of {rows.Count}" : Dash,
+                    InGroup(snapshot, ranks, rows.Count, account.RobloxUserId, stat.Key, value),
                     RecentChange(series[account.RobloxUserId], stat.Format),
                     sent,
                     Records.Stalled(series[account.RobloxUserId], others),
-                    value is null)));
+                    value is null,
+                    live.AvatarFor(account.RobloxUserId))));
             }
 
             var heading = source.Role == SourceRole.Main ? $"★ {live.SourceName(source)}" : live.SourceName(source);
@@ -314,12 +380,16 @@ public static class PanelModels
         {
             groups.Add(new AccountGroupModel(
                 recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read",
+                // live.Snapshots, not live.SnapshotOf: a remembered snapshot never carries an Unavailable entry (A39), so
+                // this reads what was actually read, and says nothing at all before the first read.
                 [.. rest.OrderBy(a => a.DisplayName, StringComparer.Ordinal)
-                    .Select(a => new AccountLineModel(a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true))]));
+                    .Select(a => new AccountLineModel(
+                        a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId),
+                        PanelText.CannotRead(a.RobloxUserId, live.Installed, live.Sources, live.Snapshots, nameTheRecipe: false)))]));
         }
 
         return new MyAccountsModel(
-            new PanelHead(title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: "● sent to RoRoRo"),
+            new PanelHead(title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: "● sent to RoRoRo", Remembered: remembered),
             stat.Label, $"In {group}", groups);
     }
 
@@ -343,8 +413,9 @@ public static class PanelModels
             Note: $"Where each account would place if it were in {toName} now. Live only; other members' numbers are never saved.");
         var lowestLabel = $"{toName}'s lowest now";
 
-        var fromRows = live.SnapshotOf(from.Id)?.Rows;
-        var toRows = live.SnapshotOf(to.Id)?.Rows;
+        // Live only (plan A40): the book never kept another member's row, so a remembered snapshot cannot place anyone.
+        var fromRows = live.LiveOf(from.Id)?.Rows;
+        var toRows = live.LiveOf(to.Id)?.Rows;
         if (fromRows is null || toRows is null)
         {
             return new PromotionModel(head with { Note = $"Waiting for a read of {(fromRows is null ? fromName : toName)}." }, lowestLabel, Dash, stat.Label, []);
@@ -365,7 +436,7 @@ public static class PanelModels
 
             if (ValueOf(row, stat.Key) is not { } value)
             {
-                rows.Add((null, new PromotionRow(account.DisplayName, Dash, Dash, false, true)));
+                rows.Add((null, new PromotionRow(account.DisplayName, Dash, Dash, false, true, live.AvatarFor(account.RobloxUserId))));
                 continue;
             }
 
@@ -374,7 +445,7 @@ public static class PanelModels
             var below = lowest is { } low && value < low;
             var text = place is not { } p ? Dash : below ? "below the lowest" : $"{PanelText.Ordinal(p.Place)} of {p.Of}";
             var fits = place is { } q && !below && q.Place <= others.Count;
-            rows.Add((value, new PromotionRow(account.DisplayName, StatText.Abbrev(value), text, fits, false)));
+            rows.Add((value, new PromotionRow(account.DisplayName, StatText.Abbrev(value), text, fits, false, live.AvatarFor(account.RobloxUserId))));
         }
 
         return new PromotionModel(head, lowestLabel, PanelText.Full(lowest), stat.Label, MissingLast(rows));
@@ -432,9 +503,10 @@ public static class PanelModels
         var facts = new List<FactModel>();
         if (!recipe.LastStep.PerAccount && snapshot.Rows is { } listRows)
         {
-            var ranks = Ranking.Competition(listRows, stat.Key);
+            // Counted only for a reading of this session; a remembered one is answered from the book (review C1).
+            var ranks = snapshot.RememberedAt is null ? Ranking.Competition(listRows, stat.Key) : null;
             facts.Add(new FactModel($"In {RecipeWords.Group(recipe)}",
-                ValueOf(pickedRow, stat.Key) is not null && ranks.TryGetValue(pickedAccount.RobloxUserId, out var rank) ? $"#{rank} of {listRows.Count}" : Dash));
+                InGroup(snapshot, ranks, listRows.Count, pickedAccount.RobloxUserId, stat.Key, ValueOf(pickedRow, stat.Key))));
         }
 
         var records = Records.For(reader, recipe.Slug, pickedSource.InputsKey, [pickedSource.Id], pickedAccount.RobloxUserId, stat.Key, live.Time);
@@ -451,8 +523,11 @@ public static class PanelModels
             facts.Add(new FactModel("Biggest day", PanelText.Change(records.BiggestDay, stat.Format)));
         }
 
+        // This account's own last reading first; then, for a remembered card, the reading behind it. Only a card drawing
+        // a LIVE reading may fall back to live.LastRead, which stamps every attempt and so would answer "0m ago" beside
+        // numbers that were read hours before (review round 3, the same inheritance as the chart point above).
         DateTimeOffset? lastRead = series.Count > 0 ? series[^1].T
-            : live.LastRead.TryGetValue(pickedSource.Id, out var at) ? at : null;
+            : snapshot.RememberedAt ?? (live.LastRead.TryGetValue(pickedSource.Id, out var at) ? at : null);
         facts.Add(new FactModel("Last read", PanelText.Ago(lastRead, live.Now)));
 
         if (snapshot.CellMisses.GetValueOrDefault((pickedAccount.RobloxUserId, stat.Key)) is { } miss) facts.Add(new FactModel("Note", miss));
@@ -462,9 +537,11 @@ public static class PanelModels
             : [];
 
         return new AccountCardModel(
-            new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}", Overdue: live.IsOverdue(pickedSource)),
+            new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}",
+                Overdue: live.IsOverdue(pickedSource), Remembered: live.IsRemembered(pickedSource.Id)),
             stat.Label, PanelText.Value(ValueOf(pickedRow, stat.Key), stat.Format, zone), sections, line, facts,
-            $"{pickedAccount.DisplayName}'s {stat.Label} over time");
+            $"{pickedAccount.DisplayName}'s {stat.Label} over time",
+            live.AvatarFor(pickedAccount.RobloxUserId));
     }
 
     public static PastPeriodsModel PastPeriods(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
@@ -584,7 +661,8 @@ public static class PanelModels
         var valueColumn = recipe.LastStep.Values[0].Label;
         var head = new PanelHead(title, Overdue: live.IsOverdue(source), Note: "From the source's own top list. ~ marks an estimate from your own read.");
 
-        if (live.SnapshotOf(source.Id)?.Groups is not { Count: > 0 } groups)
+        // Live only (plan A40): a group list's groups are shown and never kept, so the book has none to give back.
+        if (live.LiveOf(source.Id)?.Groups is not { Count: > 0 } groups)
         {
             return new TopModel(head with { Note = "Waiting for the first read." }, nameColumn, valueColumn, []);
         }
@@ -615,7 +693,7 @@ public static class PanelModels
             if (!placed.Add(name)) continue;
 
             var mineRecipe = live.FindRecipe(mineSource.Recipe)!.Recipe;
-            if (HeadlineNumber(live.SnapshotOf(mineSource.Id), TotalId(mineRecipe)) is not { } total) continue;
+            if (HeadlineNumber(live.LiveOf(mineSource.Id), TotalId(mineRecipe)) is not { } total) continue;
 
             var shown = mainNames.Contains(name) ? $"{name} ★" : name;
 
@@ -673,7 +751,8 @@ public static class PanelModels
                 value is null)));
         }
 
-        return new ProfileStatModel(new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source)), stat.Label, MissingLast(rows));
+        return new ProfileStatModel(
+            new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)), stat.Label, MissingLast(rows));
     }
 
     /// <summary>
@@ -744,7 +823,8 @@ public static class PanelModels
                 cells,
                 snapshot?.Unavailable.GetValueOrDefault(account.RobloxUserId) ?? "",
                 Missing: row is null,
-                Picked: account.RobloxUserId == pickedUserId)));
+                Picked: account.RobloxUserId == pickedUserId,
+                Avatar: live.AvatarFor(account.RobloxUserId))));
         }
 
         var names = StringComparer.OrdinalIgnoreCase;
@@ -773,7 +853,9 @@ public static class PanelModels
             : snapshot is not null ? ""
             : source.Enabled ? "Waiting for the first read."
             : $"{live.SourceName(source)} is switched off, so it isn't read.";
-        return new AccountsTableModel(new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note), columns, list);
+        return new AccountsTableModel(
+            new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note, Remembered: live.IsRemembered(source.Id)),
+            columns, list);
     }
 
     /// <summary>Every row of a source live, your accounts marked (spec §9.4). Other members' names come from memory only.</summary>
@@ -791,7 +873,8 @@ public static class PanelModels
         if (shown.Count == 0) return new LeaderboardModel(head with { Note = "Tick Show on a stat to fill this panel." }, [], []);
 
         IReadOnlyList<string> columns = [.. shown.Select(s => s.Label)];
-        if (live.SnapshotOf(source.Id)?.Rows is not { } rows) return new LeaderboardModel(head, columns, []);
+        // Live only (plan A40): every row but yours is memory alone, so a remembered snapshot would show you by yourself.
+        if (live.LiveOf(source.Id)?.Rows is not { } rows) return new LeaderboardModel(head, columns, []);
 
         var ranked = Leaderboard.Rank(rows, live.MyUserIds, shown[0].Key);
         var zone = live.Time.LocalTimeZone;
@@ -878,6 +961,29 @@ public static class PanelModels
 
     private static double? HeadlineNumber(RecipeSnapshot? snapshot, string? id) =>
         id is null ? null : snapshot?.Headline?.FirstOrDefault(h => h.Id == id)?.Number;
+
+    /// <summary>
+    /// One account's place among every row its source read — "#7 of 50" — or a dash when there is no honest answer
+    /// (plan A40, review C1). The one door for a rank, so neither panel can grow its own.
+    /// <para>
+    /// A reading from this session carries every row, so <paramref name="live"/> is counted from it. A REMEMBERED one
+    /// carries your own accounts alone, and a place worked out from those would read "#1 of 4" of a group this never
+    /// counted — so it is answered from what the reading itself kept (<see cref="RecipeSnapshot.RememberedRanks"/>),
+    /// and from nothing else. A line that kept no place shows none: an empty "In clan" is honest, "#1 of 4" is not.
+    /// </para>
+    /// </summary>
+    private static string InGroup(
+        RecipeSnapshot snapshot, IReadOnlyDictionary<long, int>? live, int rowsInHand, long userId, string stat, double? value)
+    {
+        if (value is null) return Dash;
+
+        if (snapshot.RememberedAt is not null)
+        {
+            return snapshot.RememberedRanks.TryGetValue((userId, stat), out var kept) ? $"#{kept.Rank} of {kept.Of}" : Dash;
+        }
+
+        return live is not null && live.TryGetValue(userId, out var rank) ? $"#{rank} of {rowsInHand}" : Dash;
+    }
 
     private static double? ValueOf(RecipeRow row, string stat) => row.Values.TryGetValue(stat, out var value) ? value : null;
 

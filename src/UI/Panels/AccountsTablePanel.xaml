@@ -6,7 +6,10 @@
         <!-- The account column: the name, and under it why the account couldn't be read (D17). -->
         <DataTemplate x:Key="AccountNameCell">
             <StackPanel>
-                <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                <DockPanel>
+                    <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                </DockPanel>
                 <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontSize="11" MaxWidth="240" HorizontalAlignment="Left"
                            Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}" />
             </StackPanel>

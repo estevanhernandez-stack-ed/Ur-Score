@@ -43,6 +43,25 @@ public sealed record RecipeSnapshot(
     /// <summary>Whether this cycle wrote a reading line to the score book.</summary>
     public bool Recorded { get; init; }
 
+    /// <summary>
+    /// When every number here came from the score book rather than a read, and when that reading was taken (plan
+    /// A39). Null on everything a watch produces. It is the single mark: nothing pairs it with a flag that could
+    /// disagree with it, and only <c>Remembered</c> ever sets it.
+    /// </summary>
+    public DateTimeOffset? RememberedAt { get; init; }
+
+    /// <summary>
+    /// Where each of your accounts placed among EVERY row its reading saw, by account and stat, as the score book
+    /// kept it (plan A40, review C1). Only <c>Remembered</c> ever fills it, and only from what the book holds.
+    /// <para>
+    /// It exists because a remembered snapshot's <see cref="Rows"/> are your own accounts alone, so a place worked
+    /// out from them would be a place in a group this never counted — "#1 of 4" where the reading said "#7 of 50".
+    /// A live snapshot carries every row it read, so its panels count for themselves and this stays empty.
+    /// </para>
+    /// </summary>
+    public IReadOnlyDictionary<(long UserId, string Stat), RankInGroup> RememberedRanks { get; init; } =
+        new Dictionary<(long UserId, string Stat), RankInGroup>();
+
     /// <summary>Why this cycle kept nothing, when a book is attached and nothing was kept.</summary>
     public string? NotRecordingReason { get; init; }
 
@@ -51,6 +70,9 @@ public sealed record RecipeSnapshot(
     /// <summary>A group list's groups, shown live and never kept.</summary>
     public IReadOnlyList<GroupRow> Groups { get; init; } = [];
 }
+
+/// <summary>One account's place among every row a reading saw, and how many rows that was: "#7 of 50".</summary>
+public sealed record RankInGroup(int Rank, int Of);
 
 /// <summary>
 /// One cycle for one source: ask for the user's accounts, read the recipe, keep the user's rows in the score

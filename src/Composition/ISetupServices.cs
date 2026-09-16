@@ -55,11 +55,17 @@ public interface ISetupServices
     /// <summary>The fetched icon file for a recipe, once a read has named one, else null.</summary>
     string? IconFileFor(string recipeSlug);
 
+    /// <summary>The cached picture for one of your own accounts, once it has been fetched, else null. Never another player's.</summary>
+    string? AvatarFileFor(long userId);
+
     /// <summary>The history-budget warning once RoRoRo's accounts are known, else null.</summary>
     string? BudgetWarning { get; }
 
     /// <summary>"host=1.28.0.0 reject=(none)", for diagnostics.</summary>
     string HostText { get; }
+
+    /// <summary>The metric rules file Setup › Alerts reads and writes: RoRoRo's, unless a walk names a scratch copy (plan A1).</summary>
+    string RulesPath { get; }
 
     /// <summary>The newest trail lines, redacted, oldest first.</summary>
     IReadOnlyList<string> Trail { get; }
@@ -68,6 +74,12 @@ public interface ISetupServices
 
     /// <summary>Saves <c>sources.json</c>, applies it to the running watches at once, and raises <see cref="Changed"/>.</summary>
     void SaveSources(IReadOnlyList<Source> sources);
+
+    /// <summary>
+    /// Writes <c>settings.json</c> and raises <see cref="Changed"/>. Throws when it can't be written, and nothing
+    /// changes then; no page edits that file itself.
+    /// </summary>
+    void SaveSettings(Settings settings);
 
     /// <summary>Reloads recipes from disk, migrates sources for any new recipe, applies, and raises <see cref="Changed"/>.</summary>
     void ReloadRecipes();

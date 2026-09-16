@@ -41,3 +41,6 @@ secrets/
 # Superpowers brainstorming companion (local mockups)
 .superpowers/
 .gitnexus
+
+# Build and test transcripts written at the repo root by the build gate
+*-output.txt

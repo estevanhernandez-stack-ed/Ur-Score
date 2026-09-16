@@ -127,6 +127,27 @@
             <!-- Bool to Visibility for bindings. Panels and Setup rows use it. -->
             <BooleanToVisibilityConverter x:Key="BoolToVisible" />
             <ui:UpperCase x:Key="Upper" />
+            <ui:AvatarFill x:Key="Avatar" />
+
+            <!-- One of your own accounts' pictures: round, sized to its row, the same on every surface. The slot is laid
+                 out whether or not a picture is there (Hidden, never Collapsed), so a picture that arrives late, fails or
+                 never comes never moves a row. Only your own accounts ever have one. -->
+            <Style x:Key="AccountAvatar" TargetType="Ellipse">
+                <Setter Property="Width" Value="20" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="Margin" Value="0,0,8,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Stroke" Value="{DynamicResource DividerBrush}" />
+                <Setter Property="StrokeThickness" Value="1" />
+                <Setter Property="Fill" Value="{Binding Avatar, Converter={StaticResource Avatar}}" />
+                <Style.Triggers>
+                    <!-- On the converted brush, not the path: a file that is gone by the time it is drawn, or that doesn't
+                         decode, hides the slot too instead of leaving an empty ring for the session (review Minor 3). -->
+                    <DataTrigger Binding="{Binding Avatar, Converter={StaticResource Avatar}}" Value="{x:Null}">
+                        <Setter Property="Visibility" Value="Hidden" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
 
             <!-- A button that reads as a row: no fill or edge until hovered, content on the left. Search
                  matches and panel tools use it. -->
@@ -532,6 +553,11 @@
             <!-- A number column's heading lines up with its numbers. -->
             <Style x:Key="PanelTableNumberHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource PanelTableHeader}">
                 <Setter Property="HorizontalContentAlignment" Value="Right" />
+            </Style>
+            <!-- The account column's heading lines up with the names, which the avatar slot (AccountAvatar: 20 px wide with
+                 8 px after it) indents by a constant 28 px whether or not a picture is there. -->
+            <Style x:Key="PanelTableNameHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource PanelTableHeader}">
+                <Setter Property="Padding" Value="34,5" />
             </Style>
             <!-- The cell the arrow keys are on: a thin cyan ring inside it, shown for the keyboard only. -->
             <Style x:Key="PanelTableCellFocus">

@@ -7,6 +7,8 @@
         <TextBlock x:Name="ListedLine" Style="{StaticResource Muted}" Margin="0,4,0,4" />
         <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
                    Text="Send reports an account's sent stats to RoRoRo. Reading and keeping your scores happen either way." />
+        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
+                   Text="Each picture comes from Roblox: Ur Score asks Roblox's picture service for your own accounts' pictures and keeps them on this PC. No other player's id is ever sent for a picture, and the leaderboard shows other members by name only." />
         <TextBlock x:Name="AccountsBudgetLine" Style="{StaticResource Refusal}" Margin="0,0,0,10" Visibility="Collapsed" />
 
         <Grid Margin="10,0,10,6">
@@ -15,7 +17,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Account" Style="{StaticResource Muted}" />
+            <!-- Indented by this page's avatar slot (24 px wide with 8 px after it), so the heading sits over the names. -->
+            <TextBlock Grid.Column="0" Text="Account" Style="{StaticResource Muted}" Margin="32,0,0,0" />
             <TextBlock Grid.Column="1" Text="Found in" Style="{StaticResource Muted}" />
             <ui:RowList x:Name="RecipeHeaders" Grid.Column="2">
                 <ui:RowList.ItemsPanel>
@@ -41,9 +44,19 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="1" Text="{Binding FoundIn}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                            <DockPanel Grid.Column="0">
+                                <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" Width="24" Height="24" />
+                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding FoundIn}" Style="{StaticResource Muted}" />
+                                <!-- The recipe's own words for why this account's numbers are empty, beside the row where
+                                     you decide what it sends (plan A44). Muted, not Refusal: it is a standing condition,
+                                     not the result of something you just pressed. -->
+                                <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontSize="11" Margin="0,3,0,0"
+                                           Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}" />
+                            </StackPanel>
                             <ui:RowList Grid.Column="2" ItemsSource="{Binding Sends}">
                                 <ui:RowList.ItemsPanel>
                                     <ItemsPanelTemplate>

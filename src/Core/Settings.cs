@@ -7,8 +7,13 @@ namespace Labs626.UrScore.Core;
 /// What the user configures for Ur Score as a whole. Everything about a particular source — its
 /// inputs, metric id and which accounts send — lives with that recipe (<c>RecipeState</c>), and
 /// thresholds live in RoRoRo, because RoRoRo does the judging.
+/// <para>
+/// <c>StartOnOpen</c> is off until you turn it on, in Setup › Recipes (plan A31). It is about this app's own window —
+/// whether the board does what pressing Start does as it opens — and not about RoRoRo launching the plugin, which is
+/// the manifest's <c>autostartDefault</c> and stays off.
+/// </para>
 /// </summary>
-public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null)
+public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null, bool StartOnOpen = false)
 {
     public static Settings Defaults { get; } = new();
 

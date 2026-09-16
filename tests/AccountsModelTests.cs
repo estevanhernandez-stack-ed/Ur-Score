@@ -121,4 +121,36 @@ public class AccountsModelTests
         rows[1].Sends[0].On = true;
         Assert.Equal(new string?[] { nameof(SendTick.On) }, raised);
     }
+
+    [Fact]
+    public void EachSetupRowCarriesItsOwnAccountsPicture()
+    {
+        var rows = AccountsModel.Rows([Main, Alt], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>(),
+            id => id == Main.RobloxUserId ? @"C:\cache\avatar-101.png" : null);
+
+        Assert.Equal(@"C:\cache\avatar-101.png", rows[0].Avatar);
+        Assert.Null(rows[1].Avatar);
+
+        // With no lookup (a page that hasn't one yet), every row is simply pictureless.
+        Assert.Null(AccountsModel.Rows([Main], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>())[0].Avatar);
+    }
+
+    [Fact]
+    public void SetupSaysWhyAnAccountsNumbersAreEmpty()
+    {
+        var profile = new Source("s-00000009", Profile.Slug, new Dictionary<string, string>(), SourceRole.Mine);
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [profile.Id] = Read(Main.RobloxUserId) with { Unavailable = new Dictionary<long, string> { [Alt.RobloxUserId] = "Profile is private. Link this account on db.biggames.io and turn on its Profile view." } },
+        };
+        var installed = new[] { Sending(Profile) };
+
+        var rows = AccountsModel.Rows([Main, Alt], installed, [profile], latest);
+
+        Assert.Equal("", rows.Single(r => r.AccountId == Main.AccountId).Note);
+        Assert.Equal(
+            "Pet Sim 99 profile: Profile is private. Link this account on db.biggames.io and turn on its Profile view.",
+            rows.Single(r => r.AccountId == Alt.AccountId).Note);
+        Assert.True(rows.Single(r => r.AccountId == Alt.AccountId).HasNote);
+    }
 }

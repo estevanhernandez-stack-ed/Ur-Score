@@ -262,6 +262,70 @@ public class PanelModelsTests
         Assert.Equal(PanelText.StaleStat, model.Head.Stale);
     }
 
+    /// <summary>Plan A44: the panel with the dashes is the panel that says why.</summary>
+    [Fact]
+    public void MyAccountsSaysWhyARowHasNoNumbers()
+    {
+        var snapshot = Snapshot(ProfileSource.Id, [Row(Main.RobloxUserId, 4200, "diamonds")])
+            with { Unavailable = new Dictionary<long, string> { [AltOne.RobloxUserId] = "Profile is private. Link this account on db.biggames.io and turn on its Profile view." } };
+        var live = Live([ProfileSource], [Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot> { [ProfileSource.Id] = snapshot });
+
+        var model = PanelModels.MyAccounts(live, Reader(), new PanelSettings(Profile.Slug, ProfileSource.Id, Stat: "diamonds"));
+        var rows = model.Groups.SelectMany(g => g.Rows).ToList();
+
+        var unread = rows.Single(r => r.UserId == AltOne.RobloxUserId);
+        Assert.True(unread.Missing);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", unread.Note);
+        Assert.True(unread.HasNote);
+
+        // An account that was read says nothing, and no row repeats the recipe's name on a panel drawn per recipe.
+        var read = rows.Single(r => r.UserId == Main.RobloxUserId);
+        Assert.Equal("", read.Note);
+        Assert.False(read.HasNote);
+    }
+
+    /// <summary>
+    /// Plans A39 and A44 meet without arguing. The remembered mark is the panel's, about the numbers it is showing;
+    /// the reason is one row's, about numbers it hasn't got. A remembered snapshot carries no Unavailable entry, and
+    /// the note is read from the live map alone, so a row drawn from the book is never also told it can't be read.
+    /// </summary>
+    [Fact]
+    public void ARememberedPanelStillSaysWhyARowWithNoNumbersIsEmpty()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var mine = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        // Nothing builds a remembered snapshot with an Unavailable entry (A39); the second one pins that the panel
+        // would not print it if something ever did, rather than assuming the map stays empty.
+        var kept = Snapshot(main.Id, [Row(Main.RobloxUserId, 14_020_550)])
+            with
+            {
+                RememberedAt = Now.AddHours(-2),
+                Unavailable = new Dictionary<long, string> { [AltTwo.RobloxUserId] = "Not in this clan right now." },
+            };
+        var read = Snapshot(mine.Id, [])
+            with { Unavailable = new Dictionary<long, string> { [AltOne.RobloxUserId] = "Profile is private." } };
+        var live = Live([main, mine], [Installed(Clan, "value")], Snaps(read),
+            remembered: new Dictionary<string, RecipeSnapshot> { [main.Id] = kept });
+
+        var model = PanelModels.MyAccounts(live, Reader(), new PanelSettings(Clan.Slug, Stat: "value"));
+        var rows = model.Groups.SelectMany(g => g.Rows).ToList();
+
+        Assert.True(model.Head.Remembered);
+
+        // The row the book remembers keeps its number, and says nothing about being unreadable.
+        var fromTheBook = rows.Single(r => r.UserId == Main.RobloxUserId);
+        Assert.False(fromTheBook.Missing);
+        Assert.Equal("", fromTheBook.Note);
+
+        // The row with no numbers carries its reason, inside that same remembered panel.
+        var empty = rows.Single(r => r.UserId == AltOne.RobloxUserId);
+        Assert.True(empty.Missing);
+        Assert.Equal("Profile is private.", empty.Note);
+
+        // Read from what was actually read: a reason only the remembered snapshot carries is never shown.
+        Assert.Equal("", rows.Single(r => r.UserId == AltTwo.RobloxUserId).Note);
+    }
+
     // ---- Promotion check ----
 
     [Fact]
@@ -754,5 +818,107 @@ public class PanelModelsTests
 
         Assert.Equal(new[] { "215,850,364", "586d 5h", "13 Sep 2020" }, model.Rows.Single(r => r.Name == Main.DisplayName).Cells);
         Assert.Equal(new[] { "1,000", StatText.Dash, StatText.Dash }, model.Rows.Single(r => r.Name == AltOne.DisplayName).Cells);
+    }
+
+    // ---- Your own accounts' pictures ----
+
+    [Fact]
+    public void YourOwnAccountsRowsCarryTheirPictureAndNobodyElsesDoes()
+    {
+        var pictures = new Dictionary<long, string>
+        {
+            [Main.RobloxUserId] = @"C:\cache\avatar-101.png",
+            [999] = @"C:\cache\avatar-999.png",
+        };
+        var live = ProfileLive("diamonds", "rank") with { Avatars = pictures };
+
+        var table = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort(AccountSort.NameKey, Descending: false));
+        var mine = PanelModels.MyAccounts(live, DiamondsBook(), new PanelSettings(Profile.Slug, Stat: "diamonds"));
+        var card = PanelModels.AccountCard(live, DiamondsBook(), new PanelSettings(Profile.Slug, Stat: "diamonds", UserId: Main.RobloxUserId));
+
+        Assert.Equal(@"C:\cache\avatar-101.png", table.Rows.First(r => r.Name == Main.DisplayName).Avatar);
+        Assert.Null(table.Rows.First(r => r.Name == AltOne.DisplayName).Avatar);
+        Assert.True(table.Rows[^1].IsTotal);
+        Assert.Null(table.Rows[^1].Avatar);
+        Assert.Equal(@"C:\cache\avatar-101.png", mine.Groups.SelectMany(g => g.Rows).First(r => r.UserId == Main.RobloxUserId).Avatar);
+        Assert.Equal(@"C:\cache\avatar-101.png", card.Avatar);
+
+        // A picture for anyone but you is never drawn, whatever the map holds.
+        Assert.Null(live.AvatarFor(999));
+        Assert.Null(live.AvatarFor(0));
+    }
+
+    [Fact]
+    public void ThePromotionCheckShowsYourPictureBesideEachAccountItWouldPlace()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var live = Live([main, alts], [Installed(Clan, "value")],
+            Snaps(Snapshot(main.Id, [Row(5, 900), Row(6, 700)]), Snapshot(alts.Id, [Row(Main.RobloxUserId, 800)]))) with
+        {
+            Avatars = new Dictionary<long, string> { [Main.RobloxUserId] = @"C:\cache\avatar-101.png" },
+        };
+
+        var model = PanelModels.PromotionCheck(live, new PanelSettings(Clan.Slug, SourceId: alts.Id, ToSourceId: main.Id, Stat: "value"));
+
+        Assert.Equal(@"C:\cache\avatar-101.png", Assert.Single(model.Rows).Avatar);
+    }
+
+    // ---- The last numbers the score book kept ----
+
+    /// <summary>Plan A41: a panel drawing numbers from the score book says so, in every panel that can.</summary>
+    [Fact]
+    public void EveryPanelThatDrawsRememberedNumbersSaysSoInItsHead()
+    {
+        var mainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var kept = Remembered.From(
+            Read(mainClan, Now.AddHours(-3), Period, Headline(99), "value", (Main.RobloxUserId, 4200)),
+            mainClan, Clan, LiveBoard.UserIdsOf(Accounts))!;
+        var installed = Installed(Clan, "value");
+        var live = Live([mainClan], [installed], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept });
+        var reader = Reader();
+        var settings = new PanelSettings(Clan.Slug, mainClan.Id, Stat: "value");
+
+        Assert.True(PanelModels.Standing(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.Race(live, reader, settings with { SourceIds = [mainClan.Id] }).Head.Remembered);
+        Assert.True(PanelModels.MyAccounts(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.AccountCard(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.ProfileStat(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.AccountsTable(live, reader, settings).Head.Remembered);
+
+        // And the same six say nothing when the numbers were read this session.
+        var read = Live([mainClan], [installed],
+            new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = Snapshot(mainClan.Id, [Row(Main.RobloxUserId, 4200)], [Points(99)]) });
+        Assert.False(PanelModels.Standing(read, reader, settings).Head.Remembered);
+        Assert.False(PanelModels.AccountsTable(read, reader, settings).Head.Remembered);
+
+        // And the mark goes with the numbers it marked: the kept ones are still in hand when the first read lands, so
+        // this is the case the board is actually in a second after Start. The state line's sentence goes with them.
+        var replaced = read with { Remembered = new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept } };
+        Assert.False(PanelModels.Standing(replaced, reader, settings).Head.Remembered);
+        Assert.False(PanelModels.AccountsTable(replaced, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.Standing(replaced, reader, settings).HasAccounts);
+        Assert.Null(replaced.OldestRemembered);
+    }
+
+    /// <summary>Plan A40: the book never kept another member, so a panel that shows them waits for a real read.</summary>
+    [Fact]
+    public void ThePanelsThatShowOtherMembersNeverDrawRememberedNumbers()
+    {
+        var mainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var kept = Remembered.From(
+            Read(mainClan, Now.AddHours(-3), Period, Headline(99), "value", (Main.RobloxUserId, 4200)),
+            mainClan, Clan, LiveBoard.UserIdsOf(Accounts))!;
+        var live = Live([mainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept });
+        var settings = new PanelSettings(Clan.Slug, mainClan.Id, Stat: "value");
+
+        Assert.Empty(PanelModels.LiveLeaderboard(live, settings, new Dictionary<long, string>()).Rows);
+        Assert.Empty(PanelModels.PromotionCheck(live, settings with { ToSourceId = mainClan.Id }).Rows);
+        Assert.False(PanelModels.LiveLeaderboard(live, settings, new Dictionary<long, string>()).Head.Remembered);
+
+        // And Standing never turns your own four accounts into "4 of 4" of a clan it did not read.
+        Assert.False(PanelModels.Standing(live, Reader(), settings).HasAccounts);
     }
 }

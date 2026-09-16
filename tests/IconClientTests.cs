@@ -327,4 +327,73 @@ public class IconClientTests : IDisposable
         var clan = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
         Assert.Equal(new[] { "ps99.biggamesapi.io" }, RecipeHosts.ContactedBy(clan).ToArray());
     }
+
+    private const string HeadshotsUrl =
+        "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=101,201&size=48x48&format=Png&isCircular=false";
+
+    private const string HeadshotUrl = "https://tr.rbxcdn.com/AVATAR-101/48/48/AvatarHeadshot/Png/noFilter";
+
+    private static string Headshots(params (long UserId, string State, string Url)[] rows) =>
+        "{ \"data\": [ " + string.Join(", ", rows.Select(r =>
+            $"{{ \"targetId\": {r.UserId}, \"state\": \"{r.State}\", \"imageUrl\": \"{r.Url}\" }}")) + " ] }";
+
+    [Fact]
+    public async Task YourAccountsPicturesComeBackInOneRequestAndAreCachedByUserId()
+    {
+        var handler = new RouteHandler()
+            .On(HeadshotsUrl, () => Json(Headshots((101, "Completed", HeadshotUrl), (201, "Pending", ""))))
+            .On(HeadshotUrl, () => Bytes(Png));
+
+        var files = await Client(handler).HeadshotsAsync(new long[] { 101, 201 }, CancellationToken.None);
+
+        // A picture Roblox hasn't rendered yet is no icon this time, and costs nobody else theirs.
+        Assert.Equal(new long[] { 101 }, files.Keys.ToArray());
+        Assert.Equal(Path.Combine(_dir, "avatar-101.png"), files[101]);
+        Assert.Equal(Png, File.ReadAllBytes(files[101]));
+        Assert.Equal(new[] { HeadshotsUrl, HeadshotUrl }, handler.Requests.Select(r => r.RequestUri!.AbsoluteUri).ToArray());
+        Assert.All(handler.Requests, r => Assert.Contains("UrScore", r.Headers.UserAgent.ToString()));
+    }
+
+    [Fact]
+    public async Task ACachedPictureYoungerThanSevenDaysIsUsedWithoutAsking()
+    {
+        Directory.CreateDirectory(_dir);
+        var cached = Path.Combine(_dir, "avatar-101.png");
+        File.WriteAllBytes(cached, Png);
+        File.SetLastWriteTimeUtc(cached, Now.AddDays(-6).UtcDateTime);
+        var handler = new RouteHandler();
+
+        var files = await Client(handler).HeadshotsAsync(new long[] { 101 }, CancellationToken.None);
+
+        Assert.Equal(cached, files[101]);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task APictureOffRobloxsOwnDomainIsRefusedAndOnlyTheIdsAskedForAreFetched()
+    {
+        var handler = new RouteHandler()
+            .On(HeadshotsUrl, () => Json(Headshots(
+                (101, "Completed", "https://evil.example/headshot.png"),
+                (201, "Completed", HeadshotUrl),
+                (999, "Completed", HeadshotUrl))))
+            .On("https://evil.example/headshot.png", () => Bytes(Png))
+            .On(HeadshotUrl, () => Bytes(Png));
+
+        var files = await Client(handler).HeadshotsAsync(new long[] { 101, 201 }, CancellationToken.None);
+
+        Assert.Equal(new long[] { 201 }, files.Keys.ToArray());
+        Assert.Equal(new[] { HeadshotsUrl, HeadshotUrl }, handler.Requests.Select(r => r.RequestUri!.AbsoluteUri).ToArray());
+        Assert.False(File.Exists(Path.Combine(_dir, "avatar-999.png")));
+        Assert.False(File.Exists(Path.Combine(_dir, "avatar-101.png")));
+    }
+
+    [Fact]
+    public async Task APictureServiceThatAnswersWithNothingUsefulCostsOnlyThePictures()
+    {
+        var handler = new RouteHandler().On(HeadshotsUrl, () => Json("{ \"data\": \"not a list\" }"));
+
+        Assert.Empty(await Client(handler).HeadshotsAsync(new long[] { 101, 201 }, CancellationToken.None));
+        Assert.Single(handler.Requests);
+    }
 }

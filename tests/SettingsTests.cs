@@ -82,4 +82,25 @@ public class SettingsTests : IDisposable
         Write("{}");
         Assert.Equal(Settings.Defaults, Settings.Load(File()));
     }
+
+    [Fact]
+    public void StartingFromOpenIsOffUntilYouTurnItOn()
+    {
+        // The owner's words: something a user enables once they are set up, never a behaviour change everyone gets.
+        Assert.False(Settings.Defaults.StartOnOpen);
+
+        Write("""{ "resolveNames": true, "activeRecipe": "pet-sim-99-profile" }""");
+        Assert.False(Settings.Load(File()).StartOnOpen);
+    }
+
+    [Fact]
+    public void StartOnOpenRoundTripsUnderItsCamelCaseKeyWithoutDisturbingTheOthers()
+    {
+        Settings.Save(new Settings(ResolveNames: false, ActiveRecipe: "x") with { StartOnOpen = true }, File());
+        var json = System.IO.File.ReadAllText(File());
+
+        Assert.Contains("\"startOnOpen\"", json);
+        Assert.DoesNotContain("\"StartOnOpen\"", json);
+        Assert.Equal(new Settings(false, "x", true), Settings.Load(File()));
+    }
 }
