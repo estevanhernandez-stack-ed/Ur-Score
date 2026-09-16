@@ -35,9 +35,12 @@
             <TextBlock Grid.Column="3" Text="Name RoRoRo uses" Style="{StaticResource Muted}" />
         </Grid>
 
-        <!-- Virtualized: a profile recipe can offer hundreds of statistic names. A fixed height keeps
-             virtualization on inside a scrolling window. -->
-        <ListBox x:Name="StatsRows" Height="300"
+        <!-- Virtualized: a profile recipe can offer hundreds of statistic names, so the list scrolls
+             inside its own viewport rather than growing the window. MaxHeight rather than Height:
+             virtualization still has a viewport to work against, but a recipe that offers one stat
+             draws one row instead of a 300px box of empty space that pushed Cancel and Import off
+             the bottom of the window. -->
+        <ListBox x:Name="StatsRows" MaxHeight="300"
                  Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
                  Foreground="{DynamicResource WhiteBrush}"
                  ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
