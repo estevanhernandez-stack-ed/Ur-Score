@@ -6,7 +6,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 146** (43 you'd notice, 103 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.2 to V3-S.10)
+- **OPEN: 145** (42 you'd notice, 103 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.2 to V3-S.10)
 - **FIXED: 52**
 - **GONE: 7**
 - Total: 208 distinct items (duplicates merged; every source is named on the line)
@@ -144,7 +144,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-11.1 **OPEN** — code tidiness: clan search picks and name loading are fire-and-forget with no outer catch — src/UI/Setup/ClansPage.xaml.cs:33-39 — T11 review
 - S1-11.2 **OPEN** — the "Top of the battle" switch uses the first group-list recipe installed, not the page's own (matters only with two clan-type recipes) — src/UI/Setup/ClansModel.cs:149-150 — T11 review
 - S1-11.3 (merged into S1-3.1)
-- S1-11.4 **OPEN** — you'd notice: the "add a 6th source?" confirmation is a stock Windows message box, not themed — src/UI/Setup/ClansPage.xaml.cs:288-289 — T11 review
+- S1-11.4 **FIXED (80262f7, 0.3.3)** — the question now uses the shared themed ConfirmWindow (ClansModel.AddQuestion). Original finding: you'd notice: the "add a 6th source?" confirmation is a stock Windows message box, not themed — src/UI/Setup/ClansPage.xaml.cs:288-289 — T11 review
 
 ## Task 12: remaining Setup pages
 - S1-12.1 **GONE** — the moved import flow dropped typed inputs: Task 14 removed the import screen's inputs — n/a — T12 review, T12 report
