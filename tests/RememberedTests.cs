@@ -163,6 +163,42 @@ public class RememberedTests
             text => text.EndsWith(" of 2", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Review round 2. The owner opens Ur Score before a battle on last night's numbers, and the first read of his
+    /// main clan comes back with nothing — which is routine, not hypothetical. A read that failed has REPLACED
+    /// nothing, so it must not take the numbers with it: going blank there leaves him worse off than before the
+    /// window remembered anything. The fault is still the state line's to name, and it still can.
+    /// </summary>
+    [Fact]
+    public void AReadThatFailedNeverClearsTheNumbersItDidNotReplace()
+    {
+        var kept = Remembered.From(Kept(Now.AddHours(-3), (Main.RobloxUserId, 4200)), MainClan, Clan, Yours)!;
+        var remembered = new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept };
+        var failed = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id };
+        var live = Live([MainClan], [Installed(Clan, "value")],
+            new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = failed }, running: true, remembered: remembered);
+        var settings = new PanelSettings(Clan.Slug, MainClan.Id, Stat: "value");
+
+        // The numbers stay, and they stay marked: a failed read is not a quieter way of saying "nothing here".
+        Assert.Equal(Now.AddHours(-3), live.SnapshotOf(MainClan.Id)?.RememberedAt);
+        Assert.True(live.IsRemembered(MainClan.Id));
+        Assert.Equal(Now.AddHours(-3), live.OldestRemembered);
+
+        var table = PanelModels.AccountsTable(live, Reader(), settings);
+        Assert.True(table.Head.Remembered);
+        Assert.Equal("4,200", table.Rows.Single(r => r.UserId == Main.RobloxUserId).Cells[1]);
+        Assert.True(PanelModels.Standing(live, Reader(), settings).Head.Remembered);
+
+        // And the failure is untouched for whoever reports what Ur Score is doing.
+        Assert.Equal(WatchState.SourceUnreachable, live.LiveOf(MainClan.Id)?.State);
+
+        // Only a reading that came back clears them, and then the mark goes with the numbers it marked.
+        var read = live with { Snapshots = new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 9_001)]) } };
+        Assert.False(read.IsRemembered(MainClan.Id));
+        Assert.Null(read.OldestRemembered);
+        Assert.Equal("9,001", PanelModels.AccountsTable(read, Reader(), settings).Rows.Single(r => r.UserId == Main.RobloxUserId).Cells[1]);
+    }
+
     [Fact]
     public void AReadingOfThisSessionStillCountsItsOwnRows()
     {

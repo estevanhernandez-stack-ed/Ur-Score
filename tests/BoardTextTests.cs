@@ -208,6 +208,23 @@ public class BoardTextTests
         Assert.EndsWith("from 3h ago.", BoardText.StateLine(live, everStarted: false));
     }
 
+    /// <summary>
+    /// Review round 2: the source whose own read failed is still drawing its remembered numbers, so the line has to
+    /// carry both — the fault, and how old the numbers beside it are.
+    /// </summary>
+    [Fact]
+    public void ASourceWhoseOwnReadFailedStillSaysHowOldTheNumbersItIsDrawingAre()
+    {
+        var failed = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id };
+        var kept = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 4200)]) with { RememberedAt = Now.AddHours(-3) };
+        var live = Live([MainClan], [Installed(Clan, "value")],
+            new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = failed },
+            running: true, remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.Equal("CCGP: Could not reach the data. The numbers on screen are the last ones Ur Score read, from 3h ago.",
+            BoardText.StateLine(live, everStarted: true));
+    }
+
     [Fact]
     public void ARememberedSnapshotIsNeverAStateUrScoreIsIn()
     {

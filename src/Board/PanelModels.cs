@@ -70,12 +70,30 @@ public sealed record LiveBoard(
     /// What a panel draws for a source: the reading from this session, else the last one the score book kept (plan
     /// A38). A remembered one carries <see cref="RecipeSnapshot.RememberedAt"/>; a panel that needs another member's
     /// row takes <see cref="LiveOf"/> instead (plan A40).
+    /// <para>
+    /// A read that FAILED has replaced nothing, so it does not take the remembered numbers with it (review round 2).
+    /// A source that cannot be reached is exactly when the last numbers are worth most, and going blank there would
+    /// leave the board worse off than before it remembered anything. The failed reading is still what
+    /// <see cref="LiveOf"/> answers with, so the state line goes on naming the fault while the numbers beside it stay
+    /// honestly marked as remembered. Only a reading that came back clears them.
+    /// </para>
     /// </summary>
-    public RecipeSnapshot? SnapshotOf(string sourceId) =>
-        Snapshots.GetValueOrDefault(sourceId) ?? Remembered?.GetValueOrDefault(sourceId);
+    public RecipeSnapshot? SnapshotOf(string sourceId)
+    {
+        var live = Snapshots.GetValueOrDefault(sourceId);
+        return live is not null && BroughtNumbers(live) ? live : Remembered?.GetValueOrDefault(sourceId) ?? live;
+    }
 
     /// <summary>The reading from this session alone. What Ur Score is DOING is only ever answered from this one.</summary>
     public RecipeSnapshot? LiveOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
+
+    /// <summary>
+    /// Whether a reading came back with numbers at all. A read that failed carries its state and its reason and
+    /// nothing else — <see cref="RecipeSnapshot.Rows"/> and <see cref="RecipeSnapshot.Headline"/> are both null,
+    /// because no reading was ever attached to it — so it replaces nothing a panel is drawing.
+    /// </summary>
+    private static bool BroughtNumbers(RecipeSnapshot snapshot) =>
+        snapshot.Rows is not null || snapshot.Headline is not null || snapshot.Groups.Count > 0;
 
     public bool IsRemembered(string sourceId) => SnapshotOf(sourceId)?.RememberedAt is not null;
 
