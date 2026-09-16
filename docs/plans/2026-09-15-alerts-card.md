@@ -3813,6 +3813,1450 @@ powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Setup' -Ou
 
 ---
 
+> **Added 2026-09-15, later the same day.** The owner approved three more pieces for 0.3.2 after Task 6 landed at
+> `ddfafc8`, in his words: *"option in settings, so once a user sets up they can enable it to start from open"*,
+> *"last numbers it saw"*, and *"the plugin should tell them"*. Like Task 6 they sit below the release run rather
+> than renumbering the tasks above, and like Task 6 they are built **before** it. **Execution order: Task 7 → Task 8
+> → Task 9 → Task 5 (the release run), release last.** Task 9 uses `LiveBoard.LiveOf` and `PanelText.CannotRead`
+> shaped in Task 8, so the order is load-bearing between 8 and 9. Each task lists its own files and names below; the
+> file table and the interface contract near the top of this plan still cover Tasks 1 to 4 only.
+
+### Task 7: Start reading when Ur Score opens
+
+**Files:**
+- Modify: `src/Core/Settings.cs`, `src/Composition/ISetupServices.cs`, `src/Composition/AppServices.cs`,
+  `src/UI/BoardButtons.cs`, `src/UI/BoardWindow.xaml.cs`, `src/UI/Setup/RecipesPage.xaml`,
+  `src/UI/Setup/RecipesPage.xaml.cs`, `README.md`
+- Test: `tests/SettingsTests.cs` (added to), `tests/BoardButtonsTests.cs` (added to)
+- Never touched: `tools/smoke` (A47), `manifest.json` (its `autostartDefault` is RoRoRo's switch, not this one — A33)
+
+**Interfaces:**
+- Consumes: `Settings.Load/Save/Defaults`, `BoardButtons.For`, `SetupPages.FirstRunPage`, `AppServices.StartAsync`,
+  `AppServices.AddTrail`, `AppServices.RaiseChanged`, `Redactor.Redact`, the App.xaml styles `SectionLabel`, `Muted`
+  and `Refusal`.
+- Produces:
+
+```csharp
+// ---- src/Core/Settings.cs ----
+public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null, bool StartOnOpen = false)
+
+// ---- src/Composition/ISetupServices.cs (AppServices implements it) ----
+void SaveSettings(Settings settings);          // writes settings.json, then raises Changed; throws when it can't be written
+
+// ---- src/UI/BoardButtons.cs ----
+public static bool StartsOnOpen(bool startOnOpen, bool loaded, bool running, int installed, bool anySourceOn, bool firstRunPage);
+```
+
+**Rulings made while planning**
+
+Recorded so a reviewer doesn't read them as drift. Each names what was decided, why, and the cost if it is wrong.
+They continue the plan's A-numbering.
+
+- **A31. It is a `Settings` key, not a `RecipeState` one, and it is off until you turn it on.** Start reads every
+  enabled source at once, so nothing about it belongs to one recipe: it goes on the `Settings` record in
+  `src/Core/Settings.cs` as `StartOnOpen`, third positional parameter, defaulting to `false`. A file written by 0.3.1
+  loads with it off, which is the same as today's behaviour. Neither Task 8 nor Task 9 adds a setting at all — one is
+  what the window does with what it already kept, the other is a reading of `Latest` — so `StartOnOpen` is the only
+  new key in 0.3.2. *Why:* the owner was explicit that this is something a user enables after setting up, not a
+  behaviour change everyone gets; an opt-in that defaults on is a different feature. *Cost if wrong:* someone who
+  wants it on has to tick one box once.
+- **A32. The control lives on Setup › Recipes, and settings get a save path.** A checkbox, "Start reading as soon as
+  Ur Score opens", in a `WHEN UR SCORE OPENS` section at the bottom of `RecipesPage`, under the Import recipe… row.
+  `ISetupServices` gains `SaveSettings`, `AppServices.Settings` gains a private setter, and no page edits
+  `settings.json` by hand. *Why:* the standing rule is that a thing the app can do for you must not need a file
+  edited, and that is what `84d4c19` fixed in the README this morning — so this setting ships with its control in the
+  same commit as the key. Among the pages that are always listed (Your accounts, Stats, Recipes, Alerts, Score book,
+  Diagnostics), Recipes is the one about what Ur Score reads, and reading is running the installed recipes; a Clans
+  page would have been the other candidate and is disqualified because those pages exist only for a recipe with
+  inputs, so with only the profile recipe installed there would be nowhere to put it. Rejected: Score book (it is
+  about what is kept, not about reading), Diagnostics (a read-out). *Cost if wrong:* the box is one page away from
+  where someone looks for it; moving it later is a XAML block and a handler.
+- **A33. What "from open" means, exactly.** It is not RoRoRo's `autostartDefault` in `manifest.json` — that decides
+  whether RoRoRo launches the plugin, and it stays `off`. Ur Score still reads only while its own window is open.
+  When the box is on, the board does once, as it opens, exactly what pressing Start does: the same `StartAsync`, the
+  same `_starting` flag, the same failure line. It fires after the score book has loaded, and never when pressing
+  Start yourself would have done nothing — nothing installed, no enabled source, already running, or Setup has just
+  opened on a recipe that has no source yet (spec §7.1). The decision is pure, in `BoardButtons.StartsOnOpen`, so a
+  test sees every branch; the window only obeys it. A trail line says it happened. *Cost if wrong:* a first run with
+  the box already on reads nothing until you press Start, which is what happens today anyway.
+- **A34. A failed save is said on the page, and the box goes back to what is saved.** No message box (Global
+  Constraints). The refusal is a `Refusal`-styled line under the checkbox, redacted; the box is then re-read from
+  `_services.Settings`, so it never shows something the file doesn't. The handler is `Checked`/`Unchecked`, not
+  `Click`, because a UI Automation toggle changes `IsChecked` without a click, and a `_settingBox` guard keeps
+  `Refresh` from writing the file back. *Cost if wrong:* a disk that refuses the write leaves one visible line and a
+  box that tells the truth.
+- **A35. The README is patched in this task, not in the release.** Two places say the wrong thing the moment this
+  lands: the "Run itself in the background" bullet ("Autostart defaults to off … it won't watch a battle you forgot
+  to start it for") and the settings reference, which says the file holds two keys. Both are edited here, in the same
+  commit as the behaviour. *Why:* `84d4c19`'s whole lesson was a README describing a window that had moved on.
+  *Cost if wrong:* one bullet and one table row.
+- **A36. It ships inside 0.3.2.** Task 5's `CHANGELOG.md` **Added** list gains exactly this line: "Setup › Recipes
+  has a checkbox: start reading as soon as Ur Score opens. It is off until you turn it on, it does exactly what
+  pressing Start does, and Ur Score still reads only while its window is open." *Cost if wrong:* one line in one
+  release note.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `tests/SettingsTests.cs`, after `AnEmptyObjectYieldsDefaults`:
+
+```csharp
+    [Fact]
+    public void StartingFromOpenIsOffUntilYouTurnItOn()
+    {
+        // The owner's words: something a user enables once they are set up, never a behaviour change everyone gets.
+        Assert.False(Settings.Defaults.StartOnOpen);
+
+        Write("""{ "resolveNames": true, "activeRecipe": "pet-sim-99-profile" }""");
+        Assert.False(Settings.Load(File()).StartOnOpen);
+    }
+
+    [Fact]
+    public void StartOnOpenRoundTripsUnderItsCamelCaseKeyWithoutDisturbingTheOthers()
+    {
+        Settings.Save(new Settings(ResolveNames: false, ActiveRecipe: "x") with { StartOnOpen = true }, File());
+        var json = System.IO.File.ReadAllText(File());
+
+        Assert.Contains("\"startOnOpen\"", json);
+        Assert.DoesNotContain("\"StartOnOpen\"", json);
+        Assert.Equal(new Settings(false, "x", true), Settings.Load(File()));
+    }
+```
+
+Add to `tests/BoardButtonsTests.cs`, at the end of the class:
+
+```csharp
+    /// <summary>Plan A33: the board starts itself only when pressing Start yourself would have done something.</summary>
+    [Theory]
+    [InlineData(true, true, false, 1, true, false, true)]     // the one case that reads
+    [InlineData(false, true, false, 1, true, false, false)]   // off, which is the default
+    [InlineData(true, false, false, 1, true, false, false)]   // the score book hasn't been read yet
+    [InlineData(true, true, true, 1, true, false, false)]     // already running
+    [InlineData(true, true, false, 0, true, false, false)]    // nothing installed
+    [InlineData(true, true, false, 1, false, false, false)]   // every source switched off
+    [InlineData(true, true, false, 1, true, true, false)]     // Setup just opened on a recipe with no source
+    public void StartingFromOpenNeedsSomethingToRead(
+        bool startOnOpen, bool loaded, bool running, int installed, bool anySourceOn, bool firstRunPage, bool starts) =>
+        Assert.Equal(starts, BoardButtons.StartsOnOpen(startOnOpen, loaded, running, installed, anySourceOn, firstRunPage));
+
+    [Fact]
+    public void StartingFromOpenAgreesWithTheStartButton()
+    {
+        // Two gates that can drift apart is how a board starts itself while the button that does the same thing is
+        // disabled. This one is the button's, plus the reasons a press would have been a no-op.
+        Assert.False(BoardButtons.For(loaded: false, running: false, starting: false, testing: false, importing: false).StartStop);
+        Assert.False(BoardButtons.StartsOnOpen(startOnOpen: true, loaded: false, running: false, installed: 1, anySourceOn: true, firstRunPage: false));
+    }
+```
+
+- [ ] **Step 2: Run the tests to see them fail**
+
+Run: `dotnet build tests/Ur-Score.Tests.csproj -c Release`
+Expected: FAIL to compile (`Settings.StartOnOpen` and `BoardButtons.StartsOnOpen` don't exist).
+
+- [ ] **Step 3: The setting**
+
+In `src/Core/Settings.cs`, replace the record's declaration line with:
+
+```csharp
+public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null, bool StartOnOpen = false)
+```
+
+and add this paragraph to the class summary, directly above `/// </summary>`:
+
+```csharp
+/// <para>
+/// <c>StartOnOpen</c> is off until you turn it on, in Setup › Recipes (plan A31). It is about this app's own window —
+/// whether the board does what pressing Start does as it opens — and not about RoRoRo launching the plugin, which is
+/// the manifest's <c>autostartDefault</c> and stays off.
+/// </para>
+```
+
+- [ ] **Step 4: The save path**
+
+In `src/Composition/ISetupServices.cs`, add directly after `void SaveSources(IReadOnlyList<Source> sources);`:
+
+```csharp
+    /// <summary>
+    /// Writes <c>settings.json</c> and raises <see cref="Changed"/>. Throws when it can't be written, and nothing
+    /// changes then; no page edits that file itself.
+    /// </summary>
+    void SaveSettings(Settings settings);
+```
+
+In `src/Composition/AppServices.cs`:
+
+1. Replace `    public Settings Settings { get; }` with:
+
+```csharp
+    public Settings Settings { get; private set; }
+```
+
+2. Add directly after the `SaveSources` method:
+
+```csharp
+    /// <summary>
+    /// Writes <c>settings.json</c> and redraws. Nothing running changes: the only key a page writes is read when the
+    /// board next opens (plan A33). Qualified as <c>Core.Settings</c> because the property beside it has that name.
+    /// </summary>
+    public void SaveSettings(Settings settings)
+    {
+        Core.Settings.Save(settings);
+        Settings = settings;
+        RaiseChanged();
+    }
+```
+
+- [ ] **Step 5: The decision**
+
+In `src/UI/BoardButtons.cs`, add inside `BoardButtons`, after `For`:
+
+```csharp
+    /// <summary>
+    /// Whether the board starts reading by itself as it opens (plan A33). Off unless you turned it on, and then only
+    /// when pressing Start yourself would have done something: the book is read, nothing runs yet, a recipe is
+    /// installed, a source is on, and Setup isn't about to open on a recipe that has no source.
+    /// <para>
+    /// It ends with the Start button's own gate rather than restating it, so the two can't drift apart and leave the
+    /// board starting itself while the button for the same thing is disabled.
+    /// </para>
+    /// </summary>
+    public static bool StartsOnOpen(bool startOnOpen, bool loaded, bool running, int installed, bool anySourceOn, bool firstRunPage) =>
+        startOnOpen && !running && installed > 0 && anySourceOn && !firstRunPage
+        && For(loaded, running, starting: false, testing: false, importing: false).StartStop;
+```
+
+- [ ] **Step 6: The board starts itself**
+
+In `src/UI/BoardWindow.xaml.cs`:
+
+1. In `OnStartStopClick`, replace everything from `if (_services.Installed.Count == 0)` to the end of the method with:
+
+```csharp
+        await StartReadingAsync();
+    }
+
+    /// <summary>
+    /// Start, from the button or from opening (plan A33): the same gate above it, the same in-flight flag, the same
+    /// failure line. One path, so "from open" can never become a second, subtly different way to start.
+    /// </summary>
+    private async Task StartReadingAsync()
+    {
+        if (_services.Installed.Count == 0)
+        {
+            StateLine.Text = "No recipe to run.";
+            DetailLine.Text = "Import a recipe first.";
+            return;
+        }
+
+        _starting = true;
+        ApplyButtons();
+
+        try
+        {
+            await _services.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowFailure(ex);
+        }
+        finally
+        {
+            _starting = false;
+            RenderLines();
+        }
+    }
+```
+
+2. In `OnLoaded`, replace the last two lines (the `// Spec §7.1` comment and the `if (SetupPages.FirstRunPage…)` line) with:
+
+```csharp
+        // Spec §7.1: a recipe with inputs and no sources opens Setup on its Clans page.
+        var firstRun = SetupPages.FirstRunPage(_services.Installed, _services.Sources);
+        if (firstRun is not null) OpenSetup(firstRun);
+
+        // Plan A33: with "Start reading as soon as Ur Score opens" ticked, the board does once what pressing Start
+        // does — after the book is read, and never while Setup has just opened on a recipe that has no source yet.
+        if (!BoardButtons.StartsOnOpen(
+                _services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
+                _services.Installed.Count, _services.Sources.Any(s => s.Enabled), firstRun is not null))
+        {
+            return;
+        }
+
+        _services.AddTrail("START ON OPEN: reading started because Setup > Recipes has it ticked.");
+        await StartReadingAsync();
+```
+
+The trail line is ASCII (`>`, not `›`): it goes into Diagnostics' Copy text, which is read in a terminal.
+
+- [ ] **Step 7: The control**
+
+In `src/UI/Setup/RecipesPage.xaml`, insert directly before the final `</StackPanel>`:
+
+```xml
+        <TextBlock Text="WHEN UR SCORE OPENS" Style="{StaticResource SectionLabel}" Margin="0,22,0,6" />
+        <!-- Checked and Unchecked, not Click: a UI Automation toggle changes IsChecked without a click. -->
+        <CheckBox x:Name="StartOnOpenBox" Content="Start reading as soon as Ur Score opens"
+                  Checked="OnStartOnOpenChanged" Unchecked="OnStartOnOpenChanged"
+                  AutomationProperties.Name="Start reading as soon as Ur Score opens" />
+        <TextBlock Style="{StaticResource Muted}" Margin="24,4,0,0"
+                   Text="Off unless you turn it on. Ticking it doesn't start reading now; it takes effect the next time you open Ur Score. Ur Score reads only while its window is open, and Stop still stops it." />
+        <TextBlock x:Name="StartOnOpenProblemLine" Style="{StaticResource Refusal}" Margin="24,4,0,0" Visibility="Collapsed" />
+```
+
+In `src/UI/Setup/RecipesPage.xaml.cs`:
+
+1. Add the field after `private bool _importing;`:
+
+```csharp
+    /// <summary>The box is being set from the saved settings, not by a click, so the handler doesn't write them back.</summary>
+    private bool _settingBox;
+```
+
+2. Add at the end of `Refresh`:
+
+```csharp
+        _settingBox = true;
+        StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
+        _settingBox = false;
+```
+
+3. Add the handler, after `OnImportClick`:
+
+```csharp
+    /// <summary>
+    /// The one app-wide setting with a control (plan A32). A write that fails is said here and the box goes back to
+    /// what is saved, so it never shows something the file doesn't — and no message box, ever (Global Constraints).
+    /// </summary>
+    private void OnStartOnOpenChanged(object sender, RoutedEventArgs e)
+    {
+        if (_settingBox) return;
+
+        try
+        {
+            _services.SaveSettings(_services.Settings with { StartOnOpen = StartOnOpenBox.IsChecked == true });
+            Show(StartOnOpenProblemLine, "");
+        }
+        catch (Exception ex)
+        {
+            Show(StartOnOpenProblemLine, _services.Redactor.Redact($"Could not save that: {ex.Message}"));
+            _settingBox = true;
+            StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
+            _settingBox = false;
+        }
+    }
+```
+
+- [ ] **Step 8: The README (A35)**
+
+In `README.md`:
+
+- Replace the bullet that begins `- **Run itself in the background.** Autostart defaults to off.` (through "…it won't
+  watch a battle you forgot to start it for.") with:
+
+```
+- **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur Score reads only
+  while its own window is open. Once you're set up you can tick **Start reading as soon as Ur Score opens** in
+  **Setup → Recipes** so you don't have to press Start; it still won't watch a battle you never opened it for.
+```
+
+- In *Settings reference*, change `is two keys, and only the first is` to `is three keys, and only the first is`, and
+  add this row to the end of the table:
+
+```
+| `startOnOpen` | `false` | Whether Ur Score starts reading as soon as its window opens. Ticked in **Setup → Recipes**; no reason to edit it by hand. |
+```
+
+- [ ] **Step 9: Run the tests, then the build gate**
+
+Run, from the repo root, with Ur Score closed (a running copy locks `bin\Release`):
+
+```
+dotnet build tests/Ur-Score.Tests.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~SettingsTests|FullyQualifiedName~BoardButtonsTests"
+dotnet build Ur-Score.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build
+```
+
+Expected: all four pass. The app build is run on its own because the new `CheckBox` and its two handlers only fail
+there. If `SavedJsonUsesCamelCaseKeys` or `RoundTripsThroughDisk` breaks, the third positional parameter went in the
+wrong place: `StartOnOpen` is last, after `ActiveRecipe`.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add src/Core/Settings.cs src/Composition/ISetupServices.cs src/Composition/AppServices.cs src/UI/BoardButtons.cs src/UI/BoardWindow.xaml.cs src/UI/Setup/RecipesPage.xaml src/UI/Setup/RecipesPage.xaml.cs README.md tests/SettingsTests.cs tests/BoardButtonsTests.cs
+git commit -m "settings: Ur Score can start reading as soon as it opens, off until you turn it on
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+The live look for this task is **Task 8 Step 9**, which opens the window twice anyway; doing it here would mean a
+third restart for one checkbox.
+
+---
+
+### Task 8: The window opens on the last numbers it saw
+
+**Files:**
+- Modify: `src/Book/ScoreBookReader.cs`, `src/Core/RecipeWatch.cs` (the `RecipeSnapshot` record only),
+  `src/Board/PanelModels.cs`, `src/UI/Panels/PanelFrame.xaml`, `src/UI/BoardText.cs`,
+  `src/Composition/AppServices.cs`
+- Create: `src/Book/Remembered.cs`
+- Test: `tests/RememberedTests.cs` (new), `tests/BoardFixtures.cs` (added to), `tests/ScoreBookReaderTests.cs`
+  (added to), `tests/PanelModelsTests.cs` (added to), `tests/BoardTextTests.cs` (added to)
+- Never touched: `tools/smoke` (A47), `README.md` (A42)
+
+**Interfaces:**
+- Consumes: `BookLine`, `BookAccount`, `BookPeriod`, `BookLine.KindRead`, `ScoreBookReader`'s `_gate`/`_slugs`,
+  `Source.KeyOf`, `Source.InputsKey`, `RecipeStats.Find`, `RecipeRow`, `HeadlineValue`, `ReadingPeriod`,
+  `LiveBoard.UserIdsOf`, `StatText.Span`, `BoardFixtures.Read/Live/Snapshot`.
+- Produces:
+
+```csharp
+// ---- src/Core/RecipeWatch.cs (on RecipeSnapshot) ----
+public DateTimeOffset? RememberedAt { get; init; }   // non-null: every number here came from the score book, at that time
+
+// ---- src/Book/ScoreBookReader.cs ----
+public BookLine? LastReading(string sourceId);        // the newest kept reading for one source, else null
+
+// ---- src/Book/Remembered.cs (new, Labs626.UrScore.Book) ----
+public static class Remembered
+{
+    public static IReadOnlyDictionary<string, RecipeSnapshot> ForSources(
+        ScoreBookReader reader, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, IReadOnlySet<long> yourUserIds);
+    public static RecipeSnapshot? From(BookLine line, Source source, Recipe recipe, IReadOnlySet<long> yourUserIds);
+}
+
+// ---- src/Board/PanelModels.cs ----
+// LiveBoard gains a trailing  IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null  and:
+public RecipeSnapshot? LiveOf(string sourceId);       // the live reading alone
+public bool IsRemembered(string sourceId);
+public DateTimeOffset? OldestRemembered { get; }
+// SnapshotOf falls back to Remembered; PanelHead gains a trailing  bool Remembered = false
+
+// ---- src/UI/BoardText.cs ----
+public static string RememberedLine(DateTimeOffset oldest, DateTimeOffset now);
+```
+
+**Rulings made while planning**
+
+- **A37. They come out of the score book, not a new store.** `StatHistory` is the window's in-memory memory of the
+  previous read and is documented "never saved"; `WatchState` is a state, not numbers; `boards.json` holds layout.
+  The one thing already on disk that holds numbers is the score book, which `ScoreBookReader` loads at start anyway
+  (the last 35 days of readings, plus every final). So the last numbers are `reader.LastReading(sourceId)` turned
+  back into a `RecipeSnapshot` by a new `Remembered`, the reverse of `LineBuilder`. Nothing new is written, no new
+  file, no new format. *Why:* a second store would be a second thing to keep true, and the book is already loaded
+  before the first draw. *Cost if wrong:* a source whose newest kept reading is older than `ScoreBookReader.KeepReadings`
+  shows nothing, exactly as today.
+- **A38. Remembered snapshots live in their own map and reach the panels only.** `AppServices` keeps them in
+  `_remembered`, never in `_latest`, and hands them to `LiveBoard` as its own parameter. `LiveBoard.SnapshotOf` — the
+  panels' door — returns the live reading if there is one and the remembered one otherwise; `LiveBoard.LiveOf`
+  returns the live one alone. Everything that reports what Ur Score is *doing* keeps reading the live map:
+  `ISetupServices.Latest` (so Setup › Your accounts, Setup › Stats, `AccountsModel.FoundIn` and Diagnostics are
+  untouched), `BoardText.DetailLine`'s RoRoRo-is-down check, and `BoardText.StateLine`'s hunt for a source in
+  trouble, which moves from `SnapshotOf` to `LiveOf` in this task. *Why:* the alternative — seeding `_latest` — makes
+  every existing consumer a place where a stale number can be mistaken for a current one, and there is no fence that
+  catches the next consumer someone adds. One map, one door. *Cost if wrong:* Diagnostics says "Waiting for its first
+  read" and "Last read never" for a source whose numbers are on screen, which is true.
+- **A39. One mark, `RememberedAt`, and what a remembered snapshot may carry.** A nullable time, not a bool plus a
+  time that can disagree: non-null means every number in it came from the book, at that moment. It carries your own
+  accounts' rows (the stats the recipe still offers), the source's headline, the line's period, and nothing else —
+  `Accounts`, `Unresolved`, `Groups`, `Unavailable`, `StatMisses`, `CellMisses`, `CounterNames` and `Detail` all stay
+  empty, because the book never kept them. Its `State` is `Showing` and is never read: nothing that looks at
+  `WatchState` sees this map (A38). *Why:* the book's own privacy rules come along for free — it only ever held your
+  accounts and the headline, so nothing here can put another member back on screen. *Cost if wrong:* none known.
+- **A40. The three panels that show other members refuse them, and Standing stops counting.** `LiveLeaderboard`,
+  `Top` and `PromotionCheck` are each documented "Live only" and each needs rows the book never kept, so all three
+  switch from `SnapshotOf` to `LiveOf` and keep the empty state they already have ("Waiting for the first read.").
+  `Standing`'s "5 of 50 accounts" count is computed from the snapshot's rows, which for a remembered snapshot is your
+  own accounts alone — so `hasAccounts` also requires a live reading. `PastPeriods` and `RecordsPanel` change not at
+  all: they only ever read the book, and already say so. *Why:* a leaderboard that looks current while missing
+  everyone but you is the worst possible version of this feature. *Cost if wrong:* three panels stay blank until the
+  first read of the session, which is what they do today.
+- **A41. Two marks, and neither is magenta.** Board-wide: `BoardText.StateLine` gains one sentence — "The numbers on
+  screen are the last ones Ur Score read, from 3 h ago." — built from the *oldest* remembered reading among enabled
+  sources, so the line can never claim the numbers are fresher than the oldest one on screen. It is in the top bar,
+  above the scroll, always visible, and it needs nothing per panel, so it cannot be forgotten. Per panel: `PanelHead`
+  gains `Remembered`, and the shared `PanelFrame` draws the word `remembered` beside the title in `MutedTextBrush` —
+  never magenta, which is `overdue`, a read that should have happened and hasn't. Six panels pass it (Standing, Race,
+  My accounts, Account card, Profile stat, Accounts table) and a test asserts each one. *Cost if wrong:* a panel
+  someone adds later defaults to no mark; the board-wide line still says it.
+- **A42. What makes a kept reading refuse to come back.** `Remembered.From` returns null unless the line is a
+  reading (not a final), its recipe slug is this source's recipe, and `Source.KeyOf(line.Inputs)` equals the source's
+  `InputsKey` — the same clan, the same inputs. Within a line, an account id RoRoRo isn't listing as yours right now
+  is dropped, and a stat the recipe no longer offers is dropped. The line's **recipe hash is deliberately not
+  checked**: a recipe update doesn't make the number it read yesterday untrue, and the per-stat filter already
+  removes anything the new recipe can't name. Nothing about this touches the README: no new file, no new
+  destination, and the score book section already says every read is kept. *Cost if wrong:* a recipe that changed
+  what a stat *means* under the same id shows yesterday's number under today's label for one read.
+- **A43. It ships inside 0.3.2.** Task 5's `CHANGELOG.md` **Added** list gains exactly this line: "Ur Score opens on
+  the last numbers it read instead of an empty board. Each panel drawing them says `remembered`, the state line says
+  how old they are, and the first read replaces them. The panels that show other members wait for a real read,
+  because the score book never keeps anyone else." *Cost if wrong:* one line in one release note.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tests/RememberedTests.cs`:
+
+```csharp
+using Labs626.UrScore.Board;
+using Labs626.UrScore.Book;
+using Labs626.UrScore.Core;
+using static UrScore.Tests.BoardFixtures;
+
+namespace UrScore.Tests;
+
+using Source = Labs626.UrScore.Core.Source;
+
+/// <summary>
+/// The numbers the window shows before its first read. These pin what a remembered snapshot may carry (your own
+/// accounts and the source's own headline, nothing else), what makes one refuse to be built, and that every one is
+/// stamped — the stamp is the only thing downstream has to tell it from a read.
+/// </summary>
+public class RememberedTests
+{
+    private static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+
+    private static readonly IReadOnlySet<long> Yours = LiveBoard.UserIdsOf(Accounts);
+
+    private static BookLine Kept(DateTimeOffset at, params (long UserId, double Value)[] rows) =>
+        Read(MainClan, at, "AutumnBattle", new Dictionary<string, double> { ["clan-points"] = 14_020_550 }, "value", rows);
+
+    [Fact]
+    public void TheLastKeptReadingComesBackStampedWithItsOwnTime()
+    {
+        var snapshot = Remembered.From(Kept(Now.AddHours(-3), (Main.RobloxUserId, 4200)), MainClan, Clan, Yours);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(Now.AddHours(-3), snapshot.RememberedAt);
+        Assert.Equal(MainClan.Id, snapshot.SourceId);
+        Assert.Equal("AutumnBattle", snapshot.Period?.Value);
+        Assert.Equal(new RecipeRow(Main.RobloxUserId, new Dictionary<string, double> { ["value"] = 4200 }), Assert.Single(snapshot.Rows!));
+        Assert.Equal(14_020_550, Assert.Single(snapshot.Headline!).Number);
+    }
+
+    [Fact]
+    public void ItCarriesNothingTheBookNeverKept()
+    {
+        // The book's own privacy rules come along for free, and only for free if nothing here invents a field.
+        var snapshot = Remembered.From(Kept(Now.AddMinutes(-20), (Main.RobloxUserId, 4200)), MainClan, Clan, Yours)!;
+
+        Assert.Empty(snapshot.Accounts);
+        Assert.Empty(snapshot.Unresolved);
+        Assert.Empty(snapshot.Groups);
+        Assert.Empty(snapshot.Unavailable);
+        Assert.Empty(snapshot.CellMisses);
+        Assert.Empty(snapshot.CounterNames);
+        Assert.Null(snapshot.Detail);
+        Assert.False(snapshot.Recorded);
+    }
+
+    [Fact]
+    public void AnAccountThatIsNoLongerYoursDoesNotComeBack()
+    {
+        var line = Kept(Now.AddHours(-1), (Main.RobloxUserId, 4200), (AltOne.RobloxUserId, 900));
+
+        var snapshot = Remembered.From(line, MainClan, Clan, new HashSet<long> { Main.RobloxUserId })!;
+
+        Assert.Equal([Main.RobloxUserId], snapshot.Rows!.Select(r => r.UserId).ToArray());
+    }
+
+    [Fact]
+    public void AStatTheRecipeNoLongerOffersIsLeftOutAndAnEmptyRowWithIt()
+    {
+        var line = Read(MainClan, Now.AddHours(-1), "AutumnBattle", null, "gone-from-the-recipe", (Main.RobloxUserId, 7));
+
+        Assert.Null(Remembered.From(line, MainClan, Clan, Yours));
+    }
+
+    [Fact]
+    public void AReadingOfOtherInputsIsNotThisSourcesNumbers()
+    {
+        // The same recipe, another clan: its total and its rows are about something else entirely.
+        var otherClan = SourceOf(MainClan.Id, Clan, "K0i2", SourceRole.Main);
+        var line = Kept(Now.AddHours(-1), (Main.RobloxUserId, 4200));
+
+        Assert.Null(Remembered.From(line, otherClan, Clan, Yours));
+        Assert.Null(Remembered.From(line, SourceOf(MainClan.Id, Profile, null, SourceRole.Mine), Profile, Yours));
+    }
+
+    [Fact]
+    public void AFinalIsNotAReading()
+    {
+        var final = Final(MainClan, Now.AddDays(-9), "SpringBattle", new Dictionary<string, double> { ["clan-points"] = 1 }, "value", (Main.RobloxUserId, 4200));
+
+        Assert.Null(Remembered.From(final, MainClan, Clan, Yours));
+    }
+
+    [Fact]
+    public void EverySourceWithSomethingKeptGetsOneAndASwitchedOffSourceGetsNone()
+    {
+        var off = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine) with { Enabled = false };
+        var reader = Reader(
+            Kept(Now.AddHours(-5), (Main.RobloxUserId, 4000)),
+            Kept(Now.AddHours(-2), (Main.RobloxUserId, 4200)),
+            Read(off, Now.AddHours(-1), "AutumnBattle", null, "value", (AltOne.RobloxUserId, 900)));
+
+        var map = Remembered.ForSources(reader, [MainClan, off], [Installed(Clan, "value")], Yours);
+
+        Assert.Equal([MainClan.Id], map.Keys.ToArray());
+        Assert.Equal(Now.AddHours(-2), map[MainClan.Id].RememberedAt);
+    }
+}
+```
+
+Add to `tests/ScoreBookReaderTests.cs`, using that file's own `Read` and `Reader` helpers (its `Read` takes the
+source id last, and `Final` is always `s-1`):
+
+```csharp
+    [Fact]
+    public void TheLastReadingIsTheNewestOneForThatSourceAlone()
+    {
+        var reader = Reader(
+            Read(Now.AddHours(-4), 100),
+            Read(Now.AddHours(-1), 300, source: "s-2"),
+            Read(Now.AddHours(-2), 200),
+            Final("B", Now, 999, 1));
+
+        // A final is not a reading, so the 2 h old line is still the last thing s-1 read.
+        Assert.Equal(Now.AddHours(-2), reader.LastReading("s-1")?.T);
+        Assert.Equal(Now.AddHours(-1), reader.LastReading("s-2")?.T);
+        Assert.Null(reader.LastReading("s-nothing-here"));
+    }
+```
+
+Add to `tests/PanelModelsTests.cs`. That class has no shared clan `Source` (only `ProfileSource`, line 593), so
+each test makes its own, and `Period` is the class's own constant for `"AutumnBattle"`:
+
+```csharp
+    /// <summary>Plan A41: a panel drawing numbers from the score book says so, in every panel that can.</summary>
+    [Fact]
+    public void EveryPanelThatDrawsRememberedNumbersSaysSoInItsHead()
+    {
+        var mainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var kept = Remembered.From(
+            Read(mainClan, Now.AddHours(-3), Period, Headline(99), "value", (Main.RobloxUserId, 4200)),
+            mainClan, Clan, LiveBoard.UserIdsOf(Accounts))!;
+        var installed = Installed(Clan, "value");
+        var live = Live([mainClan], [installed], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept });
+        var reader = Reader();
+        var settings = new PanelSettings(Clan.Slug, mainClan.Id, Stat: "value");
+
+        Assert.True(PanelModels.Standing(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.Race(live, reader, settings with { SourceIds = [mainClan.Id] }).Head.Remembered);
+        Assert.True(PanelModels.MyAccounts(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.AccountCard(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.ProfileStat(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.AccountsTable(live, reader, settings).Head.Remembered);
+
+        // And the same six say nothing when the numbers were read this session.
+        var read = Live([mainClan], [installed],
+            new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = Snapshot(mainClan.Id, [Row(Main.RobloxUserId, 4200)], [Points(99)]) });
+        Assert.False(PanelModels.Standing(read, reader, settings).Head.Remembered);
+        Assert.False(PanelModels.AccountsTable(read, reader, settings).Head.Remembered);
+    }
+
+    /// <summary>Plan A40: the book never kept another member, so a panel that shows them waits for a real read.</summary>
+    [Fact]
+    public void ThePanelsThatShowOtherMembersNeverDrawRememberedNumbers()
+    {
+        var mainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var kept = Remembered.From(
+            Read(mainClan, Now.AddHours(-3), Period, Headline(99), "value", (Main.RobloxUserId, 4200)),
+            mainClan, Clan, LiveBoard.UserIdsOf(Accounts))!;
+        var live = Live([mainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept });
+        var settings = new PanelSettings(Clan.Slug, mainClan.Id, Stat: "value");
+
+        Assert.Empty(PanelModels.LiveLeaderboard(live, settings, new Dictionary<long, string>()).Rows);
+        Assert.Empty(PanelModels.PromotionCheck(live, settings with { ToSourceId = mainClan.Id }).Rows);
+        Assert.False(PanelModels.LiveLeaderboard(live, settings, new Dictionary<long, string>()).Head.Remembered);
+
+        // And Standing never turns your own four accounts into "4 of 4" of a clan it did not read.
+        Assert.False(PanelModels.Standing(live, Reader(), settings).HasAccounts);
+    }
+```
+
+Add to `tests/BoardTextTests.cs`:
+
+```csharp
+    [Fact]
+    public void TheStateLineSaysTheNumbersOnScreenAreTheLastOnesItRead()
+    {
+        var kept = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 4200)]) with { RememberedAt = Now.AddHours(-3) };
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.Equal("Not started. The numbers on screen are the last ones Ur Score read, from 3h ago.",
+            BoardText.StateLine(live, everStarted: false));
+    }
+
+    [Fact]
+    public void TheStateLineTakesTheOldestRememberedReadingSoItNeverSoundsFresherThanItIs()
+    {
+        var snaps = new Dictionary<string, RecipeSnapshot>
+        {
+            [MainClan.Id] = Snapshot(MainClan.Id, []) with { RememberedAt = Now.AddMinutes(-20) },
+            [AltClan.Id] = Snapshot(AltClan.Id, []) with { RememberedAt = Now.AddDays(-2) },
+        };
+        var live = Live([MainClan, AltClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(), remembered: snaps);
+
+        Assert.EndsWith("from 2d ago.", BoardText.StateLine(live, everStarted: true));
+    }
+
+    [Fact]
+    public void ARememberedSnapshotIsNeverAStateUrScoreIsIn()
+    {
+        // Nothing in this map describes what is happening now, so the state line must not read one as a fault.
+        var kept = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id, RememberedAt = Now.AddHours(-1) };
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            running: true, remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.StartsWith("Reading 1 source.", BoardText.StateLine(live, everStarted: true));
+    }
+```
+
+- [ ] **Step 2: Run the tests to see them fail**
+
+Run: `dotnet build tests/Ur-Score.Tests.csproj -c Release`
+Expected: FAIL to compile (`Remembered`, `RecipeSnapshot.RememberedAt`, `ScoreBookReader.LastReading`,
+`PanelHead.Remembered` and `BoardFixtures.Live`'s `remembered` parameter don't exist).
+
+- [ ] **Step 3: The stamp and the reader**
+
+In `src/Core/RecipeWatch.cs`, add to `RecipeSnapshot`, directly after the `Recorded` property:
+
+```csharp
+    /// <summary>
+    /// When every number here came from the score book rather than a read, and when that reading was taken (plan
+    /// A39). Null on everything a watch produces. It is the single mark: nothing pairs it with a flag that could
+    /// disagree with it, and only <c>Remembered</c> ever sets it.
+    /// </summary>
+    public DateTimeOffset? RememberedAt { get; init; }
+```
+
+In `src/Book/ScoreBookReader.cs`, add after `FirstReading`:
+
+```csharp
+    /// <summary>
+    /// The newest reading this source kept, or null. Finals are not readings, and a line older than
+    /// <see cref="KeepReadings"/> was never loaded, so an untouched source eventually has nothing to give back.
+    /// </summary>
+    public BookLine? LastReading(string sourceId)
+    {
+        lock (_gate)
+        {
+            return _slugs.Values
+                .SelectMany(d => d.Readings)
+                .Where(l => string.Equals(l.Source, sourceId, StringComparison.Ordinal))
+                .OrderBy(l => l.T)
+                .LastOrDefault();
+        }
+    }
+```
+
+- [ ] **Step 4: The last numbers as a snapshot**
+
+Create `src/Book/Remembered.cs`:
+
+```csharp
+using System.Globalization;
+using Labs626.UrScore.Core;
+using Labs626.UrScore.Recipes;
+
+namespace Labs626.UrScore.Book;
+
+// The bare name Source would find the Labs626.UrScore.Source namespace from in here; LineBuilder writes it out in full
+// for the same reason.
+using Source = Labs626.UrScore.Core.Source;
+
+/// <summary>
+/// The last numbers the score book kept, as a snapshot the panels can draw before the first read of the session lands
+/// (plan A37-A42). The reverse of <see cref="LineBuilder"/>.
+/// <para>
+/// It inherits that class's privacy rules for free: the book only ever held YOUR accounts and the source's own
+/// headline, so nothing here can put another member back on screen. It also cannot invent one — every field a
+/// snapshot has that the book has no answer for is left empty.
+/// </para>
+/// <para>
+/// Never a read and never a report. These snapshots live in their own map, never in <c>_latest</c>, and reach the
+/// window only through <see cref="LiveBoard.SnapshotOf"/> — so the state line, Diagnostics and every Setup page go on
+/// seeing only what was actually read. Every one of them carries <see cref="RecipeSnapshot.RememberedAt"/>.
+/// </para>
+/// </summary>
+public static class Remembered
+{
+    /// <summary>The last reading each enabled source kept, by source id. A source with nothing usable kept is absent.</summary>
+    public static IReadOnlyDictionary<string, RecipeSnapshot> ForSources(
+        ScoreBookReader reader, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, IReadOnlySet<long> yourUserIds)
+    {
+        var map = new Dictionary<string, RecipeSnapshot>(StringComparer.Ordinal);
+
+        foreach (var source in sources.Where(s => s.Enabled))
+        {
+            if (installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe) continue;
+            if (reader.LastReading(source.Id) is not { } line) continue;
+            if (From(line, source, recipe, yourUserIds) is { } snapshot) map[source.Id] = snapshot;
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// One kept reading as a snapshot, or null when it no longer describes this source: a final rather than a
+    /// reading, another recipe, other inputs, or nothing left in it that this recipe still offers (plan A42).
+    /// </summary>
+    public static RecipeSnapshot? From(BookLine line, Source source, Recipe recipe, IReadOnlySet<long> yourUserIds)
+    {
+        if (line.Kind != BookLine.KindRead) return null;
+        if (!string.Equals(line.Recipe.Slug, recipe.Slug, StringComparison.Ordinal)) return null;
+
+        // The same clan, the same inputs: a line written for another one is about something else entirely. The recipe
+        // HASH is deliberately not compared — an update doesn't make yesterday's number untrue, and a stat the new
+        // recipe can't name is dropped below anyway.
+        if (!string.Equals(Source.KeyOf(line.Inputs), source.InputsKey, StringComparison.Ordinal)) return null;
+
+        var rows = new List<RecipeRow>();
+        foreach (var (id, account) in line.Accounts)
+        {
+            // An id RoRoRo isn't listing as yours right now never comes back, whatever the book holds.
+            if (!long.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var userId) || !yourUserIds.Contains(userId)) continue;
+
+            var values = account.V
+                .Where(kv => RecipeStats.Find(recipe, kv.Key) is not null && double.IsFinite(kv.Value))
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            if (values.Count > 0) rows.Add(new RecipeRow(userId, values));
+        }
+
+        var headline = recipe.Headline
+            .Where(h => h.Id.Length > 0 && line.Headline.ContainsKey(h.Id))
+            .Select(h => new HeadlineValue(h.Label, line.Headline[h.Id].ToString(CultureInfo.InvariantCulture))
+            {
+                Id = h.Id,
+                Number = line.Headline[h.Id],
+            })
+            .ToList();
+
+        if (rows.Count == 0 && headline.Count == 0) return null;
+
+        // State is never read for one of these (plan A38); Showing is the honest one of the fourteen if it ever were.
+        return new RecipeSnapshot(WatchState.Showing, null, [], [], rows.Count, null, rows, headline)
+        {
+            SourceId = source.Id,
+            Period = line.Period is { } period ? new ReadingPeriod(period.Value, period.Starts, period.Ends) : null,
+            RememberedAt = line.T,
+        };
+    }
+}
+```
+
+- [ ] **Step 5: The board reads them through one door**
+
+In `src/Board/PanelModels.cs`:
+
+1. Give `LiveBoard` a trailing parameter — replace `    IReadOnlyDictionary<long, string>? Avatars = null)` with:
+
+```csharp
+    IReadOnlyDictionary<long, string>? Avatars = null,
+    IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null)
+```
+
+2. Replace the `SnapshotOf` member with:
+
+```csharp
+    /// <summary>
+    /// What a panel draws for a source: the reading from this session, else the last one the score book kept (plan
+    /// A38). A remembered one carries <see cref="RecipeSnapshot.RememberedAt"/>; a panel that needs another member's
+    /// row takes <see cref="LiveOf"/> instead (plan A40).
+    /// </summary>
+    public RecipeSnapshot? SnapshotOf(string sourceId) =>
+        Snapshots.GetValueOrDefault(sourceId) ?? Remembered?.GetValueOrDefault(sourceId);
+
+    /// <summary>The reading from this session alone. What Ur Score is DOING is only ever answered from this one.</summary>
+    public RecipeSnapshot? LiveOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
+
+    public bool IsRemembered(string sourceId) => SnapshotOf(sourceId)?.RememberedAt is not null;
+
+    /// <summary>
+    /// The oldest reading behind anything on screen, so a line about them never claims they are fresher than the
+    /// oldest one a panel is showing. Null once every enabled source has been read this session.
+    /// </summary>
+    public DateTimeOffset? OldestRemembered =>
+        Sources.Where(s => s.Enabled).Select(s => SnapshotOf(s.Id)?.RememberedAt).Min();
+```
+
+3. Give `PanelHead` a trailing parameter — replace `    string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "")`
+   with:
+
+```csharp
+    string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "",
+    bool Remembered = false)
+```
+
+4. The six panels that say it. In `Standing`, replace the `hasAccounts` line and the returned head:
+
+```csharp
+        // Your own rows are all a remembered snapshot has, so "4 of 4" would be a clan this never read (plan A40).
+        var hasAccounts = source.Role != SourceRole.Watch && rows is not null && snapshot?.RememberedAt is null;
+```
+
+```csharp
+            new PanelHead(title, name, source.Role, live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)),
+```
+
+   In `Race`, add `var remembered = false;` beside `var overdue = false;`, add `remembered |= live.IsRemembered(source.Id);`
+   directly under `overdue |= live.IsOverdue(source);`, and give the head `Remembered: remembered`.
+
+   In `MyAccounts`, add `var remembered = false;` beside `var overdue = false;`, add
+   `remembered |= live.IsRemembered(source.Id);` directly under `overdue |= live.IsOverdue(source);`, and give the
+   returned head `Remembered: remembered` after its `Note:`.
+
+   In `AccountCard`, the picked head becomes:
+
+```csharp
+            new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}",
+                Overdue: live.IsOverdue(pickedSource), Remembered: live.IsRemembered(pickedSource.Id)),
+```
+
+   In `ProfileStat`, the returned head becomes:
+
+```csharp
+        return new ProfileStatModel(
+            new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)), stat.Label, MissingLast(rows));
+```
+
+   In `AccountsTable`, the returned head becomes:
+
+```csharp
+        return new AccountsTableModel(
+            new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note, Remembered: live.IsRemembered(source.Id)),
+            columns, list);
+```
+
+5. The three that refuse them (plan A40): in `PromotionCheck` replace `live.SnapshotOf(from.Id)?.Rows` with
+   `live.LiveOf(from.Id)?.Rows` and `live.SnapshotOf(to.Id)?.Rows` with `live.LiveOf(to.Id)?.Rows`; in `Top` replace
+   both `live.SnapshotOf(source.Id)?.Groups` and `HeadlineNumber(live.SnapshotOf(mineSource.Id), …)` with `LiveOf`;
+   in `LiveLeaderboard` replace `live.SnapshotOf(source.Id)?.Rows` with `live.LiveOf(source.Id)?.Rows`. `PastPeriods`
+   and `RecordsPanel` touch no snapshot and change not at all.
+
+- [ ] **Step 6: The two marks**
+
+In `src/UI/BoardText.cs`, replace `StateLine` with:
+
+```csharp
+    public static string StateLine(LiveBoard live, bool everStarted)
+    {
+        // Plan A41: whatever else this line says, it says so while any panel is drawing numbers from the score book.
+        var remembered = live.OldestRemembered is { } oldest ? " " + RememberedLine(oldest, live.Now) : "";
+
+        if (!live.Running) return (everStarted ? "Stopped." : "Not started.") + remembered;
+
+        var enabled = live.Sources.Where(s => s.Enabled).ToList();
+        if (enabled.Count == 0) return "Running, with nothing to read yet.";
+
+        foreach (var source in enabled)
+        {
+            // The reading from this session only: a remembered snapshot is not a state Ur Score is in (plan A38).
+            if (live.LiveOf(source.Id) is { } snapshot && !Healthy(snapshot.State))
+            {
+                return $"{live.SourceName(source)}: {DiagnosticsModel.StateText(snapshot.State)}";
+            }
+        }
+
+        return (enabled.Count == 1 ? "Reading 1 source." : $"Reading {enabled.Count} sources.") + remembered;
+    }
+
+    /// <summary>
+    /// Plan A41: how old the numbers on screen are, from the OLDEST reading behind any of them, so the line can never
+    /// sound fresher than the worst thing it covers.
+    /// </summary>
+    public static string RememberedLine(DateTimeOffset oldest, DateTimeOffset now) =>
+        $"The numbers on screen are the last ones Ur Score read, from {StatText.Span(now - oldest)} ago.";
+```
+
+In `src/UI/Panels/PanelFrame.xaml`, add directly after the `PanelOverdue` TextBlock:
+
+```xml
+            <!-- Plan A41: this panel's numbers came from the score book, not from a read this session. Muted, never
+                 magenta: magenta is "overdue", which is a read that should have happened and hasn't. -->
+            <TextBlock x:Name="PanelRemembered" DockPanel.Dock="Left" Text="remembered" Margin="8,0,0,0" FontSize="11"
+                       VerticalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}"
+                       Visibility="{Binding Remembered, Converter={StaticResource BoolToVisible}}" />
+```
+
+- [ ] **Step 7: The wiring**
+
+In `src/Composition/AppServices.cs`:
+
+1. Add the field after `private readonly Dictionary<string, DateTimeOffset> _lastRead = …;`:
+
+```csharp
+    /// <summary>The last numbers the score book kept, per source, until that source is read this session (plan A38).</summary>
+    private IReadOnlyDictionary<string, RecipeSnapshot> _remembered = new Dictionary<string, RecipeSnapshot>(StringComparer.Ordinal);
+```
+
+2. Replace `CurrentBoard`'s last line `KnownAccounts, _time, Runner.Running, _avatars.Files);` with:
+
+```csharp
+        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered);
+```
+
+3. Add after `AskForAvatars`:
+
+```csharp
+    /// <summary>
+    /// The last numbers each source kept, so the window has something real in it before the first read lands (plan
+    /// A37). Read from the loaded book, never from disk again: after the book loads, when the sources change, and
+    /// when RoRoRo's account list changes, since which ids are yours decides which rows come back. A reading from
+    /// this session always wins (<see cref="LiveBoard.SnapshotOf"/>), so nothing here needs clearing.
+    /// </summary>
+    private void RememberLastNumbers()
+    {
+        if (!ReaderLoaded) return;
+
+        _remembered = Remembered.ForSources(Reader, Sources, Installed, LiveBoard.UserIdsOf(KnownAccounts));
+    }
+```
+
+4. Call it: in `LoadBookOnceAsync`, between `Runner.Apply(Sources);` and `AddTrail($"BOOK: loaded from {root}.");`,
+   insert `RememberLastNumbers();` and change the trail line to:
+
+```csharp
+        AddTrail($"BOOK: loaded from {root}. {_remembered.Count} source(s) opened on their last kept numbers.");
+```
+
+   In `ApplySources`, insert `RememberLastNumbers();` directly above `WarnPastBudget();`. In `OnListed`, insert
+   `RememberLastNumbers();` directly under `RefreshPolicies();`.
+
+5. `Remembered` is in `Labs626.UrScore.Book`, which this file already imports; if the name collides with anything,
+   alias it the way `AvatarBook` is aliased at the top of the file.
+
+In `tests/BoardFixtures.cs`, give `Live` a trailing parameter and pass it:
+
+```csharp
+    public static LiveBoard Live(
+        IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, IReadOnlyDictionary<string, RecipeSnapshot> snapshots,
+        bool running = false, IReadOnlyDictionary<string, DateTimeOffset>? lastRead = null, IReadOnlyList<HostAccount>? accounts = null,
+        IReadOnlyDictionary<string, RecipeSnapshot>? remembered = null) =>
+        new(sources, installed, snapshots, lastRead ?? new Dictionary<string, DateTimeOffset>(), accounts ?? Accounts, new FixedTime(Now), running,
+            Remembered: remembered);
+```
+
+- [ ] **Step 8: Run the tests, then the build gate**
+
+```
+dotnet build tests/Ur-Score.Tests.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~RememberedTests|FullyQualifiedName~PanelModelsTests|FullyQualifiedName~BoardTextTests|FullyQualifiedName~ScoreBookReaderTests"
+dotnet build Ur-Score.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build
+```
+
+Expected: all four pass. If an existing `PanelModelsTests` case starts failing on a head, check it isn't asserting a
+whole `PanelHead` by value — the new trailing `Remembered` changes those comparisons and the fix is to compare the
+member, not the record.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add src/Book/Remembered.cs src/Book/ScoreBookReader.cs src/Core/RecipeWatch.cs src/Board/PanelModels.cs src/UI/Panels/PanelFrame.xaml src/UI/BoardText.cs src/Composition/AppServices.cs tests/RememberedTests.cs tests/BoardFixtures.cs tests/ScoreBookReaderTests.cs tests/PanelModelsTests.cs tests/BoardTextTests.cs
+git commit -m "board: the window opens on the last numbers it saw, marked as remembered
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 10: The live look, for Tasks 7 and 8 (controller)**
+
+Quit Ur Score, build both projects `-warnaserror`, then start RoRoRo with your accounts listed and, on your own data:
+
+1. **It opens on real numbers.** Start Ur Score and, before pressing anything: the accounts table, My accounts and
+   the account card have numbers in them, each panel's title line reads `remembered`, and the state line reads
+   "Not started." followed by "The numbers on screen are the last ones Ur Score read, from … ago." Check that age
+   against Diagnostics' own last-read line for the same source.
+2. **Nobody else.** The Live leaderboard and Top of the battle are empty and say "Waiting for the first read."
+   Clan standing shows the place and total but no "N of M accounts" count.
+3. **The first read replaces them.** Press Start (or Test now). As each source lands, its panel's `remembered` goes,
+   and the sentence leaves the state line once every enabled source has been read.
+4. **The setting (Task 7).** Setup › Recipes has a `WHEN UR SCORE OPENS` section with the box unticked. Tick it,
+   close Setup, quit Ur Score, start it again: the board starts reading by itself, the Start button reads **Stop**,
+   the live dot is on, and Diagnostics' trail carries one `START ON OPEN:` line. Untick it, restart, and the button
+   reads **Start** with nothing running.
+5. **Two screenshots, one per theme**, of the board in its remembered state (quit before the first read lands, or
+   read the state line before pressing Start):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Ur Score' -OutPath artifacts\smoke\remembered-dark.png
+powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Ur Score' -OutPath artifacts\smoke\remembered-light.png
+```
+
+   Each must show the word `remembered` reading as muted text, clearly not the magenta `overdue` mark, and the state
+   line's sentence in full.
+
+6. **The walks still pass, unchanged** (A47): run `window-smoke.ps1 -Main CCGP`, `walk-alts.ps1`,
+   `walk-starter-board.ps1 -Main CCGP -Alt K0i2` and `walk-alerts.ps1`. A walk that now fails at a line it used to
+   read is the state line's new sentence, and that is a walk to fix in its own commit, not a reason to drop the
+   sentence.
+
+---
+
+### Task 9: The reason an account's numbers are empty, beside the empty numbers
+
+**Files:**
+- Modify: `src/Board/PanelText.cs`, `src/Board/PanelModels.cs` (`AccountLineModel` and `MyAccounts`),
+  `src/UI/Panels/MyAccountsPanel.xaml`, `src/UI/Setup/AccountsModel.cs`, `src/UI/Setup/AccountsPage.xaml`
+- Test: `tests/PanelTextTests.cs` (added to), `tests/PanelModelsTests.cs` (added to),
+  `tests/AccountsModelTests.cs` (added to)
+- Never touched: `src/UI/BoardText.cs`'s `Attribution` and the board's `AttributionLine` (A45), `tools/smoke` (A47)
+
+**Interfaces:**
+- Consumes: `RecipeSnapshot.Unavailable` (filled by `RecipeEngine` from the recipe's own `unavailable.message`, and
+  from the same message on a 404), `Recipe.Name`, `SourceRole`, `ISetupServices.Latest`.
+- Produces:
+
+```csharp
+// ---- src/Board/PanelText.cs ----
+public static string CannotRead(
+    long userId, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
+    IReadOnlyDictionary<string, RecipeSnapshot> latest, bool nameTheRecipe);
+
+// ---- src/Board/PanelModels.cs ----
+// AccountLineModel gains a trailing  string Note = ""  with  public bool HasNote => Note.Length > 0;
+
+// ---- src/UI/Setup/AccountsModel.cs ----
+// AccountRow gains a trailing  string Note = ""  with  public bool HasNote => Note.Length > 0;
+```
+
+**Rulings made while planning**
+
+- **A44. The message already exists; this task is about where it lands.** The board's footer already carries the
+  profile recipe's credit, and its second sentence is "Each account must be linked on db.biggames.io with its
+  Profile view public." — so the plugin is not silent, it is just saying it in an 11 px line at the bottom of the
+  window, nowhere near the dashes it explains. The recipe also carries a second, sharper sentence for exactly this
+  case, `unavailable.message`: "Profile is private. Link this account on db.biggames.io and turn on its Profile
+  view." `RecipeEngine` already puts it in `RecipeSnapshot.Unavailable` per account, both when the source says the
+  profile is unavailable and on a 404. **No new sentence is written in this task.** It routes that existing message
+  to the two places that show the account's numbers as dashes and say nothing about why: the **My accounts** panel
+  (where a row with no reading falls into "Not in the last read" and gets four dashes) and **Setup › Your accounts**
+  (where you decide what each account sends). The accounts table, Profile stat and the account card already show it
+  and are not touched. *Why:* the owner's ask was that the plugin tell them, and the fix for "said in the wrong
+  place" is to say it in the right place, not to say it twice. *Cost if wrong:* the same sentence now appears on up
+  to five surfaces at once, which is one per screen showing that account, not one screen repeating itself.
+- **A45. The board's footer stays exactly as it is.** Task 9 changes neither `BoardText.Attribution` nor the
+  `AttributionLine` control. That line is the recipes' credit — attribution is its job, and it must go on naming
+  every source being read. Its known defect, printing the shared first sentence of two recipes' credits twice, is
+  backlog **V3-S.4** and the owner is fixing it in the same footer, separately; this task must not collide with that
+  edit. *Why:* one owner per line. *Cost if wrong:* none; if the two edits ever did collide, the conflict would be
+  in one method neither task rewrites.
+- **A46. One helper, and the only thing Ur Score adds is a name.** `PanelText.CannotRead` builds the note in one place, for
+  both callers, because the same words on two screens that drift apart is worse than either. It returns the recipe's
+  own message verbatim, one line per recipe that could not read that account at its last read, oldest source order
+  (main first, as `AccountsModel.FoundIn` already orders them), joined with `Environment.NewLine`. Its only Ur Score
+  words are the prefix `{recipe.Name}: `, added when `nameTheRecipe` is true — on Setup › Your accounts, where two
+  recipes' rows sit side by side, and not on My accounts, which is already drawn per recipe. The recipe's name is
+  how the rest of the tree refers to a recipe (`AccountsModel.Rows`'s "Send {account} for {recipe.Name}",
+  `RecipesModel`, `SetupPages.For`), so Ur Score still names no game of its own: everything a reader sees about a
+  game here was written by the recipe. An id RoRoRo isn't listing as yours never produces a note. *Cost if wrong:*
+  with two recipes failing on one account the Setup row is two lines tall.
+- **A47. Tasks 7, 8 and 9 change nothing in `tools/smoke`.** No automation id moves and none is removed; the new
+  ones are listed below so a later walk can find them without anything shifting. The three tasks are proved by unit
+  tests plus the controller's live looks (Task 8 Step 10, Task 9 Step 6), and Task 8 Step 10 item 6 re-runs the
+  existing walks unchanged. *Why:* this is the same call A29 made for Task 6, and the cycle's own lesson was that a
+  walk written and never run is a liability — the clan battle is Saturday. *Cost if wrong:* three features whose
+  regression cover is unit tests and one pass of human eyes; the ids are in place for a walk in 0.3.3.
+- **A48. It ships inside 0.3.2.** Task 5's `CHANGELOG.md` **Changed** list gains exactly this line: "An account a
+  source can't read now says why beside its own empty numbers — on My accounts and on Setup › Your accounts, in the
+  recipe's own words, which say what to do about it. The board's footer is unchanged." *Cost if wrong:* one line in
+  one release note.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `tests/PanelTextTests.cs` (its four usings already cover every name below; a test file is outside
+`Labs626.UrScore`, so the bare name `Source` needs no alias there — only `src/Board/PanelText.cs` does):
+
+```csharp
+    private static RecipeSnapshot CouldNotRead(string sourceId, params (long UserId, string Why)[] said) =>
+        BoardFixtures.Snapshot(sourceId, []) with { Unavailable = said.ToDictionary(x => x.UserId, x => x.Why) };
+
+    /// <summary>Plan A44/A46: the recipe's own sentence, not a new one, and only the recipe's name added to it.</summary>
+    [Fact]
+    public void AnAccountASourceCouldNotReadCarriesTheRecipesOwnWords()
+    {
+        var profile = BoardFixtures.SourceOf("s-00000009", BoardFixtures.Profile, null, SourceRole.Mine);
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [profile.Id] = CouldNotRead(profile.Id, (BoardFixtures.AltOne.RobloxUserId, "Profile is private. Link this account on db.biggames.io and turn on its Profile view.")),
+        };
+        var installed = new[] { BoardFixtures.Installed(BoardFixtures.Profile, "diamonds") };
+
+        Assert.Equal(
+            "Profile is private. Link this account on db.biggames.io and turn on its Profile view.",
+            PanelText.CannotRead(BoardFixtures.AltOne.RobloxUserId, installed, [profile], latest, nameTheRecipe: false));
+        Assert.Equal(
+            "Pet Sim 99 profile: Profile is private. Link this account on db.biggames.io and turn on its Profile view.",
+            PanelText.CannotRead(BoardFixtures.AltOne.RobloxUserId, installed, [profile], latest, nameTheRecipe: true));
+        Assert.Equal("", PanelText.CannotRead(BoardFixtures.Main.RobloxUserId, installed, [profile], latest, nameTheRecipe: true));
+    }
+
+    [Fact]
+    public void EveryRecipeThatCouldNotReadItGetsItsOwnLineMainFirst()
+    {
+        var clan = BoardFixtures.SourceOf("s-00000001", BoardFixtures.Clan, "CCGP", SourceRole.Main);
+        var profile = BoardFixtures.SourceOf("s-00000009", BoardFixtures.Profile, null, SourceRole.Mine);
+        var id = BoardFixtures.AltOne.RobloxUserId;
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [profile.Id] = CouldNotRead(profile.Id, (id, "Profile is private.")),
+            [clan.Id] = CouldNotRead(clan.Id, (id, "Not in this clan right now.")),
+        };
+        var installed = new[] { BoardFixtures.Installed(BoardFixtures.Clan, "value"), BoardFixtures.Installed(BoardFixtures.Profile, "diamonds") };
+
+        Assert.Equal(
+            "Pet Sim 99 clan battle points: Not in this clan right now." + Environment.NewLine + "Pet Sim 99 profile: Profile is private.",
+            PanelText.CannotRead(id, installed, [profile, clan], latest, nameTheRecipe: true));
+    }
+
+    [Fact]
+    public void ASwitchedOffSourceAndAnIdThatIsNotYoursSayNothing()
+    {
+        // Unavailable only ever holds your own ids; this pins that nothing here would print one if it didn't.
+        var profile = BoardFixtures.SourceOf("s-00000009", BoardFixtures.Profile, null, SourceRole.Mine) with { Enabled = false };
+        var latest = new Dictionary<string, RecipeSnapshot> { [profile.Id] = CouldNotRead(profile.Id, (999_999, "Profile is private.")) };
+        var installed = new[] { BoardFixtures.Installed(BoardFixtures.Profile, "diamonds") };
+
+        Assert.Equal("", PanelText.CannotRead(999_999, installed, [profile], latest, nameTheRecipe: true));
+        Assert.Equal("", PanelText.CannotRead(0, installed, [profile], latest, nameTheRecipe: true));
+    }
+```
+
+The recipe names above are the fixtures' own, checked against the tree at `ddfafc8`:
+`tests/Fixtures/petsim99-profile.recipe.json` is `"name": "Pet Sim 99 profile"` and
+`petsim99-clan-battle.recipe.json` is `"name": "Pet Sim 99 clan battle points"`. The profile fixture's
+`unavailable.message` is quoted verbatim here and is the sentence this whole task is about.
+
+Add to `tests/PanelModelsTests.cs`:
+
+```csharp
+    /// <summary>Plan A44: the panel with the dashes is the panel that says why.</summary>
+    [Fact]
+    public void MyAccountsSaysWhyARowHasNoNumbers()
+    {
+        var snapshot = Snapshot(ProfileSource.Id, [Row(Main.RobloxUserId, 4200, "diamonds")])
+            with { Unavailable = new Dictionary<long, string> { [AltOne.RobloxUserId] = "Profile is private. Link this account on db.biggames.io and turn on its Profile view." } };
+        var live = Live([ProfileSource], [Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot> { [ProfileSource.Id] = snapshot });
+
+        var model = PanelModels.MyAccounts(live, Reader(), new PanelSettings(Profile.Slug, ProfileSource.Id, Stat: "diamonds"));
+        var rows = model.Groups.SelectMany(g => g.Rows).ToList();
+
+        var unread = rows.Single(r => r.UserId == AltOne.RobloxUserId);
+        Assert.True(unread.Missing);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", unread.Note);
+        Assert.True(unread.HasNote);
+
+        // An account that was read says nothing, and no row repeats the recipe's name on a panel drawn per recipe.
+        var read = rows.Single(r => r.UserId == Main.RobloxUserId);
+        Assert.Equal("", read.Note);
+        Assert.False(read.HasNote);
+    }
+```
+
+Add to `tests/AccountsModelTests.cs`:
+
+```csharp
+    [Fact]
+    public void SetupSaysWhyAnAccountsNumbersAreEmpty()
+    {
+        var profile = new Source("s-00000009", Profile.Slug, new Dictionary<string, string>(), SourceRole.Mine);
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [profile.Id] = Read(Main.RobloxUserId) with { Unavailable = new Dictionary<long, string> { [Alt.RobloxUserId] = "Profile is private. Link this account on db.biggames.io and turn on its Profile view." } },
+        };
+        var installed = new[] { Sending(Profile) };
+
+        var rows = AccountsModel.Rows([Main, Alt], installed, [profile], latest);
+
+        Assert.Equal("", rows.Single(r => r.AccountId == Main.AccountId).Note);
+        Assert.Equal(
+            "Pet Sim 99 profile: Profile is private. Link this account on db.biggames.io and turn on its Profile view.",
+            rows.Single(r => r.AccountId == Alt.AccountId).Note);
+        Assert.True(rows.Single(r => r.AccountId == Alt.AccountId).HasNote);
+    }
+```
+
+- [ ] **Step 2: Run the tests to see them fail**
+
+Run: `dotnet build tests/Ur-Score.Tests.csproj -c Release`
+Expected: FAIL to compile (`PanelText.CannotRead`, `AccountLineModel.Note` and `AccountRow.Note` don't exist).
+
+- [ ] **Step 3: The one place the words are built**
+
+In `src/Board/PanelText.cs`, add `using Labs626.UrScore.Recipes;` to the usings if it isn't there, add
+`using Source = Labs626.UrScore.Core.Source;` directly after the `namespace Labs626.UrScore.Board;` line (the bare
+name `Source` would otherwise find the `Labs626.UrScore.Source` namespace), and add to `PanelText`:
+
+```csharp
+    /// <summary>
+    /// Why a source could not read one of your accounts at its last read, in the recipe's own words, or empty
+    /// (plan A44, A46). One line per recipe that said so, main source first.
+    /// <para>
+    /// The sentence is the recipe's: <c>unavailable.message</c>, which is the only thing here that knows what it
+    /// reads and what you must do about it. The only words Ur Score adds are the recipe's own name, and only when
+    /// <paramref name="nameTheRecipe"/> — a screen that already shows one recipe at a time doesn't need telling.
+    /// </para>
+    /// </summary>
+    public static string CannotRead(
+        long userId, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
+        IReadOnlyDictionary<string, RecipeSnapshot> latest, bool nameTheRecipe)
+    {
+        if (userId == 0) return "";
+
+        var lines = new List<string>();
+        foreach (var source in sources.Where(s => s.Enabled).OrderBy(s => s.Role == SourceRole.Main ? 0 : 1))
+        {
+            if (installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe) continue;
+            if (latest.GetValueOrDefault(source.Id)?.Unavailable.GetValueOrDefault(userId) is not { Length: > 0 } why) continue;
+
+            var line = nameTheRecipe ? $"{recipe.Name}: {why}" : why;
+            if (!lines.Contains(line, StringComparer.Ordinal)) lines.Add(line);
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+```
+
+- [ ] **Step 4: My accounts says it**
+
+In `src/Board/PanelModels.cs`:
+
+1. Replace the `AccountLineModel` record with:
+
+```csharp
+public sealed record AccountLineModel(
+    long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing,
+    string? Avatar = null, string Note = "")
+{
+    /// <summary>Why this row has no numbers, in the recipe's own words (plan A44). Empty for a row that was read.</summary>
+    public bool HasNote => Note.Length > 0;
+}
+```
+
+2. In `MyAccounts`, the "not in a watched" group's rows become:
+
+```csharp
+                [.. rest.OrderBy(a => a.DisplayName, StringComparer.Ordinal)
+                    .Select(a => new AccountLineModel(
+                        a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId),
+                        PanelText.CannotRead(a.RobloxUserId, live.Installed, live.Sources, live.Snapshots, nameTheRecipe: false)))]));
+```
+
+   `live.Snapshots`, not `live.SnapshotOf`: a remembered snapshot never carries an `Unavailable` entry (A39), so
+   this reads what was actually read, and says nothing at all before the first read.
+
+In `src/UI/Panels/MyAccountsPanel.xaml`, wrap the row's first column: replace the opening tag
+`<DockPanel Grid.Column="0">` with
+
+```xml
+                                                    <StackPanel Grid.Column="0">
+                                                        <DockPanel>
+```
+
+and replace that DockPanel's matching `</DockPanel>` with
+
+```xml
+                                                        </DockPanel>
+                                                        <!-- Indented past the avatar slot and the sent dot (28 + 12 px, A26), so the
+                                                             reason lines up under the name it is about. -->
+                                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontSize="11"
+                                                                   Margin="40,3,0,0"
+                                                                   Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}" />
+                                                    </StackPanel>
+```
+
+(the three children between them — the avatar `Ellipse`, the sent-dot `Ellipse` with its `Hidden` trigger, and the
+name `TextBlock` — are untouched; only their parent moves one level down.)
+
+- [ ] **Step 5: Setup › Your accounts says it**
+
+In `src/UI/Setup/AccountsModel.cs`:
+
+1. Replace the `AccountRow` record with:
+
+```csharp
+public sealed record AccountRow(
+    Guid AccountId, string DisplayName, string FoundIn, IReadOnlyList<SendTick> Sends, string? Avatar = null, string Note = "")
+{
+    /// <summary>Why a source can't read this account, in that recipe's own words (plan A44).</summary>
+    public bool HasNote => Note.Length > 0;
+}
+```
+
+2. In `Rows`, the row's last argument becomes two:
+
+```csharp
+            avatar?.Invoke(account.RobloxUserId),
+            PanelText.CannotRead(account.RobloxUserId, installed, sources, latest, nameTheRecipe: true)))];
+```
+
+In `src/UI/Setup/AccountsPage.xaml`, replace the row's `Found in` cell —
+`<TextBlock Grid.Column="1" Text="{Binding FoundIn}" Style="{StaticResource Muted}" VerticalAlignment="Center" />` —
+with:
+
+```xml
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding FoundIn}" Style="{StaticResource Muted}" />
+                                <!-- The recipe's own words for why this account's numbers are empty, beside the row where
+                                     you decide what it sends (plan A44). Muted, not Refusal: it is a standing condition,
+                                     not the result of something you just pressed. -->
+                                <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontSize="11" Margin="0,3,0,0"
+                                           Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}" />
+                            </StackPanel>
+```
+
+- [ ] **Step 6: Run the tests, then the build gate**
+
+```
+dotnet build tests/Ur-Score.Tests.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~PanelTextTests|FullyQualifiedName~PanelModelsTests|FullyQualifiedName~AccountsModelTests"
+dotnet build Ur-Score.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build
+```
+
+Expected: all four pass. The app build is run on its own because the two XAML re-parentings only fail there — check
+by eye that the My accounts name column still starts at the same x as its `Account` heading (A26's 40 px).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/Board/PanelText.cs src/Board/PanelModels.cs src/UI/Panels/MyAccountsPanel.xaml src/UI/Setup/AccountsModel.cs src/UI/Setup/AccountsPage.xaml tests/PanelTextTests.cs tests/PanelModelsTests.cs tests/AccountsModelTests.cs
+git commit -m "accounts: an account a source can't read says why beside its own empty numbers
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 8: The live look (controller)**
+
+On your own data, with at least one account whose profile is not linked or not public (if every account is linked,
+un-link one on db.biggames.io, read once, and link it back afterwards):
+
+1. **My accounts.** That account sits under "Not in the last read" with four dashes and, under its name, the
+   recipe's own sentence naming db.biggames.io. Every other row is unchanged and no row moved sideways.
+2. **Setup › Your accounts.** The same account's row carries the same sentence under "Found in", prefixed with the
+   recipe's name; the accounts that were read carry nothing.
+3. **The footer is untouched.** The credit line at the bottom of the board reads exactly what it read before this
+   task (whatever V3-S.4 has left it as), and Task 9 added nothing to it and took nothing from it.
+4. **It clears.** Link the account, press Test now: its numbers appear and both notes go.
+
+**Automation ids added by Tasks 7, 8 and 9** (nothing is moved or removed, so every walk runs unchanged — A47):
+
+| Where | Automation ids and names |
+|---|---|
+| Setup › Recipes | `StartOnOpenBox`, a checkbox named "Start reading as soon as Ur Score opens"; `StartOnOpenProblemLine` |
+| The board's top bar | `StateLine` gains the remembered sentence; `DetailLine`, `PeriodLine`, `AttributionLine` unchanged |
+| Inside a panel | `PanelRemembered`, the word "remembered" beside a panel's title |
+| My accounts, Setup › Your accounts | each row's reason, inside its row template and named by its own words, like the Send ticks |
+
+---
+
 ## Self-review record
 
 - **Design coverage:**
