@@ -70,28 +70,52 @@ public static class AccountsModel
             PanelText.CannotRead(account.RobloxUserId, installed, sources, latest, nameTheRecipe: true)))];
     }
 
-    /// <summary>The main and mine sources whose last read had this account, main first; else "Not in a watched clan".</summary>
+    /// <summary>
+    /// The main and mine sources whose last read had this account, main first. Else where it is, in the words My accounts heads
+    /// the same accounts with (PanelText.NotFound): only in groups you watch, or how much has been read (backlog S1-12.7).
+    /// <paramref name="latest"/> holds this session's readings only, so "not in" waits for every source to be read.
+    /// </summary>
     public static string FoundIn(
         HostAccount account, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
         IReadOnlyDictionary<string, RecipeSnapshot> latest)
     {
         var withInputs = installed.Where(SetupPages.HasClansPage).ToList();
         if (withInputs.Count == 0) return "";
-        if (account.RobloxUserId == 0) return "Not matched by RoRoRo yet";
+        if (account.RobloxUserId == 0) return PanelText.NotMatched;
+
+        var ofRecipes = sources
+            .Where(s => s.Enabled && withInputs.Any(i => string.Equals(i.Recipe.Slug, s.Recipe, StringComparison.Ordinal)))
+            .ToList();
+        bool Holds(Source source) => latest.GetValueOrDefault(source.Id)?.Rows is { } rows && rows.Any(r => r.UserId == account.RobloxUserId);
 
         var names = new List<string>();
-        foreach (var source in sources.Where(s => s.Enabled && s.Role != SourceRole.Watch).OrderBy(s => s.Role == SourceRole.Main ? 0 : 1))
+        foreach (var source in ofRecipes.Where(s => s.Role != SourceRole.Watch).OrderBy(s => s.Role == SourceRole.Main ? 0 : 1))
         {
-            if (withInputs.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe) continue;
-            if (latest.GetValueOrDefault(source.Id)?.Rows is not { } rows || rows.All(r => r.UserId != account.RobloxUserId)) continue;
+            if (!Holds(source)) continue;
 
+            var recipe = withInputs.First(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal)).Recipe;
             var name = ClansModel.NameOf(recipe, source);
             names.Add(source.Role == SourceRole.Main ? $"★ {name}" : name);
         }
 
-        return names.Count > 0
-            ? string.Join(", ", names.Distinct(StringComparer.Ordinal))
-            : $"Not in a watched {RecipeWords.Group(withInputs[0].Recipe)}";
+        if (names.Count > 0) return string.Join(", ", names.Distinct(StringComparer.Ordinal));
+
+        var (group, groups) = Words(withInputs);
+        if (ofRecipes.Any(s => s.Role == SourceRole.Watch && Holds(s))) return PanelText.OnlyWatched(groups);
+
+        var read = ofRecipes.Count(s => latest.GetValueOrDefault(s.Id)?.Rows is not null);
+        return PanelText.NotFound($"Not in a watched {group}", groups, inHand: read, readNow: read, sources: ofRecipes.Count);
+    }
+
+    /// <summary>
+    /// The recipes' own words for a group and several ("clan", "clans") when every recipe with a clans page uses the same ones,
+    /// else Ur Score's own "source", "sources". The line is about all of them, so one recipe's noun never speaks for the rest
+    /// (backlog S1-12.7, where it came from the first recipe alone).
+    /// </summary>
+    private static (string Group, string Groups) Words(IReadOnlyList<InstalledRecipe> withInputs)
+    {
+        var words = withInputs.Select(i => (Group: RecipeWords.Group(i.Recipe), Groups: RecipeWords.GroupsLower(i.Recipe))).Distinct().ToList();
+        return words.Count == 1 ? words[0] : ("source", "sources");
     }
 
     /// <summary>

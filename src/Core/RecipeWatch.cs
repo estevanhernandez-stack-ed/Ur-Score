@@ -104,6 +104,12 @@ public sealed class RecipeWatch(
 
     internal const string NotRecordingNoAccounts = "None of your accounts were in this read.";
 
+    /// <summary>
+    /// Your accounts were in this read, and another source of the recipe read them first, so that one keeps them (ruling R6).
+    /// Saying none were here named a cause that wasn't the cause (backlog S1-6.8).
+    /// </summary>
+    internal const string NotRecordingKeptElsewhere = "Your accounts in this read are kept by another source of this recipe, which read them first.";
+
     internal const string NotRecordingEnded = "It has ended, and its final result is saved.";
 
     internal const string NotRecordingGroups = "Group lists are shown live and never kept.";
@@ -348,7 +354,7 @@ public sealed class RecipeWatch(
         // Ruling R6: an account two sources of this recipe both saw belongs to the one that claimed it first.
         var owned = OwnedMap(readRecipe, readSource, reading, map);
 
-        var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, owned);
+        var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, map, owned);
         RecipeSnapshot Kept(RecipeSnapshot snapshot) => snapshot with { Recorded = recorded, NotRecordingReason = notRecording };
 
         var mine = reading.Rows
@@ -446,7 +452,7 @@ public sealed class RecipeWatch(
     /// </summary>
     private (bool Recorded, string? Reason) Record(
         Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, IReadOnlySet<string> readTracked, Source? readSource, string trigger,
-        RecipeReading reading, IReadOnlyDictionary<long, Guid> owned)
+        RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlyDictionary<long, Guid> owned)
     {
         if (book is null || readSource is null) return (false, null);
 
@@ -469,7 +475,12 @@ public sealed class RecipeWatch(
         if (finals is not null && FinalsPlanner.CurrentPeriodEnded(context, reading, finals)) return (false, NotRecordingEnded);
 
         var line = LineBuilder.Reading(context, reading, owned, readTracked);
-        if (line is null) return (false, NotRecordingNoAccounts);
+        if (line is null)
+        {
+            // Your account in these rows but not in what this source owns: a claim took it, so it wasn't absent (S1-6.8).
+            var keptElsewhere = reading.Rows.Any(r => map.ContainsKey(r.UserId) && !owned.ContainsKey(r.UserId));
+            return (false, keptElsewhere ? NotRecordingKeptElsewhere : NotRecordingNoAccounts);
+        }
 
         book.Append(line, readText);
         return (true, null);

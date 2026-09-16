@@ -25,6 +25,27 @@ public class DiagnosticsModelTests
     [InlineData(WatchState.Showing, "Reading. No stat is set to send to RoRoRo.")]
     public void StatesReadAsSentences(WatchState state, string text) => Assert.Equal(text, DiagnosticsModel.StateText(state));
 
+    /// <summary>
+    /// Backlog S1-12.8. After Stop the page still said "Reporting to RoRoRo.", news about now from a read that had finished.
+    /// Stopped, a source's state is its last read's, and a state that claimed something was happening says what happened.
+    /// </summary>
+    [Theory]
+    [InlineData(WatchState.Reporting, "Stopped. Last read: Reported to RoRoRo.")]
+    [InlineData(WatchState.Showing, "Stopped. Last read: No stat was set to send to RoRoRo, so nothing was sent.")]
+    [InlineData(WatchState.HostDown, "Stopped. Last read: RoRoRo wasn't running.")]
+    [InlineData(WatchState.SourceIdle, "Stopped. Last read: There was nothing to read.")]
+    [InlineData(WatchState.SourceUnreachable, "Stopped. Last read: Could not reach the data.")]
+    public void AfterStopAStateIsTheLastReadsNeverNewsAboutNow(WatchState state, string text)
+    {
+        var source = ForClan;
+        var latest = new Dictionary<string, RecipeSnapshot> { [source.Id] = new(state, null, [], [], 1) };
+        SourceDiagnostic Row(bool running) =>
+            DiagnosticsModel.Sources([Installed], [source], latest, _ => Now.AddMinutes(-3), running, [Main], Now, new Redactor(() => [])).Single();
+
+        Assert.Equal(text, Row(running: false).State);
+        Assert.Equal(DiagnosticsModel.StateText(state), Row(running: true).State);
+    }
+
     [Fact]
     public void EachSourceSaysWhenItWasReadAndWhenItReadsNext()
     {

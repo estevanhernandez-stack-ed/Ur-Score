@@ -146,6 +146,33 @@ public class RecipeWatchBookTests
         Assert.Empty(book.Lines[1].Accounts);
     }
 
+    /// <summary>
+    /// Backlog S1-6.8. Your account WAS in this read: another source of the recipe read it first and keeps it (ruling R6).
+    /// "None of your accounts were in this read." named a cause that wasn't the cause. A read that really had none still says so.
+    /// </summary>
+    [Fact]
+    public async Task AReadWhoseAccountsAnotherSourceReadFirstSaysSoRatherThanThatNoneWereThere()
+    {
+        var claims = new AccountClaims(TimeProvider.System);
+        var host = new StubHost(true, AltAccount);
+        // No headline: with nothing of its own to keep, a read whose account was claimed elsewhere keeps no line at all.
+        static StubEngine Reads(params RecipeRow[] rows) => new(() =>
+            new RecipeReading(ReadingOutcome.Read, null, rows, [], "battle=B", rows.Length) { Period = new ReadingPeriod("B", null, null) });
+
+        var first = await Watch(Reads(EngineRow(111, 4200)), host, new MemoryBook(), SourceOf(SourceRole.Main, "s-00000001"), claims: claims)
+            .RunOnceAsync(CancellationToken.None);
+        var second = await Watch(Reads(EngineRow(111, 4200)), host, new MemoryBook(), SourceOf(SourceRole.Mine, "s-00000002"), claims: claims)
+            .RunOnceAsync(CancellationToken.None);
+        var nobody = await Watch(Reads(EngineRow(222, 10)), host, new MemoryBook(), SourceOf(SourceRole.Mine, "s-00000003"), claims: claims)
+            .RunOnceAsync(CancellationToken.None);
+
+        Assert.True(first.Recorded);
+        Assert.False(second.Recorded);
+        Assert.Equal("Your accounts in this read are kept by another source of this recipe, which read them first.", second.NotRecordingReason);
+        Assert.False(nobody.Recorded);
+        Assert.Equal("None of your accounts were in this read.", nobody.NotRecordingReason);
+    }
+
     [Fact]
     public async Task AGroupListIsShownAndNeverKept()
     {

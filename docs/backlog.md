@@ -6,35 +6,28 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 145** (42 you'd notice, 103 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.2 to V3-S.10)
-- **FIXED: 52**
+- **OPEN: 138** (35 you'd notice, 103 code, tests, performance or docs only), including 7 found since v0.3.0 shipped (V3-S.2 to V3-S.17)
+- **FIXED: 64**
 - **GONE: 7**
-- Total: 208 distinct items (duplicates merged; every source is named on the line)
+- Total: 209 distinct items (duplicates merged; every source is named on the line)
+- Counted from the rows on 2026-09-16, not adjusted: each **OPEN**, **FIXED** and **GONE** row from "Stage 1" to the end of "Stage 2", and the lines of the two summary lists below.
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
-- **0.3.2 (the Alerts page and avatars), added 2026-09-15:** 53 more distinct items in their own section at the end — **32 OPEN, 20 FIXED, 1 GONE** — from the nine reviews of `feat/alerts-card`. They are held apart from the counts and the two summary lists above because that branch hasn't merged; fold them in when it does.
+- **0.3.2 (the Alerts page and avatars), added 2026-09-15:** 90 more distinct items in their own section at the end — **56 OPEN, 32 FIXED, 2 GONE** — from the thirteen reviews of `feat/alerts-card`. They are held apart from the counts and the two summary lists above. That branch has since merged (#9), and they haven't been folded in yet.
 
 ## Open, and you'd notice
 
 - V3-S.2 Updating a recipe installed before 0.3.0 starts with every stat unticked, so an update can quietly stop sending to RoRoRo.
 - V3-S.3 The update screen's "What changed" doesn't say the recipe now tracks battles.
-- V3-S.4 The board's footer repeats the same data credit once per recipe.
 - V3-S.6 The board shows Ur Score's own icon at every start until the first read, even though your clan's picture is already saved.
 - V3-S.7 The board's icon can be another clan's: it follows whichever clan on the recipe was read last, not your main clan.
 - V3-S.9 Editing a board feels clumsy: panels only flow in reading order on a fixed grid, and moving and sizing them takes several small steps.
 - V3-S.13 Tooltips still use the Windows look ("Drag to move" on a panel, "Return to the board" on a pop-out), the last of the owner rule that every popup and toast is themed. Carried out of V3-S.10 when the message boxes went.
-- S1-6.8 Setup › Score book can give the wrong "not recording" reason when another clan source has claimed your account.
+- V3-S.17 Choose another has the same name on every panel, so a screen reader can't tell two stale panels' buttons apart.
 - S1-6.9 "#rank of N" counts players with no value for that stat, so it disagrees with Promotion check.
 - S1-9.3 Records can double-count "biggest day" / "fastest week" when two sources read the same account.
-- S1-11.4 The "add a 6th source?" confirmation is a plain Windows box, not themed.
 - S1-12.4 Error and outcome lines vanish on the next refresh (Accounts, Score book folder, import result).
-- S1-12.7 An account seen only in a watched clan reads "Not in a watched clan".
-- S1-12.8 Diagnostics can still say "Reporting to RoRoRo." after Stop.
 - S1-12.12 A failed reload after a good import says "Could not save that recipe" though it saved.
-- S1-13.4 Before the first read, My accounts lists everyone as "Not in a watched clan".
 - S1-13.5 The gap to the group above doesn't show when ranks are tied.
-- S1-13.6 Race says "clan was removed" when the recipe just has no total, and silently drops removed clans.
-- S1-13.7 Profile stat quietly switches to another source when its own is removed, and shows "can't read" instead of the reason.
-- S1-13.8 Account card for an account with no reading says "No reading of your accounts yet."
 - S1-13.11 A chart of all-equal values draws a flat line on an invented axis.
 - S1-13.14 Standing's change is cyan even when it fell.
 - S1-14.1 A recipe update that drops its icon leaves the old icon on the window.
@@ -64,7 +57,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - **Test gaps:** S1-1.1, S1-1.2, S1-4.1, S1-5.3, S1-5.4, S1-5.6, S1-6.1, S1-6.2, S1-6.3, S1-3.1, S1-8.7, S1-8.8, S1-9.1, S1-10.3, S1-12.11, S1-13.12, S1-13.16, S1-14.9, S1-15.1, S1-15.2, S1-15.4, S1-L.1, S1-L.2, S1-L.3, S1-L.4, S2-P.3, S2-P.11, S2-P.14, S2-P.16, S2-6.4, S2-8.6, S2-FR.3
 - **Behaviour edges nobody is likely to see:** S1-2.2, S1-3.2, S1-4.2, S1-5.1, S1-6.5, S1-6.10, S1-8.2, S1-8.3, S1-8.4, S1-9.2, S1-9.4, S1-11.2, S1-12.6, S1-14.7, S1-14.8, S1-14.13, S1-14.15, S1-F.4, S1-F.10, S1-L.5, S2-P.9, S2-1.1, S2-5.10
 - **Performance:** S1-12.5, S1-F.2, S1-F.3, S2-5.1
-- **Code tidiness:** S1-1.3, S1-2.1, S1-4.3, S1-5.2, S1-6.4, S1-6.6, S1-6.7, S1-6.11, S1-7.1, S1-7.2, S1-8.1, S1-8.5, S1-8.6, S1-9.5, S1-10.1, S1-10.2, S1-11.1, S1-12.9, S1-13.9, S1-13.10, S1-13.13, S1-13.15, S1-14.6, S1-14.12, S1-14.14, S1-14.16, S1-14.17, S1-F.9, S2-P.13, S2-1.2, S2-2.1, S2-2.2, S2-2.3, S2-4.1, S2-4.7, S2-6.7, S2-FR.4
+- **Code tidiness:** S1-1.3, S1-2.1, S1-4.3, S1-5.2, S1-6.4, S1-6.6, S1-6.7, S1-6.11, S1-7.1, S1-7.2, S1-8.1, S1-8.5, S1-8.6, S1-9.5, S1-10.1, S1-10.2, S1-11.1, S1-12.9, S1-13.10, S1-13.13, S1-13.15, S1-14.6, S1-14.12, S1-14.14, S1-14.16, S1-14.17, S1-F.9, S2-P.13, S2-1.2, S2-2.1, S2-2.2, S2-2.3, S2-4.1, S2-4.7, S2-6.7, S2-FR.4
 - **Docs, plan text, process:** S1-2.3 (commit co-author lines), S1-16.1, S1-F.11 (before the repo goes public), S2-P.4, S2-P.7, S2-P.19, S2-8.5, S2-9.1
 
 ---
@@ -108,7 +101,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-6.5 **OPEN** — switching a clan to Watch during a read lets the rest of that read send (documented as "applies next read") — src/Core/RecipeWatch.cs:206 — T6 review
 - S1-6.6 **OPEN** — code tidiness: the lock comment says every access is locked, but `Recipe` is read without it — src/Core/RecipeWatch.cs:95-97, 122 — T6 review
 - S1-6.7 **OPEN** — code tidiness: report timestamps use the system clock, not the injected one — src/Core/RecipeWatch.cs:359, 427 — T6 review
-- S1-6.8 **OPEN** — you'd notice: Setup › Score book gives the wrong "not recording" reason when another clan source has claimed your account ("None of your accounts were in this read") — src/Core/RecipeWatch.cs:453 — T6 review
+- S1-6.8 **FIXED** — you'd notice: Setup › Score book gave the wrong "not recording" reason when another clan source had claimed your account ("None of your accounts were in this read"). A read whose accounts another source of the recipe claimed first now says "Your accounts in this read are kept by another source of this recipe, which read them first."; a read that really had none of them still says so. Naming the source that keeps them is S1-F.1 — src/Core/RecipeWatch.cs (`Record`, `NotRecordingKeptElsewhere`) — T6 review, fixed 2026-09-16
 - S1-6.9 **OPEN** — you'd notice: "#rank of N" counts players with no value for that stat, so it disagrees with Promotion check's count — src/Book/LineBuilder.cs:88; src/Board/PanelModels.cs:281 — T6 review, T13 review
 - S1-6.10 **OPEN** — privacy edge: a headline number is only compared with the ids in this read's rows, so an id-like number for someone outside them could be kept — src/Book/LineBuilder.cs:92-100 — T6 review
 - S1-6.11 **OPEN** — code tidiness: the recipe hash is recomputed every read — src/Core/RecipeWatch.cs:428 — T6 review
@@ -153,8 +146,8 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-12.4 **OPEN** — you'd notice: messages vanish on the next refresh: "Could not ask RoRoRo" (AccountsPage.xaml.cs:45 overwrites :58), "Could not open the folder" (ScoreBookPage.xaml.cs:27 overwrites :51), and the import result when the page jumps to Clans (RecipesPage.xaml.cs:43-44) — src/UI/Setup/ — T12 review
 - S1-12.5 **OPEN** — performance: disk reads on the UI thread on every refresh (RoRoRo's rules file, the accounts cache time) — src/UI/Setup/AlertsPage.xaml.cs `Refresh` (:51, now skipped while an editor is open); ScoreBookPage.xaml.cs:36; AccountsPage.xaml.cs:35 — T12 review
 - S1-12.6 **OPEN** — the Stats page asks the source for counter names again on each recipe switch or save while none are saved (spec says once) — src/UI/Setup/StatsPage.xaml.cs:92 — T12 review
-- S1-12.7 **OPEN** — you'd notice: an account found only in a watched clan reads "Not in a watched clan", and the noun comes from the first recipe only — src/UI/Setup/AccountsModel.cs:87 — T12 review
-- S1-12.8 **OPEN** — you'd notice: Diagnostics can still say "Reporting to RoRoRo." after you press Stop — src/UI/Setup/DiagnosticsModel.cs:31 — T12 review
+- S1-12.7 **FIXED** — you'd notice: an account found only in a watched clan read "Not in a watched clan", and the noun came from the first recipe only. Setup › Your accounts now says "Only in clans you're watching" for it, and otherwise says how much has been read ("No clans read yet", "Not found in the clans read so far") until every source has been read this session; when the recipes name their groups differently the word is "source". The words and the decision are My accounts' own (S1-13.4) — src/UI/Setup/AccountsModel.cs (`FoundIn`, `Words`); src/Board/PanelText.cs (`NotFound`, `OnlyWatched`) — T12 review, fixed 2026-09-16
+- S1-12.8 **FIXED** — you'd notice: Diagnostics could still say "Reporting to RoRoRo." after you pressed Stop. Stopped, a source's state is its last read's: "Stopped. Last read: Reported to RoRoRo.", and the other states that claimed something was happening now (RoRoRo not running, nothing to read right now, reading with no stat to send) are worded as what happened — src/UI/Setup/DiagnosticsModel.cs (`Sources`, `LastReadText`) — T12 review, fixed 2026-09-16
 - S1-12.9 **OPEN** — code tidiness: an unknown Setup page id shows Diagnostics, and the Stats page's recipe parameter is never passed — src/UI/SetupWindow.xaml.cs:87, 91 — T12 review
 - S1-12.10 **FIXED** — a source comment named a real account and a game — stage 1 fix wave item 6 (src/UI/Setup/AccountsModel.cs) — T12 review, final review triage
 - S1-12.11 **OPEN** — test gap: Alerts tests leave temp folders behind; no tests for listed-time preference, id-0 misses, or watch-source inputs in the copy text — tests/AlertsModelTests.cs:18 — T12 review
@@ -164,11 +157,11 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-13.1 **FIXED** — stale panels had no "Choose another" button — stage 2 Task 6, 028e24d (`ChooseAnotherButton`) — T13 review
 - S1-13.2 **FIXED** — Records showed "+-1.5K" for a fall — stage 1 fix wave item 4 (`PanelText.Signed`) — T13 review, final review Minor 5
 - S1-13.3 **FIXED** — Ctrl+C on the live leaderboard copied other players' names — stage 1 fix wave item 5 (src/UI/Panels/LiveLeaderboardPanel.xaml, `ClipboardCopyMode="None"`) — T13 review, final review Minor 6
-- S1-13.4 **OPEN** — you'd notice: before the first read, My accounts lists everyone under "Not in a watched clan", and so are accounts seen only by a watched clan — src/Board/PanelModels.cs:296 — T13 review
+- S1-13.4 **FIXED** — you'd notice: before the first read, My accounts listed everyone under "Not in a watched clan", and so were accounts seen only by a watched clan. Each leftover account is now headed by what is known of it: "No clans read yet", "Not found in the clans read so far", "Only in clans you're watching", "Not matched by RoRoRo yet", and "Not in a watched clan" only once every clan of the recipe has been read this session (a remembered reading never counts: the book keeps only the accounts it kept) — src/Board/PanelModels.cs (`MyAccounts`, `Leftovers`); src/Board/PanelText.cs (`NotFound`) — T13 review, fixed 2026-09-16
 - S1-13.5 **OPEN** — you'd notice: the gap to the group above doesn't show when ranks are tied (12, 12, 14) — src/Board/PanelModels.cs:754 — T13 review
-- S1-13.6 **OPEN** — you'd notice: Race says "This panel's clan was removed." when the recipe simply has no summed total, silently drops removed clans, and doesn't enforce 2 to 5 — src/Board/PanelModels.cs:187-191 — T13 review
-- S1-13.7 **OPEN** — you'd notice: Profile stat quietly falls back to another source when its own was removed, and its row note says "can't read" instead of the real reason — src/Board/PanelModels.cs:616, 639 — T13 review
-- S1-13.8 **OPEN** — you'd notice: an Account card whose chosen account has no reading says "No reading of your accounts yet." — src/Board/PanelModels.cs:389 — T13 review
+- S1-13.6 **FIXED** — you'd notice: Race said "This panel's clan was removed." when the recipe simply had no summed total, silently dropped removed clans, and didn't enforce 2 to 5. It now says "This panel's recipe has no total to race."; draws the lines it still has with "One of this race's clans was removed." (or "2 of this race's clans were removed."); draws the first 5 of more with "Only the first 5 clans are drawn."; and says "A race needs at least 2 clans." beside a single line, and in place of the chart when it names none. Every line gone is still "This panel's clan was removed." — src/Board/PanelModels.cs (`Race`); src/Board/PanelText.cs — T13 review, fixed 2026-09-16
+- S1-13.7 **FIXED** — you'd notice: Profile stat quietly fell back to another source when its own was removed, and its row note said "can't read" instead of the real reason. Falling back was wrong for a pinned source: one that is gone is now stale ("This panel's source was removed.") and nothing else is drawn under its settings; only an unpinned panel reads the recipe's first source (D17), which is what it was asked for. A row carries the read's own miss, and a source that is off says "{name} is switched off, so it isn't read." — src/Board/PanelModels.cs (`ProfileStat`) — T13 review, fixed 2026-09-16
+- S1-13.8 **FIXED** — you'd notice: an Account card whose chosen account had no reading said "No reading of your accounts yet." A card pinned or picked to one account now names it and gives the read's own reason when there is one, else "No reading of {name} yet."; a pinned account RoRoRo isn't listing says "RoRoRo isn't listing this panel's account right now."; "No reading of your accounts yet." is left to a card that chose none — src/Board/PanelModels.cs (`AccountCard`) — T13 review, fixed 2026-09-16
 - S1-13.9 **FIXED** — code tidiness: Past periods regrouped finals the reader had already grouped; the regroup is gone and the panel now orders the reader's entries itself — src/Board/PanelModels.cs (`PastPeriods`) — T13 review, fixed 2026-09-16
 - S1-13.10 **OPEN** — code tidiness: your account-id set is rebuilt on every access — src/Board/PanelModels.cs:47 — T13 review
 - S1-13.11 **OPEN** — you'd notice: a chart whose values are all equal draws a flat line at the bottom on a made-up axis; no tests for equal or negative values — src/Board/ChartGeometry.cs:40 — T13 review

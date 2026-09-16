@@ -101,8 +101,47 @@ public class AccountsModelTests
         };
 
         Assert.Equal("★ CCGP, K0i2", AccountsModel.FoundIn(Main, [clan], sources, latest));
-        Assert.Equal("Not in a watched clan", AccountsModel.FoundIn(Alt, [clan], sources, latest));
+        // Backlog S1-12.7: CElCPapa is in NovaForge's rows, a clan you watch. "Not in a watched clan" was the opposite of true.
+        Assert.Equal("Only in clans you're watching", AccountsModel.FoundIn(Alt, [clan], sources, latest));
         Assert.Equal("", AccountsModel.FoundIn(Main, [Sending(Profile)], sources, latest));
+    }
+
+    /// <summary>
+    /// Backlog S1-12.7, and the same decision My accounts makes (S1-13.4), in the same words: before every source has been
+    /// read this session, the line says how much has been read, never that the account is in no clan.
+    /// </summary>
+    [Fact]
+    public void FoundInSaysHowMuchHasBeenReadBeforeItSaysAnAccountIsInNone()
+    {
+        var clan = Sending(Clan);
+        Source[] sources =
+        [
+            new("s-00000001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main),
+            new("s-00000002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Mine),
+        ];
+
+        Assert.Equal("No clans read yet", AccountsModel.FoundIn(Alt, [clan], sources, new Dictionary<string, RecipeSnapshot>()));
+        Assert.Equal("Not found in the clans read so far",
+            AccountsModel.FoundIn(Alt, [clan], sources, new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Read(101) }));
+        Assert.Equal("Not in a watched clan",
+            AccountsModel.FoundIn(Alt, [clan], sources, new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Read(101), ["s-00000002"] = Read(101) }));
+        Assert.Equal("Not matched by RoRoRo yet",
+            AccountsModel.FoundIn(Alt with { RobloxUserId = 0 }, [clan], sources, new Dictionary<string, RecipeSnapshot>()));
+    }
+
+    /// <summary>
+    /// Backlog S1-12.7: the noun came from the first recipe alone. The line is about every recipe with a clans page, so when
+    /// they name their groups differently it uses the word they all share.
+    /// </summary>
+    [Fact]
+    public void RecipesThatNameTheirGroupsDifferentlyShareTheWordSource()
+    {
+        var guild = Clan with { Name = "Guild season", Inputs = [Clan.Inputs[0] with { Label = "Your guild", Plural = "Guilds" }] };
+        Source[] sources = [new("s-00000001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main)];
+        var latest = new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Read(101) };
+
+        Assert.Equal("Not in a watched source", AccountsModel.FoundIn(Alt, [Sending(Clan), Sending(guild)], sources, latest));
+        Assert.Equal("Not in a watched clan", AccountsModel.FoundIn(Alt, [Sending(Clan), Sending(Clan with { Name = "Clan season" })], sources, latest));
     }
 
     [Fact]

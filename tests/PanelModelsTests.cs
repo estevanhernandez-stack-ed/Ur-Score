@@ -182,7 +182,92 @@ public class PanelModelsTests
         Assert.Empty(model.Legend);
     }
 
+    /// <summary>
+    /// Backlog S1-13.6. Every problem a race could have read "This panel's clan was removed.", and a clan that really was
+    /// removed dropped off the chart without a word. Each problem now says what it is, and a race draws what it still can.
+    /// </summary>
+    [Fact]
+    public void ARaceSaysWhichProblemItHasInsteadOfClaimingAClanWasRemoved()
+    {
+        var clans = Enumerable.Range(1, 7).Select(i => SourceOf($"s-0000000{i}", Clan, $"Clan{i}", SourceRole.Watch)).ToList();
+        var live = Live(clans, [Installed(Clan, "value"), Installed(Profile, "diamonds")],
+            Snaps([.. clans.Select(c => Snapshot(c.Id, [], [Points(1_000)], LivePeriod))]));
+        RaceModel Race(string recipe, params string[] ids) => PanelModels.Race(live, Reader(), new PanelSettings(recipe, SourceIds: ids));
+
+        // A recipe with no summed total has nothing to race, whichever lines it names.
+        Assert.Equal("This panel's recipe has no total to race.", Race(Profile.Slug, clans[0].Id, clans[1].Id).Head.Stale);
+
+        var oneGone = Race(Clan.Slug, clans[0].Id, "s-gone0000", clans[1].Id);
+        Assert.Null(oneGone.Head.Stale);
+        Assert.Equal(2, oneGone.Series.Count);
+        Assert.Equal("One of this race's clans was removed.", oneGone.Head.Note);
+        Assert.Equal("2 of this race's clans were removed.", Race(Clan.Slug, clans[0].Id, "s-gone0000", "s-gone0001").Head.Note);
+
+        var seven = Race(Clan.Slug, [.. clans.Select(c => c.Id)]);
+        Assert.Equal(PanelModels.MaxRace, seven.Series.Count);
+        Assert.Equal("Only the first 5 clans are drawn.", seven.Head.Note);
+
+        // Short of two lines with none removed, it says what a race needs; with no lines at all there is nothing to draw.
+        Assert.Equal("A race needs at least 2 clans.", Race(Clan.Slug, clans[0].Id).Head.Note);
+        Assert.Equal("A race needs at least 2 clans.", Race(Clan.Slug).Head.Stale);
+
+        // Every line gone is the one case that really is "removed".
+        Assert.Equal("This panel's clan was removed.", Race(Clan.Slug, "s-gone0000", "s-gone0001").Head.Stale);
+    }
+
     // ---- My accounts ----
+
+    /// <summary>
+    /// Backlog S1-13.4. Before the first read every account sat under "Not in a watched clan", which was true of none of
+    /// them yet; an account a watched clan held sat there too, the opposite of true; and so did one RoRoRo hadn't matched.
+    /// Each leftover account is headed by what is actually known about it.
+    /// </summary>
+    [Fact]
+    public void MyAccountsHeadsEachLeftoverAccountByWhatIsActuallyKnown()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
+        var unmatched = new HostAccount(Guid.Parse("55555555-5555-5555-5555-555555555555"), 0, "NotYetMatched");
+        IReadOnlyList<HostAccount> accounts = [Main, AltOne, AltTwo, Loose, unmatched];
+        MyAccountsModel Model(
+            IReadOnlyDictionary<string, RecipeSnapshot> reads, IReadOnlyDictionary<string, RecipeSnapshot>? remembered = null, IReadOnlyList<Source>? sources = null) =>
+            PanelModels.MyAccounts(Live(sources ?? [main, alts, rival], [Installed(Clan, "value")], reads, accounts: accounts, remembered: remembered),
+                Reader(), new PanelSettings(Clan.Slug, Stat: "value"));
+        string[] Headings(MyAccountsModel model) => [.. model.Groups.Select(g => g.Heading)];
+
+        var mainRead = Snapshot(main.Id, [Row(Main.RobloxUserId, 10)]);
+        var altsRead = Snapshot(alts.Id, [Row(AltOne.RobloxUserId, 5)]);
+        var rivalRead = Snapshot(rival.Id, [Row(AltTwo.RobloxUserId, 7), Row(9, 1)]);
+
+        // Nothing read: no account is "not in" anything yet.
+        var nothing = Model(Snaps());
+        Assert.Equal(new[] { "No clans read yet", "Not matched by RoRoRo yet" }, Headings(nothing));
+        Assert.Equal(4, nothing.Groups[0].Rows.Count);
+
+        // Some read: the leftovers weren't found in what was read, which is all that is known of them.
+        Assert.Equal(new[] { "★ CCGP", "Not found in the clans read so far", "Not matched by RoRoRo yet" }, Headings(Model(Snaps(mainRead))));
+
+        // Every clan read: the account a watched clan holds says so, and only the one in none of them is "not in a watched clan".
+        var all = Model(Snaps(mainRead, altsRead, rivalRead));
+        Assert.Equal(new[] { "★ CCGP", "K0i2", "Only in clans you're watching", "Not in a watched clan", "Not matched by RoRoRo yet" }, Headings(all));
+        var watched = Assert.Single(all.Groups[2].Rows);
+        Assert.Equal((AltTwo.DisplayName, StatText.Dash, true), (watched.Name, watched.Value, watched.Missing));
+        Assert.Equal(Loose.DisplayName, Assert.Single(all.Groups[3].Rows).Name);
+        Assert.Equal(unmatched.DisplayName, Assert.Single(all.Groups[4].Rows).Name);
+
+        // Every clan remembered and none read this session: the book keeps only the accounts it kept, so an account missing from
+        // it proves nothing about the clan. (A watched clan is never remembered, A40, so this board has your own clans alone.)
+        var kept = new Dictionary<string, RecipeSnapshot>
+        {
+            [main.Id] = mainRead with { RememberedAt = Now.AddHours(-2) },
+            [alts.Id] = altsRead with { RememberedAt = Now.AddHours(-2) },
+        };
+        Assert.Equal(new[] { "★ CCGP", "K0i2", "Not found in the clans read so far", "Not matched by RoRoRo yet" },
+            Headings(Model(Snaps(), kept, [main, alts])));
+        Assert.Equal(new[] { "★ CCGP", "K0i2", "Not in a watched clan", "Not matched by RoRoRo yet" },
+            Headings(Model(Snaps(mainRead, altsRead), sources: [main, alts])));
+    }
 
     [Fact]
     public void MyAccountsGroupsMainFirstThenMineThenAccountsInNoWatchedClan()
@@ -439,6 +524,33 @@ public class PanelModelsTests
         Assert.False(unread.HasSections);
     }
 
+    /// <summary>
+    /// Backlog S1-13.8. A card pinned to one account with no reading said "No reading of your accounts yet.", a line about
+    /// every account on a card about one. It names that account and gives the read's own reason when there is one, and
+    /// says so when RoRoRo isn't listing the account at all.
+    /// </summary>
+    [Fact]
+    public void ACardPinnedToAnAccountWithNoReadingTalksAboutThatAccount()
+    {
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var read = Snapshot(alts.Id, [Row(AltOne.RobloxUserId, 12_418_220)], period: LivePeriod);
+        PanelHead Card(RecipeSnapshot? snapshot, long? pinned) =>
+            PanelModels.AccountCard(Live([alts], [Installed(Clan, "value")], snapshot is null ? Snaps() : Snaps(snapshot)), Reader(),
+                new PanelSettings(Clan.Slug, Stat: "value", UserId: pinned)).Head;
+
+        var listed = Card(read, AltTwo.RobloxUserId);
+        Assert.Equal((AltTwo.DisplayName, $"No reading of {AltTwo.DisplayName} yet."), (listed.Subtitle, listed.Note));
+
+        var withReason = Card(read with { Unavailable = new Dictionary<long, string> { [AltTwo.RobloxUserId] = "Not in this clan right now." } }, AltTwo.RobloxUserId);
+        Assert.Equal((AltTwo.DisplayName, "Not in this clan right now."), (withReason.Subtitle, withReason.Note));
+
+        var unlisted = Card(read, 987_654_321);
+        Assert.Equal(("", "RoRoRo isn't listing this panel's account right now."), (unlisted.Subtitle, unlisted.Note));
+
+        // With no account chosen and nothing read, the card really is about all of them.
+        Assert.Equal("No reading of your accounts yet.", Card(null, null).Note);
+    }
+
     [Fact]
     public void TheAccountCardsHighestAndBiggestDayFactsReadAsTime()
     {
@@ -683,6 +795,36 @@ public class PanelModelsTests
         Assert.Equal("Profile is private.", model.Rows[2].Note);
         Assert.True(model.Rows[3].Missing);
         Assert.Equal(StatText.Dash, model.Rows[3].Value);
+    }
+
+    /// <summary>
+    /// Backlog S1-13.7. A Profile stat pinned to a source that was removed quietly drew another source's numbers under the
+    /// settings you chose, and a row whose value missed said "can't read", which names no cause. A pin that's gone says it's
+    /// gone, a row carries the read's own miss, and a source that's off says it's off rather than leaving dashes unexplained.
+    /// </summary>
+    [Fact]
+    public void AProfileStatNeverReadsAnotherSourceQuietlyAndARowCarriesItsOwnMiss()
+    {
+        var other = SourceOf("s-0000000b", Profile, null, SourceRole.Mine);
+        const string Miss = "No 'Diamonds' in 'data.views.profile.data'. Keys present: Rank.";
+        var snapshot = Snapshot(other.Id, [Row(AltOne.RobloxUserId, 5, "diamonds"), Row(Main.RobloxUserId, null, "diamonds")]) with
+        {
+            CellMisses = new Dictionary<(long UserId, string Stat), string> { [(Main.RobloxUserId, "diamonds")] = Miss },
+        };
+        var live = Live([other], [Installed(Profile, "diamonds")], Snaps(snapshot));
+
+        var gone = PanelModels.ProfileStat(live, Reader(), new PanelSettings(Profile.Slug, SourceId: "s-gone0000", Stat: "diamonds"));
+        Assert.Equal("This panel's source was removed.", gone.Head.Stale);
+        Assert.Empty(gone.Rows);
+
+        var pinned = PanelModels.ProfileStat(live, Reader(), new PanelSettings(Profile.Slug, SourceId: other.Id, Stat: "diamonds"));
+        Assert.Equal(Miss, pinned.Rows.Single(r => r.Name == Main.DisplayName).Note);
+        Assert.Equal("", pinned.Head.Note);
+
+        var off = other with { Enabled = false };
+        var switchedOff = PanelModels.ProfileStat(Live([off], [Installed(Profile, "diamonds")], Snaps()), Reader(),
+            new PanelSettings(Profile.Slug, SourceId: off.Id, Stat: "diamonds"));
+        Assert.Equal($"{live.SourceName(off)} is switched off, so it isn't read.", switchedOff.Head.Note);
     }
 
     [Fact]

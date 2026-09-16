@@ -255,13 +255,26 @@ public static class PanelModels
     {
         var recipe = live.FindRecipe(settings.Recipe)?.Recipe;
         var title = PanelText.Title(PanelType.Race, recipe, live.Installed);
-        var totalId = recipe is null ? null : TotalId(recipe);
-        var sources = (settings.SourceIds ?? []).Select(live.FindSource).OfType<Source>().Take(MaxRace).ToList();
+        if (recipe is null) return new RaceModel(StaleSource(live, settings, title), [], [], "");
 
-        if (recipe is null || totalId is null || sources.Count == 0)
+        // Each problem says what it is (backlog S1-13.6). A recipe with no total read "This panel's clan was removed.", a line
+        // that really was removed dropped off the chart without a word, and a race of the wrong size said nothing at all.
+        if (TotalId(recipe) is not { } totalId) return new RaceModel(new PanelHead(title, Stale: PanelText.NoTotalToRace), [], [], "");
+
+        var groupsWord = RecipeWords.GroupsLower(recipe);
+        IReadOnlyList<string> ids = settings.SourceIds ?? [];
+        var found = ids.Select(live.FindSource).OfType<Source>().ToList();
+        if (found.Count == 0)
         {
-            return new RaceModel(StaleSource(live, settings, title), [], [], "");
+            var nothing = ids.Count == 0 ? new PanelHead(title, Stale: PanelText.RaceTooFew(groupsWord)) : StaleSource(live, settings, title);
+            return new RaceModel(nothing, [], [], "");
         }
+
+        var sources = found.Take(MaxRace).ToList();
+        var notes = new List<string>();
+        if (found.Count < ids.Count) notes.Add(PanelText.RaceRemoved(ids.Count - found.Count, groupsWord));
+        else if (found.Count < 2) notes.Add(PanelText.RaceTooFew(groupsWord));
+        if (found.Count > MaxRace) notes.Add(PanelText.RaceOverLimit(groupsWord));
 
         var series = new List<ChartSeries>();
         var legend = new List<LegendItem>();
@@ -303,12 +316,12 @@ public static class PanelModels
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
         var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started",
-            Overdue: overdue, Remembered: remembered);
+            Overdue: overdue, Note: string.Join(" ", notes), Remembered: remembered);
 
         // No source's period is known yet: every point in "series" would be mixing periods together.
         if (!anyPeriodKnown)
         {
-            return new RaceModel(head with { Note = "Waiting for the first read." }, [], [], "");
+            return new RaceModel(head with { Note = string.Join(" ", notes.Prepend("Waiting for the first read.")) }, [], [], "");
         }
 
         return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}");
@@ -375,17 +388,37 @@ public static class PanelModels
             groups.Add(new AccountGroupModel(heading, MissingLast(lines)));
         }
 
+        // Every account left over sat under "Not in a watched clan": before the first read, when that was true of none of
+        // them yet, and for one a watched clan held, when it was the opposite of true (backlog S1-13.4). Each is headed by
+        // what is known of it instead, in the words Setup › Your accounts uses (PanelText.NotFound).
         var rest = live.Accounts.Where(a => a.RobloxUserId == 0 || !assigned.Contains(a.RobloxUserId)).ToList();
         if (rest.Count > 0)
         {
-            groups.Add(new AccountGroupModel(
-                recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read",
-                // live.Snapshots, not live.SnapshotOf: a remembered snapshot never carries an Unavailable entry (A39), so
-                // this reads what was actually read, and says nothing at all before the first read.
-                [.. rest.OrderBy(a => a.DisplayName, StringComparer.Ordinal)
-                    .Select(a => new AccountLineModel(
-                        a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId),
-                        PanelText.CannotRead(a.RobloxUserId, live.Installed, live.Sources, live.Snapshots, nameTheRecipe: false)))]));
+            var ofRecipe = live.Sources.Where(s => s.Enabled && string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal)).ToList();
+            // A watched clan's rows are never remembered (A40), so this is what was actually read.
+            var inWatched = ofRecipe
+                .Where(s => s.Role == SourceRole.Watch)
+                .SelectMany(s => live.LiveOf(s.Id)?.Rows ?? [])
+                .Select(r => r.UserId)
+                .ToHashSet();
+            var groupsWord = RecipeWords.GroupsLower(recipe);
+            var notFound = PanelText.NotFound(
+                recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read", groupsWord,
+                inHand: ofRecipe.Count(s => live.SnapshotOf(s.Id)?.Rows is not null),
+                readNow: ofRecipe.Count(s => live.LiveOf(s.Id)?.Rows is not null),
+                sources: ofRecipe.Count);
+
+            string Heading(HostAccount account) =>
+                account.RobloxUserId == 0 ? PanelText.NotMatched
+                : inWatched.Contains(account.RobloxUserId) ? PanelText.OnlyWatched(groupsWord)
+                : notFound;
+
+            // Watched first (they are somewhere), then the rest, then the ones nothing can place yet.
+            foreach (var heading in new[] { PanelText.OnlyWatched(groupsWord), notFound, PanelText.NotMatched })
+            {
+                var under = rest.Where(a => Heading(a) == heading).ToList();
+                if (under.Count > 0) groups.Add(Leftovers(live, heading, under));
+            }
         }
 
         return new MyAccountsModel(
@@ -481,8 +514,12 @@ public static class PanelModels
 
         if (picked.Count == 0)
         {
-            if (settings.UserId is null && wanted is { } id)
+            // A card about one account talks about that account, pinned or picked; "your accounts" is only true of a card
+            // that chose none (backlog S1-13.8). A pick is always one RoRoRo lists; a pin may not be.
+            if (wanted is { } id)
             {
+                if (!live.MyUserIds.Contains(id)) return EmptyCard(new PanelHead(title, Note: "RoRoRo isn't listing this panel's account right now."));
+
                 var name = live.AccountName(id);
                 var why = SourcesYoursIn(live, recipe)
                     .Select(s => live.SnapshotOf(s.Id)?.Unavailable.GetValueOrDefault(id))
@@ -731,8 +768,10 @@ public static class PanelModels
             return new ProfileStatModel(new PanelHead(title, Stale: PanelText.StaleStat), "", []);
         }
 
-        // The pinned source, else the recipe's first source that is on, else its first: the Accounts table's rule (D17).
-        var source = live.FindSource(settings.SourceId) ?? PanelForms.FirstSourceOfRecipe(live, recipe.Slug);
+        // A pinned source that's gone is stale: falling back drew another source's numbers under the settings you chose, with
+        // nothing on screen to say so (backlog S1-13.7). Only an unpinned panel reads "the recipe's source", the recipe's first
+        // source that is on, else its first, which is the Accounts table's rule (D17) and what it was asked for.
+        var source = settings.SourceId is { } pinned ? live.FindSource(pinned) : PanelForms.FirstSourceOfRecipe(live, recipe.Slug);
         if (source is null) return new ProfileStatModel(StaleSource(live, settings, title), "", []);
 
         var snapshot = live.SnapshotOf(source.Id);
@@ -754,12 +793,17 @@ public static class PanelModels
                 PanelText.Value(value, stat.Format, live.Time.LocalTimeZone),
                 WindowGain(series, midnight, stat.Format),
                 WindowGain(series, now.AddDays(-7), stat.Format),
-                unavailable ?? (value is null && missed is not null ? "can't read" : ""),
+                // The recipe's own sentence, else the miss this read recorded for the cell, which is the reason; "can't
+                // read" named no cause at all (S1-13.7).
+                unavailable ?? (value is null ? missed ?? "" : ""),
                 value is null)));
         }
 
+        // A source that is off is never read, so its dashes say so rather than wait for a read that won't come.
         return new ProfileStatModel(
-            new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)), stat.Label, MissingLast(rows));
+            new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source), Note: source.Enabled ? "" : PanelText.SwitchedOff(live.SourceName(source)),
+                Remembered: live.IsRemembered(source.Id)),
+            stat.Label, MissingLast(rows));
     }
 
     /// <summary>
@@ -859,7 +903,7 @@ public static class PanelModels
         var note = stats.Count == 0 ? "Tick Show on a stat to fill this panel."
             : snapshot is not null ? ""
             : source.Enabled ? "Waiting for the first read."
-            : $"{live.SourceName(source)} is switched off, so it isn't read.";
+            : PanelText.SwitchedOff(live.SourceName(source));
         return new AccountsTableModel(
             new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note, Remembered: live.IsRemembered(source.Id)),
             columns, list);
@@ -938,6 +982,17 @@ public static class PanelModels
         new(title, Stale: PanelText.StaleSource(live.FindRecipe(settings.Recipe)?.Recipe is { } recipe ? RecipeWords.Group(recipe) : "source"));
 
     private static AccountCardModel EmptyCard(PanelHead head) => new(head, "", Dash, [], [], [], "");
+
+    /// <summary>
+    /// Your accounts under a heading with no value, rank or change, because no read of your own sources placed them. Each row's
+    /// note comes from live.Snapshots, not live.SnapshotOf: a remembered snapshot never carries an Unavailable entry (A39), so
+    /// this reads what was actually read, and says nothing at all before the first read.
+    /// </summary>
+    private static AccountGroupModel Leftovers(LiveBoard live, string heading, IEnumerable<HostAccount> accounts) =>
+        new(heading, [.. accounts.OrderBy(a => a.DisplayName, StringComparer.Ordinal)
+            .Select(a => new AccountLineModel(
+                a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId),
+                PanelText.CannotRead(a.RobloxUserId, live.Installed, live.Sources, live.Snapshots, nameTheRecipe: false)))]);
 
     /// <summary>
     /// A card's other shown stats under the recipe's own section names (D12): stats with no section first, with no

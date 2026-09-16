@@ -39,6 +39,19 @@ public static class DiagnosticsModel
         _ => state.ToString(),
     };
 
+    /// <summary>
+    /// After Stop, what a source's last read found (backlog S1-12.8). A state that says something is happening now is worded as
+    /// what happened; the rest already describe what the read found and read the same.
+    /// </summary>
+    private static string LastReadText(WatchState state) => "Stopped. Last read: " + state switch
+    {
+        WatchState.Reporting => "Reported to RoRoRo.",
+        WatchState.HostDown => "RoRoRo wasn't running.",
+        WatchState.SourceIdle => "There was nothing to read.",
+        WatchState.Showing => "No stat was set to send to RoRoRo, so nothing was sent.",
+        _ => StateText(state),
+    };
+
     public static IReadOnlyList<SourceDiagnostic> Sources(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest,
         Func<string, DateTimeOffset?> lastRead, bool running, IReadOnlyList<HostAccount> accounts, DateTimeOffset now, Redactor redactor)
@@ -53,7 +66,8 @@ public static class DiagnosticsModel
 
             var state = !source.Enabled ? "Switched off."
                 : snapshot is null ? (running ? "Waiting for its first read." : "Not started.")
-                : StateText(snapshot.State);
+                : running ? StateText(snapshot.State)
+                : LastReadText(snapshot.State);
 
             string next;
             if (!source.Enabled || recipe is null) next = StatText.Dash;

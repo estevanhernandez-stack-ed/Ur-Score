@@ -129,6 +129,52 @@ public static class PanelText
 
     public static string StaleSource(string group) => $"This panel's {group} was removed.";
 
+    /// <summary>A race whose recipe has no summed headline (backlog S1-13.6): none of its lines was removed, there is simply nothing to race.</summary>
+    public const string NoTotalToRace = "This panel's recipe has no total to race.";
+
+    /// <summary>A race drawn without some of its lines (S1-13.6): "One of this race's clans was removed.", "2 of this race's clans were removed."</summary>
+    public static string RaceRemoved(int removed, string groups) =>
+        removed == 1 ? $"One of this race's {groups} was removed." : $"{removed} of this race's {groups} were removed.";
+
+    /// <summary>A race with more lines than it draws, which only a hand-edited boards.json can hold (S1-13.6).</summary>
+    public static string RaceOverLimit(string groups) => $"Only the first {PanelModels.MaxRace} {groups} are drawn.";
+
+    /// <summary>A race with fewer than two lines and none of them removed: what a race needs, not a removal it never had (S1-13.6).</summary>
+    public static string RaceTooFew(string groups) => $"A race needs at least 2 {groups}.";
+
+    /// <summary>A panel reading a source that is off: "CCGP is switched off, so it isn't read." Its dashes say why.</summary>
+    public static string SwitchedOff(string name) => $"{name} is switched off, so it isn't read.";
+
+    /// <summary>One of your accounts RoRoRo hasn't matched to a Roblox account, so no read can have placed it.</summary>
+    public const string NotMatched = "Not matched by RoRoRo yet";
+
+    /// <summary>
+    /// Where one of your accounts is when no read of your own sources placed it (backlog S1-13.4, S1-12.7): the one decision
+    /// My accounts and Setup › Your accounts share, so the two screens can't disagree.
+    /// <para>
+    /// "Not in" is a claim about the account, and it is made only once every one of the <paramref name="sources"/> has a
+    /// reading from this session (<paramref name="readNow"/>). Short of that the line is about how much has been read, which
+    /// is a fact about Ur Score: none of them, or not all of them. A remembered reading counts as in hand but never as read
+    /// now, because the score book keeps only the accounts it kept, so an account missing from one proves nothing about the
+    /// group; the same inheritance as a rank counted from your own rows alone (plan A40).
+    /// </para>
+    /// </summary>
+    /// <param name="inNone">What is true once every source was read and the account is in none: "Not in a watched clan".</param>
+    /// <param name="groups">The recipe's word for several groups, lower case: "clans".</param>
+    /// <param name="inHand">Sources with a reading on hand, from this session or remembered.</param>
+    /// <param name="readNow">Sources with a reading from this session.</param>
+    /// <param name="sources">Every source the line is about.</param>
+    public static string NotFound(string inNone, string groups, int inHand, int readNow, int sources) =>
+        sources > 0 && readNow >= sources ? inNone
+        : inHand == 0 ? $"No {groups} read yet"
+        : $"Not found in the {groups} read so far";
+
+    /// <summary>
+    /// One of your accounts seen only in the rows of groups you watch (S1-13.4, S1-12.7). A watched source is never matched to
+    /// your accounts for keeping or sending, so the account has no numbers here, but it is not "not in" anything.
+    /// </summary>
+    public static string OnlyWatched(string groups) => $"Only in {groups} you're watching";
+
     /// <summary>
     /// Why a source could not read one of your accounts at its last read, in the recipe's own words, or empty
     /// (plan A44, A46). One line per recipe that said so, main source first.

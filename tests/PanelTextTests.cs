@@ -157,4 +157,29 @@ public class PanelTextTests
         Assert.Equal("", PanelText.CannotRead(999_999, installed, [profile], latest, nameTheRecipe: true));
         Assert.Equal("", PanelText.CannotRead(0, installed, [profile], latest, nameTheRecipe: true));
     }
+
+    /// <summary>
+    /// Backlog S1-13.4 and S1-12.7: one decision, on My accounts and on Setup › Your accounts. Of an account no read of yours
+    /// placed, "not in" is said only once every source has a reading from this session. Before that, the line says how much
+    /// has been read, which is a fact about Ur Score, and nothing about the account.
+    /// </summary>
+    [Fact]
+    public void AnAccountNoReadPlacedIsHeadedByHowMuchHasBeenRead()
+    {
+        const string InNone = "Not in a watched clan";
+
+        Assert.Equal("No clans read yet", PanelText.NotFound(InNone, "clans", inHand: 0, readNow: 0, sources: 3));
+        Assert.Equal("Not found in the clans read so far", PanelText.NotFound(InNone, "clans", inHand: 1, readNow: 1, sources: 3));
+        Assert.Equal(InNone, PanelText.NotFound(InNone, "clans", inHand: 3, readNow: 3, sources: 3));
+
+        // Every source remembered and none read now: the book keeps only the accounts it kept, so an account missing from
+        // what it kept proves nothing about the clan.
+        Assert.Equal("Not found in the clans read so far", PanelText.NotFound(InNone, "clans", inHand: 3, readNow: 0, sources: 3));
+
+        // No source on at all: nothing was read, so nothing is known about the account either.
+        Assert.Equal("No clans read yet", PanelText.NotFound(InNone, "clans", inHand: 0, readNow: 0, sources: 0));
+
+        Assert.Equal("Only in clans you're watching", PanelText.OnlyWatched("clans"));
+        Assert.Equal("Not matched by RoRoRo yet", PanelText.NotMatched);
+    }
 }
