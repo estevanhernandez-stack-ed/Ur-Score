@@ -36,33 +36,19 @@ function Get-ComboValue($box) {
 
 function Get-FocusedName { $f = $AE::FocusedElement; if ($f) { $f.Current.Name } else { '(none)' } }
 
-# Climbs from a control unique to one stat (an edit, combo box or button named for that stat) up to that stat's own
-# card, so a per-card automation id (AlertResultLine, AlertEditorProblemLine) is read from the right copy. Those ids
-# are declared once per card in AlertCardTemplate, and AlertCardList is a plain, non-virtualizing list: with two or
-# more sent stats on screen there are that many live elements sharing each id, and a plain Find-ByAutomationId
-# (FindFirst from the window) always returns the first card's copy in tree order, not the one you meant (review
-# task-4-review.md Important 1). Stops at the cards list or a window and throws, rather than falling back to an
-# unscoped search that would silently read the wrong card again.
-function Get-CardRoot($from, [string]$id) {
-    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-    $node = $from
-    while ($node) {
-        if ($node.Current.AutomationId -eq 'AlertCardList') { throw "climbed to the cards list without finding a card containing '$id'" }
-        if ($node.Current.ControlType.ProgrammaticName -eq 'ControlType.Window') { throw "climbed to a window without finding a card containing '$id'" }
-        if (Find-ByAutomationId $node $id) { return $node }
-        $node = $walker.GetParent($node)
-    }
-    throw "ran out of ancestors without finding a card containing '$id'"
-}
-
-# Waits for a control by type and accessible name to be on screen, then returns it freshly found. A write's redraw
-# can replace the card's visuals, so a reference held from before the write is not safe to reuse; and a script
-# block's own assignment does not escape it (controller ruling 4), so this re-queries after Wait-Until confirms it
-# rather than trusting a variable set inside the test itself.
-function Wait-Shown($root, $type, [string]$name, [int]$seconds = 5) {
-    $ok = Wait-Until { [bool](Get-Shown $root $type $name) } $seconds
-    if (-not $ok) { throw "never showed up: '$name'" }
-    Get-Shown $root $type $name
+# A13: the page holds one open editor and one result line at a time. AlertCards.cs:32 states it ("The page's one open
+# editor and its one result line"); Row() (AlertCards.cs ~line 421) blanks Result for every card but the one whose
+# ResultMetricId matches, and Problem is non-empty only on the card being edited. Both lines bind Visibility through
+# BooleanToVisibilityConverter (App.xaml:128), which yields Collapsed, and a Collapsed element gets no automation
+# peer at all -- it is not in the UI Automation tree, not merely offscreen. So at most one AlertResultLine and at
+# most one AlertEditorProblemLine can ever be findable, and a plain, unscoped Line/Wait-Line from the window root is
+# correct. This pins that invariant instead of assuming it: if a future change ever lets two cards show a line at
+# once, this throws naming the id and the count, rather than the walk quietly reading whichever one FindFirst
+# happens to return.
+function Assert-OneLine($root, [string]$id) {
+    $c = New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, $id)
+    $all = @($root.FindAll($TS::Descendants, $c))
+    if ($all.Count -gt 1) { throw "expected at most one '$id' on screen (A13), found $($all.Count)" }
 }
 
 $realBefore = Get-RealRulesHash
@@ -114,8 +100,8 @@ try {
     Select-ComboItem $minutes '15'
     $minutes.SetFocus()
     [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
-    $card = Wait-Shown (Get-SetupWindow) $CT::Button 'Change the stops climbing alert for Diamonds' 5
-    $said = Wait-Line (Get-CardRoot $card 'AlertResultLine') 'AlertResultLine' '^Changed\.' 5
+    Assert-OneLine (Get-SetupWindow) 'AlertResultLine'
+    $said = Wait-Line (Get-SetupWindow) 'AlertResultLine' '^Changed\.' 5
     Check '2c The card says what changed' ($said -eq "Changed. RoRoRo will now alert you when an account's Diamonds gains fewer than 250 a minute for 15 minutes.") $said
     $rules = @(Read-ScratchRules)
     Check '2d Rewritten in place with its label; the others are kept' ($rules.Count -eq 3 -and $rules[0].threshold -eq 250 -and $rules[0].windowMinutes -eq 15 -and $rules[0].label -eq 'Diamonds' -and $rules[0].owner -eq '626labs.ur-score' -and $rules[1].threshold -eq 3 -and -not $rules[1].owner -and $rules[2].owner -eq 'someone.else') ($rules | ConvertTo-Json -Compress)
@@ -134,15 +120,15 @@ try {
     Select-ComboItem (Get-Shown (Get-SetupWindow) $CT::ComboBox 'Above or below for Player rank') 'above'
     Set-ElementValue (Get-Shown (Get-SetupWindow) $CT::Edit 'Number for Player rank') '1,5'
     Invoke-Element (Get-Shown (Get-SetupWindow) $CT::Button 'Turn on the alert for Player rank')
-    $editBox = Wait-Shown (Get-SetupWindow) $CT::Edit 'Number for Player rank' 5
-    $problem = Wait-Line (Get-CardRoot $editBox 'AlertEditorProblemLine') 'AlertEditorProblemLine' '^Use a dot' 5
+    Assert-OneLine (Get-SetupWindow) 'AlertEditorProblemLine'
+    $problem = Wait-Line (Get-SetupWindow) 'AlertEditorProblemLine' '^Use a dot' 5
     Check '3b A comma decimal is refused and nothing is written' (($problem -eq 'Use a dot for decimals, like 1.5.') -and ((Get-Content $scratch -Raw) -eq $before)) $problem
     $number = Get-Shown (Get-SetupWindow) $CT::Edit 'Number for Player rank'
     Set-ElementValue $number '40'
     $number.SetFocus()
     [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
-    $card = Wait-Shown (Get-SetupWindow) $CT::Button 'Change the crosses a number alert for Player rank' 5
-    $said = Wait-Line (Get-CardRoot $card 'AlertResultLine') 'AlertResultLine' '^On\.' 5
+    Assert-OneLine (Get-SetupWindow) 'AlertResultLine'
+    $said = Wait-Line (Get-SetupWindow) 'AlertResultLine' '^On\.' 5
     Check '3c Enter turns it on, and the card says so' ($said -eq "On. RoRoRo will alert you when an account's Player rank goes above 40.") $said
     $level = @(Read-ScratchRules) | Where-Object { $_.metricId -eq 'ps99.rank' -and $_.kind -eq 'Level' } | Select-Object -First 1
     Check '3d The rule has its direction, label and owner, and no window' ($level -and $level.threshold -eq 40 -and $level.alertWhenBelow -eq $false -and $level.label -eq 'Player rank' -and $level.owner -eq '626labs.ur-score' -and -not ($level.PSObject.Properties.Name -contains 'windowMinutes')) ($level | ConvertTo-Json -Compress)
@@ -180,21 +166,21 @@ try {
     $before = Get-Content $scratch -Raw
     $lock = [System.IO.File]::Open($scratch, 'Open', 'ReadWrite', 'None')
     Invoke-Element (Get-Shown (Get-SetupWindow) $CT::Button 'Turn on the alert for Diamonds')
-    $editBox = Wait-Shown (Get-SetupWindow) $CT::Edit 'Number for Diamonds' 5
-    $problem = Wait-Line (Get-CardRoot $editBox 'AlertEditorProblemLine') 'AlertEditorProblemLine' 'locked' 5
+    Assert-OneLine (Get-SetupWindow) 'AlertEditorProblemLine'
+    $problem = Wait-Line (Get-SetupWindow) 'AlertEditorProblemLine' 'locked' 5
     Check '5 A locked file is said on the card and the editor stays open' (($problem -like "RoRoRo's rules file is locked*") -and [bool](Get-Shown (Get-SetupWindow) $CT::Edit 'Number for Diamonds')) $problem
     $lock.Dispose()
     $lock = $null
     Check '5b ...and nothing changed' ((Get-Content $scratch -Raw) -eq $before) 'compared'
     Invoke-Element (Get-Shown (Get-SetupWindow) $CT::Button 'Turn on the alert for Diamonds')
-    $card = Wait-Shown (Get-SetupWindow) $CT::Button 'Change the crosses a number alert for Diamonds' 5
-    $said = Wait-Line (Get-CardRoot $card 'AlertResultLine') 'AlertResultLine' '^On\.' 5
+    Assert-OneLine (Get-SetupWindow) 'AlertResultLine'
+    $said = Wait-Line (Get-SetupWindow) 'AlertResultLine' '^On\.' 5
     Check '5c Once let go, Turn on works' ($said -eq "On. RoRoRo will alert you when an account's Diamonds goes below 5,000,000.") $said
 
     # 6. Remove deletes exactly Ur Score's alert of that kind; your rule stays; focus goes to + Add an alert.
     Invoke-Element (Get-Shown (Get-SetupWindow) $CT::Button 'Remove the stops climbing alert for Diamonds')
-    $card = Wait-Shown (Get-SetupWindow) $CT::Button 'Add an alert for Diamonds' 5
-    $said = Wait-Line (Get-CardRoot $card 'AlertResultLine') 'AlertResultLine' '^Removed\.' 5
+    Assert-OneLine (Get-SetupWindow) 'AlertResultLine'
+    $said = Wait-Line (Get-SetupWindow) 'AlertResultLine' '^Removed\.' 5
     Check '6 The card says what was removed' ($said -eq "Removed. RoRoRo won't alert you when an account's Diamonds gains fewer than 250 a minute for 15 minutes any more.") $said
     $rules = @(Read-ScratchRules)
     $diamondRates = @($rules | Where-Object { $_.metricId -eq 'ps99.diamonds' -and $_.kind -eq 'Rate' })
