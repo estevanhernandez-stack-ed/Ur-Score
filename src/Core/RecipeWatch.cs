@@ -287,6 +287,7 @@ public sealed class RecipeWatch(
         if (stopped is { } state)
         {
             var fingerprint = state == WatchState.KeyRejected ? KeyFingerprint() : null;
+            RecipeSnapshot snapshot;
 
             lock (_gate)
             {
@@ -298,7 +299,7 @@ public sealed class RecipeWatch(
                 if (reading.Outcome == ReadingOutcome.Idle) _context = null;
 
                 // An idle clan still has an icon: the engine reads it before deciding the clan sat out.
-                var snapshot = Snapshot(readRecipe, readSource, state, reading.Detail, 0, unresolved) with
+                snapshot = Snapshot(readRecipe, readSource, state, reading.Detail, 0, unresolved) with
                 {
                     IconText = reading.IconText,
                     NotRecordingReason = book is null ? null : reading.Detail ?? NotRecordingNothingRead,
@@ -312,9 +313,17 @@ public sealed class RecipeWatch(
                 {
                     _held = (snapshot, null);
                 }
-
-                return snapshot;
             }
+
+            // V3-S.1: an idle source that handed its finished periods over still backfills them. No
+            // reading line — nothing was read — so the snapshot's "not recording" reason stands.
+            if (reading.Outcome == ReadingOutcome.Idle && reading.Past.Count > 0)
+            {
+                Backfill(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading,
+                    OwnedMap(readRecipe, readSource, reading, map));
+            }
+
+            return snapshot;
         }
 
         lock (_gate)
@@ -445,21 +454,9 @@ public sealed class RecipeWatch(
         // by UpdateRecipe) must not be hashed and written under a recipe it doesn't belong to.
         if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
 
-        var at = (time ?? TimeProvider.System).GetUtcNow();
-        var offset = (int)TimeZoneInfo.Local.GetUtcOffset(at).TotalMinutes;
-        var context = new ReadContext(readSource, readRecipe, BookFiles.Hash(readText), trigger, at, offset);
+        var context = ContextFor(readRecipe, readText, readSource, trigger);
 
-        if (finals is not null)
-        {
-            string? previous;
-            lock (_gate) previous = _previousPeriod;
-
-            foreach (var final in FinalsPlanner.Plan(context, reading, owned, readTracked, finals, previous))
-            {
-                finals.Add(final);
-                book.Append(final, readText);
-            }
-        }
+        KeepFinals(context, reading, readTracked, owned, readText);
 
         lock (_gate)
         {
@@ -476,6 +473,49 @@ public sealed class RecipeWatch(
 
         book.Append(line, readText);
         return (true, null);
+    }
+
+    /// <summary>
+    /// V3-S.1: the finals half of <see cref="Record"/> on its own, for a stop that read no rows but still
+    /// handed over its finished periods. No reading line (nothing was read) and no previous-period update
+    /// (nothing is live to become the previous one), so the snapshot's "not recording" reason still stands.
+    /// </summary>
+    private void Backfill(
+        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, IReadOnlySet<string> readTracked,
+        Source? readSource, string trigger, RecipeReading reading, IReadOnlyDictionary<long, Guid> owned)
+    {
+        if (book is null || finals is null || readSource is null || string.IsNullOrWhiteSpace(readText)) return;
+
+        // The same guard Record's write takes: a stop read under a recipe that has since been replaced
+        // must not write finals under whatever is running now.
+        lock (_gate)
+        {
+            if (RecipeChanged(readRecipe, readInputs)) return;
+        }
+
+        KeepFinals(ContextFor(readRecipe, readText, readSource, trigger), reading, readTracked, owned, readText);
+    }
+
+    private ReadContext ContextFor(Recipe readRecipe, string readText, Source readSource, string trigger)
+    {
+        var at = (time ?? TimeProvider.System).GetUtcNow();
+        return new ReadContext(readSource, readRecipe, BookFiles.Hash(readText), trigger, at, (int)TimeZoneInfo.Local.GetUtcOffset(at).TotalMinutes);
+    }
+
+    /// <summary>Score book spec §6: every final this read makes due, written once and remembered in the index.</summary>
+    private void KeepFinals(
+        ReadContext context, RecipeReading reading, IReadOnlySet<string> readTracked, IReadOnlyDictionary<long, Guid> owned, string readText)
+    {
+        if (finals is null || book is null) return;
+
+        string? previous;
+        lock (_gate) previous = _previousPeriod;
+
+        foreach (var final in FinalsPlanner.Plan(context, reading, owned, readTracked, finals, previous))
+        {
+            finals.Add(final);
+            book.Append(final, readText);
+        }
     }
 
     /// <summary>Whether the recipe or inputs a cycle read with have been replaced since. Call under <see cref="_gate"/>.</summary>

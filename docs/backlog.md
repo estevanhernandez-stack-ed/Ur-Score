@@ -6,8 +6,8 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 150** (45 you'd notice, 105 code, tests, performance or docs only), including 10 found in the v0.3.0 smoke and the owner's first look (V3-S.1 to V3-S.10)
-- **FIXED: 46**
+- **OPEN: 149** (44 you'd notice, 105 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.2 to V3-S.10)
+- **FIXED: 47**
 - **GONE: 6**
 - Total: 202 distinct items (duplicates merged; every source is named on the line)
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
@@ -15,7 +15,6 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Open, and you'd notice
 
-- V3-S.1 A main clan that sat out the current battle shows no past battles: nothing is read while the clan isn't in the battle, so its history is never backfilled.
 - V3-S.2 Updating a recipe installed before 0.3.0 starts with every stat unticked, so an update can quietly stop sending to RoRoRo.
 - V3-S.3 The update screen's "What changed" doesn't say the recipe now tracks battles.
 - V3-S.4 The board's footer repeats the same data credit once per recipe.
@@ -337,7 +336,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 v0.3.0 installed from the GitHub release into RoRoRo 1.28 (Store) and walked: all seven smoke walks passed against the installed copy (92 checks), then the owner's own data folder was used with the clan battle recipe re-imported.
 
-- V3-S.1 **OPEN** — you'd notice: a clan that isn't in the current battle gets nothing read at all. `--try` for CCGP returns Idle ("Your clan hasn't joined this battle.") with no past periods, while `/api/clan/CCGP` holds 23 past battles, so the Past battles panel stays "No finished battles kept yet." and no finals are backfilled until the clan joins a battle. After Test now the board still says "Not started." with no reason — src/Recipes/RecipeEngine.cs:205-207 (the idle stop returns before past periods are read) — v0.3.0 smoke
+- V3-S.1 **FIXED** — an idle stop now carries its past periods: both idle paths (`idleWithout` and `absentMessage`) read `period.past` from the last step's response through the same `PastAt` the success path uses, the planner backfills finals from an idle reading, and the watch writes them. Every other stop still returns nothing. The empty Past battles panel also says what is true now ("Ur Score hasn't read this clan's finished battles yet…") instead of "No finished battles kept yet." — src/Recipes/RecipeEngine.cs (`WithPastAsync`), src/Book/Finals.cs, src/Core/RecipeWatch.cs (`Backfill`), src/Board/PanelModels.cs — v0.3.0 smoke, fixed 2026-09-16
 - V3-S.2 **OPEN** — you'd notice: the Update recipe screen for a recipe installed before stats had ticks (v0.1 state with only a metric name override) shows Show and Send unticked, with Update off until you tick a stat; the metric name is carried (clan.battle.points) but the old send isn't, so ticking Show alone quietly stops sending to RoRoRo — src/UI/ImportWindow.xaml.cs (initial ticks on update) — v0.3.0 smoke
 - V3-S.3 **OPEN** — you'd notice: the update screen's "What changed" lists the poll, the icon and empty answers, but not that the recipe now reads the battle period and past battles — src/Recipes/ImportReview.cs:144 (the change list) — v0.3.0 smoke
 - V3-S.4 **OPEN** — you'd notice: the board footer repeats "Data from Big Games' public Pet Simulator 99 API." once per installed recipe when two recipes share the same credit — src/UI/BoardText.cs:78 — v0.3.0 smoke

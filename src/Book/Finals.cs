@@ -68,7 +68,14 @@ public static class FinalsPlanner
         ReadContext context, RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlySet<string> tracked,
         FinalsIndex index, string? previousPeriod)
     {
-        if (reading.Outcome != ReadingOutcome.Read || reading.Past.Count == 0 || context.Recipe.Period?.Past is null) return [];
+        // V3-S.1: an idle read plans finals too. The source handed its finished periods over; refusing
+        // them because nothing is live is how a clan between battles kept an empty Past battles panel.
+        // Every other stop is still refused: a response we could not parse is not a response to mine.
+        if (reading.Outcome is not (ReadingOutcome.Read or ReadingOutcome.Idle)
+            || reading.Past.Count == 0 || context.Recipe.Period?.Past is null)
+        {
+            return [];
+        }
 
         var slug = context.Recipe.Slug;
         var inputs = context.Source.InputsKey;

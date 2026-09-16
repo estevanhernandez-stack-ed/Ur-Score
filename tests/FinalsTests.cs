@@ -25,6 +25,10 @@ public class FinalsTests
     private static RecipeReading Reading(string current, DateTimeOffset? ends, params PastPeriodReading[] past) =>
         new(ReadingOutcome.Read, null, [], [], $"battle={current}", 0) { Period = new ReadingPeriod(current, null, ends), Past = past };
 
+    /// <summary>A stop that still carried its past periods: no live period, so every key it holds is finished.</summary>
+    private static RecipeReading Stopped(ReadingOutcome outcome, params PastPeriodReading[] past) =>
+        RecipeReading.Stop(outcome, "No clan battle running") with { Past = past };
+
     private static readonly HashSet<string> Points = ["value"];
 
     private static readonly Dictionary<long, Guid> Map = new() { [111] = A };
@@ -104,6 +108,35 @@ public class FinalsTests
         foreach (var line in FinalsPlanner.Plan(Context(), reading, Map, Points, index, null)) index.Add(line);
 
         Assert.Empty(FinalsPlanner.Plan(Context(), reading, Map, Points, index, null));
+    }
+
+    [Fact]
+    public void AnIdleSourceStillBackfillsTheBattlesItHandedOver()
+    {
+        // V3-S.1: a clan between battles has no live period, so every past key it carries is finished
+        // and the one it just left is the previous period.
+        var index = new FinalsIndex();
+        var reading = Stopped(ReadingOutcome.Idle, Past("A", Row(111, 300), Row(222, 200)), Past("B", Row(111, 90)));
+
+        var lines = FinalsPlanner.Plan(Context(), reading, Map, Points, index, previousPeriod: "B");
+
+        Assert.Equal(new[] { "A", "B" }, lines.Select(l => l.Period!.Value).ToArray());
+        Assert.Equal(new[] { BookLine.TriggerBackfill, BookLine.TriggerEnded }, lines.Select(l => l.Trigger).ToArray());
+        Assert.All(lines, l => Assert.Equal(new[] { "111" }, l.Accounts.Keys.ToArray()));
+
+        foreach (var line in lines) index.Add(line);
+        Assert.Empty(FinalsPlanner.Plan(Context(), reading, Map, Points, index, previousPeriod: "B"));
+    }
+
+    [Theory]
+    [InlineData(ReadingOutcome.ShapeNotUnderstood)]
+    [InlineData(ReadingOutcome.Unreachable)]
+    [InlineData(ReadingOutcome.RateLimited)]
+    [InlineData(ReadingOutcome.KeyRejected)]
+    public void AStopThatIsNotIdleBackfillsNothing(ReadingOutcome outcome)
+    {
+        // A response we could not parse is not a response to mine, whatever happens to be attached to it.
+        Assert.Empty(FinalsPlanner.Plan(Context(), Stopped(outcome, Past("A", Row(111, 300))), Map, Points, new FinalsIndex(), null));
     }
 
     [Fact]

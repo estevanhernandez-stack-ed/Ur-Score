@@ -200,11 +200,17 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                         continue;
                     }
 
-                    if (Absent(step, result) is { } absent) return absent;
+                    // V3-S.1: an idle stop still carries its past periods, so a source between periods
+                    // backfills. A shape miss below does not: see WithPastAsync.
+                    if (Absent(step, result) is { } absent)
+                    {
+                        return await WithPastAsync(recipe, absent, index + 1, stats, values, cancellationToken).ConfigureAwait(false);
+                    }
 
                     if (result.Outcome == PathOutcome.Nothing && step.IdleWithout == name)
                     {
-                        return RecipeReading.Stop(ReadingOutcome.Idle, step.IdleMessage ?? "Nothing to read right now.");
+                        var idle = RecipeReading.Stop(ReadingOutcome.Idle, step.IdleMessage ?? "Nothing to read right now.");
+                        return await WithPastAsync(recipe, idle, index + 1, stats, values, cancellationToken).ConfigureAwait(false);
                     }
 
                     return RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, result.Outcome switch
@@ -229,6 +235,61 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         result.Outcome == PathOutcome.Missing && result.MissedAtPlaceholder && step.AbsentMessage is { } message
             ? RecipeReading.Stop(ReadingOutcome.Idle, message)
             : null;
+
+    /// <summary>
+    /// V3-S.1: <c>period.past</c> is its own path into the last step's response and never waits on the
+    /// live period resolving, so an idle stop runs the steps it has left purely to reach that response
+    /// and read the past there through the same <see cref="PastAt"/> the success path uses. The reading
+    /// stays idle; only its past is added. Anything in the way — a later step whose address needs the
+    /// value we never got, a fetch that stops, a last step with no list to read — leaves the stop
+    /// exactly as it was. Only an idle stop comes here: a response we could not parse is not a response
+    /// to mine, so every other stop still returns nothing.
+    /// </summary>
+    private async Task<RecipeReading> WithPastAsync(
+        Recipe recipe, RecipeReading idle, int from, IReadOnlyList<RecipeStat> stats,
+        IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken)
+    {
+        if (recipe.Period?.Past is null || from >= recipe.Steps.Count) return idle;
+
+        var carried = new Dictionary<string, string>(values, StringComparer.Ordinal);
+
+        for (var index = from; index < recipe.Steps.Count; index++)
+        {
+            var step = recipe.Steps[index];
+            var isLast = index == recipe.Steps.Count - 1;
+
+            // A step whose address needs a value we never got cannot be asked at all, and Fill throws
+            // rather than send a half-filled address.
+            if (Placeholders.Names(step.Url).Any(name => !carried.ContainsKey(name))) return idle;
+            if (isLast && (step.PerAccount || step.Rows is null || step.UserId is null)) return idle;
+
+            // The same label as the success path, so the raw save stays one file per step either way.
+            var (document, stop, _) = await FetchJsonAsync(recipe, step, carried, $"{recipe.Slug}-step{index + 1}", cancellationToken)
+                .ConfigureAwait(false);
+            if (stop is not null) return idle;
+
+            using (document!)
+            {
+                if (isLast)
+                {
+                    var past = PastAt(recipe, step, stats, document!.RootElement, carried);
+                    return past.Count == 0 ? idle : idle with { Past = past };
+                }
+
+                // A take that misses here is not a second miss to report: the stop is already told.
+                foreach (var (name, pathTemplate) in step.Take)
+                {
+                    var result = RecipePath.Resolve(document!.RootElement, pathTemplate, carried);
+                    if (result.Outcome == PathOutcome.Found && RecipePath.AsText(result.Value) is { Length: > 0 } text)
+                    {
+                        carried[name] = text;
+                    }
+                }
+            }
+        }
+
+        return idle;
+    }
 
     /// <summary><c>Status</c> is the raw HTTP status behind a stop, when there was one, so a caller that
     /// cares about the difference between a 400 and a 404 (spec §3.2) does not have to reparse <c>Stop.Detail</c>.</summary>
@@ -354,8 +415,14 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
 
         if (rowsResult.Outcome == PathOutcome.Missing)
         {
-            return (Absent(step, rowsResult) ?? RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"Step {number}: {rowsResult.Miss}"))
-                with { IconText = icon };
+            // V3-S.1: a clan that sat out this period and a clan between periods are the same case to a
+            // reader, and this response is the one the past lives in. A shape miss keeps returning nothing.
+            if (Absent(step, rowsResult) is { } absent)
+            {
+                return absent with { IconText = icon, Past = PastAt(recipe, step, stats, root, values) };
+            }
+
+            return RecipeReading.Stop(ReadingOutcome.ShapeNotUnderstood, $"Step {number}: {rowsResult.Miss}") with { IconText = icon };
         }
 
         if (rowsResult.Outcome == PathOutcome.Nothing || rowsResult.Value.ValueKind != JsonValueKind.Array)
@@ -393,7 +460,10 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             foreach (var stat in stats)
             {
                 var result = RecipePath.Resolve(row, stat.Path, values, "this row");
-                if (Absent(step, result) is { } absent) return absent with { IconText = icon };
+                if (Absent(step, result) is { } absent)
+                {
+                    return absent with { IconText = icon, Past = PastAt(recipe, step, stats, root, values) };
+                }
 
                 var miss = StatNumberAt(result, stat, Placeholders.Fill(stat.Path, values, encode: false), "in this row", out var value);
                 if (miss is null)

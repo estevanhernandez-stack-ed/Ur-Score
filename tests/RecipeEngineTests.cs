@@ -112,15 +112,17 @@ public class RecipeEngineTests
     }
 
     [Fact]
-    public async Task NoBattleIsIdleWithTheRecipesOwnWordsAndAsksNothingMore()
+    public async Task NoBattleIsIdleWithTheRecipesOwnWords()
     {
+        // V3-S.1: the recipe keeps past battles, so the clan step is still asked for them. When it
+        // answers with nothing (here: no route, so a 404), the stop stands on its own.
         var transport = new FakeTransport().On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, """{ "status": "ok", "data": null }""");
 
         var reading = await Read(transport, PetSim);
 
         Assert.Equal(ReadingOutcome.Idle, reading.Outcome);
         Assert.Equal("No clan battle running", reading.Detail);
-        Assert.Single(transport.Requests);
+        Assert.Empty(reading.Past);
     }
 
     [Fact]
@@ -750,6 +752,133 @@ public class RecipeEngineTests
         var reading = await Read(transport, PetSim);
 
         Assert.DoesNotContain(reading.Past, p => p.Value == "123456");
+    }
+
+    /// <summary>The same clan, with no battle of its own running: only the finished ones are there.</summary>
+    private const string ClanHistoryOnly = """
+        { "status": "ok", "data": { "Icon": "rbxassetid://1", "Battles": {
+            "A": { "Place": 40, "Points": 500, "PointContributions": [ { "UserID": 111, "Points": 300 }, { "UserID": 222, "Points": 200 } ] },
+            "Empty": { "Place": 900, "Points": 10 },
+            "123456": { "Place": 1, "Points": 1 }
+        } } }
+        """;
+
+    [Fact]
+    public async Task AClanBetweenBattlesStillHandsOverItsFinishedOnes()
+    {
+        // V3-S.1: the past periods are their own path into the last step's response, so nothing about
+        // them waits on a live period. A clan between battles is the state the owner's clan is in
+        // almost always, and it kept its board empty.
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, """{ "status": "ok", "data": null }""")
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanHistoryOnly);
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(ReadingOutcome.Idle, reading.Outcome);
+        Assert.Equal("No clan battle running", reading.Detail);
+        Assert.Null(reading.Period);
+        Assert.Equal(new[] { "A", "Empty" }, reading.Past.Select(p => p.Value).ToArray());
+        Assert.Equal(new[] { Row(111, 300), Row(222, 200) }, reading.Past[0].Rows);
+        Assert.Equal(new double?[] { 40, 500 }, reading.Past[0].Headline.Select(h => h.Number).ToArray());
+    }
+
+    [Fact]
+    public async Task AClanThatSatOutTheBattleStillHandsOverItsFinishedOnes()
+    {
+        // The other idle: a battle is running, this clan is not in it. Same case to a reader.
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanHistoryOnly);
+
+        var reading = await Read(transport, PetSim);
+
+        Assert.Equal(ReadingOutcome.Idle, reading.Outcome);
+        Assert.Equal("Your clan hasn't joined this battle.", reading.Detail);
+        Assert.Equal("rbxassetid://1", reading.IconText);
+        Assert.Equal(new[] { "A", "Empty" }, reading.Past.Select(p => p.Value).ToArray());
+        Assert.Equal(new[] { Row(111, 300), Row(222, 200) }, reading.Past[0].Rows);
+    }
+
+    [Fact]
+    public async Task AnIdleReadHandsOverTheSameRowsAGoodOneWould()
+    {
+        // No second filter: the idle path and the success path return one another's past readings,
+        // everyone's rows and all, and the score book does the filtering for both.
+        var good = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanWithHistory);
+        var idle = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, """{ "status": "ok", "data": null }""")
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanWithHistory);
+
+        var read = await Read(good, PetSim);
+        var stopped = await Read(idle, PetSim);
+
+        Assert.Equal(ReadingOutcome.Read, read.Outcome);
+        Assert.Equal(ReadingOutcome.Idle, stopped.Outcome);
+        Assert.Equal(read.Past.Select(p => (p.Value, p.RowsReadable)), stopped.Past.Select(p => (p.Value, p.RowsReadable)));
+        Assert.NotEmpty(read.Past);
+
+        for (var i = 0; i < read.Past.Count; i++)
+        {
+            Assert.Equal(read.Past[i].Rows, stopped.Past[i].Rows);
+            Assert.Equal(read.Past[i].Headline, stopped.Past[i].Headline);
+        }
+    }
+
+    [Fact]
+    public async Task AShapeWeCouldNotUnderstandIsNeverMinedForPastPeriods()
+    {
+        // A response we could not parse is not a response we should mine: only an idle stop carries past.
+        var renamed = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, """{ "data": { "name": "B" } }""")
+            .On("https://ps99.biggamesapi.io/api/clan/", 200, ClanWithHistory);
+
+        var step1 = await Read(renamed, PetSim);
+
+        Assert.Equal(ReadingOutcome.ShapeNotUnderstood, step1.Outcome);
+        Assert.Empty(step1.Past);
+        Assert.Single(renamed.Requests);
+
+        var unreadableRows = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 200,
+                """
+                { "data": { "Battles": {
+                    "A": { "Place": 40, "Points": 500, "PointContributions": [ { "UserID": 111, "Points": 300 } ] },
+                    "B": { "PointContributions": [ { "Name": "a" } ] }
+                } } }
+                """);
+
+        var step2 = await Read(unreadableRows, PetSim);
+
+        Assert.Equal(ReadingOutcome.ShapeNotUnderstood, step2.Outcome);
+        Assert.Empty(step2.Past);
+    }
+
+    [Fact]
+    public async Task AnIdleStopAsksNothingMoreWhenTheRecipeKeepsNoPast()
+    {
+        // No period.past to read, so the stop is the stop: one request, exactly as before.
+        var recipe = Parse("""
+            {
+              "recipe": 1, "name": "Seasons", "credit": "Test.", "metricId": "t.v", "everySeconds": 60,
+              "inputs": [{ "id": "season", "label": "Season" }],
+              "steps": [
+                { "url": "https://example.com/seasons", "take": { "board": "data.{season}.board" },
+                  "idleWithout": "board", "idleMessage": "That season has not started." },
+                { "url": "https://example.com/boards/{board}", "rows": "data", "userId": "id", "value": "score" }
+              ]
+            }
+            """);
+        var transport = new FakeTransport().On("https://example.com/seasons", 200, """{ "data": { "summer": { "board": null } } }""");
+
+        var reading = await Read(transport, recipe, inputs: new Dictionary<string, string> { ["season"] = "summer" });
+
+        Assert.Equal(ReadingOutcome.Idle, reading.Outcome);
+        Assert.Empty(reading.Past);
+        Assert.Single(transport.Requests);
     }
 
     [Fact]

@@ -461,6 +461,21 @@ public class PanelModelsTests
     // ---- Past periods ----
 
     [Fact]
+    public void WithNoFinalsYetThePanelSaysWhatIsTrueAndWhatHappensNext()
+    {
+        // V3-S.1: the old line ("No finished battles kept yet.") read as "this clan has never been in one".
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var live = Live([main], [Installed(Clan, "value")], Snaps());
+
+        var model = PanelModels.PastPeriods(live, Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id, Stat: "value"));
+
+        Assert.Empty(model.Rows);
+        Assert.Equal(
+            "Ur Score hasn't read this clan's finished battles yet. The next read fills them in from the clan's own record.",
+            model.Head.Note);
+    }
+
+    [Fact]
     public void PastPeriodsListFinalsNewestFirstOneRowPerPeriodWithYourBest()
     {
         var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);

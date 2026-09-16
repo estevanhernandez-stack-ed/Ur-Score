@@ -89,6 +89,33 @@ public class RecipeWatchBookTests
     }
 
     [Fact]
+    public async Task AnIdleReadStillBacksItsFinishedBattlesIntoTheBookWithOnlyYourAccount()
+    {
+        // V3-S.1. The other rows are read (the engine hands over everyone's, exactly as on a good read)
+        // and then dropped here: nobody else's id or number is written to the book.
+        const long stranger = 987654321;
+        var book = new MemoryBook();
+        var past = new PastPeriodReading("Arcade2026", [EngineRow(111, 4200), EngineRow(stranger, 86420)],
+            [new HeadlineValue("Clan place", "14") { Id = "clan-place", Number = 14 }], RowsReadable: true);
+        var engine = new StubEngine(() => RecipeReading.Stop(ReadingOutcome.Idle, "No clan battle running") with { Past = [past] });
+
+        var snapshot = await Watch(engine, new StubHost(true, AltAccount), book, SourceOf(SourceRole.Mine), finals: new FinalsIndex())
+            .RunOnceAsync(CancellationToken.None);
+
+        var line = Assert.Single(book.Lines);
+        Assert.Equal((BookLine.KindFinal, BookLine.TriggerBackfill, "Arcade2026"), (line.Kind, line.Trigger, line.Period!.Value));
+        Assert.Equal(new[] { "111" }, line.Accounts.Keys.ToArray());
+
+        var written = BookJson.Serialize(line);
+        Assert.Contains("4200", written, StringComparison.Ordinal);
+        Assert.DoesNotContain(stranger.ToString(), written, StringComparison.Ordinal);
+        Assert.DoesNotContain("86420", written, StringComparison.Ordinal);
+
+        Assert.Equal(WatchState.SourceIdle, snapshot.State);
+        Assert.Equal("No clan battle running", snapshot.NotRecordingReason);
+    }
+
+    [Fact]
     public async Task AWatchSourceSendsNothingAndKeepsNoAccount()
     {
         var book = new MemoryBook();

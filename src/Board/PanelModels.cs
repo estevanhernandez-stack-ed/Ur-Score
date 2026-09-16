@@ -590,8 +590,11 @@ public static class PanelModels
             })
             .ToList();
 
+        // V3-S.1: "No finished battles kept yet" read as "this clan has never been in one". The truth is
+        // that Ur Score hasn't read them, and the next read fills them in, idle source or not.
         var note = rows.Count == 0
-            ? $"No finished {RecipeWords.Periods(recipe)} kept yet."
+            ? $"Ur Score hasn't read this {RecipeWords.Group(recipe)}'s finished {RecipeWords.Periods(recipe)} yet. "
+              + $"The next read fills them in from the {RecipeWords.Group(recipe)}'s own record."
             : $"Filled in from the {RecipeWords.Group(recipe)}'s own record.";
 
         return new PastPeriodsModel(
