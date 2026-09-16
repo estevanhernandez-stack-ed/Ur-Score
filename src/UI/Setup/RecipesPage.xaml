@@ -45,8 +45,10 @@
         <CheckBox x:Name="StartOnOpenBox" Content="Start reading as soon as Ur Score opens"
                   Checked="OnStartOnOpenChanged" Unchecked="OnStartOnOpenChanged"
                   AutomationProperties.Name="Start reading as soon as Ur Score opens" />
+        <!-- The sentence has to be true as it is read: the tick saves now and reads next time, so it says so
+             where the eye already is. A tooltip would be invisible to exactly the person who is confused. -->
         <TextBlock Style="{StaticResource Muted}" Margin="24,4,0,0"
-                   Text="Off unless you turn it on. Ur Score reads only while it is open, and Stop still stops it." />
+                   Text="Off unless you turn it on. Ticking it now doesn't start reading. It takes effect the next time you open Ur Score. Reading happens only while the window is open, and Stop still stops it." />
         <TextBlock x:Name="StartOnOpenProblemLine" Style="{StaticResource Refusal}" Margin="24,4,0,0" Visibility="Collapsed" />
     </StackPanel>
 </UserControl>
