@@ -44,7 +44,7 @@ Four separate destinations, and they're not the same boundary:
 | **Roblox's own public username-lookup API** (`users.roblox.com`) | Other clan members' Roblox user ids, so the leaderboard can show names instead of a column of numbers. These ids came from the public clan API in the first place, and only names come back — nothing is disclosed about anyone that a public API didn't already show. | Your own accounts' ids — their names are already known locally, from RoRoRo, so they never need this call. |
 | **Roblox's own public picture service** (`thumbnails.roblox.com`, and the picture host it names on `rbxcdn.com`) | Your own accounts' Roblox user ids, so each of your rows can show that account's avatar, and a recipe's icon id when the recipe has one. The pictures are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Any other player's id. The leaderboard and Top of the battle show other members by name only, and no picture of anyone else is ever asked for or kept. |
 
-**You can turn the third one off.** Set `resolveNames` to `false` in settings (see *Configure it*
+**You can turn the third one off.** Set `resolveNames` to `false` in settings (see *Settings reference*
 below) and the leaderboard still shows positions and points, with everyone but your own accounts
 shown as `Member <id>` instead of a name. With it off, Ur Score makes exactly two outbound calls
 per poll — both to the game's own API — and none to Roblox for anyone else's identity. With it on
@@ -61,8 +61,7 @@ too, every time it's open.
 
 ## What it needs
 
-- **RoRoRo v1.28.0.0 or later**, running on the same PC. (See the callout at the top — this
-  doesn't exist yet.)
+- **RoRoRo v1.28.0.0 or later**, running on the same PC.
 - **At least one account saved in RoRoRo** with its Roblox user id resolved. RoRoRo fills this in
   automatically once an account has been used — a brand-new saved account that's never been
   launched shows up in Ur Score's window as unresolved and named, and Ur Score skips it until
@@ -82,19 +81,17 @@ too, every time it's open.
 
 ## Setup
 
-Once RoRoRo 1.28+ is out and a release exists:
-
 1. **Install it.** In RoRoRo: **Plugins → Install**, and paste the release URL you were given.
    Walk the consent screen — it lists `host.metrics.report` and `host.queries.accounts` — and
    click Install. Ur Score starts as its own window (autostart is off by default, so it won't
    launch itself the next time you boot; start it yourself when a battle's on).
-2. **Set your clan.** There's no text box for this yet — it lives in a settings file. Press
-   `Win + R`, type `%LOCALAPPDATA%\626labs.ur-score`, and press Enter. That opens the folder.
-   If `settings.json` isn't there yet, start Ur Score once and it'll create it. Open it in
-   Notepad and set `"clanName"` to your clan's exact name, the way it appears in-game — a typo
-   here shows up in the window as "clan not found," naming exactly what was searched for, so you
-   can tell right away if you got it wrong. Save the file, then (re)start Ur Score.
-3. **Press "Start Score Watch."** If a battle is live, the dashboard fills in within a few
+2. **Import a recipe, then pick your clan.** Ur Score knows no game on its own — a recipe file
+   tells it what to read. In Ur Score: **Setup → Recipes → Import**, and walk the review screen,
+   which lists what that recipe will make your PC contact before anything is added. The clans the
+   recipe describes then appear under **Setup → Clans**, where **Make main** sets the one whose
+   battle you're scoring and **Watch it instead** follows a clan you're not in. No file editing,
+   and no restart.
+3. **Press "Start."** If a battle is live, the dashboard fills in within a few
    seconds — your clan's place and points at the top, the leaderboard below it, and your own
    accounts' rows beneath that. If nothing fills in, press **Test now**: it runs one cycle and
    narrates exactly what happened (which clan was asked for, whether a battle is live, how many
@@ -112,12 +109,17 @@ For that, RoRoRo needs a rule in its own `metric-rules.json` that matches Ur Sco
 (`clan.battle.points` by default) — without one, reports land, RoRoRo keeps history, and nothing
 ever fires, with nothing anywhere looking broken.
 
-Ur Score reads that file every cycle and tells you plainly whether a matching rule exists, in the
-window's **Report policy** section. If it doesn't, click **Add this rule to RoRoRo** — it shows you
-the exact JSON it's about to add before it adds it, backs up the file first
-(`metric-rules.json.ur-score-backup`, right beside the original), and only ever adds — it never
-edits a rule that's already there, whether you wrote it or another plugin did. RoRoRo re-reads
-that file live, so the rule takes effect without restarting anything.
+You set that up in **Setup → Alerts**, which shows one card per stat you send, each written as a
+sentence: "RoRoRo will alert you when an account's Diamonds stops climbing." There are two kinds —
+**stops climbing** (it gains less than some amount a minute over a stretch) and **crosses a
+number** (it goes above or below one) — and each card carries **Turn on**, **Change** and
+**Remove**. You never see or edit JSON.
+
+A rule you wrote by hand is marked **yours** and Ur Score won't change it; one belonging to another
+plugin isn't shown as yours to edit either. Ur Score backs the file up before every write
+(`metric-rules.json.ur-score-backup`, right beside the original) and keeps every rule it doesn't
+own exactly as it found it. RoRoRo re-reads that file live, so a change takes effect without
+restarting anything.
 
 **A matching rule is not enough by itself.** RoRoRo's metric alerts toggle is a separate switch,
 off by default, and Ur Score cannot see its state over the plugin contract — it can't tell you if
@@ -126,20 +128,24 @@ that, a rule that matches exactly still returns before it's ever read.
 
 ### If you don't want other members' names
 
-Set `"resolveNames": false` in `settings.json` (see step 2 above). See *What leaves your machine*
+Set `"resolveNames": false` in `settings.json` (see *Settings reference* below). See *What leaves your machine*
 for what that changes.
 
 ## Settings reference
 
-`%LOCALAPPDATA%\626labs.ur-score\settings.json`, hand-edited (there is currently no settings UI):
+Almost everything is set in the **Setup** window now. What a particular source reads — its inputs,
+which stats it sends and under what metric id, and which of your accounts send — belongs to that
+recipe and lives beside it, set under **Setup → Recipes**, **Stats**, **Clans** and **Your
+accounts**. Thresholds aren't here at all: RoRoRo does the judging, and you write those in
+**Setup → Alerts**.
+
+What's left in `%LOCALAPPDATA%\626labs.ur-score\settings.json` is two keys, and only the first is
+worth touching by hand:
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `clanName` | *(empty)* | Required. Empty means idle — nothing is polled until this is set. |
-| `metricId` | `clan.battle.points` | The id reported to RoRoRo. Must match the `metricId` in RoRoRo's rules file, or nothing can ever alert (see *Actually getting an alert*). Most people should leave this alone. |
-| `pollSeconds` | `180` | How often the clan is polled. Floored at 180 — the game's own servers cache clan data for three minutes, so anything faster just re-fetches the same bytes. A smaller value in the file is raised automatically. |
-| `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. |
-| `excludedAccountIds` | *(none)* | Managed by the **Send** checkboxes in the window — you shouldn't need to hand-edit this. |
+| `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. There is no checkbox for this. |
+| `activeRecipe` | *(none)* | Which imported recipe is on. Set by **Setup → Recipes**; no reason to edit it yourself. |
 
 ## What it doesn't do
 
@@ -149,7 +155,7 @@ for what that changes.
 - **Set thresholds, cooldowns, or send notifications.** RoRoRo owns all of that.
 - **Touch Roblox itself.** Ur Score reads HTTP and writes to a local pipe. It cannot click, type,
   or otherwise act inside a Roblox client.
-- **Run itself in the background.** Autostart defaults to off. You start Score Watch when a
+- **Run itself in the background.** Autostart defaults to off. You press Start when a
   battle's on; it won't watch a battle you forgot to start it for.
 
 ## Troubleshooting
@@ -159,7 +165,7 @@ are the states it can be in and what each one means:
 
 | You see | What it means |
 | --- | --- |
-| Idle — no clan name set | `clanName` is empty in settings.json. Nothing is being polled. |
+| Idle — nothing to watch | No recipe is on, or no clan is set as main. Import one under **Setup → Recipes**, then pick your clan under **Setup → Clans**. Nothing is being polled. |
 | Could not reach the clan data | A network or transport problem reaching the game's API. Not RoRoRo's fault. |
 | No clan battle running | Normal, and the common state between battles. Not an error. |
 | The response was not a shape Ur Score understands | The game's API returned something the parser didn't expect. Use **Copy diagnostics** — the message names the keys actually present. |
