@@ -321,7 +321,9 @@ public static class PanelModels
                 .ToList();
             if (mine.Count == 0) continue;
 
-            var ranks = Ranking.Competition(rows, stat.Key);
+            // Counted here only for a reading of this session, which holds every row. A remembered one holds your own
+            // accounts alone, so InGroup answers it from the book instead (review C1).
+            var ranks = snapshot.RememberedAt is null ? Ranking.Competition(rows, stat.Key) : null;
             var period = snapshot.Period?.Value;
             var since = Since(recipe, live.Now);
             var series = mine.ToDictionary(a => a.RobloxUserId, a => reader.Series(source.Id, a.RobloxUserId, stat.Key, period, since));
@@ -338,7 +340,7 @@ public static class PanelModels
                     account.RobloxUserId,
                     account.DisplayName,
                     PanelText.Value(value, stat.Format, zone),
-                    value is not null && ranks.TryGetValue(account.RobloxUserId, out var rank) ? $"#{rank} of {rows.Count}" : Dash,
+                    InGroup(snapshot, ranks, rows.Count, account.RobloxUserId, stat.Key, value),
                     RecentChange(series[account.RobloxUserId], stat.Format),
                     sent,
                     Records.Stalled(series[account.RobloxUserId], others),
@@ -478,9 +480,10 @@ public static class PanelModels
         var facts = new List<FactModel>();
         if (!recipe.LastStep.PerAccount && snapshot.Rows is { } listRows)
         {
-            var ranks = Ranking.Competition(listRows, stat.Key);
+            // Counted only for a reading of this session; a remembered one is answered from the book (review C1).
+            var ranks = snapshot.RememberedAt is null ? Ranking.Competition(listRows, stat.Key) : null;
             facts.Add(new FactModel($"In {RecipeWords.Group(recipe)}",
-                ValueOf(pickedRow, stat.Key) is not null && ranks.TryGetValue(pickedAccount.RobloxUserId, out var rank) ? $"#{rank} of {listRows.Count}" : Dash));
+                InGroup(snapshot, ranks, listRows.Count, pickedAccount.RobloxUserId, stat.Key, ValueOf(pickedRow, stat.Key))));
         }
 
         var records = Records.For(reader, recipe.Slug, pickedSource.InputsKey, [pickedSource.Id], pickedAccount.RobloxUserId, stat.Key, live.Time);
@@ -932,6 +935,29 @@ public static class PanelModels
 
     private static double? HeadlineNumber(RecipeSnapshot? snapshot, string? id) =>
         id is null ? null : snapshot?.Headline?.FirstOrDefault(h => h.Id == id)?.Number;
+
+    /// <summary>
+    /// One account's place among every row its source read — "#7 of 50" — or a dash when there is no honest answer
+    /// (plan A40, review C1). The one door for a rank, so neither panel can grow its own.
+    /// <para>
+    /// A reading from this session carries every row, so <paramref name="live"/> is counted from it. A REMEMBERED one
+    /// carries your own accounts alone, and a place worked out from those would read "#1 of 4" of a group this never
+    /// counted — so it is answered from what the reading itself kept (<see cref="RecipeSnapshot.RememberedRanks"/>),
+    /// and from nothing else. A line that kept no place shows none: an empty "In clan" is honest, "#1 of 4" is not.
+    /// </para>
+    /// </summary>
+    private static string InGroup(
+        RecipeSnapshot snapshot, IReadOnlyDictionary<long, int>? live, int rowsInHand, long userId, string stat, double? value)
+    {
+        if (value is null) return Dash;
+
+        if (snapshot.RememberedAt is not null)
+        {
+            return snapshot.RememberedRanks.TryGetValue((userId, stat), out var kept) ? $"#{kept.Rank} of {kept.Of}" : Dash;
+        }
+
+        return live is not null && live.TryGetValue(userId, out var rank) ? $"#{rank} of {rowsInHand}" : Dash;
+    }
 
     private static double? ValueOf(RecipeRow row, string stat) => row.Values.TryGetValue(stat, out var value) ? value : null;
 

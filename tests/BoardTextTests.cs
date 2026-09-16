@@ -185,6 +185,29 @@ public class BoardTextTests
         Assert.EndsWith("from 2d ago.", BoardText.StateLine(live, everStarted: true));
     }
 
+    /// <summary>
+    /// Review I1. A failing read is exactly when the numbers beside it go stale, so the branch that names a source in
+    /// trouble is the last one that may drop the sentence. A41's promise is that this mark cannot be forgotten.
+    /// </summary>
+    [Fact]
+    public void ASourceInTroubleNeverSwallowsTheSentenceAboutTheNumbersOnScreen()
+    {
+        var snaps = new Dictionary<string, RecipeSnapshot>
+        {
+            [AltClan.Id] = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = AltClan.Id },
+        };
+        var kept = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 4200)]) with { RememberedAt = Now.AddHours(-3) };
+        var live = Live([MainClan, AltClan], [Installed(Clan, "value")], snaps,
+            running: true, remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.Equal("K0i2: Could not reach the data. The numbers on screen are the last ones Ur Score read, from 3h ago.",
+            BoardText.StateLine(live, everStarted: true));
+
+        // And every other branch that can return while remembered numbers are drawn says it too.
+        Assert.EndsWith("from 3h ago.", BoardText.StateLine(live with { Running = false }, everStarted: true));
+        Assert.EndsWith("from 3h ago.", BoardText.StateLine(live, everStarted: false));
+    }
+
     [Fact]
     public void ARememberedSnapshotIsNeverAStateUrScoreIsIn()
     {

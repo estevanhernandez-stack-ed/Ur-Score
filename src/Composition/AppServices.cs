@@ -281,9 +281,49 @@ public sealed class AppServices : ISetupServices, IDisposable
         ReaderLoaded = true;
         _book.Written += OnWritten;
         Runner.Apply(Sources);
-        RememberLastNumbers();
-        AddTrail($"BOOK: loaded from {root}. {_remembered.Count} source(s) opened on their last kept numbers.");
+        AddTrail($"BOOK: loaded from {root}.");
         AskForAvatars();
+        RaiseChanged();
+
+        // Not awaited: BoardWindow awaits LoadBookAsync before the window is usable, and asking RoRoRo must never
+        // hold that up.
+        _ = OpenOnLastNumbersAsync();
+    }
+
+    /// <summary>
+    /// Fills the remembered map for the first time, once RoRoRo has been asked who your accounts are (review I2).
+    /// <para>
+    /// Which ids are yours decides which of the book's rows may come back (A42), and on window open nothing has asked
+    /// RoRoRo yet — <see cref="RefreshAccountsAsync"/> runs from Start, Test now, Setup and the import flow, all of
+    /// them later than this. Filling from Ur Score's own cache alone would put an account RoRoRo dropped between
+    /// sessions back on the board with its last number, so the map stays empty until the answer lands: a beat of
+    /// "waiting for the first read" beats a number for an account you no longer have.
+    /// </para>
+    /// <para>
+    /// The ask is bounded and never fails for RoRoRo's sake; when RoRoRo doesn't answer, the saved list stands in, as
+    /// it does everywhere else, and the numbers are marked <c>remembered</c> either way. Every later listing
+    /// re-filters through <see cref="OnListed"/>.
+    /// </para>
+    /// </summary>
+    private async Task OpenOnLastNumbersAsync()
+    {
+        try
+        {
+            await RefreshAccountsAsync(_closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            // The type only: a message can carry anything. The board opens on the saved list's ids either way.
+            AddTrail($"ACCOUNTS NOT LISTED AT START: {ex.GetType().Name}.");
+        }
+
+        // Explicit rather than relying on OnListed: a fetch that threw before it raised Listed must still leave the
+        // window with something real in it.
+        RememberLastNumbers();
+        AddTrail($"OPENED ON: {_remembered.Count} source(s) drawing their last kept numbers.");
         RaiseChanged();
     }
 

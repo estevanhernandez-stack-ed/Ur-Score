@@ -55,6 +55,7 @@ public static class Remembered
         if (!string.Equals(Source.KeyOf(line.Inputs), source.InputsKey, StringComparison.Ordinal)) return null;
 
         var rows = new List<RecipeRow>();
+        var ranks = new Dictionary<(long UserId, string Stat), RankInGroup>();
         foreach (var (id, account) in line.Accounts)
         {
             // An id RoRoRo isn't listing as yours right now never comes back, whatever the book holds.
@@ -63,7 +64,20 @@ public static class Remembered
             var values = account.V
                 .Where(kv => RecipeStats.Find(recipe, kv.Key) is not null && double.IsFinite(kv.Value))
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
-            if (values.Count > 0) rows.Add(new RecipeRow(userId, values));
+            if (values.Count == 0) continue;
+
+            rows.Add(new RecipeRow(userId, values));
+
+            // The place the reading itself worked out, among every row it saw, and how many that was (review C1).
+            // Carried rather than dropped because the alternative downstream is a place worked out from YOUR rows
+            // alone — "#1 of 4" of a group this never counted. A line that kept no place gives none, and the panel
+            // then shows nothing, which is the honest answer.
+            if (account.Of is not { } of || of <= 0 || account.Rank is not { } kept) continue;
+
+            foreach (var (stat, rank) in kept)
+            {
+                if (values.ContainsKey(stat)) ranks[(userId, stat)] = new RankInGroup(rank, of);
+            }
         }
 
         var headline = recipe.Headline
@@ -83,6 +97,7 @@ public static class Remembered
             SourceId = source.Id,
             Period = line.Period is { } period ? new ReadingPeriod(period.Value, period.Starts, period.Ends) : null,
             RememberedAt = line.T,
+            RememberedRanks = ranks,
         };
     }
 }

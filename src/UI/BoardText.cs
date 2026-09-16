@@ -34,14 +34,16 @@ public static class BoardText
         if (!live.Running) return (everStarted ? "Stopped." : "Not started.") + remembered;
 
         var enabled = live.Sources.Where(s => s.Enabled).ToList();
-        if (enabled.Count == 0) return "Running, with nothing to read yet.";
+        if (enabled.Count == 0) return "Running, with nothing to read yet." + remembered;
 
         foreach (var source in enabled)
         {
             // The reading from this session only: a remembered snapshot is not a state Ur Score is in (plan A38).
             if (live.LiveOf(source.Id) is { } snapshot && !Healthy(snapshot.State))
             {
-                return $"{live.SourceName(source)}: {DiagnosticsModel.StateText(snapshot.State)}";
+                // The sentence rides this branch too (review I1). A read that is failing is exactly when the numbers
+                // beside it are stale, so this is the last branch that may drop the one mark nobody has to remember.
+                return $"{live.SourceName(source)}: {DiagnosticsModel.StateText(snapshot.State)}" + remembered;
             }
         }
 
