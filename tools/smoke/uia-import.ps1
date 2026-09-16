@@ -31,22 +31,14 @@ function Start-Import([string]$path) {
     Start-Sleep -Seconds 2
 }
 
-# Whatever an import put up: a message box, the import screen, or nothing.
-function Get-AfterImport([int]$seconds = 20) {
-    Wait-UrWindow '^(Ur Score|Import recipe|Update recipe)$' $seconds
-}
-
-function Close-MessageBox($w) {
-    $ok = $w.FindAll($TS::Descendants, $Cond::TrueCondition) |
-        Where-Object { $_.Current.ClassName -eq 'Button' -and $_.Current.Name -eq 'OK' } | Select-Object -First 1
-    [UrWin32Msg]::PostMessage([IntPtr]$ok.Current.NativeWindowHandle, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-    Start-Sleep -Milliseconds 800
-}
-
-# A message box's text lives in a Static control this UIA client names but types as a pane.
-function Get-MessageBoxText($w) {
-    $w.FindAll($TS::Descendants, $Cond::TrueCondition) |
-        Where-Object { $_.Current.ClassName -eq 'Static' -and $_.Current.Name } | ForEach-Object { $_.Current.Name }
+# Why an import was refused, in the words the page says it in. A refused import no longer raises a message box
+# to dismiss (owner rule, backlog V3-S.10): Setup > Recipes says it on ImportProblemLine, under the button that
+# started it, and it stays there. '(absent)' when nothing was refused.
+function Get-ImportRefusal([int]$seconds = 15) {
+    # Re-find Setup on each look rather than holding one reference: Wait-Until's block has its own scope, and
+    # the import may have opened and closed windows over it.
+    Wait-Until { (Line (Get-SetupWindow) 'ImportProblemLine') -ne '(absent)' } $seconds | Out-Null
+    Line (Get-SetupWindow) 'ImportProblemLine'
 }
 
 # ConvertFrom-Json's return value is not reliably enumerable as an array on every PowerShell version when
@@ -67,10 +59,7 @@ function Get-RoleText($source) { "$($source.role)".ToLowerInvariant() }
 function Complete-ClanImport([string]$fixture, [string[]]$show, [string[]]$send) {
     Start-Import $fixture
     $screen = Wait-UrWindow '^(Import recipe|Update recipe)$' 30
-    if (-not $screen) {
-        $box = Get-AfterImport 2
-        throw "no import screen; saw '$($box.Current.Name)': $((Get-MessageBoxText $box) -join ' ')"
-    }
+    if (-not $screen) { throw "no import screen; Setup says: $(Get-ImportRefusal 3)" }
     foreach ($label in $show) { Set-Tick (Get-Check $screen "Show $label") $true }
     foreach ($label in $send) { Set-Tick (Get-Check $screen "Send $label") $true }
     Invoke-WhenReady $screen 'ImportButton'

@@ -67,6 +67,13 @@ public static class BoardText
     public static string DetailLine(LiveBoard live, string? budgetWarning, string? boardsProblem) =>
         boardsProblem ?? DetailLine(live, budgetWarning);
 
+    /// <summary>What Delete… asks before the board goes, for the themed confirmation to draw.</summary>
+    public static Confirm DeleteBoardQuestion(BoardDef board) => new(
+        "Delete board",
+        $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",
+        "Delete",
+        $"Delete the {board.Name} board");
+
     /// <summary>
     /// A board change that couldn't be written, in plain words. No stack; an unknown IO reason is Windows' own
     /// sentence. Anything that isn't IO says only that it was unexpected: its message was never meant for you.

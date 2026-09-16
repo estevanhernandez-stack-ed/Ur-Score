@@ -5,13 +5,15 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
         FontFamily="{StaticResource BodyFont}">
+    <!-- Every confirmation carries these three names whatever it is asking, so one smoke helper drives them all:
+         ConfirmQuestion is what it asks, ConfirmDoButton acts and ConfirmCancelButton doesn't. -->
     <StackPanel Margin="20,18,20,18">
-        <TextBlock x:Name="QuestionLine" TextWrapping="Wrap" />
+        <TextBlock x:Name="ConfirmQuestion" TextWrapping="Wrap" />
         <!-- Cancel sits where the default sits in every other Ur Score window, and it is the default: the button
              that acts is plain, never the primary one, so the eye isn't pulled to the answer that can't be undone. -->
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-            <Button x:Name="DoButton" Margin="0,0,8,0" Click="OnDoClick" />
-            <Button x:Name="CancelButton" IsCancel="True" IsDefault="True" AutomationProperties.Name="Cancel" />
+            <Button x:Name="ConfirmDoButton" Margin="0,0,8,0" Click="OnDoClick" />
+            <Button x:Name="ConfirmCancelButton" IsCancel="True" IsDefault="True" AutomationProperties.Name="Cancel" />
         </StackPanel>
     </StackPanel>
 </Window>

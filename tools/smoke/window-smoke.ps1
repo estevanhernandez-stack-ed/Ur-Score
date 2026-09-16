@@ -15,11 +15,10 @@ try {
 
     Check '1 First run asks for a recipe' ((Line $board 'EmptyStateLine') -eq 'Import a recipe to start') (Line $board 'EmptyStateLine')
 
+    # The refusal is a line on Setup > Recipes now, not a box to dismiss, so it is read where it is said.
     Start-Import $invalid
-    $box = Get-AfterImport 10
-    $text = if ($box -and $box.Current.Name -eq 'Ur Score') { (Get-MessageBoxText $box) -join ' ' } else { "(no message box: '$($box.Current.Name)')" }
-    if ($box -and $box.Current.Name -eq 'Ur Score') { Close-MessageBox $box }
-    Check '2 An invalid file is refused and nothing is installed' (($text -match "Step 2 has no 'url'\.") -and -not (Test-Path (Join-Path $UrData 'recipes\*.recipe.json'))) $text
+    $text = Get-ImportRefusal 15
+    Check '2 An invalid file is refused, on the page, and nothing is installed' (($text -match "Step 2 has no 'url'\.") -and -not (Test-Path (Join-Path $UrData 'recipes\*.recipe.json'))) $text
 
     Start-Import $clanFixture
     $screen = Wait-UrWindow '^Import recipe$' 30

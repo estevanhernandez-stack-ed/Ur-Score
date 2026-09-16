@@ -42,15 +42,13 @@ public static class ImportFlow
         }
         catch (Exception ex)
         {
-            Warn(owner, $"Could not read that file: {ex.Message}");
-            return null;
+            return Problem($"Could not read that file: {ex.Message}");
         }
 
         var parsed = RecipeParser.Parse(text);
         if (!parsed.Ok)
         {
-            Warn(owner, "That recipe could not be imported:\n\n" + string.Join("\n", parsed.Problems.Select(p => "• " + p)));
-            return null;
+            return Problem("That recipe could not be imported:\n\n" + string.Join("\n", parsed.Problems.Select(p => "• " + p)));
         }
 
         var recipe = parsed.Recipe!;
@@ -60,8 +58,7 @@ public static class ImportFlow
             && (!string.Equals(installed.Recipe.Name, recipe.Name, StringComparison.Ordinal)
                 || !string.Equals(installed.Recipe.Author, recipe.Author, StringComparison.Ordinal)))
         {
-            Warn(owner, $"A different recipe, {installed.Recipe.Name}, is already installed under the same file name. Rename one of them before importing.");
-            return null;
+            return Problem($"A different recipe, {installed.Recipe.Name}, is already installed under the same file name. Rename one of them before importing.");
         }
 
         if (installed is not null && string.Equals(installed.Text, text, StringComparison.Ordinal))
@@ -141,13 +138,4 @@ public static class ImportFlow
         return new ImportOutcome(recipe.Slug, message, choose);
     }
 
-    /// <summary>
-    /// The one stock box left in the import flow, held back on purpose (backlog V3-S.10, still open for this).
-    /// tools/smoke/window-smoke.ps1 step 2 refuses an invalid recipe and reads this box's words through Win32 —
-    /// <c>Get-MessageBoxText</c> wants a <c>Static</c> control and <c>Close-MessageBox</c> posts BM_CLICK to a
-    /// control's window handle, neither of which a WPF window has. Saying this in place needs that script changed
-    /// in the same commit. <c>MessageBoxFenceTests</c> holds it by name so no new one can join it.
-    /// </summary>
-    private static void Warn(Window owner, string text) =>
-        MessageBox.Show(owner, text, "Ur Score", MessageBoxButton.OK, MessageBoxImage.Warning);
 }

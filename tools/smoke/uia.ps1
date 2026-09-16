@@ -74,6 +74,41 @@ function Wait-UrWindow([string]$titlePattern, [int]$seconds = 15) {
 
 function Get-BoardWindow { Get-UrWindows | Where-Object { $_.Current.Name -eq 'RoRoRo Ur Score' } | Select-Object -First 1 }
 
+# ---- Ur Score's own confirmation ----
+# Ur Score raises no stock Windows message box any more (owner rule, backlog V3-S.10): a question opens
+# src/UI/ConfirmWindow.xaml instead, in the app's theme, and something that merely went wrong is said on the
+# page it happened on. Whatever it is asking, the window's title names the job ('Delete board'), it carries the
+# same three automation ids (ConfirmQuestion, ConfirmDoButton, ConfirmCancelButton), and the button that acts is
+# named for what it acts on ('Delete the Rivals copy board') while the other is named 'Cancel'. These three
+# helpers drive every one of them, so no walk open-codes the interaction. The old Close-MessageBox and
+# Get-MessageBoxText went with the boxes: both worked through Win32 (BM_CLICK to a control's window handle, a
+# Static's text), which a WPF window has neither of.
+
+# Waits for a confirmation whose title matches, and for its question to be in the tree before handing it back.
+# Returns $null if none appears, so a walk can record the miss as a failure instead of throwing.
+function Wait-UrConfirm([string]$titlePattern, [int]$seconds = 15) {
+    # Wait-Until runs its script block in that block's own scope, so nothing assigned inside it reaches here:
+    # wait first, then find the window again. Trusting otherwise has bitten this repo before.
+    $ready = Wait-Until { $seen = Wait-UrWindow $titlePattern 1; $seen -and (Find-ByAutomationId $seen 'ConfirmQuestion') } $seconds
+    if (-not $ready) { return $null }
+    return Wait-UrWindow $titlePattern 2
+}
+
+# What a confirmation asks, in the words on screen. '(absent)' when there is no such window.
+function Get-UrConfirmText($confirmWindow) { Line $confirmWindow 'ConfirmQuestion' }
+
+# Answers a confirmation by the accessible name of the button pressed: 'Delete the Rivals copy board', 'Cancel'.
+function Invoke-UrConfirm($confirmWindow, [string]$answerName) {
+    if (-not $confirmWindow) { throw "no confirmation window to answer '$answerName'" }
+    $button = Get-Button $confirmWindow $answerName
+    if (-not $button) {
+        $offered = @(Find-All $confirmWindow $CT::Button | ForEach-Object { $_.Current.Name }) -join ', '
+        throw "the confirmation has no button named '$answerName'; it offers: $offered"
+    }
+    Invoke-Element $button
+    Start-Sleep -Milliseconds 800
+}
+
 function Get-SetupWindow { Get-UrWindows | Where-Object { $_.Current.Name -eq 'Setup' } | Select-Object -First 1 }
 
 function Find-ByAutomationId($root, [string]$id) {

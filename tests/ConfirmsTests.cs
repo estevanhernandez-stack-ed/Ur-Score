@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.UI;
@@ -48,6 +49,21 @@ public class ConfirmsTests
 
     [Fact]
     public void TheAnswerThatDoesNothingIsTheOneKeyboardLandsOn() => Assert.Equal("Cancel", Confirm.CancelText);
+
+    /// <summary>
+    /// Deleting a board asks in that board's name and says what goes with it. The smoke walk answers this window
+    /// by the acting button's accessible name, so that name is part of the contract, not decoration.
+    /// </summary>
+    [Fact]
+    public void DeletingABoardAsksInThatBoardsNameAndSaysWhatGoesWithIt()
+    {
+        var question = BoardText.DeleteBoardQuestion(new BoardDef("b-00000002", "Rivals copy", []));
+
+        Assert.Equal("Delete board", question.Title);
+        Assert.Equal("Delete the Rivals copy board? Its panels go with it. Your score book isn't touched.", question.Question);
+        Assert.Equal("Delete", question.DoText);
+        Assert.Equal("Delete the Rivals copy board", question.DoName);
+    }
 
     [Fact]
     public void OneClanPastTheLimitAsksAndSaysWhatAddingItCosts()
@@ -125,6 +141,7 @@ public class ConfirmsTests
         [
             RecipesModel.RemoveQuestion(Clan),
             RecipesModel.RemoveQuestion(Profile),
+            BoardText.DeleteBoardQuestion(new BoardDef("b-00000002", "Rivals copy", [])),
             ClansModel.AddQuestion(five, change, Clan, Installed(Clan), accountCount: 2, "Clan6")!,
         ];
 

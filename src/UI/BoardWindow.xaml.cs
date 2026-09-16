@@ -407,14 +407,8 @@ public partial class BoardWindow : Window
         // The item is disabled for the last board and while editing; this only catches a press already on its way.
         if (!ButtonStates().DeleteBoard) return;
 
-        // The one stock box left on the board, held back on purpose (backlog V3-S.10, still open for this).
-        // tools/smoke/walk-board-editing.ps1 step 9 confirms this delete through Win32: Close-MessageBox posts
-        // BM_CLICK to a control's window handle, which a WPF window has none of. Asking this through ConfirmWindow
-        // needs that walk changed in the same commit. MessageBoxFenceTests holds it by name so no new one can join it.
-        var answer = MessageBox.Show(this,
-            $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",
-            "Ur Score", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
-        if (answer != MessageBoxResult.OK) return;
+        // Asked in Ur Score's own window, in the theme, never a stock Windows box (owner rule, backlog V3-S.10).
+        if (!ConfirmWindow.Ask(this, BoardText.DeleteBoardQuestion(board))) return;
 
         var boards = _services.Boards;
         var remaining = BoardEdits.Delete(boards, board.Id);

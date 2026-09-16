@@ -69,9 +69,8 @@ try {
 
     # 7. A removed clan's panel says so; Choose another fixes it (spec 9.4).
     $setup = Open-SetupPage 'Clans'
+    # Removing a clan has never asked, so nothing opens here; the wait for a box that never came is gone.
     Invoke-Element (Get-Button $setup "Remove $Alt")
-    $box = Wait-UrWindow '^Ur Score$' 3
-    if ($box) { Close-MessageBox $box }
     Start-Sleep -Seconds 1
     Close-UrWindow (Get-SetupWindow)
     $altPanel = Find-ByAutomationId (Get-BoardWindow) 'StandingPanel2'
@@ -108,12 +107,15 @@ try {
     Invoke-TabMenu (Get-BoardWindow) 'DuplicateBoardItem' | Out-Null
     Start-Sleep -Seconds 1
     Check '9b Duplicate adds the copy and selects it' ((Get-SelectedTabName (Get-BoardWindow)) -eq 'Rivals copy') ((Get-TabNames (Get-BoardWindow)) -join ', ')
+    # Delete asks in Ur Score's own themed window (backlog V3-S.10), naming the board and what goes with it.
     Invoke-TabMenu (Get-BoardWindow) 'DeleteBoardItem' | Out-Null
-    $box = Wait-UrWindow '^Ur Score$' 10
-    if ($box) { Close-MessageBox $box }
+    $confirm = Wait-UrConfirm '^Delete board$' 10
+    $asked = Get-UrConfirmText $confirm
+    Check "9c Delete asks first, in Ur Score's own window" ($asked -eq "Delete the Rivals copy board? Its panels go with it. Your score book isn't touched.") $asked
+    if ($confirm) { Invoke-UrConfirm $confirm 'Delete the Rivals copy board' }
     Start-Sleep -Seconds 1
     $names = @(Get-TabNames (Get-BoardWindow))
-    Check '9c Delete removes it' ($names.Count -eq 2 -and $names -notcontains 'Rivals copy') ($names -join ', ')
+    Check '9d ...and the board goes' ($names.Count -eq 2 -and $names -notcontains 'Rivals copy') ($names -join ', ')
 
     # 10. A restart keeps it all.
     Stop-UrScoreFromBoard
