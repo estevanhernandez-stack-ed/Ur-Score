@@ -6,10 +6,10 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 149** (44 you'd notice, 105 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.2 to V3-S.10)
-- **FIXED: 47**
-- **GONE: 6**
-- Total: 202 distinct items (duplicates merged; every source is named on the line)
+- **OPEN: 148** (44 you'd notice, 104 code, tests, performance or docs only), including 9 found in the v0.3.0 smoke and the owner's first look (V3-S.2 to V3-S.10)
+- **FIXED: 49**
+- **GONE: 7**
+- Total: 204 distinct items (duplicates merged; every source is named on the line)
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
 - **0.3.2 (the Alerts page and avatars), added 2026-09-15:** 53 more distinct items in their own section at the end — **32 OPEN, 20 FIXED, 1 GONE** — from the nine reviews of `feat/alerts-card`. They are held apart from the counts and the two summary lists above because that branch hasn't merged; fold them in when it does.
 
@@ -170,7 +170,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-13.6 **OPEN** — you'd notice: Race says "This panel's clan was removed." when the recipe simply has no summed total, silently drops removed clans, and doesn't enforce 2 to 5 — src/Board/PanelModels.cs:187-191 — T13 review
 - S1-13.7 **OPEN** — you'd notice: Profile stat quietly falls back to another source when its own was removed, and its row note says "can't read" instead of the real reason — src/Board/PanelModels.cs:616, 639 — T13 review
 - S1-13.8 **OPEN** — you'd notice: an Account card whose chosen account has no reading says "No reading of your accounts yet." — src/Board/PanelModels.cs:389 — T13 review
-- S1-13.9 **OPEN** — code tidiness: Past periods regroups finals that the reader already grouped — src/Board/PanelModels.cs:452-457 — T13 review
+- S1-13.9 **FIXED** — code tidiness: Past periods regrouped finals the reader had already grouped; the regroup is gone and the panel now orders the reader's entries itself — src/Board/PanelModels.cs (`PastPeriods`) — T13 review, fixed 2026-09-16
 - S1-13.10 **OPEN** — code tidiness: your account-id set is rebuilt on every access — src/Board/PanelModels.cs:47 — T13 review
 - S1-13.11 **OPEN** — you'd notice: a chart whose values are all equal draws a flat line at the bottom on a made-up axis; no tests for equal or negative values — src/Board/ChartGeometry.cs:40 — T13 review
 - S1-13.12 **OPEN** — test gap: panel tests compute expected values with the same calls the code makes, and the `withGap` case actually asserts no gap — tests/PanelModelsTests.cs:67-73 — T13 review
@@ -346,6 +346,9 @@ v0.3.0 installed from the GitHub release into RoRoRo 1.28 (Store) and walked: al
 - V3-S.8 **OPEN** — you'd notice: Rename…, Duplicate and Delete… for a board exist only on the tab's right-click menu (or Shift+F10); nothing on screen says they're there — src/UI/BoardWindow.xaml:76-83 — owner's first look, 2026-09-15
 - V3-S.9 **OPEN** — you'd notice: editing a board is clumsy. Panels flow in reading order on a 12-column grid (R6), so resizing one reflows everything after it; there's no free placement, no drop marker while dragging (R9), and moving and sizing are separate small steps (Move earlier/later, a size menu, a Tall tick). Owner's goal (2026-09-15): a snap grid, where you drag a panel anywhere, drag a corner to resize, the other panels stay put, and a live outline shows where it lands. Its own spec and plan after the 2026-09-19 clan battle — src/Board/BoardLayout.cs, src/UI/BoardWindow.Editing.cs, docs/plans/2026-09-14-score-book-stage-2.md R5-R9 — owner's first look, 2026-09-15
 - V3-S.10 **OPEN** — you'd notice (owner rule, 2026-09-15: every popup and toast is themed): seven stock `MessageBox.Show` calls — BoardWindow.xaml.cs:376 (Delete board) and :420 (a failed board save), ImportFlow.cs:120 and :137, RecipesPage.xaml.cs:58, ClansPage.xaml.cs:288-289 (add a 6th clan; S1-11.4) — and the default-styled ToolTips on PanelFrame.xaml:8 ("Drag to move") and PanelPopOutWindow.xaml:19 ("Return to the board"). All eight Ur Score windows already follow the theme and Ur Score has no toasts; the recipe file picker (ImportFlow.cs:26) is Windows' own dialog and follows the Windows theme, which Ur Score can't restyle — owner's first look, 2026-09-15
+
+- V3-S.11 **FIXED** — you'd notice: in Past battles, Total and Your best sat flush against each other, so a row read as one number (`32 32 · estehernandez` as 3232), and the account name lost characters early on a narrow panel. Every column past the first now opens with a 12 px gutter; the two number columns take what they need (64 px for an ordinal, 76 px for an abbreviated total) and the two columns that carry names share the rest, Your best on the larger share — src/UI/Panels/PastPeriodsPanel.xaml — owner's look at the backfilled record, 2026-09-16
+- V3-S.12 **GONE** — Past battles was reported as listing the record in the source's own order instead of newest first. It doesn't: the rows were already newest first, and reversing them would have been the defect. Checked against the live record (23 finished battles, `HalloweenBattle` first to `NinjaBattle2026` last), that source's published battle schedule (the two agree key for key, oldest first), and the reported screen order (Ninja 08-01, Lunar 07-04, Soccer 06-20, Backrooms 06-06, Angel 05-09 — strictly descending). What was true: nothing said so. The order was inherited from the reader through two stable sorts in two files while the panel's own line read as "sort by T", which a backfill ties across a whole record. The panel now orders explicitly by the two signals a final has (when the book learned it, then where the record keeps it) and two tests hold it — src/Board/PanelModels.cs, src/Book/ScoreBookReader.cs (`FinalEntry.Kept`), tests/PanelModelsTests.cs — owner's look at the backfilled record, 2026-09-16
 
 Owner actions noted in the smoke, not Ur Score defects:
 - RoRoRo has no alert rules file yet ("nothing can alert until a rule is added"): add a rule for `clan.battle.points` in RoRoRo before the battle.

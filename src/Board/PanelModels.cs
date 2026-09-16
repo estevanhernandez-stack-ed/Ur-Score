@@ -557,22 +557,26 @@ public static class PanelModels
         var placeId = PlaceId(recipe);
         var totalId = TotalId(recipe);
 
+        // Newest first, said out loud rather than inherited from whatever order the reader happens to return.
+        // Two signals, and only two. T is when the book learned a period, so it separates cycles: a period
+        // written later finished later, because a record only ever grows at its end. It cannot separate a
+        // backfill, where one cycle writes the whole record and every entry carries the same T. There, Kept
+        // does: the source lists its finished periods oldest first, so the last one it handed over is the most
+        // recent (verified 2026-09-16 against the live record for the user's own group and that source's
+        // published schedule, which agree key for key). No final carries a date of its own — the record gives
+        // none — so no row is placed as though we knew when it ran. The reader already returns one entry per
+        // period, so there is nothing to regroup here (backlog S1-13.9).
         var rows = reader.Finals(recipe.Slug, source.InputsKey)
-            .GroupBy(f => f.Period, StringComparer.Ordinal)
-            .Select(g => (
-                Period: g.Key,
-                T: g.Max(f => f.T),
-                Headline: g.First().Headline,
-                Accounts: g.SelectMany(f => f.Accounts).GroupBy(kv => kv.Key).ToDictionary(x => x.Key, x => x.First().Value)))
-            .OrderByDescending(g => g.T)
-            .Select(g =>
+            .OrderByDescending(f => f.T)
+            .ThenByDescending(f => f.Kept)
+            .Select(f =>
             {
                 string best = Dash;
                 if (settings.Stat is { } stat)
                 {
                     double? top = null;
                     long holder = 0;
-                    foreach (var (userId, account) in g.Accounts)
+                    foreach (var (userId, account) in f.Accounts)
                     {
                         if (!account.V.TryGetValue(stat, out var v) || (top is { } t && v <= t)) continue;
                         top = v;
@@ -583,9 +587,9 @@ public static class PanelModels
                 }
 
                 return new PastRow(
-                    g.Period,
-                    placeId is not null && g.Headline.TryGetValue(placeId, out var place) ? PanelText.Ordinal((int)place) : Dash,
-                    totalId is not null && g.Headline.TryGetValue(totalId, out var total) ? StatText.Abbrev(total) : Dash,
+                    f.Period,
+                    placeId is not null && f.Headline.TryGetValue(placeId, out var place) ? PanelText.Ordinal((int)place) : Dash,
+                    totalId is not null && f.Headline.TryGetValue(totalId, out var total) ? StatText.Abbrev(total) : Dash,
                     best);
             })
             .ToList();

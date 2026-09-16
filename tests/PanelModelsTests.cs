@@ -498,6 +498,48 @@ public class PanelModelsTests
         }, model.Rows.ToArray());
     }
 
+    [Fact]
+    public void OneBackfillsFinalsShareATimestampSoTheRecordsOwnOrderPutsTheNewestOnTop()
+    {
+        // A backfill writes a whole record in one cycle, so every final carries the same T and T orders nothing.
+        // What does: the source lists its finished periods oldest first, so the last one it handed over is the
+        // most recent, and the panel reads the record back the other way up.
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var t = Now.AddHours(-1);
+        var reader = Reader(
+            Final(main, t, "Halloween", Headline(1_000), "value", (101, 100)),
+            Final(main, t, "Christmas2024", Headline(2_000), "value", (101, 200)),
+            Final(main, t, "SpringBattle", Headline(3_000), "value", (101, 300)),
+            Final(main, t, "SummerBattle", Headline(4_000), "value", (101, 400)));
+        var live = Live([main], [Installed(Clan, "value")], Snaps());
+
+        var model = PanelModels.PastPeriods(live, reader, new PanelSettings(Clan.Slug, SourceId: main.Id, Stat: "value"));
+
+        Assert.Equal(
+            new[] { "SummerBattle", "SpringBattle", "Christmas2024", "Halloween" },
+            model.Rows.Select(r => r.Period).ToArray());
+    }
+
+    [Fact]
+    public void APeriodTheBookLearnedInALaterCycleSitsAboveAWholeBackfilledRecord()
+    {
+        // The other signal: a record only grows at its end, so a final written in a later cycle finished later
+        // than everything the backfill already held, wherever the backfill's own rows landed.
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var backfilled = Now.AddDays(-4);
+        var reader = Reader(
+            Final(main, backfilled, "Halloween", Headline(1_000), "value", (101, 100)),
+            Final(main, backfilled, "SpringBattle", Headline(2_000), "value", (101, 200)),
+            Final(main, Now.AddHours(-2), "AutumnBattle", Headline(3_000), "value", (101, 300)));
+        var live = Live([main], [Installed(Clan, "value")], Snaps());
+
+        var model = PanelModels.PastPeriods(live, reader, new PanelSettings(Clan.Slug, SourceId: main.Id, Stat: "value"));
+
+        Assert.Equal(
+            new[] { "AutumnBattle", "SpringBattle", "Halloween" },
+            model.Rows.Select(r => r.Period).ToArray());
+    }
+
     // ---- Records ----
 
     [Fact]

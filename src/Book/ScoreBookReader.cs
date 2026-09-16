@@ -5,7 +5,16 @@ namespace Labs626.UrScore.Book;
 
 public sealed record SeriesPoint(DateTimeOffset T, double Value, DateTimeOffset? AsOf, bool Stale, int Off);
 
-public sealed record FinalEntry(string Period, DateTimeOffset T, IReadOnlyDictionary<string, double> Headline, IReadOnlyDictionary<long, BookAccount> Accounts);
+/// <summary>
+/// One finished period as the book holds it. <paramref name="T"/> is when the book first learned it, not when
+/// the period ran: a backfill writes a whole record in one cycle, so every entry from that cycle shares one T.
+/// <paramref name="Kept"/> is where the line sits in the book, which is where the period sits in the record the
+/// source keeps — a source lists its finished periods oldest first, so a larger <paramref name="Kept"/> is the
+/// more recent period. It is the only ordering signal a final has: the record carries no dates and
+/// <see cref="LineBuilder.Final"/> writes the period's name alone.
+/// </summary>
+public sealed record FinalEntry(
+    string Period, DateTimeOffset T, int Kept, IReadOnlyDictionary<string, double> Headline, IReadOnlyDictionary<long, BookAccount> Accounts);
 
 /// <summary>
 /// The book as panels read it (score book spec §9.1). Keeps reading lines from the last
@@ -97,7 +106,7 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
                     }
                 }
 
-                return (Entry: new FinalEntry(g.Key, g.Min(x => x.line.T), first.line.Headline, accounts), first.order);
+                return (Entry: new FinalEntry(g.Key, g.Min(x => x.line.T), first.order, first.line.Headline, accounts), first.order);
             })
             .OrderByDescending(x => x.Entry.T)
             .ThenByDescending(x => x.order)
