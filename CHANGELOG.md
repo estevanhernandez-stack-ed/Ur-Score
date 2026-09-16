@@ -3,6 +3,51 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.3.2 - 2026-09-15
+
+### Added
+
+- **An Alerts page that says what will alert you.** Every stat you send gets a card on
+  Setup > Alerts, and its alerts read as sentences you fill in: stops climbing (fewer than a number
+  a minute, over 10, 15 or 30 minutes) and crosses a number (above or below). + Add an alert,
+  Change and Remove, with what happened said on the card itself. Rules you or another plugin wrote
+  are listed and never changed. A standing line names the one switch to turn on in RoRoRo. Rules
+  Ur Score writes carry a `label`; RoRoRo 1.28 ignores it, and RoRoRo 1.29 uses it to word the
+  alert from the rule that fired.
+- **Your accounts have faces.** Each of your own accounts shows its Roblox avatar beside its name -
+  in the accounts table, My accounts, Promotion check, the account card and Setup > Your accounts.
+  Pictures load after the numbers and never hold a row up. Other players are never looked up: the
+  leaderboard and the top of the period show names only.
+- **Start reading when the window opens.** Once you are set up, tick **Start reading as soon as
+  Ur Score opens** on Setup > Recipes and you no longer have to press Start. Off until you turn it
+  on, and it takes effect the next time you open Ur Score.
+- **The window opens on the last numbers it saw.** Rather than empty panels, Ur Score draws the
+  last good reading from your score book, marks those panels `remembered`, and says in the state
+  line how old they are. A remembered number is never sent to RoRoRo, never written back to the
+  book as a new reading, and never given a rank it did not earn. A read that fails leaves them
+  alone - it replaced nothing.
+- **The reason an account has no numbers, beside the numbers it has none of.** When a recipe cannot
+  read an account, its own explanation now appears on My accounts and Setup > Your accounts, where
+  the dashes are, instead of only in places you might not be looking.
+
+### Changed
+
+- No stock message box and no JSON on the Alerts page. A failed write is said on the card and
+  changes nothing. RoRoRo's rules file is backed up and written through a temporary file on every
+  change, and every rule Ur Score does not own is kept exactly as it was found.
+- The Stats table's rule line counts a stat's alerts.
+- The board credits each source once. Recipes for one service share an opening sentence, and the
+  footer used to repeat it once per recipe.
+- The README describes the window that ships. It had described the build before recipes - including
+  telling you to set your clan by editing a file, when Setup > Clans does it - and two of its
+  claims about what leaves your machine were wrong: Ur Score does hold a recipe's key, in a
+  DPAPI-encrypted store, and a per-account recipe does send your own Roblox user ids to that
+  recipe's host.
+
+### Removed
+
+- `written-rules.json` is no longer written.
+
 ## Unreleased
 
 ### Added
