@@ -77,15 +77,9 @@ public class AvatarFenceTests
     public void ThePictureSlotIsLaidOutWhetherOrNotAPictureIsThere()
     {
         var app = File.ReadAllText(Path.Combine(RepoRoot(), "src", "App.xaml"));
-        var opens = app.IndexOf("<Style x:Key=\"AccountAvatar\"", StringComparison.Ordinal);
-        Assert.True(opens >= 0, "App.xaml no longer holds the shared AccountAvatar style.");
+        var style = Between(app, "<Style x:Key=\"AccountAvatar\"", "</Style>", "the shared AccountAvatar style in App.xaml");
 
-        var closes = app.IndexOf("</Style>", opens, StringComparison.Ordinal);
-        Assert.True(closes > opens, "The AccountAvatar style is not closed.");
-        var style = app[opens..closes];
-
-        Assert.Contains("Value=\"Hidden\"", style, StringComparison.Ordinal);
-        Assert.DoesNotContain("Collapsed", style, StringComparison.Ordinal);
+        HidesRatherThanCollapses(style, "the avatar slot");
     }
 
     /// <summary>
@@ -98,8 +92,37 @@ public class AvatarFenceTests
     {
         var text = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", "MyAccountsPanel.xaml"));
 
-        Assert.Contains("<DataTrigger Binding=\"{Binding Sent}\" Value=\"False\">", text, StringComparison.Ordinal);
+        // The converter that collapsed the dot is gone...
         Assert.DoesNotContain("{Binding Sent, Converter={StaticResource BoolToVisible}}", text, StringComparison.Ordinal);
+
+        // ...and the trigger that replaced it hides rather than collapses. The value, not just the trigger's shape:
+        // Collapsed inside this very setter is the defect the test exists to catch.
+        var trigger = Between(text, "<DataTrigger Binding=\"{Binding Sent}\" Value=\"False\">", "</DataTrigger>",
+            "the sent dot's Sent trigger in MyAccountsPanel.xaml");
+
+        HidesRatherThanCollapses(trigger, "the sent dot");
+    }
+
+    /// <summary>The one thing A26 asks of anything drawn before a name: it keeps its space when it isn't shown.</summary>
+    private static void HidesRatherThanCollapses(string markup, string what)
+    {
+        Assert.True(markup.Contains("Property=\"Visibility\"", StringComparison.Ordinal),
+            $"Nothing sets Visibility on {what}, so this test is no longer reading what it was written to read.");
+        Assert.True(markup.Contains("Value=\"Hidden\"", StringComparison.Ordinal),
+            $"{what} is not Hidden. It must keep its space when it isn't shown, or a row moves under the reader (A26).");
+        Assert.True(!markup.Contains("Collapsed", StringComparison.Ordinal),
+            $"{what} is Collapsed. That reflows the name column the moment it appears or goes (A26); use Hidden.");
+    }
+
+    /// <summary>The markup from <paramref name="opens"/> up to the next <paramref name="closes"/> after it.</summary>
+    private static string Between(string text, string opens, string closes, string what)
+    {
+        var start = text.IndexOf(opens, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Could not find {what}, so this fence is looking in the wrong place.");
+
+        var end = text.IndexOf(closes, start, StringComparison.Ordinal);
+        Assert.True(end > start, $"{what} is never closed.");
+        return text[start..end];
     }
 
     [Fact]
