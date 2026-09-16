@@ -333,6 +333,27 @@ public partial class BoardWindow : Window
     /// <summary>The menu opens on what is true now, e.g. a board deleted since the last redraw.</summary>
     private void OnTabMenuOpened(object sender, RoutedEventArgs e) => ApplyButtons();
 
+    /// <summary>
+    /// ⋯ beside the tabs (backlog V3-S.8: the owner saw no way to rename or delete a board). It opens the tab's own
+    /// menu, not a copy of it, so the two ways in always offer the same three commands.
+    /// </summary>
+    private void OnBoardMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (!ButtonStates().BoardMenu) return;
+
+        BoardMenu.AimAt(TabMenu, BoardMenuButton);
+        TabMenu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// The menu goes back to the mouse for the next right-click. Closed with nothing chosen, focus goes back to ⋯,
+    /// which is where it came from; a command that ran has already put it on the board's tab.
+    /// </summary>
+    private void OnTabMenuClosed(object sender, RoutedEventArgs e)
+    {
+        if (BoardMenu.Release(TabMenu, BoardMenuButton)) BoardMenuButton.Focus();
+    }
+
     // Each handler that opens a dialog reads the boards again once it closes, and edits that list: something
     // else (a pop-out coming back, later) may have changed them while it was open. While editing they are all
     // disabled (R8); each guard only catches a press already on its way.
@@ -562,6 +583,7 @@ public partial class BoardWindow : Window
         RenameBoardItem.IsEnabled = states.RenameBoard;
         DuplicateBoardItem.IsEnabled = states.DuplicateBoard;
         DeleteBoardItem.IsEnabled = states.DeleteBoard;
+        BoardMenuButton.IsEnabled = states.BoardMenu;
         EditBoardButton.IsEnabled = states.EditBoard;
         AddPanelButton.IsEnabled = states.AddPanel;
         DoneButton.IsEnabled = states.Done;

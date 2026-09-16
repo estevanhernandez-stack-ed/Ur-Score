@@ -10,6 +10,7 @@ public readonly record struct BoardButtonStates(
     bool AddBoard = true,
     bool RenameBoard = true,
     bool DuplicateBoard = true,
+    bool BoardMenu = true,
     bool EditBoard = true,
     bool AddPanel = false,
     bool Done = false);
@@ -33,6 +34,10 @@ public static class BoardButtons
     /// Edit mode is on (R8): one draft at a time, so the tabs, + Board and the tab menu wait for Done, and Edit board
     /// gives way to + Add panel and Done. Reading, Stop and the empty state don't wait.
     /// </param>
+    /// <remarks>
+    /// <c>BoardMenu</c> is ⋯ beside the tabs, which opens the tab's own menu (backlog V3-S.8). It takes a press for
+    /// exactly as long as one of the three commands on that menu does, so it never opens on nothing.
+    /// </remarks>
     public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing, int boards = 1, bool editing = false) => new(
         StartStop: loaded && !starting && (running || !testing),
         TestNow: loaded && !starting && !testing,
@@ -42,6 +47,7 @@ public static class BoardButtons
         AddBoard: !editing,
         RenameBoard: !editing,
         DuplicateBoard: !editing,
+        BoardMenu: !editing,
         EditBoard: !editing,
         AddPanel: editing,
         Done: editing);

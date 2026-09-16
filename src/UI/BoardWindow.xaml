@@ -90,7 +90,8 @@
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
                     <ListBox.ContextMenu>
-                        <ContextMenu x:Name="TabMenu" Opened="OnTabMenuOpened" Background="{DynamicResource RowBgBrush}"
+                        <ContextMenu x:Name="TabMenu" Opened="OnTabMenuOpened" Closed="OnTabMenuClosed"
+                                     Background="{DynamicResource RowBgBrush}"
                                      Foreground="{DynamicResource WhiteBrush}" BorderBrush="{DynamicResource EdgeBrush}">
                             <MenuItem x:Name="RenameBoardItem" Header="Rename…" Click="OnRenameBoardClick" />
                             <MenuItem x:Name="DuplicateBoardItem" Header="Duplicate" Click="OnDuplicateBoardClick" />
@@ -98,6 +99,13 @@
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
+                <!-- The board on screen: ⋯ opens the tab's own menu (Rename…, Duplicate, Delete…), the same one the
+                     right-click opens, so the commands are on screen without taking the right-click away. Same ⋯ the
+                     panels carry, one step up: it acts on the board, so it sits with its tabs. -->
+                <Button x:Name="BoardMenuButton" DockPanel.Dock="Left" Content="⋯" Style="{StaticResource FlatButton}" Padding="6,2"
+                        HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,10,0"
+                        Foreground="{DynamicResource MutedTextBrush}" Click="OnBoardMenuClick"
+                        AutomationProperties.Name="Rename, duplicate or delete this board" />
                 <Button x:Name="AddBoardButton" DockPanel.Dock="Left" Content="+ Board" Style="{StaticResource AddBoardButtonStyle}"
                         HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,14,0" Click="OnAddBoardClick"
                         AutomationProperties.Name="Add a board" />

@@ -95,6 +95,33 @@ public class BoardButtonsTests
         Assert.True(states.RenameBoard);
         Assert.True(states.DuplicateBoard);
         Assert.True(states.DeleteBoard);
+        Assert.True(states.BoardMenu);
+    }
+
+    [Fact]
+    public void TheBoardMenuOpensOnTheOnlyBoardThereIs()
+    {
+        // The owner saw no way to rename or delete a board (backlog V3-S.8), on a board that was the starter and
+        // the only one. Delete is off there, Rename and Duplicate aren't, so ⋯ has to open or they stay as hidden.
+        var one = BoardButtons.For(loaded: true, running: false, starting: false, testing: false, importing: false, boards: 1);
+
+        Assert.True(one.BoardMenu);
+        Assert.True(one.RenameBoard);
+        Assert.True(one.DuplicateBoard);
+        Assert.False(one.DeleteBoard);
+    }
+
+    /// <summary>⋯ opens the tab's own menu, so it takes a press for exactly as long as something on that menu does.</summary>
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    public void TheBoardMenuTakesAPressExactlyWhenOneOfItsCommandsDoes(int boards, bool editing)
+    {
+        var states = BoardButtons.For(loaded: true, running: false, starting: false, testing: false, importing: false, boards, editing);
+
+        Assert.Equal(states.RenameBoard || states.DuplicateBoard || states.DeleteBoard, states.BoardMenu);
     }
 
     [Fact]
@@ -111,6 +138,7 @@ public class BoardButtonsTests
         Assert.False(states.RenameBoard);
         Assert.False(states.DuplicateBoard);
         Assert.False(states.DeleteBoard);
+        Assert.False(states.BoardMenu);
     }
 
     [Fact]
