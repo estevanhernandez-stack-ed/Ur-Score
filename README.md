@@ -1,29 +1,18 @@
-> **Being rebuilt around recipes (2026-09-13).** Ur Score no longer knows any one game. It reads
-> whatever a recipe file describes, and Pet Simulator 99 is one recipe among any number. Everything
-> below this banner describes the build before recipes — its setup, what leaves your machine, the
-> settings reference and the build notes — and is rewritten when the new window lands. Design:
-> [`docs/2026-09-13-recipes-design.md`](docs/2026-09-13-recipes-design.md).
-
 # RoRoRo Ur Score
 
-> A [RoRoRo](https://github.com/estevanhernandez-stack-ed/ROROROblox) plugin that watches Pet
-> Simulator 99 clan battle scores, shows you the clan's leaderboard whether or not you ever set up
-> an alert, and hands RoRoRo one number per account so RoRoRo can decide whether that number is
-> worth ringing your phone.
+> A [RoRoRo](https://github.com/estevanhernandez-stack-ed/ROROROblox) plugin that watches the
+> numbers a recipe describes, shows you the board whether or not you ever set up an alert, and
+> hands RoRoRo one number per account so RoRoRo can decide whether that number is worth ringing
+> your phone. Ur Score knows no game of its own: it reads whatever a recipe file describes, and
+> Pet Simulator 99 is one recipe among any number.
 
-**You cannot install this yet.** Two things have to happen first, and neither is in your control
-or this repo's:
+**You can install this.** The latest release is **v0.3.1**, on the
+[releases page](https://github.com/estevanhernandez-stack-ed/Ur-Score/releases).
 
-1. **RoRoRo needs to ship v1.28.0.0 or later.** The current released RoRoRo is **v1.27.0.0**,
-   which predates the `ReportMetric` call this plugin depends on. This plugin's manifest declares
-   `minHostVersion: 1.28.0.0` on purpose — installing it against 1.27 or older gets refused with
-   "This plugin requires RoRoRo 1.28.0.0 or newer. You're running 1.27.0.0. Update RoRoRo and try
-   again." That is correct behavior, not a bug to work around.
-2. **A packaged release has to exist.** As of this writing, none does — see *Build from source*
-   below for what that build needs and where it currently stops.
-
-If you found this repo before either of those landed, you're early. Nothing below is wrong, it
-just isn't runnable yet.
+You need **RoRoRo v1.28.0.0 or newer** — that is the release that added the `ReportMetric` call
+this plugin depends on, and the manifest declares `minHostVersion: 1.28.0.0` on purpose. Against
+anything older the install is refused with "This plugin requires RoRoRo 1.28.0.0 or newer." That
+is correct behaviour, not a bug to work around.
 
 ## What it does
 
@@ -218,9 +207,9 @@ dotnet test tests/Ur-Score.Tests.csproj
 pwsh ./build/build-plugin.ps1
 ```
 
-The test suite needs neither of the two prerequisites above beyond the contract package (it
-doesn't touch a live RoRoRo, a live clan API, or the icon) and is expected to pass in full. The
-build script currently stops at the icon check — that's correct, not a bug, until the icon lands.
+The test suite needs nothing beyond the contract package — it doesn't touch a live RoRoRo, a live
+clan API, or the icon — and is expected to pass in full. The build script's icon check passes:
+`icon.png` is in the repo root.
 
 ## License
 

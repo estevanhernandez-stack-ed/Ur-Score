@@ -2608,6 +2608,1211 @@ By hand, on the owner's own data (A20, look only): open Setup › Alerts on the 
 
 ---
 
+> **Added 2026-09-15, after the plan was written.** The owner approved one more piece for 0.3.2 the same day: a Roblox
+> avatar headshot beside each of your own accounts. It is a late ask, so it sits here, below the release run, rather than
+> renumbering the tasks above — but it is built **before** the release, not after. **Execution order: Task 4 → Task 6 →
+> Task 5 (the release run), release last.** The file table and the interface contract near the top of this plan cover
+> Tasks 1 to 4; Task 6 lists its own files and names below. It changes nothing in `tools/smoke`.
+
+### Task 6: Avatars beside your own accounts
+
+**Files:**
+- Modify: `src/Source/IconClient.cs`, `src/Board/PanelModels.cs`, `src/Board/AccountsTableModel.cs`, `src/Composition/AppServices.cs`, `src/Composition/ISetupServices.cs`, `src/UI/Setup/AccountsModel.cs`, `src/UI/Setup/AccountsPage.xaml`, `src/UI/Setup/AccountsPage.xaml.cs`, `src/App.xaml`, `src/UI/Panels/AccountsTablePanel.xaml`, `src/UI/Panels/MyAccountsPanel.xaml`, `src/UI/Panels/PromotionCheckPanel.xaml`, `src/UI/Panels/AccountCardPanel.xaml`, `README.md`
+- Create: `src/Source/AvatarBook.cs`, `src/UI/Controls/AvatarFill.cs`
+- Test: `tests/AvatarBookTests.cs` (new), `tests/AvatarFenceTests.cs` (new), `tests/IconClientTests.cs` (added to), `tests/PanelModelsTests.cs` (added to), `tests/AccountsModelTests.cs` (added to)
+- Never touched: anything under `tools/smoke` (another agent owns those this cycle; A29 says why nothing there needs to change)
+
+**Interfaces:**
+- Consumes: `IconClient.ThumbnailsHost/IsPictureHost/CacheFor/MaxBytes/DefaultCacheDirectory`, its private `CachePath`, `IsFresh`, `DownloadAsync` and `Get`; `JsonNav.TryGet/TryUserId`; `UrScoreIdentity.UserAgent`; `HttpRecipeTransport.CreateHandler()`; `LiveBoard.UserIdsOf`, `HostAccount`; `BoardFixtures` (tests).
+- Produces:
+
+```csharp
+// ---- src/Source/IconClient.cs ----
+public sealed class IconClient : IAvatarSource                                     // the class gains the interface
+{
+    public const string HeadshotSize = "48x48";
+    public const int HeadshotBatchLimit = 100;
+    public const string AvatarPrefix = "avatar-";
+    public Task<IReadOnlyDictionary<long, string>> HeadshotsAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken);
+}
+
+// ---- src/Source/AvatarBook.cs (new) ----
+public interface IAvatarSource
+{
+    Task<IReadOnlyDictionary<long, string>> HeadshotsAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken);
+}
+public sealed class AvatarBook(IAvatarSource source)
+{
+    public IReadOnlyDictionary<long, string> Files { get; }                        // a copy, safe to hand to a model
+    public string? FileFor(long userId);
+    public Task<bool> AskAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken);   // true when the map changed
+    public void Keep(IReadOnlySet<long> yours);
+}
+
+// ---- src/Board/PanelModels.cs, src/Board/AccountsTableModel.cs ----
+// LiveBoard gains a trailing  IReadOnlyDictionary<long, string>? Avatars = null  and:
+public string? AvatarFor(long userId);                                             // null for any id that isn't yours
+// Each row gains a trailing  string? Avatar = null :
+//   AccountRow (board table), AccountLineModel, PromotionRow, AccountCardModel, AccountRow (Setup, src/UI/Setup/AccountsModel.cs)
+
+// ---- src/Composition ----
+// ISetupServices gains:  string? AvatarFileFor(long userId);
+// AccountsModel.Rows gains a trailing  Func<long, string?>? avatar = null
+
+// ---- src/UI/Controls/AvatarFill.cs (new) ----
+public sealed class AvatarFill : IValueConverter                                    // a cached file path -> a frozen round ImageBrush, or null
+```
+
+**Rulings made while planning**
+
+Recorded so a reviewer doesn't read them as drift. Each names what was decided, why, and the cost if it is wrong. They
+continue the plan's A-numbering.
+
+- **A21. The picture path lives in `IconClient`; the session's map lives in `AvatarBook`; tests get a fake.** The batch
+  headshot request goes in `IconClient.HeadshotsAsync`, beside the recipe-icon path it already owns, and it implements a
+  new `IAvatarSource`. `AvatarBook` holds what has been asked for and what came back, takes an `IAvatarSource`, and is
+  what the tests exercise. `AppServices` builds one book from its one `IconClient`. *Why:* `NoHostnameFenceTests` names
+  exactly two files that may write a hostname; a third file naming `thumbnails.roblox.com` would mean editing the fence,
+  and the avatar fetch is the same host, the same handler, the same User-Agent, the same size cap and the same picture
+  domain check that file already enforces. *Cost if wrong:* `IconClient` does two jobs; they are 40 lines apart and share
+  every guard.
+- **A22. Only your own accounts, checked twice.** `AppServices.AvatarFileFor` answers only for an id in
+  `LiveBoard.UserIdsOf(KnownAccounts)`, and `LiveBoard.AvatarFor` returns null for any id that isn't in `MyUserIds`,
+  whatever the map holds. `TopRow` and `LeaderRow` have no `Avatar` member at all, so the Live leaderboard and Top of the
+  battle cannot draw one even for your own row. `AvatarFenceTests` pins all of it, plus "only `IconClient.cs` names the
+  headshot endpoint" and "only `AppServices.cs` asks the book". *Why:* other players' ids are read off a public
+  leaderboard and dropped; asking Roblox for their pictures would send those ids back out and leave a file per player on
+  this PC. *Cost if wrong:* none known; the two checks are each two lines.
+- **A23. One ask per id per session, in one request, and a new account is asked at the next accounts refresh.**
+  `AvatarBook.AskAsync` asks only for ids it hasn't asked for this session, `IconClient` sends them 100 to a request, and
+  `AppServices` calls it after the book loads and after every `RefreshAccountsAsync` — after the numbers, never before.
+  A user whose picture Roblox says is `Pending`, `Blocked` or anything but `Completed` is no icon this time and is not
+  asked again this session; nor is a failed fetch. An id that stops being yours is forgotten by `Keep`, and is asked for
+  again if RoRoRo lists it later. *Why:* a redraw happens on every read; re-asking on each one would be twenty requests an
+  hour against Roblox for a picture that doesn't move, and that is exactly the reasoning `NameClient` already carries.
+  *Cost if wrong:* an account whose headshot wasn't rendered yet when you started shows no picture until the next start.
+- **A24. The files sit in the icon cache, named `avatar-<userId>.png`, and live seven days.** The same
+  `%LOCALAPPDATA%\626labs.ur-score\icon-cache` folder, the same `IconClient.CacheFor`, the same freshness check on the
+  file's last write time: a file younger than seven days is used with no request; an older one is fetched again at the
+  first ask of the session that wants it. *Why:* one folder to clear, one rule to explain, and no new path to disclose.
+  The prefix keeps them apart from a recipe icon's asset-id name and its `url-…` hash, and a Roblox user id is a public
+  number that is only ever one of the owner's own here. *Cost if wrong:* someone who changes their avatar sees the old
+  headshot for up to a week; deleting the folder fixes it.
+- **A25. 48x48, round, one property name, one style.** The request asks for `size=48x48&format=Png&isCircular=false`;
+  Ur Score does the round crop itself with an `Ellipse` filled by an `ImageBrush`, so the picture is round on every
+  surface even if Roblox's circular option ever changes. Every row model calls the member `Avatar`, so one shared
+  `AccountAvatar` style in `App.xaml` draws all five surfaces and a surface can only change size. *Why:* the design says
+  one look everywhere, and a shared style is the only way a fence-free change stays consistent. *Cost if wrong:* at 200 %
+  display scaling the 40 px account-card header upscales a 48 px picture and looks soft; it is one constant.
+- **A26. The slot is laid out whether or not a picture is there — `Hidden`, never `Collapsed`.** The ellipse takes its
+  space from the first draw, so a picture that arrives late, fails, or never comes does not move a single pixel of the
+  row, and there is never an error line. *Why:* "icons never block" has to mean the numbers you are reading don't jump
+  under your eyes; `Collapsed` would reflow the name column the moment a fetch landed. *Cost if wrong:* someone whose
+  accounts have no pictures at all sees names indented by a constant 28 px (32 px on the card, 32 px on Setup) with
+  nothing in it.
+- **A27. One fetch serves every window.** There is one `IconClient`, one `AvatarBook` and one cache folder in the
+  process. Pop-outs are drawn by `BoardWindow.RenderPanel` from the same `LiveBoard`, and Setup pages read
+  `ISetupServices.AvatarFileFor`, so a popped-out accounts table and Setup › Your accounts show the same files with no
+  second request. *Cost if wrong:* none known; a second process (there is none) would share the files through the cache
+  anyway.
+- **A28. The import screen says nothing new; the README row and a line on Setup › Your accounts are the disclosure.**
+  "YOUR PC WILL CONTACT" lists what *that recipe* makes your PC contact, and `ImportReview` stays per-recipe. Avatars are
+  Ur Score's own feature, like the username lookup, which has never been on that screen either. Instead the README's
+  "What leaves your machine" table gains a row for Roblox's picture service (and its stale "three destinations" and "only
+  outbound calls are the two named above" sentences are corrected), and Setup › Your accounts carries a standing line
+  saying what is sent and that no other player's id ever is. *Why:* putting an Ur Score-wide call in a per-recipe consent
+  list would make every import ask about something the recipe doesn't do. *Cost if wrong:* someone reads the import
+  screen as the complete list of everything Ur Score contacts; a later version can give that screen its own "Ur Score
+  itself" section.
+- **A29. The picture is decoration: no automation id, no accessible name, no smoke-script change.** The row already
+  carries the account's name for UI Automation, and a second "picture of X" would double every row for a screen reader.
+  Nothing in the automation-id table changes, so the walks in `tools/smoke` run unchanged — which matters this cycle,
+  because another agent owns that folder. The picture is proved by eye in the live look (A30's step), not by a walk.
+  *Cost if wrong:* a Narrator user is told nothing about the picture, which is what a decorative image should do.
+- **A30. It ships inside 0.3.2.** Task 5's `CHANGELOG.md` **Added** list gains exactly this line: "Each of your own
+  accounts shows its Roblox avatar beside its name — in the accounts table, My accounts, Promotion check, the account
+  card and Setup › Your accounts. Pictures load after the numbers and never hold a row up. Other players are never
+  looked up: the leaderboard and Top of the battle show names only." Backlog V3-S.6 (the window icon at start) is
+  untouched and stays OPEN. *Cost if wrong:* one line in one release note.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `tests/AvatarBookTests.cs`:
+
+```csharp
+using Labs626.UrScore.Source;
+
+namespace UrScore.Tests;
+
+/// <summary>
+/// The pictures beside your own accounts. These pin the three promises: an id is asked for once a session, only the ids
+/// an ask asked for are kept, and nothing here ever throws — a failure costs the pictures and nothing else.
+/// </summary>
+public class AvatarBookTests
+{
+    private sealed class FakeAvatars : IAvatarSource
+    {
+        public List<long[]> Asks { get; } = [];
+
+        public Func<IReadOnlyCollection<long>, IReadOnlyDictionary<long, string>> Answer { get; set; } =
+            ids => ids.ToDictionary(id => id, id => $@"C:\cache\avatar-{id}.png");
+
+        public Exception? Throws { get; set; }
+
+        public Task<IReadOnlyDictionary<long, string>> HeadshotsAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken)
+        {
+            Asks.Add([.. userIds]);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Throws is { } ex
+                ? Task.FromException<IReadOnlyDictionary<long, string>>(ex)
+                : Task.FromResult(Answer(userIds));
+        }
+    }
+
+    private static string[] Asked(FakeAvatars source) => [.. source.Asks.Select(a => string.Join(",", a))];
+
+    [Fact]
+    public async Task EachOfYourAccountsIsAskedForOnceASession()
+    {
+        var source = new FakeAvatars();
+        var book = new AvatarBook(source);
+
+        Assert.True(await book.AskAsync(new long[] { 101, 201, 101 }, CancellationToken.None));
+        Assert.False(await book.AskAsync(new long[] { 101, 201 }, CancellationToken.None));
+        Assert.True(await book.AskAsync(new long[] { 101, 202 }, CancellationToken.None));
+
+        Assert.Equal(new[] { "101,201", "202" }, Asked(source));
+        Assert.Equal(@"C:\cache\avatar-202.png", book.FileFor(202));
+        Assert.Null(book.FileFor(999));
+    }
+
+    [Fact]
+    public async Task AnIdWithNoRobloxUserIsNeverAskedAbout()
+    {
+        var source = new FakeAvatars();
+
+        Assert.False(await new AvatarBook(source).AskAsync(new long[] { 0 }, CancellationToken.None));
+        Assert.Empty(source.Asks);
+    }
+
+    [Fact]
+    public async Task OnlyTheIdsAnAskAskedForAreKept()
+    {
+        // Roblox only ever answers for the ids sent, so this is inert against the real service. Keeping "asked for" and
+        // "known" the same set is the point: a picture for anyone else must have nowhere to land.
+        var source = new FakeAvatars
+        {
+            Answer = _ => new Dictionary<long, string> { [101] = "mine.png", [999] = "someone-else.png" },
+        };
+        var book = new AvatarBook(source);
+
+        Assert.True(await book.AskAsync(new long[] { 101 }, CancellationToken.None));
+
+        Assert.Equal(new long[] { 101 }, book.Files.Keys.Order().ToArray());
+    }
+
+    [Fact]
+    public async Task APictureThatCouldNotBeFetchedCostsNothingElseAndIsNotRetriedInALoop()
+    {
+        var source = new FakeAvatars { Throws = new InvalidOperationException("no network") };
+        var book = new AvatarBook(source);
+
+        Assert.False(await book.AskAsync(new long[] { 101 }, CancellationToken.None));
+        Assert.Empty(book.Files);
+
+        source.Throws = null;
+        Assert.False(await book.AskAsync(new long[] { 101 }, CancellationToken.None));
+        Assert.Single(source.Asks);
+    }
+
+    [Fact]
+    public async Task AStopYouAskedForLeavesThoseIdsToBeAskedAgain()
+    {
+        var source = new FakeAvatars();
+        var book = new AvatarBook(source);
+        using var stopped = new CancellationTokenSource();
+        await stopped.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => book.AskAsync(new long[] { 101 }, stopped.Token));
+
+        Assert.True(await book.AskAsync(new long[] { 101 }, CancellationToken.None));
+        Assert.Equal(new[] { "101", "101" }, Asked(source));
+    }
+
+    [Fact]
+    public async Task AnAccountThatIsNoLongerYoursIsForgotten()
+    {
+        var source = new FakeAvatars();
+        var book = new AvatarBook(source);
+        await book.AskAsync(new long[] { 101, 201 }, CancellationToken.None);
+
+        book.Keep(new HashSet<long> { 101 });
+
+        Assert.Equal(new long[] { 101 }, book.Files.Keys.Order().ToArray());
+        Assert.True(await book.AskAsync(new long[] { 101, 201 }, CancellationToken.None));
+        Assert.Equal(new[] { "101,201", "201" }, Asked(source));
+    }
+}
+```
+
+Create `tests/AvatarFenceTests.cs`:
+
+```csharp
+using Labs626.UrScore.Board;
+using Labs626.UrScore.Recipes;
+using static UrScore.Tests.BoardFixtures;
+
+namespace UrScore.Tests;
+
+/// <summary>
+/// A picture beside a row is only ever one of YOUR OWN accounts'. Other members' ids are read off a public leaderboard,
+/// compared against your accounts and dropped (README, "What leaves your machine"); asking Roblox for their pictures
+/// would send those ids back out and leave a file of each one on this PC. These stand where a refactor would cross that
+/// line quietly.
+/// </summary>
+public class AvatarFenceTests
+{
+    [Fact]
+    public void OnlyYourOwnAccountsEverHaveAPicture()
+    {
+        var live = Live([], [], new Dictionary<string, RecipeSnapshot>()) with
+        {
+            Avatars = new Dictionary<long, string> { [Main.RobloxUserId] = "mine.png", [999] = "someone-else.png" },
+        };
+
+        Assert.Equal("mine.png", live.AvatarFor(Main.RobloxUserId));
+        Assert.Null(live.AvatarFor(999));
+        Assert.Null(live.AvatarFor(0));
+        Assert.Null(Live([], [], new Dictionary<string, RecipeSnapshot>()).AvatarFor(Main.RobloxUserId));
+    }
+
+    [Fact]
+    public void TheLeaderboardAndTheTopHaveNowhereToPutAPicture()
+    {
+        // Structural, not a convention: these rows have no such member, so no template can bind one.
+        Assert.Null(typeof(LeaderRow).GetProperty("Avatar"));
+        Assert.Null(typeof(TopRow).GetProperty("Avatar"));
+
+        foreach (var file in new[] { "LiveLeaderboardPanel.xaml", "TopPanel.xaml" })
+        {
+            var text = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", file));
+            Assert.DoesNotContain("Avatar", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void ThePictureLookupLivesInOneFileAndIsOnlyEverAskedWithYourOwnAccountIds()
+    {
+        var src = Path.Combine(RepoRoot(), "src");
+        var files = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Select(f => (Relative: Path.GetRelativePath(src, f), Text: File.ReadAllText(f)))
+            .ToList();
+
+        Assert.Equal(
+            new[] { Path.Combine("Source", "AvatarBook.cs"), Path.Combine("Source", "IconClient.cs") },
+            files.Where(f => f.Text.Contains("HeadshotsAsync", StringComparison.Ordinal))
+                .Select(f => f.Relative).Order(StringComparer.Ordinal).ToArray());
+
+        Assert.Equal(
+            new[] { Path.Combine("Source", "IconClient.cs") },
+            files.Where(f => f.Text.Contains("avatar-headshot", StringComparison.Ordinal)).Select(f => f.Relative).ToArray());
+
+        Assert.Equal(
+            new[] { Path.Combine("Composition", "AppServices.cs") },
+            files.Where(f => f.Text.Contains(".AskAsync(", StringComparison.Ordinal)).Select(f => f.Relative).ToArray());
+
+        var app = files.Single(f => string.Equals(f.Relative, Path.Combine("Composition", "AppServices.cs"), StringComparison.Ordinal)).Text;
+        Assert.Contains("LiveBoard.UserIdsOf(KnownAccounts)", app, StringComparison.Ordinal);
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Ur-Score.csproj")))
+        {
+            dir = dir.Parent;
+        }
+
+        Assert.False(dir is null, "Could not locate Ur-Score.csproj above the test assembly.");
+        return dir!.FullName;
+    }
+}
+```
+
+In `tests/IconClientTests.cs`, add these four members after the `ARecipesOwnHostsAreItsStepsAndItsSearchLists` test (the
+last one in the class), inside the class:
+
+```csharp
+    private const string HeadshotsUrl =
+        "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=101,201&size=48x48&format=Png&isCircular=false";
+
+    private const string HeadshotUrl = "https://tr.rbxcdn.com/AVATAR-101/48/48/AvatarHeadshot/Png/noFilter";
+
+    private static string Headshots(params (long UserId, string State, string Url)[] rows) =>
+        "{ \"data\": [ " + string.Join(", ", rows.Select(r =>
+            $"{{ \"targetId\": {r.UserId}, \"state\": \"{r.State}\", \"imageUrl\": \"{r.Url}\" }}")) + " ] }";
+
+    [Fact]
+    public async Task YourAccountsPicturesComeBackInOneRequestAndAreCachedByUserId()
+    {
+        var handler = new RouteHandler()
+            .On(HeadshotsUrl, () => Json(Headshots((101, "Completed", HeadshotUrl), (201, "Pending", ""))))
+            .On(HeadshotUrl, () => Bytes(Png));
+
+        var files = await Client(handler).HeadshotsAsync(new long[] { 101, 201 }, CancellationToken.None);
+
+        // A picture Roblox hasn't rendered yet is no icon this time, and costs nobody else theirs.
+        Assert.Equal(new long[] { 101 }, files.Keys.ToArray());
+        Assert.Equal(Path.Combine(_dir, "avatar-101.png"), files[101]);
+        Assert.Equal(Png, File.ReadAllBytes(files[101]));
+        Assert.Equal(new[] { HeadshotsUrl, HeadshotUrl }, handler.Requests.Select(r => r.RequestUri!.AbsoluteUri).ToArray());
+        Assert.All(handler.Requests, r => Assert.Contains("UrScore", r.Headers.UserAgent.ToString()));
+    }
+
+    [Fact]
+    public async Task ACachedPictureYoungerThanSevenDaysIsUsedWithoutAsking()
+    {
+        Directory.CreateDirectory(_dir);
+        var cached = Path.Combine(_dir, "avatar-101.png");
+        File.WriteAllBytes(cached, Png);
+        File.SetLastWriteTimeUtc(cached, Now.AddDays(-6).UtcDateTime);
+        var handler = new RouteHandler();
+
+        var files = await Client(handler).HeadshotsAsync(new long[] { 101 }, CancellationToken.None);
+
+        Assert.Equal(cached, files[101]);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task APictureOffRobloxsOwnDomainIsRefusedAndOnlyTheIdsAskedForAreFetched()
+    {
+        var handler = new RouteHandler()
+            .On(HeadshotsUrl, () => Json(Headshots(
+                (101, "Completed", "https://evil.example/headshot.png"),
+                (201, "Completed", HeadshotUrl),
+                (999, "Completed", HeadshotUrl))))
+            .On("https://evil.example/headshot.png", () => Bytes(Png))
+            .On(HeadshotUrl, () => Bytes(Png));
+
+        var files = await Client(handler).HeadshotsAsync(new long[] { 101, 201 }, CancellationToken.None);
+
+        Assert.Equal(new long[] { 201 }, files.Keys.ToArray());
+        Assert.Equal(new[] { HeadshotsUrl, HeadshotUrl }, handler.Requests.Select(r => r.RequestUri!.AbsoluteUri).ToArray());
+        Assert.False(File.Exists(Path.Combine(_dir, "avatar-999.png")));
+        Assert.False(File.Exists(Path.Combine(_dir, "avatar-101.png")));
+    }
+
+    [Fact]
+    public async Task APictureServiceThatAnswersWithNothingUsefulCostsOnlyThePictures()
+    {
+        var handler = new RouteHandler().On(HeadshotsUrl, () => Json("{ \"data\": \"not a list\" }"));
+
+        Assert.Empty(await Client(handler).HeadshotsAsync(new long[] { 101, 201 }, CancellationToken.None));
+        Assert.Single(handler.Requests);
+    }
+```
+
+In `tests/PanelModelsTests.cs`, add these two tests at the end of the class:
+
+```csharp
+    [Fact]
+    public void YourOwnAccountsRowsCarryTheirPictureAndNobodyElsesDoes()
+    {
+        var pictures = new Dictionary<long, string>
+        {
+            [Main.RobloxUserId] = @"C:\cache\avatar-101.png",
+            [999] = @"C:\cache\avatar-999.png",
+        };
+        var live = ProfileLive("diamonds", "rank") with { Avatars = pictures };
+
+        var table = PanelModels.AccountsTable(live, DiamondsBook(), TableSettings, new AccountSort(AccountSort.NameKey, Descending: false));
+        var mine = PanelModels.MyAccounts(live, DiamondsBook(), new PanelSettings(Profile.Slug, Stat: "diamonds"));
+        var card = PanelModels.AccountCard(live, DiamondsBook(), new PanelSettings(Profile.Slug, Stat: "diamonds", UserId: Main.RobloxUserId));
+
+        Assert.Equal(@"C:\cache\avatar-101.png", table.Rows.First(r => r.Name == Main.DisplayName).Avatar);
+        Assert.Null(table.Rows.First(r => r.Name == AltOne.DisplayName).Avatar);
+        Assert.Null(table.Rows[^1].Avatar);
+        Assert.Equal(@"C:\cache\avatar-101.png", mine.Groups.SelectMany(g => g.Rows).First(r => r.UserId == Main.RobloxUserId).Avatar);
+        Assert.Equal(@"C:\cache\avatar-101.png", card.Avatar);
+
+        // A picture for anyone but you is never drawn, whatever the map holds.
+        Assert.Null(live.AvatarFor(999));
+        Assert.Null(live.AvatarFor(0));
+    }
+
+    [Fact]
+    public void ThePromotionCheckShowsYourPictureBesideEachAccountItWouldPlace()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var live = Live([main, alts], [Installed(Clan, "value")],
+            Snaps(Snapshot(main.Id, [Row(5, 900), Row(6, 700)]), Snapshot(alts.Id, [Row(Main.RobloxUserId, 800)]))) with
+        {
+            Avatars = new Dictionary<long, string> { [Main.RobloxUserId] = @"C:\cache\avatar-101.png" },
+        };
+
+        var model = PanelModels.PromotionCheck(live, new PanelSettings(Clan.Slug, SourceId: alts.Id, ToSourceId: main.Id, Stat: "value"));
+
+        Assert.Equal(@"C:\cache\avatar-101.png", Assert.Single(model.Rows).Avatar);
+    }
+```
+
+In `tests/AccountsModelTests.cs`, add this test at the end of the class:
+
+```csharp
+    [Fact]
+    public void EachSetupRowCarriesItsOwnAccountsPicture()
+    {
+        var rows = AccountsModel.Rows([Main, Alt], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>(),
+            id => id == Main.RobloxUserId ? @"C:\cache\avatar-101.png" : null);
+
+        Assert.Equal(@"C:\cache\avatar-101.png", rows[0].Avatar);
+        Assert.Null(rows[1].Avatar);
+
+        // With no lookup (a page that hasn't one yet), every row is simply pictureless.
+        Assert.Null(AccountsModel.Rows([Main], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>())[0].Avatar);
+    }
+```
+
+- [ ] **Step 2: Run the tests to see them fail**
+
+Run: `dotnet build tests/Ur-Score.Tests.csproj -c Release`
+Expected: FAIL to compile (`IAvatarSource`, `AvatarBook`, `IconClient.HeadshotsAsync`, `LiveBoard.Avatars`, `AvatarFor`
+and each row's `Avatar` don't exist).
+
+- [ ] **Step 3: The headshot path**
+
+In `src/Source/IconClient.cs`, change the class line to:
+
+```csharp
+public sealed class IconClient : IAvatarSource
+```
+
+and add to its summary, after the paragraph beginning "The second named exemption":
+
+```csharp
+/// <para>
+/// It also fetches the headshot of each of YOUR OWN accounts (<see cref="HeadshotsAsync"/>), for the rows that name
+/// them. Same host, same handler, same User-Agent, same size cap, same picture-domain check. No other player's id is
+/// ever passed in: <c>AppServices</c> asks with RoRoRo's list of your accounts and nothing else (plan A22).
+/// </para>
+```
+
+Add these constants after `public const int MaxBytes = 1024 * 1024;`:
+
+```csharp
+    /// <summary>Roblox's own supported headshot size, the nearest above the 20-40 px a row draws (plan A25).</summary>
+    public const string HeadshotSize = "48x48";
+
+    /// <summary>The endpoint's ceiling, and well above the 256 accounts RoRoRo's history limit allows.</summary>
+    public const int HeadshotBatchLimit = 100;
+
+    /// <summary>What a cached headshot is called in the icon cache, so it can never collide with a recipe's icon (plan A24).</summary>
+    public const string AvatarPrefix = "avatar-";
+```
+
+Add these two members after `ResolveAsync`, before `IsPictureHost`:
+
+```csharp
+    /// <summary>
+    /// The cached headshot of each of <paramref name="userIds"/>, fetching the ones the cache has none younger than
+    /// <see cref="CacheFor"/> for. Only your own accounts' ids are ever passed in (plan A22). A user Roblox has no
+    /// finished picture for, and one whose picture is off Roblox's picture domain, is simply left out. Never throws for
+    /// anything but a stop the caller asked for: a failure costs the pictures, and the rows keep their names.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<long, string>> HeadshotsAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken)
+    {
+        var files = new Dictionary<long, string>();
+        var wanted = userIds.Where(id => id > 0).Distinct().ToList();
+
+        for (var offset = 0; offset < wanted.Count; offset += HeadshotBatchLimit)
+        {
+            var batch = wanted.Skip(offset).Take(HeadshotBatchLimit).ToList();
+            var asked = batch.ToHashSet();
+
+            var missing = new List<long>();
+            foreach (var id in batch)
+            {
+                var cached = CachePath(AvatarKey(id));
+                if (IsFresh(cached)) files[id] = cached;
+                else missing.Add(id);
+            }
+
+            if (missing.Count == 0) continue;
+
+            foreach (var (userId, url) in await HeadshotUrlsAsync(missing, cancellationToken).ConfigureAwait(false))
+            {
+                // Only what this batch asked for, so an answer carrying anyone else cannot reach the cache.
+                if (!asked.Contains(userId) || !IsPictureHost(url)) continue;
+
+                if (await DownloadAsync(url, CachePath(AvatarKey(userId)), cancellationToken).ConfigureAwait(false) is { } file)
+                {
+                    files[userId] = file;
+                }
+            }
+        }
+
+        return files;
+    }
+```
+
+and these two private members just before `IsPng`:
+
+```csharp
+    private static string AvatarKey(long userId) => AvatarPrefix + userId.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// One batch ask for headshots. Only a row Roblox calls <c>Completed</c> has a picture to fetch: <c>Pending</c>,
+    /// <c>Blocked</c> and the rest mean no icon this time, and no reason to spoil the batch for everyone else.
+    /// </summary>
+    private async Task<IReadOnlyList<(long UserId, Uri Url)>> HeadshotUrlsAsync(IReadOnlyList<long> userIds, CancellationToken cancellationToken)
+    {
+        var ids = string.Join(',', userIds.Select(id => id.ToString(CultureInfo.InvariantCulture)));
+        var address = new Uri(
+            $"https://{ThumbnailsHost}/v1/users/avatar-headshot?userIds={ids}&size={HeadshotSize}&format=Png&isCircular=false");
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(_requestTimeout);
+
+            using var request = Get(address);
+            using var response = await _http.SendAsync(request, timeout.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) return [];
+
+            var body = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(body);
+
+            if (!JsonNav.TryGet(document.RootElement, "data", out var data) || data.ValueKind != JsonValueKind.Array) return [];
+
+            var found = new List<(long, Uri)>();
+            foreach (var row in data.EnumerateArray())
+            {
+                if (!JsonNav.TryGet(row, "state", out var state) || state.ValueKind != JsonValueKind.String
+                    || !string.Equals(state.GetString(), "Completed", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!JsonNav.TryGet(row, "targetId", out var target) || !JsonNav.TryUserId(target, out var userId)) continue;
+                if (!JsonNav.TryGet(row, "imageUrl", out var imageUrl) || imageUrl.ValueKind != JsonValueKind.String) continue;
+                if (!Uri.TryCreate(imageUrl.GetString(), UriKind.Absolute, out var url)) continue;
+
+                found.Add((userId, url));
+            }
+
+            return found;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+```
+
+- [ ] **Step 4: The session's pictures**
+
+Create `src/Source/AvatarBook.cs`:
+
+```csharp
+namespace Labs626.UrScore.Source;
+
+/// <summary>The seam the app and the tests use for headshots, so neither needs the network. <see cref="IconClient"/> implements it.</summary>
+public interface IAvatarSource
+{
+    Task<IReadOnlyDictionary<long, string>> HeadshotsAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// The picture beside each of your own accounts, for as long as the app runs (plan A21-A23).
+/// <para>
+/// Every id it is given is one of YOUR accounts: <c>AppServices</c> asks with RoRoRo's list and nothing else, and only
+/// what an ask asked for is ever kept. Nobody else's id reaches this class, so nobody else's picture can reach the disk.
+/// </para>
+/// <para>
+/// An id is asked about ONCE a session, whatever comes back. A board redraws on every read; re-asking each time would be
+/// twenty requests an hour against Roblox for a picture that doesn't move. A picture Roblox hasn't rendered yet, and one
+/// that couldn't be fetched, cost the picture until the next start — never a retry loop under a redraw.
+/// </para>
+/// <para>
+/// Never throws except for a stop the caller asked for, and those ids are left to be asked again. Locked, because
+/// <c>AppServices</c> may ask from a fetching thread while the UI thread reads <see cref="Files"/>.
+/// </para>
+/// </summary>
+public sealed class AvatarBook(IAvatarSource source)
+{
+    private readonly object _gate = new();
+    private readonly Dictionary<long, string> _files = [];
+    private readonly HashSet<long> _asked = [];
+
+    /// <summary>A copy, safe to hand to a view model that outlives the next ask.</summary>
+    public IReadOnlyDictionary<long, string> Files
+    {
+        get
+        {
+            lock (_gate) return new Dictionary<long, string>(_files);
+        }
+    }
+
+    public string? FileFor(long userId)
+    {
+        lock (_gate) return _files.GetValueOrDefault(userId);
+    }
+
+    /// <summary>
+    /// Asks for the pictures of the ids not asked about yet this session, and keeps what came back for those ids.
+    /// True when the map changed, so the caller can redraw.
+    /// </summary>
+    public async Task<bool> AskAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken)
+    {
+        List<long> missing;
+        lock (_gate)
+        {
+            missing = [.. userIds.Where(id => id > 0 && _asked.Add(id))];
+        }
+
+        if (missing.Count == 0) return false;
+
+        IReadOnlyDictionary<long, string> found;
+        try
+        {
+            found = await source.HeadshotsAsync(missing, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A stop the user asked for is not an answer: these ids are still unknown.
+            lock (_gate)
+            {
+                foreach (var id in missing) _asked.Remove(id);
+            }
+
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        var wanted = missing.ToHashSet();
+        lock (_gate)
+        {
+            var changed = false;
+            foreach (var (id, file) in found)
+            {
+                if (!wanted.Contains(id)) continue;
+                if (string.Equals(_files.GetValueOrDefault(id), file, StringComparison.Ordinal)) continue;
+
+                _files[id] = file;
+                changed = true;
+            }
+
+            return changed;
+        }
+    }
+
+    /// <summary>Your accounts changed: an id that is no longer yours is forgotten, and asked about again if it comes back.</summary>
+    public void Keep(IReadOnlySet<long> yours)
+    {
+        lock (_gate)
+        {
+            foreach (var gone in _files.Keys.Where(id => !yours.Contains(id)).ToList()) _files.Remove(gone);
+            foreach (var gone in _asked.Where(id => !yours.Contains(id)).ToList()) _asked.Remove(gone);
+        }
+    }
+}
+```
+
+- [ ] **Step 5: The rows carry a picture**
+
+In `src/Board/PanelModels.cs`:
+
+1. Give `LiveBoard` a trailing parameter — replace `    bool Running)` in its declaration with:
+
+```csharp
+    bool Running,
+    IReadOnlyDictionary<long, string>? Avatars = null)
+```
+
+2. Add this member to `LiveBoard`, after `AccountName`:
+
+```csharp
+    /// <summary>
+    /// The cached picture for one of YOUR accounts, or null. An id that isn't yours has none, whatever the map holds:
+    /// the leaderboard and Top show other members by name only, and this is the second of the two checks (plan A22).
+    /// </summary>
+    public string? AvatarFor(long userId) =>
+        userId != 0 && MyUserIds.Contains(userId) ? Avatars?.GetValueOrDefault(userId) : null;
+```
+
+3. Give three row records a trailing `string? Avatar = null`:
+
+```csharp
+public sealed record AccountLineModel(long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing, string? Avatar = null);
+
+public sealed record PromotionRow(string Name, string Value, string WouldPlace, bool Fits, bool Missing, string? Avatar = null);
+```
+
+and in `AccountCardModel`, replace `    IReadOnlyList<FactModel> Facts, string ChartName)` with:
+
+```csharp
+    IReadOnlyList<FactModel> Facts, string ChartName, string? Avatar = null)
+```
+
+4. Fill them in at the five build sites. In `MyAccounts`, the line inside `foreach (var account in mine)` becomes:
+
+```csharp
+                lines.Add((value, new AccountLineModel(
+                    account.RobloxUserId,
+                    account.DisplayName,
+                    PanelText.Value(value, stat.Format, zone),
+                    value is not null && ranks.TryGetValue(account.RobloxUserId, out var rank) ? $"#{rank} of {rows.Count}" : Dash,
+                    RecentChange(series[account.RobloxUserId], stat.Format),
+                    sent,
+                    Records.Stalled(series[account.RobloxUserId], others),
+                    value is null,
+                    live.AvatarFor(account.RobloxUserId))));
+```
+
+and the "not in a watched" group's line becomes:
+
+```csharp
+                [.. rest.OrderBy(a => a.DisplayName, StringComparer.Ordinal)
+                    .Select(a => new AccountLineModel(a.RobloxUserId, a.DisplayName, Dash, Dash, Dash, false, false, true, live.AvatarFor(a.RobloxUserId)))]));
+```
+
+In `PromotionCheck`, the two `rows.Add` lines become:
+
+```csharp
+                rows.Add((null, new PromotionRow(account.DisplayName, Dash, Dash, false, true, live.AvatarFor(account.RobloxUserId))));
+```
+
+```csharp
+            rows.Add((value, new PromotionRow(account.DisplayName, StatText.Abbrev(value), text, fits, false, live.AvatarFor(account.RobloxUserId))));
+```
+
+In `AccountCard`, the returned model becomes:
+
+```csharp
+        return new AccountCardModel(
+            new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}", Overdue: live.IsOverdue(pickedSource)),
+            stat.Label, PanelText.Value(ValueOf(pickedRow, stat.Key), stat.Format, zone), sections, line, facts,
+            $"{pickedAccount.DisplayName}'s {stat.Label} over time",
+            live.AvatarFor(pickedAccount.RobloxUserId));
+```
+
+In `AccountsTable`, the `rows.Add` becomes:
+
+```csharp
+            rows.Add((sorted is null || row is null ? null : ValueOf(row, sorted.Key), new AccountRow(
+                account.RobloxUserId,
+                account.DisplayName,
+                cells,
+                snapshot?.Unavailable.GetValueOrDefault(account.RobloxUserId) ?? "",
+                Missing: row is null,
+                Picked: account.RobloxUserId == pickedUserId,
+                Avatar: live.AvatarFor(account.RobloxUserId))));
+```
+
+5. In `src/Board/AccountsTableModel.cs`, the table row gains the same trailing member (the totals row keeps null, so
+   "Total" lines up under the names):
+
+```csharp
+/// <summary>One of your accounts, or the totals row (user id 0). Cells line up with the columns, the name first.</summary>
+public sealed record AccountRow(
+    long UserId, string Name, IReadOnlyList<string> Cells, string Note, bool Missing, bool Picked, bool IsTotal = false, string? Avatar = null)
+```
+
+6. In `src/UI/Setup/AccountsModel.cs`, the Setup row gains the same member and `Rows` takes the lookup:
+
+```csharp
+public sealed record AccountRow(Guid AccountId, string DisplayName, string FoundIn, IReadOnlyList<SendTick> Sends, string? Avatar = null);
+```
+
+```csharp
+    public static IReadOnlyList<AccountRow> Rows(
+        IReadOnlyList<HostAccount> accounts, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
+        IReadOnlyDictionary<string, RecipeSnapshot> latest, Func<long, string?>? avatar = null)
+    {
+        var sending = SendingRecipes(installed);
+        return [.. accounts.Select(account => new AccountRow(
+            account.AccountId,
+            account.DisplayName,
+            FoundIn(account, installed, sources, latest),
+            [.. sending.Select(r => new SendTick
+            {
+                RecipeSlug = r.Recipe.Slug,
+                AccountId = account.AccountId,
+                Name = $"Send {account.DisplayName} for {r.Recipe.Name}",
+                On = !r.State.Excluded.Contains(account.AccountId),
+            })],
+            avatar?.Invoke(account.RobloxUserId)))];
+    }
+```
+
+- [ ] **Step 6: The wiring**
+
+In `src/Composition/ISetupServices.cs`, add after `IconFileFor`:
+
+```csharp
+    /// <summary>The cached picture for one of your own accounts, once it has been fetched, else null. Never another player's.</summary>
+    string? AvatarFileFor(long userId);
+```
+
+In `src/Composition/AppServices.cs`:
+
+1. Add to the aliases under the namespace (the file's `using Source = Labs626.UrScore.Core.Source;` hides the
+   `Labs626.UrScore.Source` namespace, which is why `NameClient` and `IconClient` are aliased there already):
+
+```csharp
+using AvatarBook = Labs626.UrScore.Source.AvatarBook;
+```
+
+2. Add the field after `private readonly IconClient _icons;`:
+
+```csharp
+    private readonly AvatarBook _avatars;
+```
+
+3. In the constructor, straight after the `_icons = new IconClient(...)` line:
+
+```csharp
+        _avatars = new AvatarBook(_icons);
+```
+
+4. Add after `IconFileForBoard()`:
+
+```csharp
+    /// <summary>The picture for one of your own accounts (plan A22): an id RoRoRo isn't listing as yours has none.</summary>
+    public string? AvatarFileFor(long userId) =>
+        LiveBoard.UserIdsOf(KnownAccounts).Contains(userId) ? _avatars.FileFor(userId) : null;
+```
+
+5. `CurrentBoard()` hands the map to the panels:
+
+```csharp
+    public LiveBoard CurrentBoard() => new(
+        Sources, Installed,
+        new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
+        new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
+        KnownAccounts, _time, Runner.Running, _avatars.Files);
+```
+
+6. Add these two members just after `ApplyIconAsync` / `RaiseIconIfChanged`:
+
+```csharp
+    /// <summary>
+    /// The pictures beside your own accounts, after the numbers (plan A23): the ids RoRoRo lists as yours, once each per
+    /// session, off the UI thread. Anything that fails costs the pictures and nothing else.
+    /// </summary>
+    private void AskForAvatars()
+    {
+        var yours = LiveBoard.UserIdsOf(KnownAccounts);
+        if (yours.Count == 0) return;
+
+        _avatars.Keep(yours);
+        _ = AskForAvatarsAsync(yours);
+    }
+
+    private async Task AskForAvatarsAsync(IReadOnlySet<long> yours)
+    {
+        try
+        {
+            if (await _avatars.AskAsync(yours, _closing.Token)) RaiseChanged();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            // The type only: a message can carry anything. The rows keep their names either way.
+            AddTrail($"AVATARS: your accounts' pictures could not be fetched ({ex.GetType().Name}).");
+        }
+    }
+```
+
+7. Call it from the two places that know your accounts. In `LoadBookOnceAsync`, after `AddTrail($"BOOK: loaded from {root}.");`:
+
+```csharp
+        AskForAvatars();
+```
+
+and in `RefreshAccountsAsync`, between `WarnPastBudget();` and `RaiseChanged();`:
+
+```csharp
+        AskForAvatars();
+```
+
+8. In `src/UI/Setup/AccountsPage.xaml.cs`, `Refresh` passes the lookup:
+
+```csharp
+        _rows = AccountsModel.Rows(accounts, _services.Installed, _services.Sources, _services.Latest, _services.AvatarFileFor);
+```
+
+- [ ] **Step 7: The look**
+
+Create `src/UI/Controls/AvatarFill.cs`:
+
+```csharp
+using System.Globalization;
+using System.IO;
+using System.Windows.Data;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+
+namespace Labs626.UrScore.UI;
+
+/// <summary>
+/// A cached picture file beside one of your accounts, as a round fill (plan A25). Never throws: a file that is gone,
+/// half-written or not a picture gives no brush, and the row shows what it showed before the picture arrived.
+/// <para>
+/// Brushes are kept by path and write time, so redrawing a board every three minutes doesn't decode the same twenty
+/// pictures again. The map holds one entry per account, so it cannot grow past your account list.
+/// </para>
+/// </summary>
+public sealed class AvatarFill : IValueConverter
+{
+    private readonly Dictionary<string, ImageBrush?> _brushes = new(StringComparer.OrdinalIgnoreCase);
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not string file || file.Length == 0) return null;
+
+        string key;
+        try
+        {
+            key = $"{file}|{File.GetLastWriteTimeUtc(file).Ticks}";
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        if (_brushes.TryGetValue(key, out var known)) return known;
+
+        ImageBrush? brush = null;
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            image.UriSource = new Uri(file);
+            image.EndInit();
+            image.Freeze();
+
+            brush = new ImageBrush(image) { Stretch = Stretch.UniformToFill };
+            brush.Freeze();
+        }
+        catch (Exception)
+        {
+            // A picture that doesn't decode costs the picture. The row keeps its space and its name.
+        }
+
+        _brushes[key] = brush;
+        return brush;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => Binding.DoNothing;
+}
+```
+
+In `src/App.xaml`, directly after `<ui:UpperCase x:Key="Upper" />`:
+
+```xml
+            <ui:AvatarFill x:Key="Avatar" />
+
+            <!-- One of your own accounts' pictures: round, sized to its row, the same on every surface. The slot is laid
+                 out whether or not a picture is there (Hidden, never Collapsed), so a picture that arrives late, fails or
+                 never comes never moves a row. Only your own accounts ever have one. -->
+            <Style x:Key="AccountAvatar" TargetType="Ellipse">
+                <Setter Property="Width" Value="20" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="Margin" Value="0,0,8,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Stroke" Value="{DynamicResource DividerBrush}" />
+                <Setter Property="StrokeThickness" Value="1" />
+                <Setter Property="Fill" Value="{Binding Avatar, Converter={StaticResource Avatar}}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Avatar}" Value="{x:Null}">
+                        <Setter Property="Visibility" Value="Hidden" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+```
+
+In `src/UI/Panels/AccountsTablePanel.xaml`, the account column's template becomes (a `DockPanel`, so the name still
+takes the width the picture leaves):
+
+```xml
+        <DataTemplate x:Key="AccountNameCell">
+            <StackPanel>
+                <DockPanel>
+                    <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                </DockPanel>
+                <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontSize="11" MaxWidth="240" HorizontalAlignment="Left"
+                           Visibility="{Binding HasNote, Converter={StaticResource BoolToVisible}}" />
+            </StackPanel>
+        </DataTemplate>
+```
+
+In `src/UI/Panels/MyAccountsPanel.xaml`, the row's first column becomes:
+
+```xml
+                                                    <DockPanel Grid.Column="0">
+                                                        <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
+                                                        <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                 Fill="{DynamicResource CyanBrush}"
+                                                                 Visibility="{Binding Sent, Converter={StaticResource BoolToVisible}}" />
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                                                    </DockPanel>
+```
+
+In `src/UI/Panels/PromotionCheckPanel.xaml`, the row's first column becomes:
+
+```xml
+                                    <DockPanel Grid.Column="0">
+                                        <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" />
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                                    </DockPanel>
+```
+
+In `src/UI/Panels/AccountCardPanel.xaml`, the two header lines are wrapped so the picture sits beside them:
+
+```xml
+                <DockPanel>
+                    <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" Width="40" Height="40" Margin="0,0,12,0"
+                             VerticalAlignment="Top" />
+                    <StackPanel>
+                        <TextBlock Text="{Binding BigLabel}" Style="{StaticResource KeyLabel}" />
+                        <TextBlock Text="{Binding Big}" Style="{StaticResource BigNumber}" Margin="0,5,0,-5" />
+                    </StackPanel>
+                </DockPanel>
+```
+
+In `src/UI/Setup/AccountsPage.xaml`, the row's name cell becomes:
+
+```xml
+                            <DockPanel Grid.Column="0">
+                                <Ellipse DockPanel.Dock="Left" Style="{StaticResource AccountAvatar}" Width="24" Height="24" />
+                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+```
+
+and the page gains the standing line (plan A28), directly under the "Send reports an account's sent stats…" line:
+
+```xml
+        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
+                   Text="Each picture comes from Roblox: Ur Score asks Roblox's picture service for your own accounts' pictures and keeps them on this PC. No other player's id is ever sent for a picture, and the leaderboard shows other members by name only." />
+```
+
+- [ ] **Step 8: What leaves your machine**
+
+In `README.md`, under "What leaves your machine":
+
+- Change `Three separate destinations, and they're not the same boundary:` to `Four separate destinations, and they're not the same boundary:`.
+- Add this row to the end of the table:
+
+```
+| **Roblox's own public picture service** (`thumbnails.roblox.com`, and the picture host it names on `rbxcdn.com`) | Your own accounts' Roblox user ids, so each of your rows can show that account's avatar, and a recipe's icon id when the recipe has one. The pictures are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Any other player's id. The leaderboard and Top of the battle show other members by name only, and no picture of anyone else is ever asked for or kept. |
+```
+
+- Replace the last sentence of the paragraph beginning "Ur Score has no webhook of its own" with: `Its only outbound
+  calls are the four named above — the game's API, the username lookup, and Roblox's picture service for your own
+  accounts' avatars and a recipe's icon — and its only inbound connection is the local pipe to RoRoRo.`
+
+- [ ] **Step 9: Run the tests, then the build gate**
+
+Run, from the repo root, with Ur Score closed (a running copy locks `bin\Release`):
+
+```
+dotnet build tests/Ur-Score.Tests.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~AvatarBookTests|FullyQualifiedName~AvatarFenceTests|FullyQualifiedName~IconClientTests"
+dotnet build Ur-Score.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build
+```
+
+Expected: all four pass. The app build is run on its own because a XAML mistake (a style key, a `DockPanel` that
+swallowed a column) only shows there. If `YourAccountsPicturesComeBackInOneRequestAndAreCachedByUserId` fails on the
+request list, compare `handler.Requests[0].RequestUri.AbsoluteUri` with `HeadshotsUrl` character by character: the comma
+between ids must stay a comma, and the query order is `userIds`, `size`, `format`, `isCircular`.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add src/Source/IconClient.cs src/Source/AvatarBook.cs src/Board/PanelModels.cs src/Board/AccountsTableModel.cs src/Composition/AppServices.cs src/Composition/ISetupServices.cs src/UI/Setup/AccountsModel.cs src/UI/Setup/AccountsPage.xaml src/UI/Setup/AccountsPage.xaml.cs src/UI/Controls/AvatarFill.cs src/App.xaml src/UI/Panels/AccountsTablePanel.xaml src/UI/Panels/MyAccountsPanel.xaml src/UI/Panels/PromotionCheckPanel.xaml src/UI/Panels/AccountCardPanel.xaml README.md tests/AvatarBookTests.cs tests/AvatarFenceTests.cs tests/IconClientTests.cs tests/PanelModelsTests.cs tests/AccountsModelTests.cs
+git commit -m "accounts: your own accounts show their Roblox picture, and no one else's is ever asked for
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 11: The live look (controller)**
+
+Quit Ur Score, then from the repo root:
+
+```bash
+dotnet build Ur-Score.csproj -c Release -warnaserror
+dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build
+```
+
+Start RoRoRo 1.28 with your accounts listed. Run these walks one at a time, unchanged (no script in `tools/smoke`
+changed, and no automation id moved), from a shell where `UR_SCORE_RULES_FILE` is not set, and record every result:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/smoke/window-smoke.ps1 -Main CCGP
+powershell -ExecutionPolicy Bypass -File tools/smoke/walk-alts.ps1
+powershell -ExecutionPolicy Bypass -File tools/smoke/walk-starter-board.ps1 -Main CCGP -Alt K0i2
+powershell -ExecutionPolicy Bypass -File tools/smoke/walk-pop-outs.ps1 -Main CCGP
+powershell -ExecutionPolicy Bypass -File tools/smoke/walk-alerts.ps1
+powershell -ExecutionPolicy Bypass -File tools/smoke/check-book-privacy.ps1
+powershell -ExecutionPolicy Bypass -File tools/smoke/check-boards-privacy.ps1
+```
+
+Expected: every step passes and both privacy checks exit 0. A failure here goes back to its step above, before the
+release run.
+
+Then, by hand on your own data, with Ur Score started and read at least once:
+
+1. **The Alts tab.** Every account in the accounts table has a round picture beside its name; the totals row has none and
+   "Total" sits exactly where a name does. My accounts and Promotion check show the same picture beside the same names.
+   Pick a row: the account card's header shows that account's picture at the larger size.
+2. **Nobody else.** The Live leaderboard and Top of the battle show names only — no picture on any row, including your
+   own.
+3. **No jump, no error.** Watch a row while the next read lands: nothing moves. Then quit, delete
+   `%LOCALAPPDATA%\626labs.ur-score\icon-cache`, turn the network off, and start again: rows draw at once with names, no
+   picture and no error line anywhere, and Diagnostics' trail has at most one `AVATARS:` line.
+4. **One fetch, every window.** With the network back, pop the accounts table out: the same pictures, and
+   `Get-ChildItem $env:LOCALAPPDATA\626labs.ur-score\icon-cache avatar-*.png | Select-Object Name, LastWriteTime` is
+   unchanged by opening the pop-out or Setup › Your accounts.
+5. **Only yours on disk.** Every `avatar-<id>.png` in that folder is one of your own accounts: list them and compare the
+   ids against RoRoRo's Accounts page. Nothing prunes this folder (review Minor 4), so an account you have since removed
+   from RoRoRo leaves its picture behind until the seven-day refresh ages it out. So the check is that no id in the
+   folder is a stranger's — not that the count matches. An id you don't recognise at all is the failure.
+6. **Setup › Your accounts.** A picture beside each row, and the standing line about Roblox's picture service is on
+   screen.
+7. **Both themes.** Take four screenshots, switching RoRoRo's theme (Settings › Appearance) between the pairs and
+   waiting for Ur Score to follow:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Ur Score' -OutPath artifacts\smoke\avatars-board-dark.png
+powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Setup' -OutPath artifacts\smoke\avatars-setup-dark.png
+powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Ur Score' -OutPath artifacts\smoke\avatars-board-light.png
+powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Setup' -OutPath artifacts\smoke\avatars-setup-light.png
+```
+
+   Each board shot must show: round pictures beside your accounts in the table, My accounts and the account card; the
+   leaderboard with names and no pictures; names aligned in one column whether or not a row has a picture. Each pair must
+   show the ring around a picture following the theme (it is `DividerBrush`), and no colour that stayed put across the
+   switch.
+
+---
+
 ## Self-review record
 
 - **Design coverage:**
