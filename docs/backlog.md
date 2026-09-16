@@ -11,6 +11,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - **GONE: 6**
 - Total: 202 distinct items (duplicates merged; every source is named on the line)
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
+- **0.3.2 (the Alerts page and avatars), added 2026-09-15:** 53 more distinct items in their own section at the end — **32 OPEN, 20 FIXED, 1 GONE** — from the nine reviews of `feat/alerts-card`. They are held apart from the counts and the two summary lists above because that branch hasn't merged; fold them in when it does.
 
 ## Open, and you'd notice
 
@@ -350,3 +351,90 @@ v0.3.0 installed from the GitHub release into RoRoRo 1.28 (Store) and walked: al
 Owner actions noted in the smoke, not Ur Score defects:
 - RoRoRo has no alert rules file yet ("nothing can alert until a rule is added"): add a rule for `clan.battle.points` in RoRoRo before the battle.
 - CCGP isn't in the current battle (ArcadeBattle2026 ended 2026-09-11); live numbers for it start when the next battle begins.
+
+---
+
+# 0.3.2: the Alerts page and avatars
+
+Every Minor from the nine reviews of `feat/alerts-card` (`cec5987..ddfafc8`), checked against the tree at `ddfafc8` on 2026-09-15. The execution record, with the rulings and the three lessons, is in `docs/plans/2026-09-15-alerts-card.md`. Reviews: `task-1`, `task-1-rereview`, `task-2`, `task-2-rereview`, `task-3`, `task-4`, `task-6`, `branch-review`, `branch-rereview`.
+
+**32 OPEN, 20 FIXED, 1 GONE — 53 distinct items** from 58 raw Minors; five are restatements across reviews, merged onto one line each with both sources named. The Critical and the three Importants were fixed in their own rounds and are in the execution record, not here.
+
+## Task 1: rules file operations
+
+- AC-1.1 **FIXED** — code tidiness: `Remove` repeated `Guard`'s blank-metric-id check and its message word for word — src/Core/RulesFile.cs:164-166; now the shared `GuardId` (aed8848) — T1 review
+- AC-1.2 **FIXED** — a root-only override path such as `C:\` threw unhandled out of `Path.GetDirectoryName(path)!` — src/Core/RulesFile.cs:497; `NamesAFile` now refuses it before any IO (aed8848) — T1 review
+- AC-1.3 **OPEN** — code tidiness: `Build` omits `label` entirely when `spec.Label` is blank rather than falling back to the metric id, so "every rule Ur Score writes carries owner and label" isn't self-enforced there — src/Core/RulesFile.cs:533-544 (:568 at aed8848) — T1 review, T1 re-review (left as ruled)
+- AC-1.4 **FIXED** — test gap: an infinite threshold (`1e400`) was never exercised end to end, only claimed in the report — tests/RulesFileParityTests.cs `AThresholdTooBigForANumberReadsAsInfinity` (aed8848) — T1 review
+- AC-1.5 **OPEN** — a numeric kind (`"kind": "7"`) is skipped here but loaded by RoRoRo, which parses without an `IsDefined` check; no writer emits one — src/Core/RulesFile.cs:404 — T1 review, T1 re-review (left as ruled)
+- AC-1.6 **OPEN** — in the rare `ERROR_UNABLE_TO_MOVE_REPLACEMENT_2` partial-swap state the cleanup deletes the temp file unconditionally, destroying the only surviving copy of the new content and leaving the rules file missing rather than unchanged — src/Core/RulesFile.cs:529-536 — T1 re-review (new; parked)
+
+## Task 2: the Alerts model
+
+- AC-2.1 **FIXED** — you'd notice: a number one step below the refusal's own limit displayed rounded up to it ("999999999999999.9" showed as "1,000,000,000,000,000"), and Change then Save rewrote the rule rounded — src/UI/Setup/AlertCards.cs:87, 197-203, 308; `TooManyDigits`/`MaxDigits` now refuse more than 15 significant digits (f9fd6f7) — T2 review Minor 1
+- AC-2.2 **OPEN** — you'd notice (hand edit only): a hand-typed 1e300 threshold prints a 401-character sentence and opens Change with a 301-digit box that Save refuses — src/UI/Setup/AlertCards.cs:197-203, 438-439 — T2 review Minor 2, T2 report
+- AC-2.3 **OPEN** — focus after Remove with a hand-made duplicate lands on the copy's Change instead of "+ Add an alert" as A15 says; the target is valid and visible — src/UI/Setup/AlertCards.cs:418 — T2 review Minor 3
+- AC-2.4 **OPEN** — accessibility: focus drops to the window when `FocusName` returns "" (Remove on a locked file, or removing a stale card's last rule), and with no live region a Narrator user hears nothing — src/UI/Setup/AlertCards.cs:405-422 — T2 review Minor 4 (plan-mandated)
+- AC-2.5 **FIXED** — `Same` compared whole `AlertRule` records, `Index` included, so a row someone else inserted higher in the file redrew the cards and dropped your keyboard focus — src/UI/Setup/AlertCards.cs:134-138; now `Placeless` (f9fd6f7). Residue: AC-B.12 — T2 review Minor 5
+- AC-2.6 **FIXED** — `Check` accepted any positive minutes string, "Infinity" included, held back only by Task 3's non-editable ComboBox — src/UI/Setup/AlertCards.cs:323; the Rate branch now matches exactly 10, 15 or 30 (f9fd6f7) — T2 review Minor 6
+- AC-2.7 **GONE** — a rule's own window was offered as an extra minutes choice and lost after a refused Save — src/UI/Setup/AlertCards.cs:395; ruling 3 removed the extra choice entirely (f9fd6f7), so the case can no longer occur. The ledger counts it among the nine parked; the cost that replaced it is AC-2.13 — T2 review Minor 7 (preflight 4.13)
+- AC-2.8 **OPEN** — a hand-tuned 0.125 threshold or 7.333 window shows and saves rounded to two decimals, 0.001 reads "goes below 0", and a window of 0 or less opens as 10 and saves as 10 — src/UI/Setup/AlertCards.cs:197-203, 270-275 — T2 review Minor 8 (preflight 4.12, plan-mandated by A12)
+- AC-2.9 **OPEN** — the plural test compares the raw window while printing the rounded one, so 1.004 reads "for 1 minutes" — src/UI/Setup/AlertCards.cs:208 — T2 review Minor 9
+- AC-2.10 **OPEN** — copy: `Failed(NotAList)` drops "Fix it by hand, then come back.", `Failed(AlreadyThere)` says "an alert of this kind" though the kind words exist, and `Failed(CantWrite)` joins with a semicolon where its siblings start a new sentence — src/UI/Setup/AlertCards.cs:226, 229, 231 — T2 review Minor 10
+- AC-2.11 **OPEN** — the refusal hints mislead a writer from another locale: "1.000" gets "Use at most two decimal places", and "-5" gets "Type a number" although it is one; both refusals are safe — src/UI/Setup/AlertCards.cs:304, 305 — T2 review Minor 11
+- AC-2.12 **OPEN** — test gaps: a theory over every `Failed` outcome's copy, `Managed()`, an Ur Score-owned Event rule showing Remove only, `AfterWrite` with `AlreadyThere`/`NotJson`, `Same` on `Note` or `CanAdd` alone, focus after Remove with a duplicate, three number rows, and a Level `OpenChange` row — tests/AlertCardsTests.cs (:151-169 for the number theory) — T2 review Minor 12 (preflight 4.16)
+- AC-2.13 **OPEN** — you'd notice: a stored rule whose window isn't 10, 15 or 30 opens Change with an empty minutes box and nothing on screen saying why; Save is blocked with the generic "Choose how many minutes." — src/UI/Setup/AlertCards.cs:293, 416 — T2 re-review, branch review Minor 5
+
+## Task 3: the themed Alerts page
+
+- AC-3.1 **FIXED** — Change and Remove started from the last drawn view, so after a hand edit Change opened on old values and Remove's result sentence could describe the old rule (the write itself was always correct) — src/UI/Setup/AlertsPage.xaml.cs:87, 127-129; both now re-read the file at the click (953ee44) — T3 review Minor 1 (preflight 4.14)
+- AC-3.2 **OPEN** — an unexpected exception in Turn on, Save or Remove goes only to the trail with nothing on the card, so the click looks like it did nothing; no known input triggers it — src/UI/Setup/AlertsPage.xaml.cs:105-138 — T3 review Minor 2 (preflight 3.27)
+- AC-3.3 **FIXED** — test gap: Enter and Escape on a *closed* ComboBox were proven by nothing (a closed box doesn't handle either key itself) — the walk's check 2c confirms with Enter in the closed Minutes box and check 4c sends Escape from the closed Direction box (7c5b93e) — T3 review Minor 3
+- AC-3.4 **OPEN** — you'd notice (rare): an orphaned result under the cards is always drawn in body colour, so a failure reads in white instead of magenta — src/UI/Setup/AlertsPage.xaml:120 — T3 review Minor 4, branch review (listed as still standing)
+- AC-3.5 **OPEN** — accessibility: focus is left nowhere when Remove takes a stale stat's card away; A15 doesn't cover the case — src/UI/Setup/AlertCards.cs:423 with src/UI/Setup/AlertsPage.xaml.cs:136-137 — T3 review Minor 5
+- AC-3.6 **OPEN** — the fence bans the bare substring `Preview`, so it would also block `PreviewKeyDown`/`PreviewTextInput`, the natural fix if the combo boxes ever need tunnelled key handling — tests/AlertsPageFenceTests.cs:20 (:21 at 8177b8d) — T3 review Minor 6, branch review Minor 11
+- AC-3.7 **OPEN** — performance: `File.Exists` and the read run on the UI thread at every coalesced refresh; a `UR_SCORE_RULES_FILE` pointing at an unreachable share would stall the window each time — src/UI/Setup/AlertsPage.xaml.cs:51; src/Core/RulesFile.cs:106 — T3 review Minor 7
+- AC-3.8 **OPEN** — code tidiness: an eighth verbatim copy of `RepoRoot()`, and the `Show` helper written out again — tests/AlertsPageFenceTests.cs:23-33; src/UI/Setup/AlertsPage.xaml.cs:186 (repeats StatsPage.xaml.cs:124) — T3 review Minor 8 (preflight 4.11)
+
+## Task 4: the Setup › Alerts smoke walk
+
+- AC-4.1 **OPEN** — test gap: no plain Rate "+ Add an alert" is exercised through the page; a new Rate alert is only ever reached via Change on the pre-seeded rule — tools/smoke/walk-alerts.ps1 (whole script) — T4 review Minor 1 (preflight 4.17)
+- AC-4.2 **OPEN** — code tidiness: `Get-Shown`, `Get-ComboValue` and `Get-FocusedName` are walk-local, though the collapsed-twin hazard they guard is general to any page built from repeated `RowList` card templates — tools/smoke/walk-alerts.ps1:28-37 — T4 review Minor 2
+
+## Task 6: avatars beside your own accounts
+
+- AC-6.1 **FIXED** — you'd notice: the "Account" column header stopped lining up with the names on four surfaces once the rows gained the 28 px avatar slot — src/UI/Panels/MyAccountsPanel.xaml:17, src/UI/Panels/PromotionCheckPanel.xaml:20, src/UI/Setup/AccountsPage.xaml:20, src/UI/Panels/AccountsTablePanel.xaml:10-13; headings indented (8177b8d) and My accounts' conditional "sent" dot given a permanent slot (34569ae) — T6 review Minor 1
+- AC-6.2 **FIXED** — nothing pinned A26's `Hidden`, the single point where `Collapsed` would reflow every row on five surfaces — src/App.xaml:143-146; fence added (8177b8d) and given teeth on the setter's value (ddfafc8) — T6 review Minor 2
+- AC-6.3 **FIXED** — a cache file deleted mid-session took the corrupt-file path (`File.GetLastWriteTimeUtc` returns 1601 rather than throwing) and left an empty themed ring for the rest of the session — src/UI/Controls/AvatarFill.cs:26-35; the trigger now binds the converted value (8177b8d) — T6 review Minor 3
+- AC-6.4 **OPEN** — nothing ever prunes the icon cache, so an account removed from RoRoRo leaves its `avatar-<id>.png` on disk; harmless (it is your own id) but it makes Step 11 item 5's count check read as a failure for anyone who has removed one — src/Source/IconClient.cs:166 — T6 review Minor 4, branch review, branch re-review (ruled: no code this cycle; a sentence went into Step 11 at 0666172)
+- AC-6.5 **FIXED** — `AskForAvatars` returned before `Keep` on an empty account list, so removing every account left the whole map in memory and the forgetting promise was conditional — src/Composition/AppServices.cs:752; `Keep` now runs first (8177b8d) — T6 review Minor 5
+- AC-6.6 **OPEN** — bookkeeping: two overlapping asks can re-add a just-forgotten id; the read gates cover it and the next `Keep` clears it — src/Source/AvatarBook.cs:88 — T6 review Minor 6 (parked)
+- AC-6.7 **FIXED** — a doc comment claimed the brush map "cannot grow past your account list" though its key is `path|writeTicks`, so each seven-day refresh adds an entry — src/UI/Controls/AvatarFill.cs:14 (8177b8d) — T6 review Minor 7
+- AC-6.8 **OPEN** — performance: a filesystem stat per row per redraw on the UI thread, inside a converter — src/UI/Controls/AvatarFill.cs:28 — T6 review Minor 8 (parked)
+- AC-6.9 **FIXED** — the fence's "asked with your own ids" case only asserted the file *contained* the expression, which `AvatarFileFor` alone satisfies, so passing some other set would still have passed — tests/AvatarFenceTests.cs:65; it now pins the argument (8177b8d) — T6 review Minor 9
+- AC-6.10 **FIXED** — a totals-row assertion that would pass for any pictureless row — tests/PanelModelsTests.cs:777; now asserts `IsTotal` alongside (8177b8d) — T6 review Minor 10
+- AC-6.11 **OPEN** — you'd notice: Setup › Your accounts stacks two muted 12 px lines with double the page's rhythm between them — src/UI/Setup/AccountsPage.xaml:8-11 — T6 review Minor 11, T6 report (brief-specified; parked for the live look)
+- AC-6.12 **FIXED** — the hostname fence swept `.cs` only, so a host written in prose in a `.xaml` file would have passed — tests/NoHostnameFenceTests.cs:25; `.xaml` is now swept with `xmlns` attribute values stripped and a vacuity floor (8177b8d) — T6 review Minor 12
+- AC-6.13 **FIXED** — a stale inventory row said `icon-cache\` holds recipe icons, when it now holds your own accounts' avatars too — docs/plans/2026-09-15-backlog-remediation.md:4151 (8177b8d) — T6 review Minor 13
+
+## Whole-branch review
+
+Its Minor 5 is AC-2.13 and its Minor 11 is AC-3.6; both are listed under the task that raised them first.
+
+- AC-B.1 **OPEN** — docs: three rows in this file that the branch invalidated. V3-S.10 still lists `AlertsPage.xaml.cs:74` and `:90` among "nine stock `MessageBox.Show` calls" (both are gone, so the count is seven); S1-12.5 cites `AlertsPage.xaml.cs:62` where the read is now at `:51`; S1-12.11 cites `tests/AlertsModelTests.cs:18` for tests that moved out of that file — docs/backlog.md:155, :161, :348 — branch review Minor 1 (Task 5's release step already instructs the edits)
+- AC-B.2 **OPEN** — docs: three earlier design docs still describe the Alerts page this branch replaced, with no banner — docs/2026-09-14-score-book-design.md:381-384; docs/2026-09-13-recipes-design.md:348; docs/2026-09-12-ur-score-design.md:229-237 — branch review Minor 2
+- AC-B.3 **OPEN** — docs: the approved design is now wrong in two places — it says the "Next, in RoRoRo" line is always shown while any alert is on (the code needs a *sent* stat's alert), and that the file is backed up *before* each write (the backup is now made as part of a replace that succeeds) — docs/2026-09-15-alerts-card-design.md:28, :33 — branch review Minor 3
+- AC-B.4 **OPEN** — code tidiness: `MinuteChoices(string? current)` ignores its parameter, kept so the contract's signature does, and `Row()` still computes a value to feed it; a reader who misses the comment will think A12's extra choice is live — src/UI/Setup/AlertCards.cs:293, 416 — branch review Minor 4
+- AC-B.6 **FIXED** — five untracked build transcripts sat in the repo root uncovered by `.gitignore`, where one stray `git add` could commit build logs to a public repo — `*-output.txt` now ignored (8e1bdd9) — branch review Minor 6
+- AC-B.7 **FIXED** — process: this cycle's plan was modified and uncommitted in the working tree at review time — committed at 0666172; the tree is clean at ddfafc8 — branch review Minor 7
+- AC-B.8 **OPEN** — test gap: `HeadshotsAsync`'s 100-id batching loop has no test, so the `asked` set — the middle privacy gate — is only ever exercised in its single-batch form — src/Source/IconClient.cs:129-154 — branch review Minor 8
+- AC-B.9 **OPEN** — performance: `AvatarFileFor` rebuilds the id set on every call, one HashSet allocation per row per redraw, where the board's equivalent reuses a snapshot — src/Composition/AppServices.cs:216-217 — branch review Minor 9
+- AC-B.10 **OPEN** — `AvatarFill._brushes` is an unsynchronized `Dictionary` on a converter shared by every window through `App.xaml`; correct today, pinned by nothing — src/UI/Controls/AvatarFill.cs — branch review Minor 10
+- AC-B.12 **OPEN** — `Placeless` drops `Index` but keeps the rule's own `Label`, so a hand edit to a label alone still fails `Same`, redraws and drops keyboard focus, though no card text changes — src/UI/Setup/AlertCards.cs:149 — branch review Minor 12 (the residue of AC-2.5)
+
+## Branch fix re-review
+
+Its second Minor is a restatement of AC-6.4 (no icon-cache pruning), not a new item.
+
+- AC-BR.1 **FIXED** — `TheSentDotIsLaidOutWhetherOrNotAnAccountIsSent` asserted the trigger's shape and the old converter's absence but never `Value="Hidden"`, so a regression to `Collapsed` inside that very setter — the one defect the test exists to catch — would still have passed — tests/AvatarFenceTests.cs:97-103; both A26 fences now read the setter through a shared check (ddfafc8) — branch re-review Minor 1
+- AC-BR.2 **OPEN** — `walk-starter-board.ps1` check 3 ("My accounts groups your accounts by clan") has no needs-RoRoRo skip, so with RoRoRo closed it fails on an empty panel and reads as a defect in Ur Score. `walk-alts.ps1` handles the same condition by reporting "needs RoRoRo" and skipping — give check 3 the same treatment, and sweep the other walks for checks that silently depend on accounts existing — tools/smoke/walk-starter-board.ps1:92-94 — found by the controller running the walks, 2026-09-15

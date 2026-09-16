@@ -3825,3 +3825,136 @@ powershell -ExecutionPolicy Bypass -File tools/smoke/shot.ps1 -Title 'Setup' -Ou
 - **Placeholders:** none. Every code step carries its code, and every command is exact. The one open-ended step is Task 3 Step 9's look at the page, which has fixed checks.
 - **Types across tasks:** each Task 1 name is used by Tasks 2 and 3 with the signature in the interface contract: `AlertRule`, `AlertSpec`, `RulesRead.For/SkippedFor/OursFor/Unusable/NoFile`, `RuleWrite`, `RulesProblem`, `RulesFile.Read/TurnOn/Change/Remove/ResolvePath/PathVariable/BackupSuffix`. The `AlertCardRow` and `AlertLineRow` property names bound in Task 3's XAML are exactly Task 2's: `Title`, `Note`, `HasNote`, `Lines`, `LinesName`, `NoAlerts`, `HasNoAlerts`, `ShowKinds`, `ShowRateKind`, `ShowLevelKind`, `RateTarget`, `LevelTarget`, `RateKindName`, `LevelKindName`, `CancelName`, `ShowRateEditor`, `ShowLevelEditor`, `Draft.Number`, `Draft.Minutes`, `Draft.Direction`, `MinuteChoices`, `DirectionChoices`, `NumberName`, `MinutesName`, `DirectionName`, `Problem`, `HasProblem`, `ShowEditor`, `ConfirmText`, `ConfirmName`, `ShowAdd`, `MetricId`, `AddName`, `Result`, `ShowResult`, `ShowResultProblem`, `Sentence`, `Mark`, `HasMark`, `Target`, `ShowChange`, `ShowRemove`, `ChangeName`, `RemoveName`. The accessible names Task 4 walks come from `AddName`, `KindName`, `ChangeName`, `RemoveName`, `NumberName`, `MinutesName`, `DirectionName` and `ConfirmName`, with the same words.
 - **Against the tree at `bab5335`:** these are used as they are: `RulesFile.Owner/DefaultPath/ReadOptions`, `RecipeState.SentStats/StatChoices`, `StatChoice.MetricId`, `RecipeStats.Find`, `InstalledRecipe`, `Recipe.IsGroupList`, `RecipeParserTests.Fixture`, `TempDir.Create`, `ISetupServices.HostText/Installed/KnownAccounts/Sources/Settings/PolicyCounts`, `AppServices.AddTrail`, `StatsTable.Load(..., Func<string, string> ruleSentence, ...)`, the `ImportWindow` constructor, the App.xaml styles `Heading`, `Muted`, `Refusal`, `SectionLabel`, `Card`, `PrimaryButton`, `MonoFont` and `BoolToVisible`, and the smoke helpers listed in Task 4. No walk used the retired ids (`RuleStatBox`, `RuleLine`, `AddRuleButton`, `RulePreview`).
+
+## Execution record (2026-09-15)
+
+Built by five subagent-driven tasks off `cec5987` (v0.3.1 + the backlog docs), each with its own dispatch, a per-task review, and a fix round where the review found real issues. Tasks 1, 2 and 3 took one fix round each; Task 4 took two, and the second one undid the first; Task 6 — the owner's late ask, planned and executed mid-cycle — took three. A whole-branch review then read `cec5987..8177b8d` in one pass, weighted on what a per-task review structurally cannot see: the two halves' shared files, the privacy fence across both halves at once, the release surface, and the states that only appear on a real machine. It found one Critical (the controller's own, see below), two Importants and twelve Minors; a scoped re-review of the four fix commits confirmed the Critical and one Important closed, and sent one Important and one Minor back for another round.
+
+The branch ends at **936 tests**, both the app and test-project builds `-warnaserror` clean, working tree clean at `ddfafc8`.
+
+**The walk ran, and passed.** The owner closed both apps; `walk-alerts.ps1` then passed **30 of 30** against a scratch rules file, including check 8 — RoRoRo's own `metric-rules.json` was byte-identical afterwards. `walk-stats-table` passed 10/10 and `walk-alts` 8/8 (one check self-skipped as needing RoRoRo). `walk-starter-board` failed its check 3 ("My accounts groups your accounts by clan") for an environmental reason, not a defect: RoRoRo was closed too, so Ur Score had no accounts to group — the panel drew its headings over zero rows, and the Alerts page said "0 of your 0 accounts" in the same run. That check has no needs-RoRoRo skip, unlike the one in `walk-alts`; giving it one is `AC-BR.2`.
+
+**Still not done, and gated on the owner:** Task 6's live look (Step 11, four screenshots in both themes) needs RoRoRo running, because avatars only appear beside accounts and the accounts come from RoRoRo over the plugin pipe. Task 5 (the release run) has not started: `manifest.json` and the csproj are still at `0.3.1`, and `CHANGELOG.md` is still at `## Unreleased`.
+
+### What shipped
+
+- **Setup › Alerts is a card per stat you send.** Each alert reads as a sentence you fill in — "stops climbing" (fewer than a number a minute for 10, 15 or 30 minutes) and "crosses a number" (above or below) — with + Add an alert, Change and Remove, and what happened said on the card in the theme. Rules you or another plugin wrote are listed and marked, never changed. A standing "Next, in RoRoRo" line says the one switch to flip. No stock message box, no JSON on screen, and a fence test pinning both.
+- **The rules file is written safely.** Every other rule and every unknown field survives a write byte for byte; the write goes through a temp file and one `File.Replace` swap, so a failure leaves the rules file *and* the previous undo point untouched; a locked, invalid or non-list file is refused with the reason on the card. Rules Ur Score writes carry `owner` and `label` (RoRoRo 1.28 ignores the label; the companion `feat/metric-alert-wording` branch reads it).
+- **Rows are read exactly as RoRoRo reads them**, by a hand-copied `RuleRow`/`RowOptions` pinned to RoRoRo commit `dc44992` by six parity tests.
+- **`RuleInventory` and `written-rules.json` are gone.** The Stats table's rule line now counts a stat's alerts from one snapshot instead of reading RoRoRo's file on every render.
+- **Your own accounts show their Roblox picture** on all five surfaces, behind a privacy fence that is gated on the id rather than the caller at three independent layers. No other player's id ever leaves the machine, and no other player's picture ever reaches disk.
+
+### Tasks
+
+- **Task 1** (rules file operations): `65224f1`, fix round 1 `aed8848`.
+- **Task 2** (the pure Alerts model): `a5e1093`, fix round 1 `f9fd6f7`.
+- **Task 3** (the themed page, the rules path, the old helper retired): `35242f0`, fix round 1 `953ee44`.
+- **Task 4** (the Setup › Alerts smoke walk): `7c5b93e`, fix round 1 `ba0037c` (**superseded**), fix round 2 `05332af`.
+- **Task 6** (avatars beside your own accounts): `52591e2`, fix round 1 `8177b8d`, fix round 2 `34569ae`, fix round 3 `ddfafc8`.
+- **Controller's own commits:** `0666172`, `8e1bdd9`, `84d4c19`.
+- **Task 5** (the release run): not started.
+
+### Every commit, and what it is for
+
+| Commit | What it is for |
+| --- | --- |
+| `bab5335` | The design: an Alerts page that tells you what to do. Approved before the plan was written. |
+| `d0a94a3` | The plan: A1-A20, Tasks 1-4, the release run. |
+| `65224f1` | Task 1. Read every rule as RoRoRo does; turn on, change or remove Ur Score's own, backing the file up first. |
+| `aed8848` | Task 1 fix round 1. One `File.Replace` swap, so a failed write keeps the last backup; six parity tests pinning RoRoRo `dc44992`; a shared blank-id guard and a path-that-names-no-file fallback. |
+| `a5e1093` | Task 2. Cards whose alerts read as sentences, checked input, and each step of the inline editor — pure, no WPF. |
+| `f9fd6f7` | Task 2 fix round 1. Numbers show exactly as typed; a rule's place in the file never redraws the cards; minutes are 10, 15 or 30. |
+| `35242f0` | Task 3. The themed Alerts page of cards and sentences, edited in place, with no message box and no JSON; `ISetupServices.RulesPath`; `RuleInventory` retired. |
+| `953ee44` | Task 3 fix round 1. Change and Remove read the file at the click, not the drawn card; `AlertCards.Gone` says so in magenta when the alert is gone or now another owner's. |
+| `7c5b93e` | Task 4. `walk-alerts.ps1`: Setup › Alerts against a scratch rules file, with RoRoRo's own file hashed before and after. |
+| `52591e2` | Task 6. Your own accounts show their Roblox picture, and no one else's is ever asked for. |
+| `ba0037c` | Task 4 fix round 1. Per-card scoping of the six line reads, plus the Stats save wait asserted. **The scoping half was wrong and is reverted at `05332af`;** the asserted wait survives. |
+| `8177b8d` | Task 6 fix round 1. Eight Minors: the heading indent, an A26 `Hidden` fence, the 1601 empty-ring case, unconditional forgetting, a wrong doc comment, two fences given teeth, a stale inventory row — plus the hostname sweep extended to `.xaml`. |
+| `0666172` | Controller. The README says you can install it (the banner and the "you cannot install this yet" block were three releases stale), and the live-look step reads the cache the way it behaves. |
+| `34569ae` | Task 6 fix round 2. The sent dot holds its space, so every name in the My accounts column starts at the same x. |
+| `05332af` | Task 4 fix round 2. Revert the per-card scoping (A13 makes it unnecessary) and pin the invariant with `Assert-OneLine` instead. |
+| `8e1bdd9` | Controller. Gitignore the build gate's five root transcripts, so one stray `git add -A` cannot commit build logs to a public repo. |
+| `84d4c19` | Controller. The README describes the window that shipped: Setup › Clans instead of Notepad, sentence cards instead of a dead JSON-preview button, and the four settings keys that still exist. |
+| `ddfafc8` | Task 6 fix round 3. Both A26 fences assert the `Visibility` setter's value, not just the trigger's shape. |
+
+### Rulings made during execution
+
+**From the pre-flight scan** (90 rows: 0 BLOCKER, 6 FIX, 28 NOTE). All six cost-if-wrong lines read "none."
+
+- **Read rules exactly as RoRoRo does** (T1): skip a row unless `label` is absent, null or a string; when a field appears twice with different case, the last one wins, as RoRoRo's case-insensitive deserializer does. Both rows went into the skip test. The implementer went further than the ruling and copied RoRoRo's own `RuleRow`/`Options` field for field, which caught two more divergences the hand-written readers would have shipped (`1e400` reads as `Infinity` rather than being skipped; case-duplicate precedence).
+- **A Change that changes nothing writes nothing** (T1): compare the built row with the existing one by `JsonNode.DeepEquals` and return Done with no backup and no write. An edit that changes nothing should not consume the one undo point.
+- **`PinnedLabel` uses `MetricId?.Trim()`** (T2), like every other reader in the tree (`RecipeStore.cs:54`).
+- **Drop the repeated `git rm src/Core/RuleInventory.cs`** from Task 3 Step 10 — Step 7 already removed it.
+- **`shot.ps1` calls pass `-OutPath`** (T3 Step 9, T4 Step 4).
+- **The walk throws before any click** if the seeded scratch-file sentence has not appeared within 15 s, so it can never act while Ur Score is reading RoRoRo's real `metric-rules.json`.
+
+**During the tasks**
+
+- **Task 1's two Importants both taken.** The `File.Replace` swap (a failure leaves file and backup untouched) in place of the brief's copy-then-move, and a `MIRRORS ROROROBLOX` comment naming RoRoRo's `LocalFileMetricRuleSource` at `dc44992` plus a parity test class pinning each behaviour relied on, `1e400` included. The blank-label omission and the numeric-`"kind": "7"` divergence were left as recorded, not chased.
+- **Task 2: a small fix round for three of the twelve Minors** — values near the cap never display rounded; `AlertCards.Same` compares rule identity rather than row index, so an unrelated edit higher in the file cannot steal your keyboard focus; minutes are only 10, 15 or 30 for Ur Score's own rules. The other nine parked. The third of these reversed A12's extra own-minutes choice: a stored 20-minute rule now opens Change with an empty minutes box. Save is blocked with a clear line rather than silently rewriting the window, so this was judged a Minor and recorded rather than reverted.
+- **Task 2's scoped re-review ran in parallel with Task 3.** The re-review is read-only and any finding would be a small model fix, so the cost if wrong was Task 3 adapting to one tweak.
+- **Task 3: one fix round, for the stale-view Minor** — re-read the file at the start of Change and Remove, as `OnAddClick` already did. The write was always correct (`RulesFile` re-resolves `OursFor` against a fresh load), but the result sentence and Change's starting values could describe the old rule. The trail-only exception path and the untested focus wiring were left; the latter became a requirement on Task 4's walk, which must press Enter in a *closed* minutes box and Escape in a *closed* direction box, since a closed `ComboBox` does not handle those keys itself.
+- **The owner's late ask became Task 6, not a bolt-on.** Roblox avatar headshots beside your own accounts, planned mid-cycle with its own rulings A21-A30, executed after Task 4 and before the release, so the order became T4 → T6 → T5. Two of its rulings were flagged for a nod and both stood: **A26's** permanent ~28 px indent on pictureless rows (a row that never moves is worth a constant indent; the alternative reflows numbers under the reader's eye) and **A28's** disclosure placement (the import screen lists what *that recipe* contacts, so an Ur Score-wide call there would make every import ask about something the recipe does not do; the README row plus a standing line on Setup › Your accounts are the honest place). Cost if wrong: a cosmetic indent, and one privacy sentence that moves to a different screen in a later version.
+- **Task 6 was dispatched before Task 4's walk had been run**, rather than idling on a gate the owner controlled. It touches `src/` only, never `tools/smoke` (A29) and never the Alerts page the walk exercises, so the walk's result could not invalidate it. Cost if wrong: the two diffs interleave, which they would not, being different files.
+- **Task 6: one fix round for eight of the thirteen Minors** — the header alignment (it lands in every screenshot, and the owner's standing rule is match the mock), a fence pinning A26's `Hidden` across all five surfaces, the missing-file-reads-1601 empty ring, `Keep` before the empty-list early return so forgetting is unconditional, a wrong doc comment, a fence assertion weaker than its name, a totals-row assertion that passed without a totals row, and a stale inventory row; plus an *attempt* at extending the hostname sweep to `.xaml`, with instructions to stop rather than edit product copy if it went red. Parked: #4, #6, #8, #11.
+- **The `.xaml` hostname carve-out stands.** The sweep flags 60 matches, every one a `schemas.microsoft.com` inside an `xmlns` declaration. The fence strips `xmlns`/`xmlns:prefix` attribute *values* from `.xaml` only, sweeps everything else including `Text=` prose, keeps `.cs` swept whole, and adds a vacuity floor asserting at least one `.xaml` file was swept — which closes the failure mode that actually worried the controller, a fence that silently sweeps nothing. An XML dialect URI is not a host anything contacts.
+- **Nothing prunes the icon cache, and that takes no code this cycle.** The ids are the owner's own and a stale file ages out on the seven-day refresh — but Step 11 item 5's count check would read as a false failure for anyone who has ever removed an account, so a sentence went into that step instead. Cost if wrong: a lingering file the owner could delete by hand.
+- **The controller reviewed Task 4's 43-line single-file fix himself** instead of spending a re-review seat, on the grounds that he is the one running the walk and the walk's own run is the real gate. That ruling is the one that cost the most; see the first lesson below.
+
+### Three findings worth keeping past this cycle
+
+**1. A false review finding, ruled on without checking the invariant, broke the thing it was meant to protect.**
+
+Task 4's review raised an Important: `AlertResultLine` and `AlertEditorProblemLine` are declared once per card in the `DataTemplate`, `AlertCardList` does not virtualize, and `Wait-Line`/`Line` `FindFirst` from the window root — so with two sent stats on screen, checks 3b and 3c would always read Diamonds' copy and fail every run regardless of the app. It reads as airtight. The controller confirmed the XAML lines it cited and ruled a fix into the walk: climb `ControlViewWalker` parents from a per-stat-unique element to the card root, and scope the reads there.
+
+It was a false finding, and the fix broke the walk outright. **The whole-branch review caught it as a Critical:** there is no per-card ancestor to climb to. `RowListAutomationPeer` is a plain `FrameworkElementAutomationPeer`, and WPF gives `Border`, `StackPanel` and `ContentPresenter` no automation peer at all, so every card's controls hoist **flat** under `AlertCardList`. The climb hits `AlertCardList` on step one and throws at all six sites; the walk would have aborted at check 2c, on an app behaving correctly — the same false-regression signal Task 4's review was written to prevent, just relocated.
+
+**The invariant that made the original code correct was stated in a one-line comment the whole time**, at `src/UI/Setup/AlertCards.cs:32`: *"The page's one open editor and its one result line (A13)."* `AlertsUi` carries a single `Problem` and a single `ResultMetricId`; `Row()` blanks `Result` on every card but the matching one; both lines bind `Visibility` through a plain `BooleanToVisibilityConverter`, which yields `Collapsed`, and a `Collapsed` element has **no automation peer** — it is absent from the tree entirely, not present-but-offscreen. At most one of each id is ever findable. The unscoped read at `7c5b93e` was right all along.
+
+The ruling was to revert the scoping, keep round 1's real fix (the asserted Stats save wait), and **not** take the branch review's own suggested fix either — an `IsOffscreen` filter rests on the same wrong premise. Instead, `Assert-OneLine` now asserts A13 rather than assuming it: a `FindAll` for the id must return at most one, throwing with the id and the count otherwise, with a comment recording why an unscoped read is correct. That turns a bad ruling into a net that catches the failure the false finding imagined. Cost if wrong: none.
+
+The lesson is not that reviews are sometimes wrong. It is that a finding about a *structural* invariant has to be checked against the invariant, not against the lines the finding cites — and that the invariant was already written down, one line above the type that enforces it.
+
+**2. "Is the fix complete?" is the wrong question. "What does this column lay out before a name, and is *all* of it unconditional?" is the right one.**
+
+The heading-alignment fix was made twice. Round 1 measured the avatar slot — a 20 px ellipse plus an 8 px margin — indented every heading by 28 px, and claimed in its own commit subject that "the Account heading sits over the names again." The whole-branch review found it still misaligned on My accounts, and inconsistent *within itself*: that row has a second leading ellipse, the 6 px cyan "sent" dot, which was `Visibility`-bound through `BoolToVisible` and therefore **`Collapsed`** — no reserved space. Names started at 40 px on a sent row and 28 px on every other one, so the heading could line up with one or the other but never both.
+
+Round 2 gave the dot the same rule A26 gives the avatar slot (a `DataTrigger` on `Sent=False` setting `Hidden`), so it holds its 12 px whether or not it paints, and set the heading to 28 + 12 = 40. A row no longer reflows when a report first lands.
+
+The implementer's own account of why round 1 missed it is the part worth keeping: **it measured the avatar slot and stopped, treating the pre-existing dot as background.** The right question was what the column lays out before a name and whether all of it is unconditional — which is exactly why the same offset held on the other three surfaces, where nothing conditional sits between the row's left edge and the name.
+
+**3. A mutation test must mutate *the* defect, not *a* defect.**
+
+Round 2 added `TheSentDotIsLaidOutWhetherOrNotAnAccountIsSent` and mutation-tested it — by restoring the old `BoolToVisible` binding, which the test obviously caught. The scoped re-review found the gap: the test asserted the trigger's *shape* and the old converter's *absence*, and never read the setter's value. A regression to `<Setter Property="Visibility" Value="Collapsed" />` **inside that very trigger** keeps the opening tag and introduces no converter, so it would have sailed straight through the one test written to catch it — the exact defect that had just shipped.
+
+Fixed at `ddfafc8`: both A26 fences now read the setter itself through a shared `HidesRatherThanCollapses` check (the markup sets `Property="Visibility"`, the value is `Hidden`, `Collapsed` appears nowhere in it), each assertion carrying a message that explains A26 rather than printing a string diff. Mutation-tested this time on the value: flipping each setter to `Collapsed` failed exactly its own test and nothing else moved. The avatar fence turned out **not** to have had the same gap — it already asserted `Value="Hidden"` — but was tightened to name the `Visibility` setter rather than trust that no other setter in that style carries a `Hidden`.
+
+A mutation only proves the assertion it actually exercises. Choosing a mutation the test was already obviously going to catch proves nothing about the assertion that matters.
+
+### Verification performed
+
+- **Builds and tests at `ddfafc8`:** `dotnet build Ur-Score.csproj -c Release -warnaserror` and `dotnet build tests/Ur-Score.Tests.csproj -c Release -warnaserror` both succeeded with 0 warnings; `dotnet test tests/Ur-Score.Tests.csproj -c Release --no-build` gave **936 passed, 0 failed, 0 skipped**. The count walked 862 (Task 1) to 870, 906, 923, then 916 (Task 3, after `RuleInventory`'s seven tests left with it), 917, 933 (Task 6), 935 and 936.
+- **Reviews:** nine in all — one per task (1, 2, 3, 4, 6), scoped re-reviews of Tasks 1 and 2, a whole-branch review of `cec5987..8177b8d`, and a scoped re-review of the four fix commits `8177b8d..8e1bdd9`. Task 1's review ran a focused `RulesFileTests` run and pulled RoRoRo's `LocalFileMetricRuleSource.cs` at `dc44992` with `git show` to check the parity claim byte for byte instead of trusting the report. The branch review ran `NoHostnameFenceTests | AvatarFenceTests | AlertsPageFenceTests | RulesFileParityTests` (16/16) and one out-of-repo WPF probe establishing that `Border`/`StackPanel`/`ContentPresenter` get no automation peer. The branch re-review was explicitly asked to re-derive the A13 invariant from the tree rather than take the controller's word, since the controller had got it wrong once already, and to re-check the other three panel surfaces itself, since that same "the others are clean" claim had been made a round earlier and was wrong for My accounts.
+- **Mutation tests:** three fences in Task 6 round 1 (`Hidden` to `Collapsed`; `AskForAvatars` computing "yours" differently; `contoso.com` in a `Text=` attribute), one in round 2 (restoring the old dot binding), two in round 3 (each A26 setter to `Collapsed`). Each failed exactly its own test, nothing else moved, all reverted, the gate green after.
+- **Byte scans:** every changed file checked for control characters, tabs and BOMs by the task reviews and again by the branch review; `walk-alerts.ps1` confirmed pure ASCII/LF three separate times, most recently by the branch re-review.
+- **`walk-alerts.ps1` was parse-checked, never run** (`Parser::ParseFile`: 0 errors, 1730 tokens). Ur Score and RoRoRo were never launched by any task.
+- **Not yet performed:** the live walk (Task 4 Step 4), Task 6's live look (Step 11: the walks, the owner's own data, the four theme screenshots, the `avatar-*.png` disk check), and every step of Task 5.
+
+### Where the sources disagree
+
+Recorded rather than silently reconciled.
+
+- **Task 4's review, Important 1, is wrong** — see lesson 1. Its two named XAML facts are true; the conclusion drawn from them is not, and the branch review's Critical 1 supersedes it. The branch review's own suggested fix (filter on `IsOffscreen`) is also wrong, for the same reason: these elements are `Collapsed` and absent from the tree, not present-but-offscreen.
+- **Task 2's Minor 7** (a 20-minute rule's extra choice is lost after a refused Save) is counted among "the other nine parked" in the ledger, but ruling 3 removed the extra choice from `MinuteChoices` entirely, so the scenario it describes can no longer occur. It is recorded **GONE** in the backlog, with the replacement cost — the empty minutes box — carried as its own open row (`AC-2.13`).
+- **Task 2's Minor 5** is recorded Fixed by the Task 2 re-review and half-closed by the branch review's Minor 12: `Placeless` drops `Index` but keeps the rule's own `Label`, so a hand edit to a label alone still redraws and drops focus. Both are in the backlog — the fix as `AC-2.5` (fixed), the residue as `AC-B.12` (open).
+- **The branch re-review reports "Minor count: 2"**, but its second item states outright that it is not a new finding — it confirms Task 6's Minor 4 (no icon-cache pruning) still stands. One distinct new Minor, not two.
+
+### Nice-to-haves (every review Minor)
+
+Every Minor finding from all nine reviews is written out row by row in `docs/backlog.md`, under **"0.3.2: the Alerts page and avatars"**, with ids `AC-1.*`, `AC-2.*`, `AC-3.*`, `AC-4.*`, `AC-6.*` (per task), `AC-B.*` (the whole-branch review) and `AC-BR.*` (the branch re-review). Each row keeps what the finding is, the `file:line` where the review gave one, whether it is open or was closed during the cycle, and the commit that closed it.
+
+**53 distinct items: 32 open, 20 fixed during the cycle, 1 gone.** The reviews raised 58 Minors between them; five of those are restatements across reviews (Task 3's Minor 6 and the branch review's Minor 11; the Task 2 re-review's minutes-box item and the branch review's Minor 5; Task 1's re-review restating two of Task 1's own; the branch re-review's second item restating Task 6's Minor 4), merged into one row each with both sources named.
+
+Per review: Task 1 six (3 open), Task 2 thirteen (9 open, 1 gone), Task 3 eight (6 open), Task 4 two (2 open), Task 6 thirteen (4 open), the whole-branch review ten (8 open), the branch re-review one (0 open).
+
+The four with a decision still to make: **`AC-6.4`** (nothing prunes the icon cache — it will make Step 11 item 5 read as a failure for anyone who has ever removed an account), **`AC-B.1`** (three backlog rows this branch invalidated, which Task 5's release step already instructs), **`AC-B.2`** and **`AC-B.3`** (three earlier design docs and the approved design itself now describe a page that no longer exists — banner-correct them, do not rewrite).
