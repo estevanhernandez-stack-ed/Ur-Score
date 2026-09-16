@@ -45,4 +45,17 @@ public static class BoardButtons
         EditBoard: !editing,
         AddPanel: editing,
         Done: editing);
+
+    /// <summary>
+    /// Whether the board starts reading by itself as it opens (plan A33). Off unless you turned it on, and then only
+    /// when pressing Start yourself would have done something: the book is read, nothing runs yet, a recipe is
+    /// installed, a source is on, and Setup isn't about to open on a recipe that has no source.
+    /// <para>
+    /// It ends with the Start button's own gate rather than restating it, so the two can't drift apart and leave the
+    /// board starting itself while the button for the same thing is disabled.
+    /// </para>
+    /// </summary>
+    public static bool StartsOnOpen(bool startOnOpen, bool loaded, bool running, int installed, bool anySourceOn, bool firstRunPage) =>
+        startOnOpen && !running && installed > 0 && anySourceOn && !firstRunPage
+        && For(loaded, running, starting: false, testing: false, importing: false).StartStop;
 }

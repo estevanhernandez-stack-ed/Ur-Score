@@ -11,6 +11,9 @@ public partial class RecipesPage : UserControl, ISetupPage
     private readonly SetupWindow _window;
     private bool _importing;
 
+    /// <summary>The box is being set from the saved settings, not by a click, so the handler doesn't write them back.</summary>
+    private bool _settingBox;
+
     public RecipesPage(ISetupServices services, SetupWindow window)
     {
         InitializeComponent();
@@ -26,6 +29,10 @@ public partial class RecipesPage : UserControl, ISetupPage
         Show(RecipeProblemsLine, _services.RecipeProblems.Count == 0
             ? ""
             : "Some recipe files could not be read: " + string.Join(" | ", _services.RecipeProblems));
+
+        _settingBox = true;
+        StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
+        _settingBox = false;
     }
 
     private async void OnImportClick(object sender, RoutedEventArgs e)
@@ -47,6 +54,28 @@ public partial class RecipesPage : UserControl, ISetupPage
         {
             _importing = false;
             ImportRecipeButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// The one app-wide setting with a control (plan A32). A write that fails is said here and the box goes back to
+    /// what is saved, so it never shows something the file doesn't — and no message box, ever (Global Constraints).
+    /// </summary>
+    private void OnStartOnOpenChanged(object sender, RoutedEventArgs e)
+    {
+        if (_settingBox) return;
+
+        try
+        {
+            _services.SaveSettings(_services.Settings with { StartOnOpen = StartOnOpenBox.IsChecked == true });
+            Show(StartOnOpenProblemLine, "");
+        }
+        catch (Exception ex)
+        {
+            Show(StartOnOpenProblemLine, _services.Redactor.Redact($"Could not save that: {ex.Message}"));
+            _settingBox = true;
+            StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
+            _settingBox = false;
         }
     }
 

@@ -141,7 +141,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public Redactor Redactor { get; }
 
-    public Settings Settings { get; }
+    public Settings Settings { get; private set; }
 
     public SharedAccounts Accounts { get; }
 
@@ -316,6 +316,17 @@ public sealed class AppServices : ISetupServices, IDisposable
         _sourceStore.Save(sources);
         Sources = sources;
         ApplySources();
+    }
+
+    /// <summary>
+    /// Writes <c>settings.json</c> and redraws. Nothing running changes: the only key a page writes is read when the
+    /// board next opens (plan A33). Qualified as <c>Core.Settings</c> because the property beside it has that name.
+    /// </summary>
+    public void SaveSettings(Settings settings)
+    {
+        Core.Settings.Save(settings);
+        Settings = settings;
+        RaiseChanged();
     }
 
     /// <summary>

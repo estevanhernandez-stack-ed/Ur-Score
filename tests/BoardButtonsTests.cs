@@ -125,4 +125,26 @@ public class BoardButtonsTests
         Assert.True(idle.TestNow);
         Assert.True(idle.EmptyState);
     }
+
+    /// <summary>Plan A33: the board starts itself only when pressing Start yourself would have done something.</summary>
+    [Theory]
+    [InlineData(true, true, false, 1, true, false, true)]     // the one case that reads
+    [InlineData(false, true, false, 1, true, false, false)]   // off, which is the default
+    [InlineData(true, false, false, 1, true, false, false)]   // the score book hasn't been read yet
+    [InlineData(true, true, true, 1, true, false, false)]     // already running
+    [InlineData(true, true, false, 0, true, false, false)]    // nothing installed
+    [InlineData(true, true, false, 1, false, false, false)]   // every source switched off
+    [InlineData(true, true, false, 1, true, true, false)]     // Setup just opened on a recipe with no source
+    public void StartingFromOpenNeedsSomethingToRead(
+        bool startOnOpen, bool loaded, bool running, int installed, bool anySourceOn, bool firstRunPage, bool starts) =>
+        Assert.Equal(starts, BoardButtons.StartsOnOpen(startOnOpen, loaded, running, installed, anySourceOn, firstRunPage));
+
+    [Fact]
+    public void StartingFromOpenAgreesWithTheStartButton()
+    {
+        // Two gates that can drift apart is how a board starts itself while the button that does the same thing is
+        // disabled. This one is the button's, plus the reasons a press would have been a no-op.
+        Assert.False(BoardButtons.For(loaded: false, running: false, starting: false, testing: false, importing: false).StartStop);
+        Assert.False(BoardButtons.StartsOnOpen(startOnOpen: true, loaded: false, running: false, installed: 1, anySourceOn: true, firstRunPage: false));
+    }
 }

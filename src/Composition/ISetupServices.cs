@@ -75,6 +75,12 @@ public interface ISetupServices
     /// <summary>Saves <c>sources.json</c>, applies it to the running watches at once, and raises <see cref="Changed"/>.</summary>
     void SaveSources(IReadOnlyList<Source> sources);
 
+    /// <summary>
+    /// Writes <c>settings.json</c> and raises <see cref="Changed"/>. Throws when it can't be written, and nothing
+    /// changes then; no page edits that file itself.
+    /// </summary>
+    void SaveSettings(Settings settings);
+
     /// <summary>Reloads recipes from disk, migrates sources for any new recipe, applies, and raises <see cref="Changed"/>.</summary>
     void ReloadRecipes();
 

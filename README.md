@@ -139,13 +139,14 @@ recipe and lives beside it, set under **Setup → Recipes**, **Stats**, **Clans*
 accounts**. Thresholds aren't here at all: RoRoRo does the judging, and you write those in
 **Setup → Alerts**.
 
-What's left in `%LOCALAPPDATA%\626labs.ur-score\settings.json` is two keys, and only the first is
+What's left in `%LOCALAPPDATA%\626labs.ur-score\settings.json` is three keys, and only the first is
 worth touching by hand:
 
 | Key | Default | What it does |
 | --- | --- | --- |
 | `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. There is no checkbox for this. |
 | `activeRecipe` | *(none)* | Which imported recipe is on. Set by **Setup → Recipes**; no reason to edit it yourself. |
+| `startOnOpen` | `false` | Whether Ur Score starts reading as soon as its window opens. Ticked in **Setup → Recipes**; no reason to edit it by hand. |
 
 ## What it doesn't do
 
@@ -155,8 +156,9 @@ worth touching by hand:
 - **Set thresholds, cooldowns, or send notifications.** RoRoRo owns all of that.
 - **Touch Roblox itself.** Ur Score reads HTTP and writes to a local pipe. It cannot click, type,
   or otherwise act inside a Roblox client.
-- **Run itself in the background.** Autostart defaults to off. You press Start when a
-  battle's on; it won't watch a battle you forgot to start it for.
+- **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur Score reads only
+  while its own window is open. Once you're set up you can tick **Start reading as soon as Ur Score opens** in
+  **Setup → Recipes** so you don't have to press Start; it still won't watch a battle you never opened it for.
 
 ## Troubleshooting
 

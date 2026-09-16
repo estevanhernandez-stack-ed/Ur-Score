@@ -40,5 +40,13 @@
                     AutomationProperties.Name="Import a recipe file" />
             <TextBlock x:Name="RecipesLine" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
         </StackPanel>
+        <TextBlock Text="WHEN UR SCORE OPENS" Style="{StaticResource SectionLabel}" Margin="0,22,0,6" />
+        <!-- Checked and Unchecked, not Click: a UI Automation toggle changes IsChecked without a click. -->
+        <CheckBox x:Name="StartOnOpenBox" Content="Start reading as soon as Ur Score opens"
+                  Checked="OnStartOnOpenChanged" Unchecked="OnStartOnOpenChanged"
+                  AutomationProperties.Name="Start reading as soon as Ur Score opens" />
+        <TextBlock Style="{StaticResource Muted}" Margin="24,4,0,0"
+                   Text="Off unless you turn it on. Ur Score reads only while it is open, and Stop still stops it." />
+        <TextBlock x:Name="StartOnOpenProblemLine" Style="{StaticResource Refusal}" Margin="24,4,0,0" Visibility="Collapsed" />
     </StackPanel>
 </UserControl>
