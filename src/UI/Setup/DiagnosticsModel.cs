@@ -40,10 +40,10 @@ public static class DiagnosticsModel
     };
 
     /// <summary>
-    /// After Stop, what a source's last read found (backlog S1-12.8). A state that says something is happening now is worded as
-    /// what happened; the rest already describe what the read found and read the same.
+    /// What a read found, said after it (backlog S1-12.8). A state that says something is happening now is worded as what
+    /// happened; the rest already describe what the read found and read the same. The board's stopped line says it too (S1-14.5).
     /// </summary>
-    private static string LastReadText(WatchState state) => "Stopped. Last read: " + state switch
+    public static string PastStateText(WatchState state) => state switch
     {
         WatchState.Reporting => "Reported to RoRoRo.",
         WatchState.HostDown => "RoRoRo wasn't running.",
@@ -51,6 +51,9 @@ public static class DiagnosticsModel
         WatchState.Showing => "No stat was set to send to RoRoRo, so nothing was sent.",
         _ => StateText(state),
     };
+
+    /// <summary>After Stop, what a source's last read found (backlog S1-12.8).</summary>
+    private static string LastReadText(WatchState state) => "Stopped. Last read: " + PastStateText(state);
 
     public static IReadOnlyList<SourceDiagnostic> Sources(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest,

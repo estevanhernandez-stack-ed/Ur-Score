@@ -73,4 +73,25 @@ public class ScoreBookModelTests
         Assert.Equal(new BookRecipeItem("Pet Sim 99 clan battle points", "0 readings kept", "No reading yet", "0 finished battles kept", "0 bytes"), item);
         Assert.Equal("0 readings kept · No reading yet · 0 finished battles kept · 0 bytes", item.Summary);
     }
+
+    /// <summary>
+    /// Backlog S1-12.4. "Could not open the folder" was written onto the line the page's redraw owns for pending lines, so the
+    /// next redraw (any read, any book line) wiped it. It has a line of its own now, and says what you can do instead in plain
+    /// words; the exception's own message (a path, a Win32 code) goes to the trail as its type.
+    /// </summary>
+    [Fact]
+    public void AFolderThatCouldNotBeOpenedSaysSoInPlainWords()
+    {
+        var said = ScoreBookModel.FolderNotOpened(new System.ComponentModel.Win32Exception(2, "The system cannot find the file specified."));
+
+        Assert.Equal("Ur Score couldn't open the folder. Its path is above, so you can open it yourself.", said);
+        Assert.Equal(said, ScoreBookModel.FolderNotOpened(new UnauthorizedAccessException("Access to the path 'C:\\x' is denied.")));
+    }
+
+    [Fact]
+    public void ThePendingLineSaysNothingWhileNothingIsWaitingOrDropped()
+    {
+        Assert.Equal("", ScoreBookModel.PendingLine(0, 0));
+        Assert.Equal("3 lines are waiting to be written, and 1 readings were dropped because the file couldn't be written.", ScoreBookModel.PendingLine(3, 1));
+    }
 }

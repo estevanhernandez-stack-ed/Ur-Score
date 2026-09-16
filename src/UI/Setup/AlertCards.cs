@@ -288,9 +288,27 @@ public static partial class AlertCards
     /// <summary>
     /// 10, 15 and 30, and nothing else, whatever <paramref name="current"/> holds (controller ruling, Task 2 review, replacing
     /// A12's extra choice). A rule whose window is another number reads as-is in its sentence; its Change opens with no minutes
-    /// chosen, and Save asks you to choose one of these. The parameter stays so the contract's signature does.
+    /// chosen, says why (<see cref="OtherMinutes"/>), and Save asks you to choose one of these. The parameter stays so the
+    /// contract's signature does.
     /// </summary>
     public static IReadOnlyList<string> MinuteChoices(string? current) => [.. Minutes.Select(Editable)];
+
+    /// <summary>
+    /// Why the minutes box is empty on a rule whose own minutes it doesn't offer, said as Change opens and again if Save is
+    /// pressed before one is chosen (backlog AC-2.13).
+    /// </summary>
+    public static string OtherMinutes(string minutes)
+    {
+        var choices = MinuteChoices(null);
+        return $"Ur Score offers {string.Join(", ", choices.Take(choices.Count - 1))} or {choices[^1]} minutes, and this alert uses {minutes}. "
+               + "Choose one to save a change, or Cancel to leave the alert as it is.";
+    }
+
+    /// <summary>Minutes a rule of its own could hold and the box doesn't offer: a finite number above 0 that isn't one of the choices.</summary>
+    private static bool IsOtherMinutes(string? minutes) =>
+        double.TryParse(minutes?.Trim(), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value)
+        && double.IsFinite(value) && value > 0
+        && !MinuteChoices(null).Contains(minutes!.Trim(), StringComparer.Ordinal);
 
     [GeneratedRegex(@"^([0-9]{1,3}(,[0-9]{3})+|[0-9]+)(\.[0-9]{1,2})?$")]
     private static partial Regex PlainNumber();
@@ -334,9 +352,8 @@ public static partial class AlertCards
         {
             // Only a choice the box offers, matched as text: "Infinity", "NaN", 0 or a rule's own 20 never reach the file.
             var chosen = Minutes.Where(m => string.Equals(Editable(m), draft.Minutes?.Trim(), StringComparison.Ordinal)).ToList();
-            return chosen.Count == 1
-                ? (new AlertSpec(kind, threshold, chosen[0], AlertWhenBelow: true, label), "")
-                : (null, ChooseMinutes);
+            if (chosen.Count == 1) return (new AlertSpec(kind, threshold, chosen[0], AlertWhenBelow: true, label), "");
+            return (null, IsOtherMinutes(draft.Minutes) ? OtherMinutes(draft.Minutes!.Trim()) : ChooseMinutes);
         }
 
         return draft.Direction is Below or Above
@@ -350,7 +367,16 @@ public static partial class AlertCards
 
     public static AlertsUi ChooseKind(AlertTarget target) => new(target.MetricId, AlertEditMode.Adding, target.Kind, NewDraft(target.Kind));
 
-    public static AlertsUi OpenChange(AlertLine line) => new(line.Rule.MetricId, AlertEditMode.Changing, line.Rule.Kind, DraftOf(line.Rule));
+    /// <summary>
+    /// Change opens on the rule's own values. A stops-climbing rule whose minutes the box doesn't offer opens saying why its
+    /// minutes box is empty (backlog AC-2.13), rather than leaving that for Save to find.
+    /// </summary>
+    public static AlertsUi OpenChange(AlertLine line)
+    {
+        var draft = DraftOf(line.Rule);
+        var problem = line.Rule.Kind == AlertKind.Rate && IsOtherMinutes(draft.Minutes) ? OtherMinutes(draft.Minutes) : "";
+        return new(line.Rule.MetricId, AlertEditMode.Changing, line.Rule.Kind, draft, Problem: problem);
+    }
 
     /// <summary>After Turn on or Save wrote (or didn't): the result on the card; a file that can't be opened or written keeps the editor open.</summary>
     public static AlertsUi AfterWrite(AlertsUi ui, RuleWrite outcome, AlertSpec spec)

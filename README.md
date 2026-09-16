@@ -196,9 +196,14 @@ copies.
 the first Start it reads "Not started."; after one, "Stopped."; with no source switched on,
 "Running, with nothing to read yet."; and while all is well, "Reading 1 source." or "Reading 3
 sources." If a source is in trouble, its name and its reason replace that — a source is named by
-the input you typed for it, so the line reads "Nebula: Could not reach the data." And whenever any
-panel is drawing numbers from the score book rather than from this session, the sentence about
-their age is appended to whatever else the line says.
+the input you typed for it, so the line reads "Nebula: Could not reach the data." While Start waits
+for RoRoRo's list of your accounts (up to 20 seconds) it reads "Starting. Asking RoRoRo for your
+accounts…", and while Test now reads, "Reading every source once…". A read you ask for while
+stopped says what it found after "Not started." or "Stopped.": "Stopped. Last read: Reported to
+RoRoRo.", or the source in trouble by name. If the score book itself can't be read, the line says
+"Your score book could not be read.", the line under it says why, and the board offers Try again.
+And whenever any panel is drawing numbers from the score book rather than from this session, the
+sentence about their age is appended to whatever else the line says.
 
 Underneath it, a second and quieter line carries whatever most needs saying: a change to your
 boards that couldn't be written, RoRoRo being away, or how many of RoRoRo's 256 history slots your

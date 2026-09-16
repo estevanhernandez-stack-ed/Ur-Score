@@ -24,11 +24,13 @@ public partial class ClansPage : UserControl, ISetupPage
     private string? _mineProbeId;
     private bool _rendering;
 
-    public ClansPage(ISetupServices services, string recipeSlug)
+    /// <param name="note">What the import that opened this page did, said above the page and left alone by every redraw (S1-12.4).</param>
+    public ClansPage(ISetupServices services, string recipeSlug, string? note = null)
     {
         InitializeComponent();
         _services = services;
         _slug = recipeSlug;
+        Show(ImportedLine, note ?? "");
 
         MainClanSearch.Picked += name => _ = PickAsync(name, SourceRole.Main);
         MineClanSearch.Picked += name => _ = PickAsync(name, SourceRole.Mine);

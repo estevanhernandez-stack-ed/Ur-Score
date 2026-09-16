@@ -189,6 +189,12 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary>Stopped after at least one Start this session, as opposed to never started.</summary>
     public bool EverStarted { get; private set; }
 
+    /// <summary>When reading last stopped, or null if it never ran. The board's stopped line says only reads asked for since (S1-14.5).</summary>
+    public DateTimeOffset? StoppedAt { get; private set; }
+
+    /// <summary>When a read was last asked for by hand: Test now, or Setup reading a source once. The board says what it found (S1-14.5).</summary>
+    public DateTimeOffset? AskedReadAt { get; private set; }
+
     /// <summary>The icon file the window should show, or null for Ur Score's own. Raised on the UI thread.</summary>
     public event Action<string?>? IconChanged;
 
@@ -341,6 +347,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     public void Stop()
     {
         Runner.Stop();
+        StoppedAt = _time.GetUtcNow();
         AddTrail("STOPPED");
         RaiseChanged();
     }
@@ -349,6 +356,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         if (!ReaderLoaded) return;
 
+        AskedReadAt = _time.GetUtcNow();
         await RefreshAccountsAsync(_closing.Token);
         await Runner.RunAllNowAsync(BookLine.TriggerManual, _closing.Token);
     }
@@ -422,6 +430,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         if (!ReaderLoaded) return null;
 
+        AskedReadAt = _time.GetUtcNow();
         await RefreshAccountsAsync(cancellationToken);
         if (Runner.WatchFor(sourceId) is not { } watch) return null;
 

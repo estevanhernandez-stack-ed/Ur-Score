@@ -451,7 +451,10 @@ public static class PanelModels
         var toRows = live.LiveOf(to.Id)?.Rows;
         if (fromRows is null || toRows is null)
         {
-            return new PromotionModel(head with { Note = $"Waiting for a read of {(fromRows is null ? fromName : toName)}." }, lowestLabel, Dash, stat.Label, []);
+            var (missing, missingName) = fromRows is null ? (from, fromName) : (to, toName);
+            // A read that happened and brought nothing back is said as that, not as a wait for one (S1-F.6).
+            var why = live.LiveOf(missing.Id) is null ? $"Waiting for a read of {missingName}." : PanelText.NothingBack(missingName);
+            return new PromotionModel(head with { Note = why }, lowestLabel, Dash, stat.Label, []);
         }
 
         var toValues = new List<(long UserId, double Value)>();
@@ -708,7 +711,9 @@ public static class PanelModels
         // Live only (plan A40): a group list's groups are shown and never kept, so the book has none to give back.
         if (live.LiveOf(source.Id)?.Groups is not { Count: > 0 } groups)
         {
-            return new TopModel(head with { Note = "Waiting for the first read." }, nameColumn, valueColumn, []);
+            // After a read that brought nothing back, "waiting for the first read" is not true (S1-F.6).
+            var why = live.LiveOf(source.Id) is null ? "Waiting for the first read." : PanelText.NothingBack();
+            return new TopModel(head with { Note = why }, nameColumn, valueColumn, []);
         }
 
         var ordered = OrderGroups(groups, key);
@@ -926,7 +931,11 @@ public static class PanelModels
 
         IReadOnlyList<string> columns = [.. shown.Select(s => s.Label)];
         // Live only (plan A40): every row but yours is memory alone, so a remembered snapshot would show you by yourself.
-        if (live.LiveOf(source.Id)?.Rows is not { } rows) return new LeaderboardModel(head, columns, []);
+        if (live.LiveOf(source.Id)?.Rows is not { } rows)
+        {
+            // Empty after a read this session is said, not left blank (S1-F.6); before one, "Live only" is all there is to say.
+            return new LeaderboardModel(live.LiveOf(source.Id) is null ? head : head with { Note = $"{head.Note} {PanelText.NothingBack()}" }, columns, []);
+        }
 
         var ranked = Leaderboard.Rank(rows, live.MyUserIds, shown[0].Key);
         var zone = live.Time.LocalTimeZone;

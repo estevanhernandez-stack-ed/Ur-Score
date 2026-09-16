@@ -15,7 +15,11 @@ public partial class SetupWindow : Window
     private string? _currentId;
     private bool _rebuilding;
 
-    public SetupWindow(ISetupServices services, string? startPage = null)
+    /// <summary>What the next page built for this id opens saying; taken by the next page built, whichever it is.</summary>
+    private (string PageId, string Text)? _note;
+
+    /// <param name="note">What <paramref name="startPage"/> opens saying, as <see cref="ShowPage"/> takes it.</param>
+    public SetupWindow(ISetupServices services, string? startPage = null, string? note = null)
     {
         InitializeComponent();
         ThemeService.Attach(this);
@@ -23,13 +27,18 @@ public partial class SetupWindow : Window
         _services.Changed += OnServicesChanged;
         Closed += (_, _) => _services.Changed -= OnServicesChanged;
 
-        ShowPage(startPage ?? SetupPages.StartPage(services.Installed, services.Sources));
+        ShowPage(startPage ?? SetupPages.StartPage(services.Installed, services.Sources), note);
     }
 
     /// <summary>Shows a page by id, building it fresh.</summary>
-    public void ShowPage(string pageId)
+    /// <param name="note">
+    /// What that page opens saying: an import that goes on to a Clans page carries its result there, because the Recipes page
+    /// it said it on is replaced at once (backlog S1-12.4). Said once, on that page only; a later visit builds the page without it.
+    /// </param>
+    public void ShowPage(string pageId, string? note = null)
     {
         _currentId = null;
+        _note = note is null ? null : (pageId, note);
         RebuildNav(pageId);
     }
 
@@ -80,14 +89,20 @@ public partial class SetupWindow : Window
         (PageHost.Content as ISetupPage)?.Refresh();
     }
 
-    private FrameworkElement CreatePage(SetupPage page) => page.Id switch
+    private FrameworkElement CreatePage(SetupPage page)
     {
-        _ when page.RecipeSlug is { } slug => new ClansPage(_services, slug),
-        SetupPages.Accounts => new AccountsPage(_services),
-        SetupPages.Stats => new StatsPage(_services),
-        SetupPages.Recipes => new RecipesPage(_services, this),
-        SetupPages.Alerts => new AlertsPage(_services),
-        SetupPages.ScoreBook => new ScoreBookPage(_services),
-        _ => new DiagnosticsPage(_services),
-    };
+        var note = _note is { } pending && pending.PageId == page.Id ? pending.Text : null;
+        _note = null;
+
+        return page.Id switch
+        {
+            _ when page.RecipeSlug is { } slug => new ClansPage(_services, slug, note),
+            SetupPages.Accounts => new AccountsPage(_services),
+            SetupPages.Stats => new StatsPage(_services),
+            SetupPages.Recipes => new RecipesPage(_services, this),
+            SetupPages.Alerts => new AlertsPage(_services),
+            SetupPages.ScoreBook => new ScoreBookPage(_services),
+            _ => new DiagnosticsPage(_services),
+        };
+    }
 }

@@ -150,6 +150,18 @@ public static class AccountsModel
         return new SendChange(recipe.State with { ExcludedAccountIds = kept }, null);
     }
 
+    /// <summary>
+    /// The page's asking for your accounts threw. The ask itself never fails for RoRoRo's sake (a slow or broken answer gives the
+    /// saved list), so what threw is what Ur Score did with the answer: the words say only what is known (backlog S1-12.4).
+    /// </summary>
+    public const string AccountsNotUpdated = "Something went wrong while Ur Score was getting your accounts. Diagnostics has the details.";
+
+    /// <summary>
+    /// The page's message line, worked out on every redraw so a redraw can't wipe what it said (backlog S1-12.4): why the last
+    /// Send tick was undone, the newest thing you did; else what went wrong getting your accounts; else the budget warning.
+    /// </summary>
+    public static string MessageLine(string? refusal, string? problem, string? budgetWarning) => refusal ?? problem ?? budgetWarning ?? "";
+
     public static string ListedLine(AccountList? last, DateTimeOffset? savedAt, DateTimeOffset now)
     {
         const string Lead = "Accounts come from RoRoRo.";

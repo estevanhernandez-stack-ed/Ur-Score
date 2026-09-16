@@ -194,12 +194,25 @@ public class AlertCardsTests
     [InlineData("Infinity")]
     [InlineData("NaN")]
     [InlineData("0")]
-    [InlineData("20")]
     [InlineData("-10")]
-    [InlineData("10.5")]
+    [InlineData("")]
     public void StopsClimbingTakesOnlyTheMinutesTheBoxOffers(string minutes)
     {
         Assert.Equal(((AlertSpec?)null, "Choose how many minutes."),
+            AlertCards.Check(AlertKind.Rate, new AlertDraft { Number = "250", Minutes = minutes }, "Diamonds"));
+    }
+
+    /// <summary>
+    /// Backlog AC-2.13. A number of minutes the box doesn't offer can only have come from the rule being changed, and Save said
+    /// the generic "Choose how many minutes." over a box that had never shown one. It is still refused (controller ruling 3), and
+    /// the refusal names the rule's own minutes and what to do.
+    /// </summary>
+    [Theory]
+    [InlineData("20")]
+    [InlineData("10.5")]
+    public void MinutesFromTheRuleThatTheBoxDoesNotOfferAreRefusedByName(string minutes)
+    {
+        Assert.Equal(((AlertSpec?)null, $"Ur Score offers 10, 15 or 30 minutes, and this alert uses {minutes}. Choose one to save a change, or Cancel to leave the alert as it is."),
             AlertCards.Check(AlertKind.Rate, new AlertDraft { Number = "250", Minutes = minutes }, "Diamonds"));
     }
 
@@ -212,11 +225,32 @@ public class AlertCardsTests
 
         Assert.Equal("Alert me when an account's Diamonds gains fewer than 100 a minute for 20 minutes.", line.Sentence);
         Assert.Equal(new[] { "10", "15", "30" }, AlertCards.Rows(view, changing)[0].MinuteChoices);
-        Assert.Equal(((AlertSpec?)null, "Choose how many minutes."), AlertCards.Check(AlertKind.Rate, changing.Draft!, "Diamonds"));
+        Assert.Equal(((AlertSpec?)null, AlertCards.OtherMinutes("20")), AlertCards.Check(AlertKind.Rate, changing.Draft!, "Diamonds"));
         foreach (var offered in AlertCards.MinuteChoices(null))
         {
             Assert.Equal("", AlertCards.Check(AlertKind.Rate, new AlertDraft { Number = "100", Minutes = offered }, "Diamonds").Problem);
         }
+    }
+
+    /// <summary>
+    /// Backlog AC-2.13. Change on a rule whose minutes the box doesn't offer opened with the minutes box empty and nothing on
+    /// screen saying why. The editor opens saying so, before Save is ever pressed; a rule with minutes the box offers, and a
+    /// crosses-a-number rule, open with nothing to say.
+    /// </summary>
+    [Fact]
+    public void ChangeOnARuleWhoseMinutesTheBoxDoesNotOfferSaysWhyTheBoxIsEmpty()
+    {
+        var odd = AlertCards.Build([Sending("diamonds")], RulesOf(Rule(0, Diamonds, AlertKind.Rate, 100, window: 20)));
+        var row = AlertCards.Rows(odd, AlertCards.OpenChange(odd.Cards[0].Alerts[0]))[0];
+
+        Assert.Equal("Ur Score offers 10, 15 or 30 minutes, and this alert uses 20. Choose one to save a change, or Cancel to leave the alert as it is.", row.Problem);
+        Assert.True(row.HasProblem);
+
+        var usual = AlertCards.Build([Sending("diamonds")], RulesOf(Rule(0, Diamonds, AlertKind.Rate, 100, window: 15)));
+        Assert.Equal("", AlertCards.Rows(usual, AlertCards.OpenChange(usual.Cards[0].Alerts[0]))[0].Problem);
+
+        var level = AlertCards.Build([Sending("diamonds")], RulesOf(Rule(0, Diamonds, AlertKind.Level, 40)));
+        Assert.Equal("", AlertCards.Rows(level, AlertCards.OpenChange(level.Cards[0].Alerts[0]))[0].Problem);
     }
 
     [Fact]

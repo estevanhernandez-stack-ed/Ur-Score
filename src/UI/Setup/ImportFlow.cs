@@ -9,9 +9,13 @@ namespace Labs626.UrScore.UI;
 
 /// <summary>
 /// What an import did, and whether Setup should go on to that recipe's Clans page. <paramref name="IsProblem"/>
-/// marks a message the page says as a refusal rather than as news: nothing was installed.
+/// marks a message the page says as a refusal rather than as news: nothing was installed, or it was saved and couldn't be
+/// loaded, which needs a restart.
 /// </summary>
 public sealed record ImportOutcome(string Slug, string Message, bool ChooseSources, bool IsProblem = false);
+
+/// <summary>The two lines an import speaks on: what it did (<paramref name="News"/>), and why it couldn't (<paramref name="Problem"/>).</summary>
+public sealed record ImportLines(string News, string Problem);
 
 /// <summary>
 /// Import recipe…, moved from the retired main window with the same rules (spec §6.3, stats design §7.2):
@@ -75,9 +79,7 @@ public static class ImportFlow
             if (installed is not null && review.CanImport && !comparison.AsksAgain)
             {
                 // An update that contacts the same hosts with the same things: listed, not asked.
-                services.Store.Save(recipe, text, installed.State);
-                services.ReloadRecipes();
-                return Outcome(services, recipe, $"Updated {recipe.Name}. {string.Join(" ", comparison.Changes)}".Trim());
+                return SaveAndLoad(services, recipe, text, installed.State, $"Updated {recipe.Name}. {string.Join(" ", comparison.Changes)}".Trim());
             }
 
             // The history budget counts RoRoRo's accounts, so they are asked for before the screen that checks it.
@@ -113,9 +115,7 @@ public static class ImportFlow
                 CounterNames = window.CounterNames,
             };
 
-            services.Store.Save(recipe, text, state);
-            services.ReloadRecipes();
-            return Outcome(services, recipe, $"Imported {recipe.Name}.");
+            return SaveAndLoad(services, recipe, text, state, $"Imported {recipe.Name}.");
         }
         catch (Exception ex)
         {
@@ -123,6 +123,46 @@ public static class ImportFlow
             // dismissed before you can see what you were doing (owner rule, backlog V3-S.10).
             return Problem(services.Redactor.Redact($"Could not save that recipe: {ex.Message}"));
         }
+    }
+
+    /// <summary>
+    /// What an import leaves on the page that started it. A cancelled one (null) leaves both lines as they were before it
+    /// started: the wait for RoRoRo writes over the news line, and a cancel must not leave it blank (backlog S1-14.10). One that
+    /// happened or couldn't replaces both.
+    /// </summary>
+    public static ImportLines LinesAfter(ImportLines before, ImportOutcome? outcome) =>
+        outcome is null ? before
+        : outcome.IsProblem ? new ImportLines("", outcome.Message)
+        : new ImportLines(outcome.Message, "");
+
+    /// <summary>
+    /// Saves the recipe, then loads every recipe again. Each step fails on its own words (backlog S1-12.12): a load that throws
+    /// after a good save is about a recipe that is on disk, so it says it was saved and that a restart loads it, and the trail
+    /// gets the exception's type.
+    /// </summary>
+    public static ImportOutcome SaveAndLoad(ISetupServices services, Recipe recipe, string text, RecipeState state, string message)
+    {
+        try
+        {
+            services.Store.Save(recipe, text, state);
+        }
+        catch (Exception ex)
+        {
+            return Problem(services.Redactor.Redact($"Could not save that recipe: {ex.Message}"));
+        }
+
+        try
+        {
+            services.ReloadRecipes();
+        }
+        catch (Exception ex)
+        {
+            services.AddTrail($"RECIPE NOT LOADED: {recipe.Slug} {ex.GetType().Name}");
+            return new ImportOutcome(recipe.Slug, $"{recipe.Name} was saved, but Ur Score couldn't load it. Restart Ur Score to load it.",
+                ChooseSources: false, IsProblem: true);
+        }
+
+        return Outcome(services, recipe, message);
     }
 
     /// <summary>An import that couldn't happen, for the page to say as a refusal. Nothing was installed.</summary>

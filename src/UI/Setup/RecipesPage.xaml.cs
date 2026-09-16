@@ -42,22 +42,21 @@ public partial class RecipesPage : UserControl, ISetupPage
         _importing = true;
         ImportRecipeButton.IsEnabled = false;
 
+        // What the lines said before this import, for a cancel to leave as it found them (backlog S1-14.10).
+        var before = new ImportLines(RecipesLine.Text, ImportProblemLine.Visibility == Visibility.Visible ? ImportProblemLine.Text : "");
+
         try
         {
             Show(ImportProblemLine, "");
-            var outcome = await ImportFlow.RunAsync(_window, _services, text => Show(RecipesLine, text));
-            if (outcome is null) return;
+            var outcome = await ImportFlow.RunAsync(_window, _services, text => Show(RecipesLine, text.Length > 0 ? text : before.News));
 
-            // An import that couldn't happen is said here, under the button that started it, not in a stock box.
-            if (outcome.IsProblem)
-            {
-                Show(RecipesLine, "");
-                Show(ImportProblemLine, outcome.Message);
-                return;
-            }
+            // An import that couldn't happen is said under the button that started it, not in a stock box.
+            var after = ImportFlow.LinesAfter(before, outcome);
+            Show(RecipesLine, after.News);
+            Show(ImportProblemLine, after.Problem);
 
-            Show(RecipesLine, outcome.Message);
-            if (outcome.ChooseSources) _window.ShowPage(SetupPages.ClansId(outcome.Slug));
+            // This page is replaced by the recipe's Clans page at once, so what the import did goes there with it (S1-12.4).
+            if (outcome is { ChooseSources: true }) _window.ShowPage(SetupPages.ClansId(outcome.Slug), outcome.Message);
         }
         finally
         {

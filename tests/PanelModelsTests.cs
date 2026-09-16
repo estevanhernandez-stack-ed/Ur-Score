@@ -1122,4 +1122,35 @@ public class PanelModelsTests
         // And Standing never turns your own four accounts into "4 of 4" of a clan it did not read.
         Assert.False(PanelModels.Standing(live, Reader(), settings).HasAccounts);
     }
+
+    /// <summary>
+    /// What is left of backlog S1-F.6 once 7ee4afd kept the book's numbers through a read that stops. Live leaderboard, Top and
+    /// Promotion check show other members, whom the score book never keeps (A40), so after a read that brought nothing back they
+    /// have nothing true to draw and stay empty. The leaderboard said nothing about why, and Top said "Waiting for the first read."
+    /// after a read had happened. Each says the last read brought nothing back; before any read they still say they are waiting.
+    /// </summary>
+    [Fact]
+    public void ALivePanelWhoseLastReadBroughtNothingBackSaysSo()
+    {
+        var top = SourceOf("s-0000000a", TopList, null, SourceRole.Watch);
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        RecipeSnapshot Idle(Source source) => new(WatchState.SourceIdle, "No clan battle running", [], [], 0) { SourceId = source.Id };
+        InstalledRecipe[] installed = [Installed(Clan, "value"), Installed(TopList)];
+        var leaderboard = new PanelSettings(Clan.Slug, SourceId: main.Id);
+        var topList = new PanelSettings(TopList.Slug, SourceId: top.Id);
+        var promotion = new PanelSettings(Clan.Slug, SourceId: alts.Id, ToSourceId: main.Id, Stat: "value");
+
+        var stopped = Live([top, main, alts], installed, Snaps(Idle(top), Idle(main), Snapshot(alts.Id, [Row(201, 12)])));
+        var board = PanelModels.LiveLeaderboard(stopped, leaderboard, new Dictionary<long, string>());
+        Assert.Empty(board.Rows);
+        Assert.Equal("Live only. Never saved. The last read brought nothing back.", board.Head.Note);
+        Assert.Equal("The last read brought nothing back.", PanelModels.Top(stopped, topList).Head.Note);
+        Assert.Equal("The last read of CCGP brought nothing back.", PanelModels.PromotionCheck(stopped, promotion).Head.Note);
+
+        var unread = Live([top, main, alts], installed, Snaps(Snapshot(alts.Id, [Row(201, 12)])));
+        Assert.Equal("Live only. Never saved.", PanelModels.LiveLeaderboard(unread, leaderboard, new Dictionary<long, string>()).Head.Note);
+        Assert.Equal("Waiting for the first read.", PanelModels.Top(unread, topList).Head.Note);
+        Assert.Equal("Waiting for a read of CCGP.", PanelModels.PromotionCheck(unread, promotion).Head.Note);
+    }
 }

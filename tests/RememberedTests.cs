@@ -200,6 +200,31 @@ public class RememberedTests
     }
 
     /// <summary>
+    /// Backlog S1-F.6, checked rather than assumed: "a read that stops (no battle, an error) blanks the panels until the next good
+    /// read". An idle read is built with a state and a reason and nothing else, exactly like a failed one, so since 7ee4afd it
+    /// replaces nothing either: the panels go on drawing what the book kept from this session's last good read three minutes ago,
+    /// marked, and the running line says how old they are. Only the live-only panels stay empty (PanelModelsTests
+    /// ALivePanelWhoseLastReadBroughtNothingBackSaysSo).
+    /// </summary>
+    [Fact]
+    public void AReadThatStopsForNoBattleKeepsTheNumbersTheLastGoodReadKept()
+    {
+        var kept = Remembered.From(Kept(Now.AddMinutes(-3), (Main.RobloxUserId, 4200)), MainClan, Clan, Yours)!;
+        var idle = new RecipeSnapshot(WatchState.SourceIdle, "No clan battle running", [], [], 0) { SourceId = MainClan.Id, RecipeSlug = Clan.Slug };
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = idle }, running: true,
+            lastRead: new Dictionary<string, DateTimeOffset> { [MainClan.Id] = Now },
+            remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+        var settings = new PanelSettings(Clan.Slug, MainClan.Id, Stat: "value");
+
+        var standing = PanelModels.Standing(live, Reader(), settings);
+        Assert.True(standing.Head.Remembered);
+        Assert.NotEqual(StatText.Dash, standing.Total);
+        Assert.Equal("4,200", PanelModels.AccountsTable(live, Reader(), settings).Rows.Single(r => r.UserId == Main.RobloxUserId).Cells[1]);
+        Assert.Equal("Reading 1 source. The numbers on screen are the last ones Ur Score read, from 3m ago.",
+            Labs626.UrScore.UI.BoardText.StateLine(live, everStarted: true));
+    }
+
+    /// <summary>
     /// Review round 3. <c>LastRead</c> stamps every ATTEMPT, so once a failed read stopped clearing the remembered
     /// numbers, the race chart began plotting an hours-old total at the current minute — a flat line drawn out to
     /// "now" for a reading that never happened. On a chart the line to "now" is the claim itself, which makes this the

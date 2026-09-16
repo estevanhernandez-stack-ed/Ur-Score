@@ -50,8 +50,26 @@ public partial class BoardWindow : Window
     /// <summary>Why a board change couldn't be saved, only while its message box is open; the box is the notification.</summary>
     private string? _boardsNote;
 
-    /// <summary>Why the score book couldn't be read at start, or null. It keeps the detail line until the book loads.</summary>
+    /// <summary>
+    /// Why the score book couldn't be read, in plain words, or null. It keeps the detail line, and the board's empty state
+    /// offers Try again, until the book loads (S1-14.2).
+    /// </summary>
     private string? _bookProblem;
+
+    /// <summary>The score book is being read, at open or from Try again.</summary>
+    private bool _readingBook;
+
+    /// <summary>
+    /// Start, Stop or Test now went wrong in a way nothing else names. The line says so until the next of those presses: it was
+    /// written once and then drawn over by the same press's own redraw, so it was never on screen.
+    /// </summary>
+    private bool _failed;
+
+    /// <summary>
+    /// What the empty state's Import recipe… said: its wait for RoRoRo, then what it did or why it couldn't. Kept for the detail
+    /// line until the next import or the next Start, Stop or Test now, instead of being drawn over by the next redraw (S1-12.4).
+    /// </summary>
+    private string? _importNote;
 
     private BoardEmpty _empty;
 
@@ -93,29 +111,23 @@ public partial class BoardWindow : Window
 
         ApplyButtons();
         Render();
-        StateLine.Text = "Reading your score book…";
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _services.StartFollowingTheme();
         _clock.Start();
+        await OpenOnTheBookAsync();
+    }
 
-        try
-        {
-            await _services.LoadBookAsync();
-        }
-        catch (Exception ex)
-        {
-            StateLine.Text = "Your score book could not be read.";
-            _bookProblem = _services.Redactor.Redact(ex.Message);
-            DetailLine.Text = _bookProblem;
-            _services.AddTrail($"BOOK NOT LOADED: {ex}");
-            return;
-        }
-
-        ApplyButtons();
-        Render();
+    /// <summary>
+    /// Reads the score book, then does what opening does once it is read. At open, and again from the empty state's Try again
+    /// when it couldn't be read (S1-14.2): the window never finished opening, so a book read on the second try gets the same
+    /// first-run page and start-on-open the first try would have.
+    /// </summary>
+    private async Task OpenOnTheBookAsync()
+    {
+        if (!await ReadBookAsync()) return;
 
         // Spec §7.1: a recipe with inputs and no sources opens Setup on its Clans page.
         var firstRun = SetupPages.FirstRunPage(_services.Installed, _services.Sources);
@@ -132,6 +144,37 @@ public partial class BoardWindow : Window
 
         _services.AddTrail("START ON OPEN: reading started because Setup > Recipes has it ticked.");
         await StartReadingAsync();
+    }
+
+    /// <summary>
+    /// Whether the score book was read. A book that couldn't be read says why in plain words on the detail line, and the board
+    /// offers Try again; the exception itself goes to the trail (S1-14.2). <see cref="AppServices.LoadBookAsync"/> starts a new
+    /// read after a failed one, and reading the book again replaces what a failed read left, so a retry is safe.
+    /// </summary>
+    private async Task<bool> ReadBookAsync()
+    {
+        _readingBook = true;
+        _bookProblem = null;
+        ApplyButtons();
+        Render();
+
+        try
+        {
+            await _services.LoadBookAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _bookProblem = _services.Redactor.Redact(BoardText.BookUnread(ex));
+            _services.AddTrail($"BOOK NOT LOADED: {ex}");
+            return false;
+        }
+        finally
+        {
+            _readingBook = false;
+            ApplyButtons();
+            Render();
+        }
     }
 
     /// <summary>The window must never die on a redraw: what fails goes to the trail, by type only, and the last drawing stays.</summary>
@@ -290,20 +333,25 @@ public partial class BoardWindow : Window
         var boardsProblem = _boardsNote ?? _services.BoardsProblem;
         if (!_services.ReaderLoaded)
         {
-            // Why your boards aren't showing is said from the first draw (R3), unless the score book's own failure is on the line.
-            if (boardsProblem is not null && _bookProblem is null) DetailLine.Text = boardsProblem;
+            // Why the score book couldn't be read comes first (S1-14.2); else why your boards aren't showing, said from the first
+            // draw (R3).
+            StateLine.Text = BoardText.BookStateLine(unread: _bookProblem is not null);
+            DetailLine.Text = _bookProblem ?? boardsProblem ?? _importNote ?? "";
             return;
         }
 
-        StateLine.Text = BoardText.StateLine(live, _services.EverStarted);
-        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem);
+        // Worked out on every redraw from what the window is doing, never written once, so no redraw wipes it (S1-14.3, S1-14.5).
+        var activity = new BoardActivity(_starting, _testing, _services.AskedReadAt, _services.StoppedAt, _failed);
+        StateLine.Text = BoardText.StateLine(live, _services.EverStarted, activity);
+        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem, _failed ? BoardText.UnexpectedDetail : _importNote);
     }
 
     private void RenderEmpty(BoardDef board)
     {
         var starters = StarterBoards.All(_services.Installed, _services.Sources);
         // A draft is a board being shaped, not a tab following your sources: with no panels it says so and offers Add panel.
-        _empty = BoardText.EmptyFor(starters, board, Editing);
+        // A score book that couldn't be read covers every board, with Try again (S1-14.2).
+        _empty = BoardText.EmptyFor(starters, board, Editing, bookUnread: _bookProblem is not null && !_services.ReaderLoaded);
         _emptyRecipe = (StarterBoards.Named(starters, board.Follows) ?? StarterBoards.EmptyState(starters)).RecipeSlug;
 
         var recipe = _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _emptyRecipe, StringComparison.Ordinal))?.Recipe;
@@ -495,6 +543,7 @@ public partial class BoardWindow : Window
         {
             // Never gated on a Test now read: Stop only ends the timed loops, and the read in flight finishes
             // on its own token, as a Test now pressed while stopped would.
+            ClearPressNotes();
             try
             {
                 _services.Stop();
@@ -527,8 +576,10 @@ public partial class BoardWindow : Window
             return;
         }
 
+        ClearPressNotes();
         _starting = true;
-        ApplyButtons();
+        // The line says Start is waiting on RoRoRo, for as long as it waits (S1-14.3).
+        RenderLines();
 
         try
         {
@@ -555,9 +606,10 @@ public partial class BoardWindow : Window
             return;
         }
 
+        ClearPressNotes();
         _testing = true;
-        ApplyButtons();
-        StateLine.Text = "Reading every source once…";
+        // Drawn from _testing, so a read landing mid-way can't put "Not started." back while this one still reads.
+        RenderLines();
 
         try
         {
@@ -593,14 +645,15 @@ public partial class BoardWindow : Window
     }
 
     /// <summary>What every button, tab and tab menu item takes right now, for <see cref="ApplyButtons"/> and the press guards.</summary>
+    /// <remarks>Try again holds the empty state's button for its read the way Import recipe… does for its import.</remarks>
     private BoardButtonStates ButtonStates() =>
-        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing, _services.Boards.Count, Editing);
+        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing || _readingBook, _services.Boards.Count, Editing);
 
     private void OnSetupClick(object sender, RoutedEventArgs e) => OpenSetup(null);
 
     private async void OnEmptyStateClick(object sender, RoutedEventArgs e)
     {
-        if (_importing) return;
+        if (_importing || _readingBook) return;
 
         if (_empty == BoardEmpty.NoPanels)
         {
@@ -620,17 +673,30 @@ public partial class BoardWindow : Window
             return;
         }
 
+        if (_empty == BoardEmpty.BookUnread)
+        {
+            await OpenOnTheBookAsync();
+            return;
+        }
+
         if (_empty != BoardEmpty.NoRecipes) return;
 
         _importing = true;
         ApplyButtons();
+        var before = new ImportLines(_importNote ?? "", "");
         try
         {
-            var outcome = await ImportFlow.RunAsync(this, _services, text => DetailLine.Text = text);
-            if (outcome is null) return;
+            // Kept, and drawn from, so neither the wait for RoRoRo nor what the import did is drawn over by the next redraw (S1-12.4).
+            var outcome = await ImportFlow.RunAsync(this, _services, text =>
+            {
+                _importNote = text.Length > 0 ? text : before.News.Length > 0 ? before.News : null;
+                RenderLines();
+            });
 
-            DetailLine.Text = outcome.Message;
-            if (outcome.ChooseSources) OpenSetup(SetupPages.ClansId(outcome.Slug));
+            var after = ImportFlow.LinesAfter(before, outcome);
+            _importNote = after.Problem.Length > 0 ? after.Problem : after.News.Length > 0 ? after.News : null;
+            RenderLines();
+            if (outcome is { ChooseSources: true }) OpenSetup(SetupPages.ClansId(outcome.Slug), outcome.Message);
         }
         finally
         {
@@ -639,26 +705,37 @@ public partial class BoardWindow : Window
         }
     }
 
-    private void OpenSetup(string? page)
+    /// <param name="note">What the page opens saying, such as an import's result on the Clans page it goes on to (S1-12.4).</param>
+    private void OpenSetup(string? page, string? note = null)
     {
         if (_setup is not null)
         {
-            if (page is not null) _setup.ShowPage(page);
+            if (page is not null) _setup.ShowPage(page, note);
             _setup.Activate();
             return;
         }
 
-        _setup = new SetupWindow(_services, page) { Owner = this };
+        _setup = new SetupWindow(_services, page, note) { Owner = this };
         _setup.Closed += (_, _) => _setup = null;
         _setup.Show();
     }
 
+    /// <summary>
+    /// The window must never die on a cycle. Said on the line until the next Start, Stop or Test now, in plain words: the press's
+    /// own redraw used to draw over it at once. The exception goes to the trail, which Diagnostics shows.
+    /// </summary>
     private void ShowFailure(Exception ex)
     {
-        // The window must never die on a cycle.
-        StateLine.Text = "Something unexpected went wrong.";
-        DetailLine.Text = _services.Redactor.Redact(ex.Message);
+        _failed = true;
         _services.AddTrail($"EXCEPTION: {ex}");
+        RenderLines();
+    }
+
+    /// <summary>A Start, Stop or Test now press is newer than whatever the last one, or the empty state's import, said.</summary>
+    private void ClearPressNotes()
+    {
+        _failed = false;
+        _importNote = null;
     }
 
     /// <summary>The main source's icon on the window, the taskbar and the top bar; anything that fails keeps Ur Score's own.</summary>

@@ -142,6 +142,15 @@ public static class PanelText
     /// <summary>A race with fewer than two lines and none of them removed: what a race needs, not a removal it never had (S1-13.6).</summary>
     public static string RaceTooFew(string groups) => $"A race needs at least 2 {groups}.";
 
+    /// <summary>
+    /// A live-only panel (Live leaderboard, Top, Promotion check) whose source was read this session and brought nothing back: no
+    /// battle, or a read that failed (backlog S1-F.6). The score book never keeps other members, so there is nothing true to draw
+    /// in its place, and the panel says why it is empty instead of "waiting" for a read that already happened. The state line
+    /// names a cause that needs you.
+    /// </summary>
+    public static string NothingBack(string? name = null) =>
+        name is null ? "The last read brought nothing back." : $"The last read of {name} brought nothing back.";
+
     /// <summary>A panel reading a source that is off: "CCGP is switched off, so it isn't read." Its dashes say why.</summary>
     public static string SwitchedOff(string name) => $"{name} is switched off, so it isn't read.";
 

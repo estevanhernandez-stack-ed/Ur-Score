@@ -18,6 +18,18 @@ public sealed record NotRecordingItem(string Source, string Reason);
 /// <summary>Setup › Score book (spec §7.6). Counts only; no line of the book is ever shown or copied.</summary>
 public static class ScoreBookModel
 {
+    /// <summary>
+    /// Open folder didn't open it (backlog S1-12.4). Said on its own line, which no redraw touches, in plain words for any cause:
+    /// the path is on the page, so you can open it yourself. The page puts the exception's type in the trail.
+    /// </summary>
+    public static string FolderNotOpened(Exception ex) => "Ur Score couldn't open the folder. Its path is above, so you can open it yourself.";
+
+    /// <summary>What the book is still waiting to write and has dropped, or "" while it is neither.</summary>
+    public static string PendingLine(int pending, int dropped) =>
+        pending == 0 && dropped == 0
+            ? ""
+            : $"{pending} lines are waiting to be written, and {dropped} readings were dropped because the file couldn't be written.";
+
     public static string Size(long bytes) =>
         bytes < 1024 ? $"{bytes} bytes"
         : bytes < 1024 * 1024 ? (bytes / 1024.0).ToString("0.#", CultureInfo.InvariantCulture) + " KB"

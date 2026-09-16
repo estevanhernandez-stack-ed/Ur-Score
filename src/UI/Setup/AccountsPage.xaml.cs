@@ -15,6 +15,9 @@ public partial class AccountsPage : UserControl, ISetupPage
     /// <summary>Why the last Send tick was undone, kept on screen until the next tick.</summary>
     private string? _refusal;
 
+    /// <summary>What went wrong getting your accounts when this page asked, kept on screen for the page's life (S1-12.4).</summary>
+    private string? _problem;
+
     private bool _reverting;
 
     /// <summary>RoRoRo is being asked for the accounts; the listed line says so until it answers or the wait runs out.</summary>
@@ -42,8 +45,11 @@ public partial class AccountsPage : UserControl, ISetupPage
         RecipeHeaders.ItemsSource = AccountsModel.SendingRecipes(_services.Installed).Select(r => r.Recipe.Name).ToList();
         AccountsTable.ItemsSource = _rows;
         Show(AccountsEmptyLine, accounts.Count == 0 ? "RoRoRo hasn't shared any accounts yet. Start RoRoRo and add your accounts there." : "");
-        Show(AccountsBudgetLine, _refusal ?? _services.BudgetWarning ?? "");
+        ShowMessage();
     }
+
+    /// <summary>Every redraw says the message line from what the page keeps, so none wipes what it said (backlog S1-12.4).</summary>
+    private void ShowMessage() => Show(AccountsBudgetLine, AccountsModel.MessageLine(_refusal, _problem, _services.BudgetWarning));
 
     private async Task AskForAccountsAsync()
     {
@@ -55,7 +61,11 @@ public partial class AccountsPage : UserControl, ISetupPage
         }
         catch (Exception ex)
         {
-            Show(AccountsBudgetLine, _services.Redactor.Redact($"Could not ask RoRoRo for your accounts: {ex.Message}"));
+            // Unreachable for RoRoRo's sake (a slow or broken answer gives the saved list), so not "Could not ask RoRoRo": only
+            // what Ur Score does with the answer can throw here. The type goes to the trail; the page says it in plain words.
+            _problem = AccountsModel.AccountsNotUpdated;
+            _services.AddTrail($"ACCOUNTS PAGE: {ex.GetType().Name} while getting your accounts.");
+            ShowMessage();
         }
         finally
         {
@@ -88,7 +98,7 @@ public partial class AccountsPage : UserControl, ISetupPage
                 _reverting = true;
                 tick.On = false;
                 _reverting = false;
-                Show(AccountsBudgetLine, _refusal);
+                ShowMessage();
                 return;
             }
 
@@ -100,7 +110,7 @@ public partial class AccountsPage : UserControl, ISetupPage
             catch (Exception ex)
             {
                 _refusal = _services.Redactor.Redact($"Could not save that change: {ex.Message}");
-                Show(AccountsBudgetLine, _refusal);
+                ShowMessage();
             }
         }, DispatcherPriority.Background);
     }

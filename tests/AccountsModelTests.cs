@@ -192,4 +192,22 @@ public class AccountsModelTests
             rows.Single(r => r.AccountId == Alt.AccountId).Note);
         Assert.True(rows.Single(r => r.AccountId == Alt.AccountId).HasNote);
     }
+
+    /// <summary>
+    /// Backlog S1-12.4. "Could not ask RoRoRo for your accounts" was written straight onto the line every redraw owns, and the
+    /// redraw the accounts listing starts put the budget line, or nothing, back over it at once. Every redraw now says it, until
+    /// a Send tick's refusal, which is newer, takes the line. Its words were also a cause that can't happen there (the ask never
+    /// fails for RoRoRo's sake; only what Ur Score does with the answer can throw), so they say what is known, in plain words.
+    /// </summary>
+    [Fact]
+    public void WhatWentWrongGettingTheAccountsStaysOnTheLineUntilSomethingNewerTakesIt()
+    {
+        const string Refusal = "Only 5 of your accounts can send Points.";
+
+        Assert.Equal(AccountsModel.AccountsNotUpdated, AccountsModel.MessageLine(refusal: null, AccountsModel.AccountsNotUpdated, "over budget"));
+        Assert.Equal(Refusal, AccountsModel.MessageLine(Refusal, AccountsModel.AccountsNotUpdated, "over budget"));
+        Assert.Equal("over budget", AccountsModel.MessageLine(refusal: null, problem: null, "over budget"));
+        Assert.Equal("", AccountsModel.MessageLine(refusal: null, problem: null, budgetWarning: null));
+        Assert.Equal("Something went wrong while Ur Score was getting your accounts. Diagnostics has the details.", AccountsModel.AccountsNotUpdated);
+    }
 }

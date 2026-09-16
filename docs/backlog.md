@@ -6,13 +6,13 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Counts
 
-- **OPEN: 138** (35 you'd notice, 103 code, tests, performance or docs only), including 7 found since v0.3.0 shipped (V3-S.2 to V3-S.17)
-- **FIXED: 64**
+- **OPEN: 131** (28 you'd notice, 103 code, tests, performance or docs only), including 7 found since v0.3.0 shipped (V3-S.2 to V3-S.17)
+- **FIXED: 71**
 - **GONE: 7**
 - Total: 209 distinct items (duplicates merged; every source is named on the line)
 - Counted from the rows on 2026-09-16, not adjusted: each **OPEN**, **FIXED** and **GONE** row from "Stage 1" to the end of "Stage 2", and the lines of the two summary lists below.
 - Note: the parked lists in the stage 2 plan's execution record (plan:5343-5349) match the OPEN items marked "parked" here.
-- **0.3.2 (the Alerts page and avatars), added 2026-09-15:** 90 more distinct items in their own section at the end — **56 OPEN, 32 FIXED, 2 GONE** — from the thirteen reviews of `feat/alerts-card`. They are held apart from the counts and the two summary lists above. That branch has since merged (#9), and they haven't been folded in yet.
+- **0.3.2 (the Alerts page and avatars), added 2026-09-15:** 90 more distinct items in their own section at the end — **55 OPEN, 33 FIXED, 2 GONE** — from the thirteen reviews of `feat/alerts-card`. They are held apart from the counts and the two summary lists above. That branch has since merged (#9), and they haven't been folded in yet.
 
 ## Open, and you'd notice
 
@@ -25,20 +25,13 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - V3-S.17 Choose another has the same name on every panel, so a screen reader can't tell two stale panels' buttons apart.
 - S1-6.9 "#rank of N" counts players with no value for that stat, so it disagrees with Promotion check.
 - S1-9.3 Records can double-count "biggest day" / "fastest week" when two sources read the same account.
-- S1-12.4 Error and outcome lines vanish on the next refresh (Accounts, Score book folder, import result).
-- S1-12.12 A failed reload after a good import says "Could not save that recipe" though it saved.
 - S1-13.5 The gap to the group above doesn't show when ranks are tied.
 - S1-13.11 A chart of all-equal values draws a flat line on an invented axis.
 - S1-13.14 Standing's change is cyan even when it fell.
 - S1-14.1 A recipe update that drops its icon leaves the old icon on the window.
-- S1-14.2 If the score book fails to load, Start and Test now stay off for the session (rare).
-- S1-14.3 Start can wait up to 20 s for RoRoRo's accounts with nothing on screen saying so.
-- S1-14.5 While stopped, the top line never shows a Test now result.
-- S1-14.10 A cancelled import blanks the Recipes status line.
 - S1-14.11 Panels in a row don't stretch to the row's height (ragged bottoms).
 - S1-F.1 Claim conflicts aren't shown in Diagnostics; panels show one account under two clans.
 - S1-F.5 The SENT dot means "sent sometime this session", not this read.
-- S1-F.6 A read that stops (no battle, an error) blanks the panels until the next good read.
 - S1-F.8 The import screen's "Kept in your score book" list leaves out the period values it keeps.
 - S2-P.5 The gallery's Race card can be enabled by switched-off clans, then the form opens on a problem.
 - S2-P.18 The drag handle uses a Braille glyph that may not render.
@@ -143,7 +136,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-12.1 **GONE** — the moved import flow dropped typed inputs: Task 14 removed the import screen's inputs — n/a — T12 review, T12 report
 - S1-12.2 **FIXED** — two quick Send ticks could lose one — stage 1 fix wave item 9 (src/UI/Setup/AccountsPage.xaml.cs, change computed inside the deferred save) — T12 review, final review triage
 - S1-12.3 **FIXED** — the Alerts card could describe a watch-only recipe as sending — Task 14 fix round (src/Core/ReportPolicies.cs, shared by AppServices and AlertsModel) — T12 review, T14 review, T14 report
-- S1-12.4 **OPEN** — you'd notice: messages vanish on the next refresh: "Could not ask RoRoRo" (AccountsPage.xaml.cs:45 overwrites :58), "Could not open the folder" (ScoreBookPage.xaml.cs:27 overwrites :51), and the import result when the page jumps to Clans (RecipesPage.xaml.cs:43-44) — src/UI/Setup/ — T12 review
+- S1-12.4 **FIXED** — you'd notice: messages vanished on the next refresh: "Could not ask RoRoRo" (Your accounts), "Could not open the folder" (Score book), and the import result when Setup went on to Clans. Each is now said where no redraw writes it. Your accounts works its message line out from what the page keeps on every redraw, and says "Something went wrong while Ur Score was getting your accounts. Diagnostics has the details." (the old words named a cause the ask can't have: it never fails for RoRoRo's sake). Open folder has a line of its own, "Ur Score couldn't open the folder. Its path is above, so you can open it yourself.", cleared by the next click that works. The import's result goes with it to the Clans page, above everything else there. The board's empty-state Import recipe… had the same fault on the detail line and keeps its note until the next import or press — src/UI/Setup/AccountsPage.xaml.cs, AccountsModel.cs (`MessageLine`); ScoreBookPage.xaml(.cs), ScoreBookModel.cs (`FolderNotOpened`); RecipesPage.xaml.cs; SetupWindow.xaml.cs (`ShowPage` note); ClansPage.xaml(.cs) (`ImportedLine`); src/UI/BoardWindow.xaml.cs — T12 review, fixed 2026-09-16
 - S1-12.5 **OPEN** — performance: disk reads on the UI thread on every refresh (RoRoRo's rules file, the accounts cache time) — src/UI/Setup/AlertsPage.xaml.cs `Refresh` (:51, now skipped while an editor is open); ScoreBookPage.xaml.cs:36; AccountsPage.xaml.cs:35 — T12 review
 - S1-12.6 **OPEN** — the Stats page asks the source for counter names again on each recipe switch or save while none are saved (spec says once) — src/UI/Setup/StatsPage.xaml.cs:92 — T12 review
 - S1-12.7 **FIXED** — you'd notice: an account found only in a watched clan read "Not in a watched clan", and the noun came from the first recipe only. Setup › Your accounts now says "Only in clans you're watching" for it, and otherwise says how much has been read ("No clans read yet", "Not found in the clans read so far") until every source has been read this session; when the recipes name their groups differently the word is "source". The words and the decision are My accounts' own (S1-13.4) — src/UI/Setup/AccountsModel.cs (`FoundIn`, `Words`); src/Board/PanelText.cs (`NotFound`, `OnlyWatched`) — T12 review, fixed 2026-09-16
@@ -151,7 +144,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-12.9 **OPEN** — code tidiness: an unknown Setup page id shows Diagnostics, and the Stats page's recipe parameter is never passed — src/UI/SetupWindow.xaml.cs:87, 91 — T12 review
 - S1-12.10 **FIXED** — a source comment named a real account and a game — stage 1 fix wave item 6 (src/UI/Setup/AccountsModel.cs) — T12 review, final review triage
 - S1-12.11 **OPEN** — test gap: Alerts tests leave temp folders behind; no tests for listed-time preference, id-0 misses, or watch-source inputs in the copy text — tests/AlertsModelTests.cs:18 — T12 review
-- S1-12.12 **OPEN** — you'd notice (rare): if the reload after a successful import throws, you're told "Could not save that recipe" although it was saved — src/UI/Setup/ImportFlow.cs:114-120 — T12 review
+- S1-12.12 **FIXED** — you'd notice (rare): a reload that threw after a good import said "Could not save that recipe" about a recipe that was saved. Saving and loading now fail on their own words: "{name} was saved, but Ur Score couldn't load it. Restart Ur Score to load it.", with the exception's type in the trail — src/UI/Setup/ImportFlow.cs (`SaveAndLoad`) — T12 review, fixed 2026-09-16
 
 ## Task 13: the ten panels
 - S1-13.1 **FIXED** — stale panels had no "Choose another" button — stage 2 Task 6, 028e24d (`ChooseAnotherButton`) — T13 review
@@ -173,15 +166,15 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 
 ## Task 14: board window and AppServices
 - S1-14.1 **OPEN** — you'd notice: when a recipe update drops its icon, the old icon stays on the window — src/Composition/AppServices.cs:692 — T14 review
-- S1-14.2 **OPEN** — you'd notice (rare): if the score book fails to load, Start and Test now stay disabled for the whole session with no retry — src/UI/BoardWindow.xaml.cs:107-113 — T14 review, final review triage
-- S1-14.3 **OPEN** — you'd notice: Start can wait up to 20 s for RoRoRo's accounts with nothing on screen saying so — src/Composition/AppServices.cs:36, 411 — T14 review
+- S1-14.2 **FIXED** — you'd notice (rare): a score book that failed to load left Start and Test now off for the session, with an exception's own message as the only reason and no retry. The state line says "Your score book could not be read.", the detail line says why in plain words (another program has a book file open, Windows didn't let Ur Score read its folder, Windows' own sentence for another disk fault, else "Something unexpected went wrong. Setup › Diagnostics has the details."), and every board shows "Your score book couldn't be read" / "Start and Test now stay off until Ur Score can read it. Why it couldn't is on the line above." with **Try again**, which reads the book again and then does what opening does. The exception goes to the trail — src/UI/BoardWindow.xaml.cs (`OpenOnTheBookAsync`, `ReadBookAsync`); src/UI/BoardText.cs (`BookUnread`, `EmptyFor`, `EmptyState`) — T14 review, final review triage, fixed 2026-09-16
+- S1-14.3 **FIXED** — you'd notice: Start could wait up to 20 s for RoRoRo's accounts with nothing on screen saying so. The state line says "Starting. Asking RoRoRo for your accounts…" for as long as it waits. It is worked out on every redraw from what the window is doing, so the 20 s clock can't put "Not started." back mid-wait; Test now's "Reading every source once…" had the same fault and is fixed the same way, and so is "Something unexpected went wrong.", which the press's own redraw used to wipe at once — src/UI/BoardText.cs (`BoardActivity`, `StateLine`); src/UI/BoardWindow.xaml.cs — T14 review, fixed 2026-09-16
 - S1-14.4 **FIXED** — Start/Stop presses were silently ignored during Test now — live-walk fix (src/UI/BoardButtons.cs, `BoardButtons.For` + `ApplyButtons`) — T14 review
-- S1-14.5 **OPEN** — you'd notice: while stopped, the top line only ever says "Not started." or "Stopped.", so a Test now result never shows there — src/UI/BoardText.cs:31 — T14 review
+- S1-14.5 **FIXED** — you'd notice: while stopped, the top line only ever said "Not started." or "Stopped.", so a Test now result never showed there. After a read you ask for while stopped (Test now, or Setup reading a source once) it says what that read found: the source in trouble by name ("Not started. Last read of K0i2: Could not reach the data."), else what every source found ("Stopped. Last read: Reported to RoRoRo."), else how many answered ("Last read: 2 sources answered."). Pressing Stop still says "Stopped." alone — src/UI/BoardText.cs (`LastReadNews`); src/Composition/AppServices.cs (`AskedReadAt`, `StoppedAt`); src/UI/Setup/DiagnosticsModel.cs (`PastStateText`) — T14 review, fixed 2026-09-16
 - S1-14.6 **OPEN** — code tidiness: async paths with no catch (empty-state import, name resolving, icon fetch) — src/UI/BoardWindow.xaml.cs:554-584, 165; src/Composition/AppServices.cs:631 — T14 review
 - S1-14.7 **OPEN** — an icon fetch that throws is never retried until the icon text changes — src/Composition/AppServices.cs:695 — T14 review
 - S1-14.8 **OPEN** — changing only which stats you track releases a held "key rejected / sign in" stop, costing one extra rejected request — src/Composition/AppServices.cs:539-542 — T14 review
 - S1-14.9 **OPEN** — test gap: AppServices (now 916 lines) and App startup have no tests of their own — src/Composition/AppServices.cs; src/App.xaml.cs — T14 review, T14 report, T14 re-review 2
-- S1-14.10 **OPEN** — you'd notice: a cancelled import leaves the Recipes status line blank — src/UI/Setup/RecipesPage.xaml.cs:40-41 — T14 review, T14 report
+- S1-14.10 **FIXED** — you'd notice: a cancelled import left the Recipes status line blank, because the wait for RoRoRo wrote over it. A cancel now leaves both of the page's lines as they were before the import started — src/UI/Setup/ImportFlow.cs (`LinesAfter`); src/UI/Setup/RecipesPage.xaml.cs — T14 review, T14 report, fixed 2026-09-16
 - S1-14.11 **OPEN** — you'd notice: panels in one row keep their own height instead of stretching to the row, so bottoms are ragged — src/UI/Controls/PanelGrid.cs:65-66 — T14 review, T14 report
 - S1-14.12 **OPEN** — code tidiness: the icon client and the closing token are never disposed — src/Composition/AppServices.cs:451-467 — T14 review
 - S1-14.13 **OPEN** — a newly listed account's policy refresh can land after a fresher one, briefly allowing a just-excluded stat to your local RoRoRo (self-corrects) — src/Composition/AppServices.cs:551 — T14 re-review 1, final review triage
@@ -206,7 +199,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - S1-F.3 **OPEN** — performance: each chart scans every kept reading of every clan, and five weeks of book may hold 100-170 MB — src/Book/ScoreBookReader.cs:104-125 — final review Minor 10, parked
 - S1-F.4 **OPEN** — the recipe text file isn't written atomically, and a torn write is never repaired — src/Book/ScoreBook.cs:188 — final review Minor 11, parked
 - S1-F.5 **OPEN** — you'd notice: the SENT dot means "sent at some point this session", not "sent this read" — src/Board/PanelModels.cs:275 — final review Minor 12
-- S1-F.6 **OPEN** — you'd notice: a read that stops (no battle, an error) blanks the panels until the next good read — src/Core/SourceHost.cs:173 — final review Minor 13
+- S1-F.6 **FIXED (7ee4afd)** — you'd notice: a read that stops (no battle, an error) blanked the panels until the next good read. A stopped read carries no rows, headline or groups, so it replaces nothing: every panel that draws your own numbers or a source's headline keeps what the score book kept from the last good read, marked remembered, and the state line says how old. Verified 2026-09-16 with an idle read (`RememberedTests.AReadThatStopsForNoBattleKeepsTheNumbersTheLastGoodReadKept`, which fails with 7ee4afd's `SnapshotOf` reverted). Still empty after a stopped read, by design: Live leaderboard, Top and Promotion check, which show other members the book never keeps (A40); since 2026-09-16 they say "The last read brought nothing back." (Promotion check: "The last read of {name} brought nothing back.") instead of nothing or "Waiting for the first read." — src/Board/PanelModels.cs (`LiveBoard.SnapshotOf`; `Top`, `LiveLeaderboard`, `PromotionCheck`); src/Board/PanelText.cs (`NothingBack`) — final review Minor 13
 - S1-F.7 **FIXED** — a stale "Task 15 adds the --try branch HERE" comment — stage 1 fix wave item 7 (src/App.xaml.cs) — final review Minor 14
 - S1-F.8 **OPEN** — you'd notice: the import screen's "Kept in your score book" list shows only headline items, though period values go into every line — src/UI/ImportText.cs:13 — final review Minor 15
 - S1-F.9 **OPEN** — code tidiness: the account-list fallback catches every exception, so a real bug would look like "RoRoRo not answering" — src/Core/SharedAccounts.cs:92 — final re-review
@@ -358,7 +351,7 @@ Owner actions noted in the smoke, not Ur Score defects:
 
 Every Minor from the reviews of `feat/alerts-card` (`cec5987..4ce08bb`, the full cycle), checked against the tree at `4ce08bb` on 2026-09-15. The execution record, with the rulings and the three lessons, is in `docs/plans/2026-09-15-alerts-card.md`. Reviews: `task-1`, `task-1-rereview`, `task-2`, `task-2-rereview`, `task-3`, `task-4`, `task-6`, `task-7`, `task-8`, `task-9`, `branch-review`, `branch-rereview`, `branch-review-2`.
 
-**56 OPEN, 32 FIXED, 2 GONE — 90 distinct items** from the thirteen reviews' raw findings; five are restatements across reviews, merged onto one line each with both sources named. Tasks 1-6's Critical and three Importants, and Task 8's Critical and two Importants, were fixed in their own rounds and are in the execution record, not here. The second whole-branch review's Critical and four Importants are kept below (AC-B2.1-AC-B2.5) instead: when this section was extended to close the gap Important 4 named, only Important 4 had a completed fix (this update) and the Critical's fix round was still in flight in another agent's hands — `git log` now shows it landed at `4ce08bb`, so AC-B2.1 is recorded FIXED; the three README Importants (AC-B2.2-AC-B2.4) are still open.
+**55 OPEN, 33 FIXED, 2 GONE — 90 distinct items** (recounted from the rows 2026-09-16, after AC-2.13) from the thirteen reviews' raw findings; five are restatements across reviews, merged onto one line each with both sources named. Tasks 1-6's Critical and three Importants, and Task 8's Critical and two Importants, were fixed in their own rounds and are in the execution record, not here. The second whole-branch review's Critical and four Importants are kept below (AC-B2.1-AC-B2.5) instead: when this section was extended to close the gap Important 4 named, only Important 4 had a completed fix (this update) and the Critical's fix round was still in flight in another agent's hands — `git log` now shows it landed at `4ce08bb`, so AC-B2.1 is recorded FIXED; the three README Importants (AC-B2.2-AC-B2.4) are still open.
 
 ## Task 1: rules file operations
 
@@ -383,7 +376,7 @@ Every Minor from the reviews of `feat/alerts-card` (`cec5987..4ce08bb`, the full
 - AC-2.10 **OPEN** — copy: `Failed(NotAList)` drops "Fix it by hand, then come back.", `Failed(AlreadyThere)` says "an alert of this kind" though the kind words exist, and `Failed(CantWrite)` joins with a semicolon where its siblings start a new sentence — src/UI/Setup/AlertCards.cs:226, 229, 231 — T2 review Minor 10
 - AC-2.11 **OPEN** — the refusal hints mislead a writer from another locale: "1.000" gets "Use at most two decimal places", and "-5" gets "Type a number" although it is one; both refusals are safe — src/UI/Setup/AlertCards.cs:304, 305 — T2 review Minor 11
 - AC-2.12 **OPEN** — test gaps: a theory over every `Failed` outcome's copy, `Managed()`, an Ur Score-owned Event rule showing Remove only, `AfterWrite` with `AlreadyThere`/`NotJson`, `Same` on `Note` or `CanAdd` alone, focus after Remove with a duplicate, three number rows, and a Level `OpenChange` row — tests/AlertCardsTests.cs (:151-169 for the number theory) — T2 review Minor 12 (preflight 4.16)
-- AC-2.13 **OPEN** — you'd notice: a stored rule whose window isn't 10, 15 or 30 opens Change with an empty minutes box and nothing on screen saying why; Save is blocked with the generic "Choose how many minutes." — src/UI/Setup/AlertCards.cs:293, 416 — T2 re-review, branch review Minor 5
+- AC-2.13 **FIXED** — you'd notice: a stored rule whose window isn't 10, 15 or 30 opened Change with an empty minutes box and nothing on screen saying why, and Save said the generic "Choose how many minutes." Change now opens saying "Ur Score offers 10, 15 or 30 minutes, and this alert uses 20. Choose one to save a change, or Cancel to leave the alert as it is.", and Save says the same until one is chosen; the choices stay 10, 15 and 30 (ruling 3) — src/UI/Setup/AlertCards.cs (`OpenChange`, `Check`, `OtherMinutes`) — T2 re-review, branch review Minor 5, fixed 2026-09-16
 
 ## Task 3: the themed Alerts page
 

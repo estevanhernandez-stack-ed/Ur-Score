@@ -8,7 +8,11 @@ using Source = Labs626.UrScore.Core.Source;
 /// <summary>One panel on a board: its type, how many of the 12 columns it spans, and what it shows.</summary>
 public sealed record PanelSpec(PanelType Type, int Span, PanelSettings Settings);
 
-public enum BoardEmpty { None, NoRecipes, NoStats, NoSources, NoPanels }
+/// <summary>
+/// Which empty state a board shows. <see cref="BookUnread"/> is the board window's own (the score book couldn't be read, backlog
+/// S1-14.2); no starter board is ever built with it.
+/// </summary>
+public enum BoardEmpty { None, NoRecipes, NoStats, NoSources, NoPanels, BookUnread }
 
 /// <summary>A starter board's panels, or the empty state it shows instead, and the recipe that empty state names.</summary>
 public sealed record StarterBoard(string Name, BoardEmpty Empty, IReadOnlyList<PanelSpec> Panels, string? RecipeSlug);

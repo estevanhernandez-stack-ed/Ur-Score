@@ -22,11 +22,7 @@ public partial class ScoreBookPage : UserControl, ISetupPage
     {
         BookFolderLine.Text = _services.Book.Root;
 
-        var pending = _services.Book.Pending;
-        var dropped = _services.Book.Dropped;
-        Show(BookPendingLine, pending == 0 && dropped == 0
-            ? ""
-            : $"{pending} lines are waiting to be written, and {dropped} readings were dropped because the file couldn't be written.");
+        Show(BookPendingLine, ScoreBookModel.PendingLine(_services.Book.Pending, _services.Book.Dropped));
 
         BookLoadingLine.Visibility = _services.ReaderLoaded ? Visibility.Collapsed : Visibility.Visible;
         BookRecipesList.ItemsSource = _services.ReaderLoaded
@@ -41,14 +37,18 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
     private void OnOpenFolderClick(object sender, RoutedEventArgs e)
     {
+        // On its own line, which Refresh never touches, so the next read's redraw doesn't wipe it; the next click that works
+        // takes it away (backlog S1-12.4).
         try
         {
             Directory.CreateDirectory(_services.Book.Root);
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_services.Book.Root}\"") { UseShellExecute = true });
+            Show(BookFolderProblemLine, "");
         }
         catch (Exception ex)
         {
-            Show(BookPendingLine, $"Could not open the folder: {ex.Message}");
+            _services.AddTrail($"FOLDER NOT OPENED: {ex.GetType().Name}");
+            Show(BookFolderProblemLine, ScoreBookModel.FolderNotOpened(ex));
         }
     }
 

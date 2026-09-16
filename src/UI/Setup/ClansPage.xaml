@@ -35,6 +35,8 @@
 
     <StackPanel MaxWidth="780" HorizontalAlignment="Left">
         <TextBlock x:Name="ClansPageTitle" Style="{StaticResource Heading}" />
+        <!-- What the import that opened this page did (backlog S1-12.4): the Recipes page it was said on is gone. No redraw touches it. -->
+        <TextBlock x:Name="ImportedLine" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed" />
         <TextBlock x:Name="RecipeLine" Style="{StaticResource Muted}" Margin="0,4,0,18" />
 
         <TextBlock x:Name="MainClanLabel" FontWeight="SemiBold" Margin="0,0,0,4" />
