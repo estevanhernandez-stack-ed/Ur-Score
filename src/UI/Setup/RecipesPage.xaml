@@ -48,7 +48,7 @@
         <!-- The sentence has to be true as it is read: the tick saves now and reads next time, so it says so
              where the eye already is. A tooltip would be invisible to exactly the person who is confused. -->
         <TextBlock Style="{StaticResource Muted}" Margin="24,4,0,0"
-                   Text="Off unless you turn it on. Ticking it doesn't start reading now; it takes effect the next time you open Ur Score. Ur Score reads only while its window is open, and Stop still stops it." />
+                   Text="Off unless you turn it on. Ticking it doesn't start reading now; it takes effect the next time you open Ur Score. Reading happens only while the window is open, and Stop still stops it." />
         <TextBlock x:Name="StartOnOpenProblemLine" Style="{StaticResource Refusal}" Margin="24,4,0,0" Visibility="Collapsed" />
     </StackPanel>
 </UserControl>

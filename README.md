@@ -156,9 +156,10 @@ worth touching by hand:
 - **Set thresholds, cooldowns, or send notifications.** RoRoRo owns all of that.
 - **Touch Roblox itself.** Ur Score reads HTTP and writes to a local pipe. It cannot click, type,
   or otherwise act inside a Roblox client.
-- **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur Score reads only
-  while its own window is open. Once you're set up you can tick **Start reading as soon as Ur Score opens** in
-  **Setup → Recipes** so you don't have to press Start; it still won't watch a battle you never opened it for.
+- **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur Score
+  reads only while its own window is open. Once you're set up you can tick **Start reading as soon as
+  Ur Score opens** in **Setup → Recipes** so you don't have to press Start; it still won't watch a
+  battle you never opened it for.
 
 ## Troubleshooting
 
