@@ -24,7 +24,8 @@ public sealed record PanelSettings(
 /// so words and colour can never disagree.
 /// </summary>
 public sealed record PanelHead(
-    string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "")
+    string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "",
+    bool Remembered = false)
 {
     public string Chip => ChipRole is { } role ? PanelText.Chip(role) : "";
 
@@ -48,7 +49,8 @@ public sealed record LiveBoard(
     IReadOnlyList<HostAccount> Accounts,
     TimeProvider Time,
     bool Running,
-    IReadOnlyDictionary<long, string>? Avatars = null)
+    IReadOnlyDictionary<long, string>? Avatars = null,
+    IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null)
 {
     public DateTimeOffset Now => Time.GetUtcNow();
 
@@ -64,7 +66,25 @@ public sealed record LiveBoard(
     public InstalledRecipe? FindRecipe(string? slug) =>
         slug is null ? null : Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, slug, StringComparison.Ordinal));
 
-    public RecipeSnapshot? SnapshotOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
+    /// <summary>
+    /// What a panel draws for a source: the reading from this session, else the last one the score book kept (plan
+    /// A38). A remembered one carries <see cref="RecipeSnapshot.RememberedAt"/>; a panel that needs another member's
+    /// row takes <see cref="LiveOf"/> instead (plan A40).
+    /// </summary>
+    public RecipeSnapshot? SnapshotOf(string sourceId) =>
+        Snapshots.GetValueOrDefault(sourceId) ?? Remembered?.GetValueOrDefault(sourceId);
+
+    /// <summary>The reading from this session alone. What Ur Score is DOING is only ever answered from this one.</summary>
+    public RecipeSnapshot? LiveOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
+
+    public bool IsRemembered(string sourceId) => SnapshotOf(sourceId)?.RememberedAt is not null;
+
+    /// <summary>
+    /// The oldest reading behind anything on screen, so a line about them never claims they are fresher than the
+    /// oldest one a panel is showing. Null once every enabled source has been read this session.
+    /// </summary>
+    public DateTimeOffset? OldestRemembered =>
+        Sources.Where(s => s.Enabled).Select(s => SnapshotOf(s.Id)?.RememberedAt).Min();
 
     /// <summary>The source's main input value ("CCGP"), else its recipe's name.</summary>
     public string SourceName(Source source)
@@ -190,11 +210,12 @@ public static class PanelModels
         var gap = Gap(live, name);
 
         var rows = snapshot?.Rows;
-        var hasAccounts = source.Role != SourceRole.Watch && rows is not null;
+        // Your own rows are all a remembered snapshot has, so "4 of 4" would be a clan this never read (plan A40).
+        var hasAccounts = source.Role != SourceRole.Watch && rows is not null && snapshot?.RememberedAt is null;
         var mine = rows?.Count(r => live.MyUserIds.Contains(r.UserId)) ?? 0;
 
         return new StandingModel(
-            new PanelHead(title, name, source.Role, live.IsOverdue(source)),
+            new PanelHead(title, name, source.Role, live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)),
             place is { } p ? PanelText.Ordinal((int)p) : Dash,
             recipe.Period is null || place is null ? "" : $"in the {RecipeWords.Period(recipe)}",
             recipe.Headline.FirstOrDefault(h => h.Id == totalId)?.Label ?? "Total",
@@ -221,6 +242,7 @@ public static class PanelModels
         var series = new List<ChartSeries>();
         var legend = new List<LegendItem>();
         var overdue = false;
+        var remembered = false;
         var anyPeriodKnown = recipe.Period is null;
 
         for (var i = 0; i < sources.Count; i++)
@@ -247,10 +269,12 @@ public static class PanelModels
             series.Add(new ChartSeries(label, points, i));
             legend.Add(new LegendItem($"{label} {(points.Count > 0 ? StatText.Abbrev(points[^1].Value) : Dash)}", i));
             overdue |= live.IsOverdue(source);
+            remembered |= live.IsRemembered(source.Id);
         }
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
-        var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started", Overdue: overdue);
+        var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started",
+            Overdue: overdue, Remembered: remembered);
 
         // No source's period is known yet: every point in "series" would be mixing periods together.
         if (!anyPeriodKnown)
@@ -277,10 +301,12 @@ public static class PanelModels
         var assigned = new HashSet<long>();
         var groups = new List<AccountGroupModel>();
         var overdue = false;
+        var remembered = false;
 
         foreach (var source in SourcesYoursIn(live, recipe))
         {
             overdue |= live.IsOverdue(source);
+            remembered |= live.IsRemembered(source.Id);
             var snapshot = live.SnapshotOf(source.Id);
             if (snapshot?.Rows is not { } rows) continue;
 
@@ -328,7 +354,7 @@ public static class PanelModels
         }
 
         return new MyAccountsModel(
-            new PanelHead(title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: "● sent to RoRoRo"),
+            new PanelHead(title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: "● sent to RoRoRo", Remembered: remembered),
             stat.Label, $"In {group}", groups);
     }
 
@@ -352,8 +378,9 @@ public static class PanelModels
             Note: $"Where each account would place if it were in {toName} now. Live only; other members' numbers are never saved.");
         var lowestLabel = $"{toName}'s lowest now";
 
-        var fromRows = live.SnapshotOf(from.Id)?.Rows;
-        var toRows = live.SnapshotOf(to.Id)?.Rows;
+        // Live only (plan A40): the book never kept another member's row, so a remembered snapshot cannot place anyone.
+        var fromRows = live.LiveOf(from.Id)?.Rows;
+        var toRows = live.LiveOf(to.Id)?.Rows;
         if (fromRows is null || toRows is null)
         {
             return new PromotionModel(head with { Note = $"Waiting for a read of {(fromRows is null ? fromName : toName)}." }, lowestLabel, Dash, stat.Label, []);
@@ -471,7 +498,8 @@ public static class PanelModels
             : [];
 
         return new AccountCardModel(
-            new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}", Overdue: live.IsOverdue(pickedSource)),
+            new PanelHead(title, $"{pickedAccount.DisplayName} · {live.SourceName(pickedSource)}",
+                Overdue: live.IsOverdue(pickedSource), Remembered: live.IsRemembered(pickedSource.Id)),
             stat.Label, PanelText.Value(ValueOf(pickedRow, stat.Key), stat.Format, zone), sections, line, facts,
             $"{pickedAccount.DisplayName}'s {stat.Label} over time",
             live.AvatarFor(pickedAccount.RobloxUserId));
@@ -594,7 +622,8 @@ public static class PanelModels
         var valueColumn = recipe.LastStep.Values[0].Label;
         var head = new PanelHead(title, Overdue: live.IsOverdue(source), Note: "From the source's own top list. ~ marks an estimate from your own read.");
 
-        if (live.SnapshotOf(source.Id)?.Groups is not { Count: > 0 } groups)
+        // Live only (plan A40): a group list's groups are shown and never kept, so the book has none to give back.
+        if (live.LiveOf(source.Id)?.Groups is not { Count: > 0 } groups)
         {
             return new TopModel(head with { Note = "Waiting for the first read." }, nameColumn, valueColumn, []);
         }
@@ -625,7 +654,7 @@ public static class PanelModels
             if (!placed.Add(name)) continue;
 
             var mineRecipe = live.FindRecipe(mineSource.Recipe)!.Recipe;
-            if (HeadlineNumber(live.SnapshotOf(mineSource.Id), TotalId(mineRecipe)) is not { } total) continue;
+            if (HeadlineNumber(live.LiveOf(mineSource.Id), TotalId(mineRecipe)) is not { } total) continue;
 
             var shown = mainNames.Contains(name) ? $"{name} ★" : name;
 
@@ -683,7 +712,8 @@ public static class PanelModels
                 value is null)));
         }
 
-        return new ProfileStatModel(new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source)), stat.Label, MissingLast(rows));
+        return new ProfileStatModel(
+            new PanelHead(title, stat.Label, Overdue: live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)), stat.Label, MissingLast(rows));
     }
 
     /// <summary>
@@ -784,7 +814,9 @@ public static class PanelModels
             : snapshot is not null ? ""
             : source.Enabled ? "Waiting for the first read."
             : $"{live.SourceName(source)} is switched off, so it isn't read.";
-        return new AccountsTableModel(new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note), columns, list);
+        return new AccountsTableModel(
+            new PanelHead(title, live.SourceName(source), Overdue: live.IsOverdue(source), Note: note, Remembered: live.IsRemembered(source.Id)),
+            columns, list);
     }
 
     /// <summary>Every row of a source live, your accounts marked (spec §9.4). Other members' names come from memory only.</summary>
@@ -802,7 +834,8 @@ public static class PanelModels
         if (shown.Count == 0) return new LeaderboardModel(head with { Note = "Tick Show on a stat to fill this panel." }, [], []);
 
         IReadOnlyList<string> columns = [.. shown.Select(s => s.Label)];
-        if (live.SnapshotOf(source.Id)?.Rows is not { } rows) return new LeaderboardModel(head, columns, []);
+        // Live only (plan A40): every row but yours is memory alone, so a remembered snapshot would show you by yourself.
+        if (live.LiveOf(source.Id)?.Rows is not { } rows) return new LeaderboardModel(head, columns, []);
 
         var ranked = Leaderboard.Rank(rows, live.MyUserIds, shown[0].Key);
         var zone = live.Time.LocalTimeZone;

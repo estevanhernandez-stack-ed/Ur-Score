@@ -68,6 +68,10 @@ public sealed class AppServices : ISetupServices, IDisposable
     private readonly List<string> _trail = [];
     private readonly Dictionary<string, RecipeSnapshot> _latest = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _lastRead = new(StringComparer.Ordinal);
+
+    /// <summary>The last numbers the score book kept, per source, until that source is read this session (plan A38).</summary>
+    private IReadOnlyDictionary<string, RecipeSnapshot> _remembered = new Dictionary<string, RecipeSnapshot>(StringComparer.Ordinal);
+
     private readonly Dictionary<string, string> _iconFiles = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _iconTexts = new(StringComparer.Ordinal);
     private readonly HashSet<string> _missesInTrail = new(StringComparer.Ordinal);
@@ -221,7 +225,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         Sources, Installed,
         new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
         new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
-        KnownAccounts, _time, Runner.Running, _avatars.Files);
+        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered);
 
     /// <summary>
     /// The boards on screen: the saved ones, with each tab that still follows a starter rebuilt from your sources and
@@ -277,7 +281,8 @@ public sealed class AppServices : ISetupServices, IDisposable
         ReaderLoaded = true;
         _book.Written += OnWritten;
         Runner.Apply(Sources);
-        AddTrail($"BOOK: loaded from {root}.");
+        RememberLastNumbers();
+        AddTrail($"BOOK: loaded from {root}. {_remembered.Count} source(s) opened on their last kept numbers.");
         AskForAvatars();
         RaiseChanged();
     }
@@ -542,6 +547,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         if (list.Accounts.Count > 0) _savedAccounts = list.Accounts;
         RefreshPolicies();
+        RememberLastNumbers();
     }
 
     /// <summary>
@@ -604,6 +610,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         foreach (var gone in _given.Keys.Where(id => Runner.WatchFor(id) is null).ToList()) _given.Remove(gone);
 
+        RememberLastNumbers();
         WarnPastBudget();
         RaiseIconIfChanged();
         RaiseChanged();
@@ -767,6 +774,19 @@ public sealed class AppServices : ISetupServices, IDisposable
         if (yours.Count == 0) return;
 
         _ = AskForAvatarsAsync(yours);
+    }
+
+    /// <summary>
+    /// The last numbers each source kept, so the window has something real in it before the first read lands (plan
+    /// A37). Read from the loaded book, never from disk again: after the book loads, when the sources change, and
+    /// when RoRoRo's account list changes, since which ids are yours decides which rows come back. A reading from
+    /// this session always wins (<see cref="LiveBoard.SnapshotOf"/>), so nothing here needs clearing.
+    /// </summary>
+    private void RememberLastNumbers()
+    {
+        if (!ReaderLoaded) return;
+
+        _remembered = Remembered.ForSources(Reader, Sources, Installed, LiveBoard.UserIdsOf(KnownAccounts));
     }
 
     private async Task AskForAvatarsAsync(IReadOnlySet<long> yours)

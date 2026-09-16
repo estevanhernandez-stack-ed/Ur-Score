@@ -160,4 +160,39 @@ public class BoardTextTests
     public void AnUnexpectedSaveFailureSaysSoWithoutItsMessage() =>
         Assert.Equal("Your change to the boards wasn't saved: something unexpected went wrong.",
             BoardText.BoardsNotSaved(new InvalidOperationException("p-1 at C:\\somewhere")));
+
+    [Fact]
+    public void TheStateLineSaysTheNumbersOnScreenAreTheLastOnesItRead()
+    {
+        var kept = Snapshot(MainClan.Id, [Row(Main.RobloxUserId, 4200)]) with { RememberedAt = Now.AddHours(-3) };
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.Equal("Not started. The numbers on screen are the last ones Ur Score read, from 3h ago.",
+            BoardText.StateLine(live, everStarted: false));
+    }
+
+    [Fact]
+    public void TheStateLineTakesTheOldestRememberedReadingSoItNeverSoundsFresherThanItIs()
+    {
+        var snaps = new Dictionary<string, RecipeSnapshot>
+        {
+            [MainClan.Id] = Snapshot(MainClan.Id, []) with { RememberedAt = Now.AddMinutes(-20) },
+            [AltClan.Id] = Snapshot(AltClan.Id, []) with { RememberedAt = Now.AddDays(-2) },
+        };
+        var live = Live([MainClan, AltClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(), remembered: snaps);
+
+        Assert.EndsWith("from 2d ago.", BoardText.StateLine(live, everStarted: true));
+    }
+
+    [Fact]
+    public void ARememberedSnapshotIsNeverAStateUrScoreIsIn()
+    {
+        // Nothing in this map describes what is happening now, so the state line must not read one as a fault.
+        var kept = new RecipeSnapshot(WatchState.SourceUnreachable, "timed out", [], [], 0) { SourceId = MainClan.Id, RememberedAt = Now.AddHours(-1) };
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            running: true, remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+
+        Assert.StartsWith("Reading 1 source.", BoardText.StateLine(live, everStarted: true));
+    }
 }

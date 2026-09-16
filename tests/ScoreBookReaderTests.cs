@@ -65,6 +65,21 @@ public class ScoreBookReaderTests
     }
 
     [Fact]
+    public void TheLastReadingIsTheNewestOneForThatSourceAlone()
+    {
+        var reader = Reader(
+            Read(Now.AddHours(-4), 100),
+            Read(Now.AddHours(-1), 300, source: "s-2"),
+            Read(Now.AddHours(-2), 200),
+            Final("B", Now, 999, 1));
+
+        // A final is not a reading, so the 2 h old line is still the last thing s-1 read.
+        Assert.Equal(Now.AddHours(-2), reader.LastReading("s-1")?.T);
+        Assert.Equal(Now.AddHours(-1), reader.LastReading("s-2")?.T);
+        Assert.Null(reader.LastReading("s-nothing-here"));
+    }
+
+    [Fact]
     public void FinalsMergeSupplementaryLinesAndListNewestFirst()
     {
         var reader = Reader(Final("A", Now.AddDays(-20), 300, 2), Final("B", Now.AddDays(-5), 4200, 1), Final("A", Now.AddDays(-1), 250, 3, account: "333"));

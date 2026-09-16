@@ -43,6 +43,13 @@ public sealed record RecipeSnapshot(
     /// <summary>Whether this cycle wrote a reading line to the score book.</summary>
     public bool Recorded { get; init; }
 
+    /// <summary>
+    /// When every number here came from the score book rather than a read, and when that reading was taken (plan
+    /// A39). Null on everything a watch produces. It is the single mark: nothing pairs it with a flag that could
+    /// disagree with it, and only <c>Remembered</c> ever sets it.
+    /// </summary>
+    public DateTimeOffset? RememberedAt { get; init; }
+
     /// <summary>Why this cycle kept nothing, when a book is attached and nothing was kept.</summary>
     public string? NotRecordingReason { get; init; }
 

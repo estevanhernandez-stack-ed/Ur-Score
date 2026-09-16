@@ -799,4 +799,62 @@ public class PanelModelsTests
 
         Assert.Equal(@"C:\cache\avatar-101.png", Assert.Single(model.Rows).Avatar);
     }
+
+    // ---- The last numbers the score book kept ----
+
+    /// <summary>Plan A41: a panel drawing numbers from the score book says so, in every panel that can.</summary>
+    [Fact]
+    public void EveryPanelThatDrawsRememberedNumbersSaysSoInItsHead()
+    {
+        var mainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var kept = Remembered.From(
+            Read(mainClan, Now.AddHours(-3), Period, Headline(99), "value", (Main.RobloxUserId, 4200)),
+            mainClan, Clan, LiveBoard.UserIdsOf(Accounts))!;
+        var installed = Installed(Clan, "value");
+        var live = Live([mainClan], [installed], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept });
+        var reader = Reader();
+        var settings = new PanelSettings(Clan.Slug, mainClan.Id, Stat: "value");
+
+        Assert.True(PanelModels.Standing(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.Race(live, reader, settings with { SourceIds = [mainClan.Id] }).Head.Remembered);
+        Assert.True(PanelModels.MyAccounts(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.AccountCard(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.ProfileStat(live, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.AccountsTable(live, reader, settings).Head.Remembered);
+
+        // And the same six say nothing when the numbers were read this session.
+        var read = Live([mainClan], [installed],
+            new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = Snapshot(mainClan.Id, [Row(Main.RobloxUserId, 4200)], [Points(99)]) });
+        Assert.False(PanelModels.Standing(read, reader, settings).Head.Remembered);
+        Assert.False(PanelModels.AccountsTable(read, reader, settings).Head.Remembered);
+
+        // And the mark goes with the numbers it marked: the kept ones are still in hand when the first read lands, so
+        // this is the case the board is actually in a second after Start. The state line's sentence goes with them.
+        var replaced = read with { Remembered = new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept } };
+        Assert.False(PanelModels.Standing(replaced, reader, settings).Head.Remembered);
+        Assert.False(PanelModels.AccountsTable(replaced, reader, settings).Head.Remembered);
+        Assert.True(PanelModels.Standing(replaced, reader, settings).HasAccounts);
+        Assert.Null(replaced.OldestRemembered);
+    }
+
+    /// <summary>Plan A40: the book never kept another member, so a panel that shows them waits for a real read.</summary>
+    [Fact]
+    public void ThePanelsThatShowOtherMembersNeverDrawRememberedNumbers()
+    {
+        var mainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var kept = Remembered.From(
+            Read(mainClan, Now.AddHours(-3), Period, Headline(99), "value", (Main.RobloxUserId, 4200)),
+            mainClan, Clan, LiveBoard.UserIdsOf(Accounts))!;
+        var live = Live([mainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+            remembered: new Dictionary<string, RecipeSnapshot> { [mainClan.Id] = kept });
+        var settings = new PanelSettings(Clan.Slug, mainClan.Id, Stat: "value");
+
+        Assert.Empty(PanelModels.LiveLeaderboard(live, settings, new Dictionary<long, string>()).Rows);
+        Assert.Empty(PanelModels.PromotionCheck(live, settings with { ToSourceId = mainClan.Id }).Rows);
+        Assert.False(PanelModels.LiveLeaderboard(live, settings, new Dictionary<long, string>()).Head.Remembered);
+
+        // And Standing never turns your own four accounts into "4 of 4" of a clan it did not read.
+        Assert.False(PanelModels.Standing(live, Reader(), settings).HasAccounts);
+    }
 }

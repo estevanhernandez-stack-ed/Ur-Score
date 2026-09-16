@@ -61,6 +61,11 @@
             <TextBlock x:Name="PanelOverdue" DockPanel.Dock="Left" Text="overdue" Margin="8,0,0,0" FontSize="11"
                        VerticalAlignment="Center" Foreground="{DynamicResource MagentaBrush}"
                        Visibility="{Binding Overdue, Converter={StaticResource BoolToVisible}}" />
+            <!-- Plan A41: this panel's numbers came from the score book, not from a read this session. Muted, never
+                 magenta: magenta is "overdue", which is a read that should have happened and hasn't. -->
+            <TextBlock x:Name="PanelRemembered" DockPanel.Dock="Left" Text="remembered" Margin="8,0,0,0" FontSize="11"
+                       VerticalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}"
+                       Visibility="{Binding Remembered, Converter={StaticResource BoolToVisible}}" />
         </DockPanel>
         <TextBlock x:Name="PanelSubtitle" Text="{Binding Subtitle}" Style="{StaticResource Muted}" FontSize="12" Margin="0,10,0,0"
                    Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVisible}}" />
