@@ -89,6 +89,21 @@ public sealed record LiveBoard(
     public RecipeSnapshot? LiveOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
 
     /// <summary>
+    /// The role a panel's chip wears for a source. A clan added under "your accounts are in" is called yours only while the
+    /// read in hand doesn't contradict it: when this session's reading has members and none of them is one of your
+    /// accounts, it is a clan you are watching, and the chip says so rather than "yours" above "Your accounts 0 of 57". With
+    /// no members read (not yet read, or between battles) there is no evidence either way, so it keeps what you chose.
+    /// Only a live reading can prove "none of yours": a remembered one holds your own accounts alone (plan A40). Deciding
+    /// membership from the clan's roster, which is there between battles too, is the larger change in the backlog.
+    /// </summary>
+    public SourceRole ChipRole(Source source) =>
+        source.Role == SourceRole.Mine
+        && LiveOf(source.Id)?.Rows is { Count: > 0 } rows
+        && !rows.Any(r => MyUserIds.Contains(r.UserId))
+            ? SourceRole.Watch
+            : source.Role;
+
+    /// <summary>
     /// Whether a reading came back with numbers at all. A read that failed carries its state and its reason and
     /// nothing else — <see cref="RecipeSnapshot.Rows"/> and <see cref="RecipeSnapshot.Headline"/> are both null,
     /// because no reading was ever attached to it — so it replaces nothing a panel is drawing.
@@ -268,7 +283,7 @@ public static class PanelModels
         var mine = rows?.Count(r => live.MyUserIds.Contains(r.UserId)) ?? 0;
 
         return new StandingModel(
-            new PanelHead(title, name, source.Role, live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)),
+            new PanelHead(title, name, live.ChipRole(source), live.IsOverdue(source), Remembered: live.IsRemembered(source.Id)),
             place is { } p ? PanelText.Ordinal((int)p) : Dash,
             recipe.Period is null || place is null ? "" : $"in the {RecipeWords.Period(recipe)}",
             recipe.Headline.FirstOrDefault(h => h.Id == totalId)?.Label ?? "Total",
@@ -681,7 +696,7 @@ public static class PanelModels
             : $"Filled in from the {RecipeWords.Group(recipe)}'s own record.";
 
         return new PastPeriodsModel(
-            new PanelHead(title, live.SourceName(source), source.Role, Note: note),
+            new PanelHead(title, live.SourceName(source), live.ChipRole(source), Note: note),
             RecipeWords.Capital(RecipeWords.Period(recipe)), rows);
     }
 
@@ -967,7 +982,7 @@ public static class PanelModels
         }
 
         var shown = installed.State.ShownStats(installed.Recipe);
-        var head = new PanelHead(title, live.SourceName(source), source.Role, live.IsOverdue(source), Note: "Live only. Never saved.");
+        var head = new PanelHead(title, live.SourceName(source), live.ChipRole(source), live.IsOverdue(source), Note: "Live only. Never saved.");
         if (shown.Count == 0) return new LeaderboardModel(head with { Note = "Tick Show on a stat to fill this panel." }, [], []);
 
         IReadOnlyList<string> columns = [.. shown.Select(s => s.Label)];

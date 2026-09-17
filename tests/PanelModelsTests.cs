@@ -57,6 +57,33 @@ public class PanelModelsTests
         Assert.Equal(("", (SourceRole?)null), (gone.Head.Chip, gone.Head.ChipRole));
     }
 
+    /// <summary>
+    /// A clan added under "your accounts are in" wore "yours" whatever its read said, so a board showed "yours" directly
+    /// above "Your accounts 0 of 57" (owner's screenshot, 2026-09-16). The chip may call a clan yours only while the read
+    /// in hand doesn't contradict it: a live read with members, none of them yours, makes it a clan you are watching.
+    /// With nothing read, or a clan between battles, there is no evidence either way, so the chip keeps what you chose.
+    /// Deciding membership from the clan's roster instead is the larger change, and it is in the backlog.
+    /// </summary>
+    [Fact]
+    public void AClanReadWithNoneOfYourAccountsIsNotCalledYours()
+    {
+        var mine = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        LiveBoard Board(RecipeSnapshot? snap) => Live([mine], [Installed(Clan, "value")], snap is null ? Snaps() : Snaps(snap));
+        PanelHead HeadOf(LiveBoard live) => PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: mine.Id)).Head;
+
+        // Read, members came back, and none of them is one of your accounts: a clan you are watching.
+        var strangers = HeadOf(Board(Snapshot(mine.Id, [Row(900001, 50), Row(900002, 40)])));
+        Assert.Equal(("watching", SourceRole.Watch), (strangers.Chip, strangers.ChipRole));
+
+        // Read, and one of your accounts is among them: yours.
+        var withYou = HeadOf(Board(Snapshot(mine.Id, [Row(900001, 50), Row(Main.RobloxUserId, 40)])));
+        Assert.Equal(("yours", SourceRole.Mine), (withYou.Chip, withYou.ChipRole));
+
+        // Nothing read yet, or read between battles: no evidence, so it keeps what you chose.
+        Assert.Equal("yours", HeadOf(Board(null)).Chip);
+        Assert.Equal("yours", HeadOf(Board(Idle(mine.Id))).Chip);
+    }
+
     [Fact]
     public void StandingShowsPlaceTotalChangeAndTheRecipesWords()
     {
