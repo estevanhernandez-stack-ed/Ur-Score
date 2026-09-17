@@ -34,6 +34,8 @@ a stat, a promotion check, an account card, past periods, records, the top of th
 stat, an accounts table, and the live leaderboard. The tabs across the top are boards; **Edit
 board** and **+ Add panel** arrange them, and any panel pops out into a window of its own. Each of
 your own accounts shows its Roblox avatar; no other player's picture is ever asked for or kept.
+When a recipe reads a group's icon, that group's standing panel shows it, and your main group's icon
+is the window and taskbar icon. After its first read, it's there as soon as Ur Score opens.
 
 **Every good read is kept.** Your own accounts' numbers and each source's headline go into a score
 book under `%LOCALAPPDATA%\626labs.ur-score\scorebook`. Nothing is thinned or deleted, and removing
@@ -56,7 +58,7 @@ Four destinations, and they're not the same boundary:
 | **RoRoRo**, over a local pipe on your own PC | Only your own saved accounts' values, only under a metric id you set to send, only if the number is a real finite value. This is the whole point of the plugin and it is checked at one gate in the code (`ReportPolicy`), not scattered around. | Anything about anyone else. Other rows' ids and values are read off the source, compared against your accounts, and dropped — never reported, never written to a file, never logged. |
 | **Whatever hosts your recipes name** — always https, never anything Ur Score chose | What that recipe's own steps carry: the inputs you filled in, a key you saved for it if it declares one, and your own accounts' Roblox user ids when it reads one account at a time. The import screen lists every host and what each one receives, under **YOUR PC WILL CONTACT**, before the recipe is added. | Anything a step doesn't name. Ur Score adds nothing of its own to a recipe's requests but its User-Agent, `UrScore/<version> (RoRoRo plugin)`. |
 | **Roblox's own public username lookup** (`users.roblox.com`) | Other members' Roblox user ids, so the live leaderboard can show names instead of a column of numbers. Those ids came from the recipe's source in the first place, and only names come back. | Your own accounts' ids — their names are already known locally, from RoRoRo, so they never need this call. |
-| **Roblox's own public picture service** (`thumbnails.roblox.com`, and the picture host it names on `rbxcdn.com`) | Your own accounts' Roblox user ids, so each of your rows can show that account's avatar, and a recipe's icon id when it has one. The pictures are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Any other player's id. The leaderboard and the top of the period show other members by name only, and no picture of anyone else is ever asked for or kept. |
+| **Roblox's own public picture service** (`thumbnails.roblox.com`, and the picture host it names on `rbxcdn.com`) | Your own accounts' Roblox user ids, so each of your rows can show that account's avatar, and the icon id a group's own answer names, when its recipe reads one. The pictures are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Any other player's id. The leaderboard and the top of the period show other members by name only, and no picture of anyone else is ever asked for or kept. |
 
 **You can turn the third one off.** Set `resolveNames` to `false` in settings (see *Settings
 reference* below) and the leaderboard still shows positions and values, with everyone but your own
@@ -67,7 +69,7 @@ schedule and your account count.
 
 Ur Score has no webhook of its own, posts nothing anywhere, and cannot type or click inside Roblox.
 Its only outbound calls are the ones above — your recipes' own hosts, the username lookup, and
-Roblox's picture service for your accounts' avatars and a recipe's icon — and its only inbound
+Roblox's picture service for your accounts' avatars and your groups' icons — and its only inbound
 connection is the local pipe to RoRoRo.
 
 **Credit where it's due:** the data is somebody else's, and each recipe carries its own credit
@@ -176,7 +178,8 @@ touching by hand:
 
 Beside those, in the same folder: `recipes\` (the recipe files you imported and their state),
 `scorebook\`, `accounts.json` (RoRoRo's last account list, so the window has names before RoRoRo
-answers), `icon-cache\`, and `keys.dat` — any key a recipe asked you to save, encrypted for your
+answers), `icon-cache\` (the pictures, and `source-icons.json`, which says which group each icon
+belongs to), and `keys.dat` — any key a recipe asked you to save, encrypted for your
 Windows account. Ur Score masks every saved key as `[key hidden]` in anything it shows, saves or
 copies.
 

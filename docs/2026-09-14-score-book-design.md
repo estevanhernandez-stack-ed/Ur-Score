@@ -471,7 +471,7 @@ type can be added more than once.
 
 | Panel | Needs | Shows |
 |---|---|---|
-| Standing | a source with a headline | Place, total, last hour's gain, the period line. Gap to the one above only when the group list has both it and the one above |
+| Standing | a source with a headline | Place, total, last hour's gain, the period line. Gap to the one above only when the group list has both it and the one above. Beside the place, that source's own icon when its recipe reads one (never the window's), named for the source; its space is kept while the picture isn't there |
 | Race | 2–5 sources | Each source's headline total over the current period, one line each, from the book, plus live |
 | My accounts | a stat | Your accounts by that stat, grouped by source (★ first, then mine, then "Not in a watched clan"), rank in clan, change with span, a SENT dot, and a stalled mark (§9.6) |
 | Promotion check | from source, to source (default: → main) | For each account in *from*: where its current value would rank among *to*'s live rows, and *to*'s lowest value. Live only |
@@ -515,6 +515,9 @@ These come from `docs/2026-09-13-stats-games-icons-design.md` §6.3 and still ho
 - **No invented range:** a chart whose values are all equal draws through the middle with one grid line naming the
   value; a chart drawn from zero keeps zero on its axis at either end.
 - **A record is one source's:** records never merge two sources' readings (§9.5).
+- **An icon is one source's:** a picture is kept per source, never per recipe. The window and taskbar show the switched-on
+  main's, and wait for it rather than showing another source's; with no main they keep Ur Score's own. Each source's
+  picture comes back from the cache at start, before any read.
 
 ## §10 The try-out command (stage 1)
 

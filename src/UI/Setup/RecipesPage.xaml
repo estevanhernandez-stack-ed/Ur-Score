@@ -16,10 +16,26 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Image Grid.Column="0" Width="32" Height="32" Margin="0,0,12,0" VerticalAlignment="Top"
-                                   Source="{Binding IconFile}"
-                                   Visibility="{Binding HasIcon, Converter={StaticResource BoolToVisible}}"
-                                   AutomationProperties.Name="Recipe icon" />
+                            <!-- The recipe's main clan's picture (backlog V3-S.7), named for that clan. Laid out while the picture
+                                 isn't there yet or doesn't decode (Hidden, A26), so the name beside it doesn't move when it lands; no
+                                 slot only for a recipe that names no icon, and that trigger is last because the later one wins. -->
+                            <Image x:Name="RecipeIcon" Grid.Column="0" Width="32" Height="32" Margin="0,0,12,0" VerticalAlignment="Top"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Source="{Binding IconFile, Converter={StaticResource Picture}}"
+                                   AutomationProperties.Name="{Binding IconName}">
+                                <Image.Style>
+                                    <Style TargetType="Image">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IconFile, Converter={StaticResource Picture}}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Hidden" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding HasIconSlot}" Value="False">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Image.Style>
+                            </Image>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding Hosts}" FontFamily="{StaticResource MonoFont}" Style="{StaticResource Muted}" Margin="0,2,0,0" />

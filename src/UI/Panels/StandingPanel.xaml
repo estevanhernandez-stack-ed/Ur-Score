@@ -8,10 +8,37 @@
             <ui:PanelFrame DataContext="{Binding Head}" />
             <!-- The mock's rhythm: 10 px between parts; key-value lines 12 apart, which at WPF's shorter line comes close to its 29 px pitch. -->
             <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding Place}" Style="{StaticResource BigNumber}" />
-                    <TextBlock Text="{Binding PlaceSuffix}" Style="{StaticResource Muted}" FontSize="12" Margin="10,0,0,0" VerticalAlignment="Bottom" />
-                </StackPanel>
+                <DockPanel>
+                    <!-- The logo of the clan THIS panel is about, never the window's (backlog V3-S.7): a panel pinned to a watched clan
+                         shows that clan's. Beside the place, as a picture sits beside the big number on the account card, and sized to
+                         the number's 30 px box. While the picture isn't there yet, or doesn't decode, the slot is laid out anyway
+                         (Hidden, never Collapsed: A26), so the place doesn't move when it lands; only a recipe that names no icon at
+                         all gives it no slot. That trigger is last, because the later of two matching triggers wins. -->
+                    <Image x:Name="StandingIcon" DockPanel.Dock="Left" Width="30" Height="30" Margin="0,0,10,0" VerticalAlignment="Center"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           Source="{Binding Icon, Converter={StaticResource Picture}}"
+                           AutomationProperties.Name="{Binding IconName}">
+                        <Image.Clip>
+                            <RectangleGeometry Rect="0,0,30,30" RadiusX="6" RadiusY="6" />
+                        </Image.Clip>
+                        <Image.Style>
+                            <Style TargetType="Image">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Icon, Converter={StaticResource Picture}}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HasIconSlot}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Image.Style>
+                    </Image>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Place}" Style="{StaticResource BigNumber}" />
+                        <TextBlock Text="{Binding PlaceSuffix}" Style="{StaticResource Muted}" FontSize="12" Margin="10,0,0,0" VerticalAlignment="Bottom" />
+                    </StackPanel>
+                </DockPanel>
                 <DockPanel Margin="0,10,0,0">
                     <TextBlock DockPanel.Dock="Right" Text="{Binding Total}" Style="{StaticResource KeyValue}" />
                     <TextBlock Text="{Binding TotalLabel}" Style="{StaticResource KeyLabel}" />

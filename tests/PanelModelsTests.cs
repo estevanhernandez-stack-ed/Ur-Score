@@ -210,6 +210,67 @@ public class PanelModelsTests
         Assert.Equal(ChangeDirection.None, Records.Direction([]));
     }
 
+    /// <summary>
+    /// The clan's own logo in Clan standing. Each panel shows the picture of the source IT is about, not the window's: a panel
+    /// pinned to a watched clan shows that clan's (backlog V3-S.7 is the window wearing the wrong clan; this is the same rule
+    /// one level down). Its name says whose picture it is, since a picture with no name is nothing to a screen reader.
+    /// </summary>
+    [Fact]
+    public void AStandingPanelShowsThePictureOfTheClanItIsAboutAndNamesIt()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
+        var live = Live([main, rival], [Installed(Clan, "value")], Snaps()) with
+        {
+            Icons = new Dictionary<string, string> { [main.Id] = "ccgp.png", [rival.Id] = "nova.png" },
+        };
+
+        var pinnedToRival = PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: rival.Id));
+        var onMain = PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
+
+        Assert.Equal(("nova.png", "NovaForge clan icon", true), (pinnedToRival.Icon, pinnedToRival.IconName, pinnedToRival.HasIconSlot));
+        Assert.Equal(("ccgp.png", "CCGP clan icon", true), (onMain.Icon, onMain.IconName, onMain.HasIconSlot));
+    }
+
+    [Fact]
+    public void AStandingPanelWhoseClanHasNoPictureYetKeepsItsSlotAndSaysNothingAboutIt()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
+        var live = Live([main, rival], [Installed(Clan, "value")], Snaps()) with
+        {
+            Icons = new Dictionary<string, string> { [main.Id] = "ccgp.png" },
+        };
+
+        var model = PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: rival.Id));
+
+        // Not the main's picture standing in: none, in a slot that keeps its space.
+        Assert.Equal((null, true, "NovaForge clan icon"), (model.Icon, model.HasIconSlot, model.IconName));
+        // A missing decoration is not news: no note, no stale message.
+        Assert.Equal(("", null), (model.Head.Note, model.Head.Stale));
+
+        var nothingYet = PanelModels.Standing(live with { Icons = null }, Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
+        Assert.Equal((null, true), (nothingYet.Icon, nothingYet.HasIconSlot));
+    }
+
+    [Fact]
+    public void AStandingPanelWhoseRecipeNamesNoIconOrWhoseClanIsGoneHasNoSlot()
+    {
+        var noIcon = Clan with { Icon = null };
+        var main = SourceOf("s-00000001", noIcon, "CCGP", SourceRole.Main);
+        var live = Live([main], [Installed(noIcon, "value")], Snaps()) with
+        {
+            // Left over from before the recipe dropped its icon: not drawn, whatever the map still holds.
+            Icons = new Dictionary<string, string> { [main.Id] = "ccgp.png" },
+        };
+
+        var dropped = PanelModels.Standing(live, Reader(), new PanelSettings(noIcon.Slug, SourceId: main.Id));
+        var gone = PanelModels.Standing(live, Reader(), new PanelSettings(noIcon.Slug, SourceId: "s-gone0000"));
+
+        Assert.Equal((null, false), (dropped.Icon, dropped.HasIconSlot));
+        Assert.Equal((null, false), (gone.Icon, gone.HasIconSlot));
+    }
+
     // ---- Race ----
 
     [Fact]

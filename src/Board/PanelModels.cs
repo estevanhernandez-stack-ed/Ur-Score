@@ -50,7 +50,8 @@ public sealed record LiveBoard(
     TimeProvider Time,
     bool Running,
     IReadOnlyDictionary<long, string>? Avatars = null,
-    IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null)
+    IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null,
+    IReadOnlyDictionary<string, string>? Icons = null)
 {
     public DateTimeOffset Now => Time.GetUtcNow();
 
@@ -105,9 +106,11 @@ public sealed record LiveBoard(
         Sources.Where(s => s.Enabled).Select(s => SnapshotOf(s.Id)?.RememberedAt).Min();
 
     /// <summary>The source's main input value ("CCGP"), else its recipe's name.</summary>
-    public string SourceName(Source source)
+    public string SourceName(Source source) => NameOf(source, FindRecipe(source.Recipe)?.Recipe);
+
+    /// <summary><see cref="SourceName"/> for a caller that already has the source's recipe, or knows it has none.</summary>
+    public static string NameOf(Source source, Recipe? recipe)
     {
-        var recipe = FindRecipe(source.Recipe)?.Recipe;
         if (recipe is not null && RecipeWords.MainInput(recipe) is { } input
             && source.Inputs.TryGetValue(input.Id, out var value) && value.Trim().Length > 0)
         {
@@ -127,6 +130,13 @@ public sealed record LiveBoard(
     public string? AvatarFor(long userId) =>
         userId != 0 && MyUserIds.Contains(userId) ? Avatars?.GetValueOrDefault(userId) : null;
 
+    /// <summary>
+    /// The cached picture of <paramref name="source"/> itself, or null (backlog V3-S.7): kept per source, so it is that clan's
+    /// and never another's. A recipe that no longer names an icon has none, whatever the map still holds.
+    /// </summary>
+    public string? IconFor(Source source) =>
+        FindRecipe(source.Recipe)?.Recipe.Icon is null ? null : Icons?.GetValueOrDefault(source.Id);
+
     /// <summary>Spec §9.6: only while reading runs, and only once the source has been read.</summary>
     public bool IsOverdue(Source source) =>
         Running
@@ -141,6 +151,18 @@ public sealed record StandingModel(
 {
     /// <summary>Which way <see cref="Change"/> went, so the panel paints a fall as one (backlog S1-13.14).</summary>
     public ChangeDirection ChangeDirection { get; init; }
+
+    /// <summary>The picture of the clan this panel is about, or null while there is none: never the window's, never another clan's.</summary>
+    public string? Icon { get; init; }
+
+    /// <summary>
+    /// This panel's recipe names an icon, so a picture belongs here: its space is kept while it isn't there yet or doesn't
+    /// decode, and nothing moves when it lands (A26). Without one there is no slot at all.
+    /// </summary>
+    public bool HasIconSlot { get; init; }
+
+    /// <summary>Whose picture it is, for a screen reader: "CCGP clan icon".</summary>
+    public string IconName { get; init; } = "";
 }
 
 public sealed record LegendItem(string Text, int Colour);
@@ -258,6 +280,9 @@ public static class PanelModels
             PanelText.PeriodLine(snapshot?.Period, live.Now, null))
         {
             ChangeDirection = totals is null ? ChangeDirection.None : Records.Direction(totals),
+            Icon = live.IconFor(source),
+            HasIconSlot = recipe.Icon is not null,
+            IconName = PanelText.IconName(name, recipe),
         };
     }
 

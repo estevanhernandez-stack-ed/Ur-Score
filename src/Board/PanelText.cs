@@ -73,6 +73,12 @@ public static class PanelText
         _ => "watching",
     };
 
+    /// <summary>
+    /// Whose picture an icon is, for a screen reader: "CCGP clan icon". The source's own name and the recipe's word for what it
+    /// reads, so it never names a game.
+    /// </summary>
+    public static string IconName(string sourceName, Recipe recipe) => $"{sourceName} {RecipeWords.Group(recipe)} icon";
+
     /// <summary>A source by its role: "★ CCGP", "K0i2", "NovaForge · watching".</summary>
     public static string SourceLabel(string name, SourceRole role) => role switch
     {

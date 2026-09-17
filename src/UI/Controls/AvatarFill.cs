@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO;
 using System.Windows.Data;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace Labs626.UrScore.UI;
 
@@ -35,23 +34,12 @@ public sealed class AvatarFill : IValueConverter
 
         if (_brushes.TryGetValue(key, out var known)) return known;
 
+        // A picture that doesn't decode costs the picture. The row keeps its space and its name.
         ImageBrush? brush = null;
-        try
+        if (PictureFile.Decode(file) is { } image)
         {
-            var image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            image.UriSource = new Uri(file);
-            image.EndInit();
-            image.Freeze();
-
             brush = new ImageBrush(image) { Stretch = Stretch.UniformToFill };
             brush.Freeze();
-        }
-        catch (Exception)
-        {
-            // A picture that doesn't decode costs the picture. The row keeps its space and its name.
         }
 
         _brushes[key] = brush;

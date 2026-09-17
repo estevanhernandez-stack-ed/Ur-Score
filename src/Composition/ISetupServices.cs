@@ -52,7 +52,10 @@ public interface ISetupServices
     /// <summary>Reports sent and dropped this session, summed over a recipe's sources.</summary>
     (int Sent, int Dropped) PolicyCounts(string recipeSlug);
 
-    /// <summary>The fetched icon file for a recipe, once a read has named one, else null.</summary>
+    /// <summary>
+    /// The picture for a recipe's row: its own main clan's, once a read has named one (or last session's is in the cache), else
+    /// null. Never another clan's (backlog V3-S.7).
+    /// </summary>
     string? IconFileFor(string recipeSlug);
 
     /// <summary>The cached picture for one of your own accounts, once it has been fetched, else null. Never another player's.</summary>

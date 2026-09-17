@@ -263,6 +263,55 @@ public class IconClientTests : IDisposable
         Assert.Single(handler.Requests);
     }
 
+    /// <summary>
+    /// Backlog V3-S.6: the window draws last session's picture before any read, so the lookup behind that is the cache alone.
+    /// Age only decides whether a READ asks Roblox again; a picture on disk is still the picture until then.
+    /// </summary>
+    [Fact]
+    public void APictureAlreadyOnDiskIsFoundHoweverOldAndNothingIsAsked()
+    {
+        Directory.CreateDirectory(_dir);
+        var cached = Path.Combine(_dir, $"{AssetId}.png");
+        File.WriteAllBytes(cached, Png);
+        File.SetLastWriteTimeUtc(cached, Now.AddDays(-30).UtcDateTime);
+        var handler = new RouteHandler();
+
+        Assert.Equal(cached, Client(handler).CachedFile($" rbxassetid://{AssetId} ", RecipeHostSet));
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task TheCacheLookupFindsTheSamePictureAFetchKeptAndOnlyUnderTheSameRules()
+    {
+        const string url = "https://ps99.example/icons/clan.png";
+        var handler = new RouteHandler().On(url, () => Bytes(Jpeg));
+        var client = Client(handler);
+        var file = await client.ResolveAsync(url, RecipeHostSet, CancellationToken.None);
+
+        Assert.NotNull(file);
+        Assert.Equal(file, client.CachedFile(url, RecipeHostSet));
+
+        // The same address from a recipe that doesn't contact that host is refused here too, picture on disk or not.
+        Assert.Null(client.CachedFile(url, new HashSet<string> { "other.example" }));
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("rbxassetid://14976358748")]
+    [InlineData("rbxassetid://0")]
+    [InlineData("rbxassetid://avatar-101")]
+    [InlineData("not an icon")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void TheCacheLookupFindsNothingWithNoPictureOnDiskOrForATextThatIsNotAnIcon(string? text)
+    {
+        // An avatar sits in the same folder under its own prefix, and no icon text can ever name it.
+        Directory.CreateDirectory(_dir);
+        File.WriteAllBytes(Path.Combine(_dir, IconClient.AvatarPrefix + "101.png"), Png);
+
+        Assert.Null(Client(new RouteHandler()).CachedFile(text, RecipeHostSet));
+    }
+
     [Theory]
     [InlineData("https://other.example/icons/clan.png")]
     [InlineData("http://ps99.example/icons/clan.png")]

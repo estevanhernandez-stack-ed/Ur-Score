@@ -128,6 +128,8 @@
             <BooleanToVisibilityConverter x:Key="BoolToVisible" />
             <ui:UpperCase x:Key="Upper" />
             <ui:AvatarFill x:Key="Avatar" />
+            <!-- A clan's icon as an image to draw: the Standing panel's own clan's (backlog V3-S.7). -->
+            <ui:PictureFile x:Key="Picture" />
 
             <!-- One of your own accounts' pictures: round, sized to its row, the same on every surface. The slot is laid
                  out whether or not a picture is there (Hidden, never Collapsed), so a picture that arrives late, fails or

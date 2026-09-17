@@ -26,7 +26,7 @@ namespace Labs626.UrScore.Source;
 /// icon, and the window keeps Ur Score's own.
 /// </para>
 /// </summary>
-public sealed class IconClient : IAvatarSource
+public sealed class IconClient : IAvatarSource, IIconSource
 {
     public const string ThumbnailsHost = "thumbnails.roblox.com";
 
@@ -85,19 +85,52 @@ public sealed class IconClient : IAvatarSource
     /// </summary>
     public async Task<string?> ResolveAsync(string? iconText, IReadOnlySet<string> recipeHosts, CancellationToken cancellationToken)
     {
+        if (KeyOf(iconText, recipeHosts) is not { } key) return null;
+
+        var file = CachePath(key.Name);
+        if (IsFresh(file)) return file;
+
+        if (key.Address is { } address) return await DownloadAsync(address, file, cancellationToken).ConfigureAwait(false);
+
+        var imageUrl = await ThumbnailUrlAsync(key.AssetId, cancellationToken).ConfigureAwait(false);
+        return imageUrl is not null && IsPictureHost(imageUrl)
+            ? await DownloadAsync(imageUrl, file, cancellationToken).ConfigureAwait(false)
+            : null;
+    }
+
+    /// <summary>
+    /// The picture already in the cache for <paramref name="iconText"/>, however old, or null (backlog V3-S.6). Never a request:
+    /// it is how the window draws last session's picture before any read. The same rules as <see cref="ResolveAsync"/> decide
+    /// what counts as an icon, so a text that would never be fetched never finds a file either.
+    /// </summary>
+    public string? CachedFile(string? iconText, IReadOnlySet<string> recipeHosts)
+    {
+        if (KeyOf(iconText, recipeHosts) is not { } key) return null;
+
+        try
+        {
+            var file = CachePath(key.Name);
+            return File.Exists(file) ? file : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>What an icon text is: an asset id, or an https address on one of the recipe's own hosts. Its cache name follows.</summary>
+    private sealed record IconKey(string Name, long AssetId, Uri? Address);
+
+    /// <summary>Null for anything that is not an asset id or an https address on one of <paramref name="recipeHosts"/>.</summary>
+    private static IconKey? KeyOf(string? iconText, IReadOnlySet<string> recipeHosts)
+    {
         var text = iconText?.Trim() ?? "";
 
         if (text.StartsWith(AssetScheme, StringComparison.OrdinalIgnoreCase)
             && long.TryParse(text[AssetScheme.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out var assetId)
             && assetId > 0)
         {
-            var file = CachePath(assetId.ToString(CultureInfo.InvariantCulture));
-            if (IsFresh(file)) return file;
-
-            var imageUrl = await ThumbnailUrlAsync(assetId, cancellationToken).ConfigureAwait(false);
-            return imageUrl is not null && IsPictureHost(imageUrl)
-                ? await DownloadAsync(imageUrl, file, cancellationToken).ConfigureAwait(false)
-                : null;
+            return new IconKey(assetId.ToString(CultureInfo.InvariantCulture), assetId, null);
         }
 
         if (Uri.TryCreate(text, UriKind.Absolute, out var address)
@@ -105,11 +138,7 @@ public sealed class IconClient : IAvatarSource
             && string.IsNullOrEmpty(address.UserInfo)
             && recipeHosts.Contains(address.Host.ToLowerInvariant()))
         {
-            var key = "url-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(address.AbsoluteUri)))[..32];
-            var file = CachePath(key);
-            if (IsFresh(file)) return file;
-
-            return await DownloadAsync(address, file, cancellationToken).ConfigureAwait(false);
+            return new IconKey("url-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(address.AbsoluteUri)))[..32], 0, address);
         }
 
         return null;

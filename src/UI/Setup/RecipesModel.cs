@@ -11,6 +11,12 @@ public sealed record RecipeItem(string Slug, string Name, string Hosts, string E
 
     public bool HasIcon => IconFile is not null;
 
+    /// <summary>The recipe names an icon, so its row keeps the picture's space while the main clan's picture isn't there (A26).</summary>
+    public bool HasIconSlot { get; init; }
+
+    /// <summary>Whose picture the row draws: "CCGP clan icon". Empty while the recipe has no main clan to draw.</summary>
+    public string IconName { get; init; } = "";
+
     public string Details => Sources.Length == 0 ? Every : $"{Every} · {Sources}";
 }
 
@@ -26,7 +32,13 @@ public static class RecipesModel
             string.Join(", ", RecipeHosts.ContactedBy(i.Recipe).Order(StringComparer.Ordinal)),
             $"Asks every {i.Recipe.EffectiveEverySeconds} s",
             SourcesText(i.Recipe, sources),
-            iconFile(i.Recipe.Slug)))];
+            iconFile(i.Recipe.Slug))
+        {
+            HasIconSlot = i.Recipe.Icon is not null,
+            IconName = IconChoice.RecipeSource(i.Recipe.Slug, sources, installed) is { } main
+                ? PanelText.IconName(LiveBoard.NameOf(main, i.Recipe), i.Recipe)
+                : "",
+        })];
 
     public static string SourcesText(Recipe recipe, IReadOnlyList<Source> sources)
     {

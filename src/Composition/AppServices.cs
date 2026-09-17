@@ -15,6 +15,7 @@ namespace Labs626.UrScore.Composition;
 using NameClient = Labs626.UrScore.Source.NameClient;
 using IconClient = Labs626.UrScore.Source.IconClient;
 using AvatarBook = Labs626.UrScore.Source.AvatarBook;
+using SourceIcons = Labs626.UrScore.Source.SourceIcons;
 using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>
@@ -56,6 +57,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     private readonly ScoreBook _book;
     private readonly IconClient _icons;
     private readonly AvatarBook _avatars;
+
+    /// <summary>Each source's own picture, never one per recipe (backlog V3-S.7), and back from the cache at start (V3-S.6).</summary>
+    private readonly SourceIcons _sourceIcons;
     private readonly SearchLists _searchLists;
     private readonly SourceStore _sourceStore = new(SourceStore.DefaultPath);
     private readonly BoardsFile _boardsFile = new(BoardsFile.DefaultPath, TimeProvider.System);
@@ -72,8 +76,6 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary>The last numbers the score book kept, per source, until that source is read this session (plan A38).</summary>
     private IReadOnlyDictionary<string, RecipeSnapshot> _remembered = new Dictionary<string, RecipeSnapshot>(StringComparer.Ordinal);
 
-    private readonly Dictionary<string, string> _iconFiles = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _iconTexts = new(StringComparer.Ordinal);
     private readonly HashSet<string> _missesInTrail = new(StringComparer.Ordinal);
 
     /// <summary>What each source's watch was last given to read, so a change elsewhere doesn't swap an unchanged recipe under a read in flight.</summary>
@@ -84,7 +86,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     private Task? _loading;
     private int? _budgetWarnedCount;
     private bool _changePending;
-    private string? _boardIcon;
+
+    /// <summary>The icon the window was last given, so a change raises <see cref="IconChanged"/> once.</summary>
+    private WindowIcon _windowIcon = WindowIcon.None;
 
     /// <summary><c>sources.json</c> was there at start but could not be read: this session never writes over it.</summary>
     private bool _sourcesUnreadable;
@@ -123,12 +127,18 @@ public sealed class AppServices : ISetupServices, IDisposable
         Names = new NameClient(_namesHttp);
         _icons = new IconClient(HttpRecipeTransport.CreateHandler(), IconClient.DefaultCacheDirectory, () => _time.GetUtcNow());
         _avatars = new AvatarBook(_icons);
+        _sourceIcons = new SourceIcons(_icons, Path.Combine(IconClient.DefaultCacheDirectory, SourceIcons.FileName));
 
         Runner = new SourceHost(CreateWatch, IntervalFor);
         Runner.SnapshotReady += OnSnapshotReady;
 
         LoadAtStart();
         LoadBoards();
+
+        // Once the sources are known, and before the window exists: each source's picture from last session, from disk alone,
+        // so the window, the taskbar and every Standing panel open on them rather than waiting for a read (V3-S.6).
+        _sourceIcons.Restore(IconHostsFor);
+        _windowIcon = WindowIcon;
     }
 
     // ---- ISetupServices ----
@@ -195,8 +205,8 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary>When a read was last asked for by hand: Test now, or Setup reading a source once. The board says what it found (S1-14.5).</summary>
     public DateTimeOffset? AskedReadAt { get; private set; }
 
-    /// <summary>The icon file the window should show, or null for Ur Score's own. Raised on the UI thread.</summary>
-    public event Action<string?>? IconChanged;
+    /// <summary>The window's icon changed: its picture, or none for Ur Score's own, and whose it is. Raised on the UI thread.</summary>
+    public event Action<WindowIcon>? IconChanged;
 
     public DateTimeOffset? LastReadAt(string sourceId) => _lastRead.TryGetValue(sourceId, out var at) ? at : null;
 
@@ -213,15 +223,13 @@ public sealed class AppServices : ISetupServices, IDisposable
         return (sent, dropped);
     }
 
-    public string? IconFileFor(string recipeSlug) => _iconFiles.GetValueOrDefault(recipeSlug);
+    public string? IconFileFor(string recipeSlug) => IconChoice.ForRecipe(recipeSlug, Sources, Installed, _sourceIcons.FileFor);
 
-    /// <summary>The main source's recipe icon, else the first enabled source's that has one.</summary>
-    public string? IconFileForBoard()
-    {
-        var source = Sources.FirstOrDefault(s => s.Enabled && s.Role == SourceRole.Main && _iconFiles.ContainsKey(s.Recipe))
-                     ?? Sources.FirstOrDefault(s => s.Enabled && _iconFiles.ContainsKey(s.Recipe));
-        return source is null ? null : _iconFiles[source.Recipe];
-    }
+    /// <summary>
+    /// The window's icon: the main clan's picture and never another clan's, whichever was read last (backlog V3-S.7). With no
+    /// main, Ur Score's own.
+    /// </summary>
+    public WindowIcon WindowIcon => IconChoice.ForWindow(Sources, Installed, _sourceIcons.FileFor);
 
     /// <summary>The picture for one of your own accounts (plan A22): an id RoRoRo isn't listing as yours has none.</summary>
     public string? AvatarFileFor(long userId) =>
@@ -231,7 +239,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         Sources, Installed,
         new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
         new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
-        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered);
+        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered, _sourceIcons.Files);
 
     /// <summary>
     /// The boards on screen: the saved ones, with each tab that still follows a starter rebuilt from your sources and
@@ -421,8 +429,6 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
 
         Sources = sources;
-        _iconFiles.Remove(slug);
-        _iconTexts.Remove(slug);
         ApplySources();
     }
 
@@ -659,6 +665,11 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         foreach (var gone in _given.Keys.Where(id => Runner.WatchFor(id) is null).ToList()) _given.Remove(gone);
 
+        // A source that is gone, or whose recipe was updated or removed so it names no icon, loses its picture now and at the
+        // next start (S1-14.1). Every path that reloads recipes or saves sources comes through here. Not while sources.json
+        // couldn't be read: there are no sources this session, and that is no reason to forget every clan's picture.
+        if (!_sourcesUnreadable) _sourceIcons.Keep(IconChoice.SourcesWithIcons(Sources, Installed));
+
         RememberLastNumbers();
         WarnPastBudget();
         RaiseIconIfChanged();
@@ -762,50 +773,43 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
     }
 
-    /// <summary>The recipe's icon, fetched once per icon text (stats design §3.3). Anything that fails keeps Ur Score's own.</summary>
+    /// <summary>
+    /// The icon a read of <paramref name="sourceId"/> named becomes THAT source's picture (backlog V3-S.7; stats design §3.3),
+    /// fetched once per icon text. The only text ever looked up is the one this read brought back. Anything that fails costs that
+    /// source's picture and nothing else, and says nothing: a missing decoration is not news.
+    /// </summary>
     private async Task ApplyIconAsync(string sourceId, RecipeSnapshot snapshot)
     {
         if (snapshot.IconText is not { } iconText) return;
-        if (Sources.FirstOrDefault(s => s.Id == sourceId) is not { } source) return;
-        if (FindInstalled(source.Recipe)?.Recipe is not { Icon: not null } recipe) return;
-        if (string.Equals(_iconTexts.GetValueOrDefault(recipe.Slug), iconText, StringComparison.Ordinal)) return;
+        if (IconHostsFor(sourceId) is not { } hosts) return;
 
-        _iconTexts[recipe.Slug] = iconText;
-
-        string? file;
         try
         {
-            file = await _icons.ResolveAsync(iconText, RecipeHosts.ContactedBy(recipe), _closing.Token);
+            if (!await _sourceIcons.ApplyAsync(sourceId, iconText, hosts, _closing.Token)) return;
         }
         catch (OperationCanceledException)
         {
             return;
         }
 
-        // A newer icon text arrived while this one was fetching.
-        if (!string.Equals(_iconTexts.GetValueOrDefault(recipe.Slug), iconText, StringComparison.Ordinal)) return;
-
-        if (file is null)
-        {
-            _iconFiles.Remove(recipe.Slug);
-            AddTrail("ICON: the recipe's icon could not be fetched, so the window keeps Ur Score's.");
-        }
-        else
-        {
-            _iconFiles[recipe.Slug] = file;
-        }
-
         RaiseIconIfChanged();
         RaiseChanged();
     }
 
-    /// <summary>The window's icon follows the main source's recipe, so a new main or a removed recipe moves it too.</summary>
+    /// <summary>The hosts a source's recipe contacts, or null when the source is gone or its recipe names no icon.</summary>
+    private IReadOnlySet<string>? IconHostsFor(string sourceId) =>
+        Sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal)) is { } source
+        && FindInstalled(source.Recipe)?.Recipe is { Icon: not null } recipe
+            ? RecipeHosts.ContactedBy(recipe)
+            : null;
+
+    /// <summary>The window's icon follows the main clan, so a new main, a picture landing or a removed recipe moves it too.</summary>
     private void RaiseIconIfChanged()
     {
-        var icon = IconFileForBoard();
-        if (string.Equals(icon, _boardIcon, StringComparison.Ordinal)) return;
+        var icon = WindowIcon;
+        if (icon == _windowIcon) return;
 
-        _boardIcon = icon;
+        _windowIcon = icon;
         IconChanged?.Invoke(icon);
     }
 

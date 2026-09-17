@@ -39,6 +39,28 @@ public class RecipesModelTests
         Assert.False(items[1].HasIcon);
     }
 
+    /// <summary>
+    /// A recipe's row draws its main clan's picture (backlog V3-S.7), so its name says whose picture it is, and its slot is laid
+    /// out while that picture isn't there (A26). A recipe that names no icon has no slot, and nothing to name.
+    /// </summary>
+    [Fact]
+    public void ARecipesPictureIsNamedForItsMainClanAndKeepsItsSlotWhileItIsNotThere()
+    {
+        var main = new Source("s-00000001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main);
+
+        var items = RecipesModel.Items(
+            [new InstalledRecipe(Clan, "", new RecipeState()), new InstalledRecipe(Profile, "", new RecipeState())],
+            [ClanSource("s-00000002", "K0i2"), main],
+            _ => null);
+
+        Assert.Equal((true, false, "CCGP clan icon"), (items[0].HasIconSlot, items[0].HasIcon, items[0].IconName));
+        Assert.Equal((false, ""), (items[1].HasIconSlot, items[1].IconName));
+
+        // With no main clan yet, the slot stays, and nothing claims to be anyone's picture.
+        var noMain = RecipesModel.Items([new InstalledRecipe(Clan, "", new RecipeState())], [ClanSource("s-00000002", "K0i2")], _ => null);
+        Assert.Equal((true, ""), (noMain[0].HasIconSlot, noMain[0].IconName));
+    }
+
     [Fact]
     public void SourcesTextCountsInTheRecipesWords()
     {

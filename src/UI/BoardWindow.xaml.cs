@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Composition;
@@ -100,6 +99,8 @@ public partial class BoardWindow : Window
 
         _services.Changed += Render;
         _services.IconChanged += ApplyIcon;
+        // At open, from last session's pictures (V3-S.6): the icon doesn't wait for the first read.
+        ApplyIcon(_services.WindowIcon);
         _clock.Tick += (_, _) => RenderLines();
         Loaded += OnLoaded;
         Closed += (_, _) =>
@@ -738,40 +739,20 @@ public partial class BoardWindow : Window
         _importNote = null;
     }
 
-    /// <summary>The main source's icon on the window, the taskbar and the top bar; anything that fails keeps Ur Score's own.</summary>
-    private void ApplyIcon(string? file)
+    /// <summary>
+    /// The main clan's icon on the window, the taskbar and the top bar (backlog V3-S.7), at open and whenever it changes. With no
+    /// picture, or one that doesn't decode, the window keeps Ur Score's own, and the top bar keeps the picture's space while a
+    /// main clan's picture belongs there (A26). A missing picture is a missing decoration: nothing is said about it.
+    /// </summary>
+    private void ApplyIcon(WindowIcon icon)
     {
-        if (file is null)
-        {
-            ResetIcon();
-            return;
-        }
+        AutomationProperties.SetName(BoardIcon, icon.Name ?? "");
 
-        try
-        {
-            var image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            image.UriSource = new Uri(file);
-            image.EndInit();
-            image.Freeze();
+        var image = icon.File is { } file ? PictureFile.Decode(file) : null;
+        if (image is null) ClearValue(IconProperty);
+        else Icon = image;
 
-            Icon = image;
-            BoardIcon.Source = image;
-            BoardIcon.Visibility = Visibility.Visible;
-        }
-        catch (Exception ex)
-        {
-            ResetIcon();
-            _services.AddTrail($"ICON: the picture did not decode ({ex.GetType().Name}), so the window keeps Ur Score's.");
-        }
-    }
-
-    private void ResetIcon()
-    {
-        ClearValue(IconProperty);
-        BoardIcon.Source = null;
-        BoardIcon.Visibility = Visibility.Collapsed;
+        BoardIcon.Source = image;
+        BoardIcon.Visibility = PictureFile.SlotVisibility(icon.HasSlot, image is not null);
     }
 }
