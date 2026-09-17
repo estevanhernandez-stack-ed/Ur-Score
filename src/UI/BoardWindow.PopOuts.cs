@@ -24,8 +24,7 @@ public partial class BoardWindow
     /// <summary>Where the windows sit is written once moving settles, never for every pixel of a drag.</summary>
     private readonly DispatcherTimer _popOutSave = new() { Interval = TimeSpan.FromMilliseconds(700) };
 
-    /// <summary>Set as Ur Score closes, so the windows it closes keep their <c>popout</c> and reopen next start.</summary>
-    private bool _closingApp;
+    private readonly PopOutLifecycle _popOutLifecycle = new();
 
     private void HookPopOuts()
     {
@@ -41,7 +40,6 @@ public partial class BoardWindow
         // After edit mode's own Closing handler has saved the draft: the positions go on top of it.
         Closing += (_, _) =>
         {
-            _closingApp = true;
             _popOutSave.Stop();
             SavePopOutPositions();
         };
@@ -85,7 +83,7 @@ public partial class BoardWindow
     private void SyncPopOuts()
     {
         // Nothing opens while Ur Score closes; the windows it closes then keep their popout.
-        if (_closingApp) return;
+        if (_popOutLifecycle.ClosingApp || !_services.ReaderLoaded) return;
 
         var boards = _services.Boards;
         var wanted = new Dictionary<string, PanelDef>(StringComparer.Ordinal);
@@ -107,7 +105,7 @@ public partial class BoardWindow
         var live = _services.CurrentBoard();
         foreach (var (id, def) in wanted)
         {
-            if (_popOuts.ContainsKey(id) || def.PopOut is not { } rect) continue;
+            if (_popOuts.ContainsKey(id) || !_popOutLifecycle.ShouldOpen(id, _services.ReaderLoaded) || def.PopOut is not { } rect) continue;
 
             var view = PanelViews.Create(def.Type);
             AutomationProperties.SetAutomationId(view, AutomationIdIn(shown, id));
@@ -154,7 +152,14 @@ public partial class BoardWindow
         if (!_popOuts.TryGetValue(window.PanelId, out var current) || !ReferenceEquals(current, window)) return;
 
         _popOuts.Remove(window.PanelId);
-        if (!_closingApp) ReturnPanel(window.PanelId);
+        if (_popOutLifecycle.Closed(window.PanelId, window.ReturnRequested))
+        {
+            ReturnPanel(window.PanelId);
+        }
+        else
+        {
+            SavePopOutPositions();
+        }
     }
 
     /// <summary>
@@ -173,6 +178,7 @@ public partial class BoardWindow
         }
 
         if (_draft is { } draft && draft.Panels.Any(p => p.Id == panelId && p.PopOut is not null)) _draft = BoardEdits.Return(draft, panelId);
+        _popOutLifecycle.Returned(panelId);
         Render();
     }
 
@@ -182,10 +188,13 @@ public partial class BoardWindow
     /// </summary>
     private void SavePopOutPositions()
     {
-        if (_popOuts.Count == 0) return;
-
         var boards = _services.Boards;
-        var placed = BoardEdits.PlacePopOuts(boards, _popOuts.ToDictionary(p => p.Key, p => p.Value.Rect, StringComparer.Ordinal));
+        var places = _lastPopOut.Where(pair => _popOutLifecycle.IsClosedExternally(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        foreach (var (id, window) in _popOuts) places[id] = window.Rect;
+        if (places.Count == 0) return;
+
+        var placed = BoardEdits.PlacePopOuts(boards, places);
         if (ReferenceEquals(placed, boards)) return;
 
         try

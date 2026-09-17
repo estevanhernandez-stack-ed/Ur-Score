@@ -28,7 +28,11 @@ public partial class PanelPopOutWindow : Window
 
         // A small tool window, never maximized or minimized: no maximize or minimize box, so a double-click on the
         // strip, Win+Up and Snap to the top edge do nothing, and any state that gets through anyway goes straight back.
-        SourceInitialized += (_, _) => DropStateBoxes();
+        SourceInitialized += (_, _) =>
+        {
+            DropStateBoxes();
+            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(ReadCloseIntent);
+        };
         StateChanged += (_, _) =>
         {
             if (WindowState != WindowState.Normal) WindowState = WindowState.Normal;
@@ -39,6 +43,8 @@ public partial class PanelPopOutWindow : Window
     }
 
     public string PanelId { get; }
+
+    public bool ReturnRequested { get; private set; }
 
     /// <summary>The panel control inside, which the board renders like any other.</summary>
     public FrameworkElement View { get; }
@@ -57,7 +63,17 @@ public partial class PanelPopOutWindow : Window
         PopOutTitle.Text = title;
     }
 
-    private void OnReturnClick(object sender, RoutedEventArgs e) => Close();
+    private void OnReturnClick(object sender, RoutedEventArgs e)
+    {
+        ReturnRequested = true;
+        Close();
+    }
+
+    private IntPtr ReadCloseIntent(IntPtr window, int message, IntPtr parameter, IntPtr data, ref bool handled)
+    {
+        if (PopOutLifecycle.IsReturnCommand(message, parameter)) ReturnRequested = true;
+        return IntPtr.Zero;
+    }
 
     private void DropStateBoxes()
     {

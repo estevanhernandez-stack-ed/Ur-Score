@@ -83,7 +83,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     private IReadOnlyList<HostAccount> _savedAccounts;
     private FinalsIndex? _finals;
-    private Task? _loading;
+    private readonly BookLoader _bookLoader = new();
     private int? _budgetWarnedCount;
     private bool _changePending;
 
@@ -275,11 +275,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// sources. Nothing else touches the reader until this returns; after it, only the UI thread does.
     /// A second call while it runs (or after it finished) gets the same load, so the book is read once.
     /// </summary>
-    public Task LoadBookAsync()
-    {
-        if (_loading is null || _loading.IsFaulted) _loading = LoadBookOnceAsync();
-        return _loading;
-    }
+    public Task LoadBookAsync() => _bookLoader.LoadAsync(LoadBookOnceAsync);
 
     private async Task LoadBookOnceAsync()
     {

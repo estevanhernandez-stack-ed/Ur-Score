@@ -28,6 +28,7 @@ public partial class BoardWindow
         // box by now; the window closes anyway, and nothing here may throw out of Closing.
         Closing += (_, _) =>
         {
+            _popOutLifecycle.BeginShutdown();
             try
             {
                 FinishEditing();

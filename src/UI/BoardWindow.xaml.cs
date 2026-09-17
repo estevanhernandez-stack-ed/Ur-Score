@@ -128,7 +128,7 @@ public partial class BoardWindow : Window
     /// </summary>
     private async Task OpenOnTheBookAsync()
     {
-        if (!await ReadBookAsync()) return;
+        if (!await ReadBookAsync() || _popOutLifecycle.ClosingApp) return;
 
         // Spec §7.1: a recipe with inputs and no sources opens Setup on its Clans page.
         var firstRun = SetupPages.FirstRunPage(_services.Installed, _services.Sources);
@@ -201,14 +201,14 @@ public partial class BoardWindow : Window
         RenderEmpty(board);
 
         var key = ViewKey(board);
-        if (key != _renderedKey)
+        if (_services.ReaderLoaded && key != _renderedKey)
         {
             _renderedKey = key;
             BuildPanels(board);
         }
 
         // Only once shown: the constructor's first draw must not open windows ahead of the board.
-        if (IsLoaded) SyncPopOuts();
+        if (IsLoaded && _services.ReaderLoaded) SyncPopOuts();
 
         _anchorSourceId = BoardEdits.AnchorSourceId(board, _services.Sources, _services.Installed);
         var live = _services.CurrentBoard();
@@ -360,7 +360,7 @@ public partial class BoardWindow : Window
         var empty = _empty != BoardEmpty.None;
 
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        BoardScroll.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        BoardScroll.Visibility = empty || !_services.ReaderLoaded ? Visibility.Collapsed : Visibility.Visible;
         EmptyStateLine.Text = line;
         EmptyStateDetail.Text = detail;
         EmptyStateButton.Content = button;
