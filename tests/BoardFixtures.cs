@@ -65,6 +65,17 @@ internal static class BoardFixtures
             Groups = groups ?? [],
         };
 
+    /// <summary>
+    /// A read of this session that found its source between periods, as <c>RecipeWatch</c> stops one: the state and the
+    /// recipe's reason, and no rows or headline, because an idle source has no member list to give.
+    /// </summary>
+    public static RecipeSnapshot Idle(string sourceId) =>
+        new(WatchState.SourceIdle, "No clan battle running", [], [], 0) { SourceId = sourceId };
+
+    /// <summary>A read of this session that failed, as <c>RecipeWatch</c> stops one: nothing came back.</summary>
+    public static RecipeSnapshot Unreachable(string sourceId) =>
+        new(WatchState.SourceUnreachable, "The source could not be reached.", [], [], 0) { SourceId = sourceId };
+
     public static LiveBoard Live(
         IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, IReadOnlyDictionary<string, RecipeSnapshot> snapshots,
         bool running = false, IReadOnlyDictionary<string, DateTimeOffset>? lastRead = null, IReadOnlyList<HostAccount>? accounts = null,

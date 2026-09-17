@@ -72,7 +72,8 @@ public static class AccountsModel
 
     /// <summary>
     /// The main and mine sources whose last read had this account, main first. Else where it is, in the words My accounts heads
-    /// the same accounts with (PanelText.NotFound): only in groups you watch, or how much has been read (backlog S1-12.7).
+    /// the same accounts with (PanelText.NotFound): only in groups you watch, or how much has been read and whether what was read
+    /// was between periods (backlog S1-12.7, V3-S.18).
     /// <paramref name="latest"/> holds this session's readings only, so "not in" waits for every source to be read.
     /// </summary>
     public static string FoundIn(
@@ -100,22 +101,26 @@ public static class AccountsModel
 
         if (names.Count > 0) return string.Join(", ", names.Distinct(StringComparer.Ordinal));
 
-        var (group, groups) = Words(withInputs);
+        var (group, groups, period) = Words(withInputs);
         if (ofRecipes.Any(s => s.Role == SourceRole.Watch && Holds(s))) return PanelText.OnlyWatched(groups);
 
         var read = ofRecipes.Count(s => latest.GetValueOrDefault(s.Id)?.Rows is not null);
-        return PanelText.NotFound($"Not in a watched {group}", groups, inHand: read, readNow: read, sources: ofRecipes.Count);
+        return PanelText.NotFound($"Not in a watched {group}", group, groups, period, inHand: read, readNow: read,
+            idleNow: ofRecipes.Count(s => PanelText.ReadIdle(latest.GetValueOrDefault(s.Id))), sources: ofRecipes.Count);
     }
 
     /// <summary>
     /// The recipes' own words for a group and several ("clan", "clans") when every recipe with a clans page uses the same ones,
-    /// else Ur Score's own "source", "sources". The line is about all of them, so one recipe's noun never speaks for the rest
-    /// (backlog S1-12.7, where it came from the first recipe alone).
+    /// else Ur Score's own "source", "sources"; and their word for a period ("battle") on the same terms, else "period". The line
+    /// is about all of them, so one recipe's noun never speaks for the rest (backlog S1-12.7, where it came from the first recipe
+    /// alone). The period is decided apart from the group, so recipes that share "clan" keep it whatever their periods are.
     /// </summary>
-    private static (string Group, string Groups) Words(IReadOnlyList<InstalledRecipe> withInputs)
+    private static (string Group, string Groups, string Period) Words(IReadOnlyList<InstalledRecipe> withInputs)
     {
         var words = withInputs.Select(i => (Group: RecipeWords.Group(i.Recipe), Groups: RecipeWords.GroupsLower(i.Recipe))).Distinct().ToList();
-        return words.Count == 1 ? words[0] : ("source", "sources");
+        var periods = withInputs.Select(i => RecipeWords.Period(i.Recipe)).Distinct(StringComparer.Ordinal).ToList();
+        var (group, groups) = words.Count == 1 ? words[0] : ("source", "sources");
+        return (group, groups, periods.Count == 1 ? periods[0] : "period");
     }
 
     /// <summary>

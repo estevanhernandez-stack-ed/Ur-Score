@@ -439,10 +439,12 @@ public static class PanelModels
                 .Select(r => r.UserId)
                 .ToHashSet();
             var groupsWord = RecipeWords.GroupsLower(recipe);
+            // Idle is asked of this session's reading alone: a remembered one is no read, between periods or otherwise.
             var notFound = PanelText.NotFound(
-                recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read", groupsWord,
+                recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read", group, groupsWord, RecipeWords.Period(recipe),
                 inHand: ofRecipe.Count(s => live.SnapshotOf(s.Id)?.Rows is not null),
                 readNow: ofRecipe.Count(s => live.LiveOf(s.Id)?.Rows is not null),
+                idleNow: ofRecipe.Count(s => PanelText.ReadIdle(live.LiveOf(s.Id))),
                 sources: ofRecipe.Count);
 
             string Heading(HostAccount account) =>

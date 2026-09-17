@@ -179,16 +179,38 @@ public static class PanelText
     /// now, because the score book keeps only the accounts it kept, so an account missing from one proves nothing about the
     /// group; the same inheritance as a rank counted from your own rows alone (plan A40).
     /// </para>
+    /// <para>
+    /// A source read between periods WAS read, and its reading has no rows, because there is no member list to give (<see
+    /// cref="ReadIdle"/>). With no rows on hand anywhere, that is what the line says: no group is in a period right now once
+    /// every source was read so, and of the ones read so far while some are not. Counting it as unread said "No clans read
+    /// yet" of clans that were read, which is the board's usual state, since a main clan sits between battles most of the time.
+    /// </para>
     /// </summary>
     /// <param name="inNone">What is true once every source was read and the account is in none: "Not in a watched clan".</param>
+    /// <param name="group">The recipe's word for one group, lower case: "clan".</param>
     /// <param name="groups">The recipe's word for several groups, lower case: "clans".</param>
-    /// <param name="inHand">Sources with a reading on hand, from this session or remembered.</param>
-    /// <param name="readNow">Sources with a reading from this session.</param>
+    /// <param name="period">The recipe's word for its period, lower case: "battle".</param>
+    /// <param name="inHand">Sources with a reading with rows on hand, from this session or remembered.</param>
+    /// <param name="readNow">Sources with a reading with rows from this session.</param>
+    /// <param name="idleNow">Sources whose reading from this session found them between periods.</param>
     /// <param name="sources">Every source the line is about.</param>
-    public static string NotFound(string inNone, string groups, int inHand, int readNow, int sources) =>
+    public static string NotFound(
+        string inNone, string group, string groups, string period, int inHand, int readNow, int idleNow, int sources) =>
         sources > 0 && readNow >= sources ? inNone
-        : inHand == 0 ? $"No {groups} read yet"
-        : $"Not found in the {groups} read so far";
+        : inHand > 0 ? $"Not found in the {groups} read so far"
+        : idleNow == 0 ? $"No {groups} read yet"
+        : idleNow >= sources ? $"No {group} is in {WithA(period)} right now"
+        : $"No {group} read so far is in {WithA(period)}";
+
+    /// <summary>
+    /// Whether a reading from this session found its source between periods: read, with no rows, since there was no member
+    /// list to read. Pass the session's own reading (<c>LiveOf</c>, Setup's latest), never a remembered one, which is no read.
+    /// </summary>
+    public static bool ReadIdle(RecipeSnapshot? live) => live is { State: WatchState.SourceIdle, Rows: null };
+
+    /// <summary>"a battle", "an event": a recipe's period word is its own, so the article can't be written in.</summary>
+    private static string WithA(string noun) =>
+        (noun.Length > 0 && "aeiou".Contains(char.ToLowerInvariant(noun[0])) ? "an " : "a ") + noun;
 
     /// <summary>
     /// One of your accounts seen only in the rows of groups you watch (S1-13.4, S1-12.7). A watched source is never matched to

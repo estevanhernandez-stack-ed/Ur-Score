@@ -401,6 +401,50 @@ public class PanelModelsTests
             Headings(Model(Snaps(mainRead, altsRead), sources: [main, alts])));
     }
 
+    /// <summary>
+    /// A clan between battles WAS read: its reading is idle, so it has no member list to find an account in. Heading every
+    /// account "No clans read yet" then was untrue, and it is what the board shows most of the time, because the main clan
+    /// sits between battles far longer than it is in one. The heading says what the reads found, in the recipe's words, and
+    /// never more than they found: "right now" only once every clan has been read.
+    /// </summary>
+    [Fact]
+    public void MyAccountsSaysNoClanIsInABattleWhenTheClansWereReadBetweenBattles()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
+        var unmatched = new HostAccount(Guid.Parse("55555555-5555-5555-5555-555555555555"), 0, "NotYetMatched");
+        IReadOnlyList<HostAccount> accounts = [Main, AltOne, AltTwo, Loose, unmatched];
+        MyAccountsModel Model(IReadOnlyDictionary<string, RecipeSnapshot> reads, IReadOnlyDictionary<string, RecipeSnapshot>? remembered = null) =>
+            PanelModels.MyAccounts(Live([main, alts, rival], [Installed(Clan, "value")], reads, accounts: accounts, remembered: remembered),
+                Reader(), new PanelSettings(Clan.Slug, Stat: "value"));
+        string[] Headings(MyAccountsModel model) => [.. model.Groups.Select(g => g.Heading)];
+
+        // Every clan read and none in a battle: nothing to place an account in, and that is what is said.
+        var between = Model(Snaps(Idle(main.Id), Idle(alts.Id), Idle(rival.Id)));
+        Assert.Equal(new[] { "No clan is in a battle right now", "Not matched by RoRoRo yet" }, Headings(between));
+        Assert.Equal(4, between.Groups[0].Rows.Count);
+
+        // The main clan read between battles and the rest not yet, or not reachable: nothing is claimed of the clans not read.
+        Assert.Equal(new[] { "No clan read so far is in a battle", "Not matched by RoRoRo yet" }, Headings(Model(Snaps(Idle(main.Id)))));
+        Assert.Equal(new[] { "No clan read so far is in a battle", "Not matched by RoRoRo yet" },
+            Headings(Model(Snaps(Idle(main.Id), Unreachable(alts.Id), Idle(rival.Id)))));
+
+        // A read that failed read nothing, so with nothing else read, no clan has been.
+        Assert.Equal(new[] { "No clans read yet", "Not matched by RoRoRo yet" }, Headings(Model(Snaps(Unreachable(main.Id)))));
+
+        // One clan in a battle among idle ones: its rows were read, and the leftovers weren't found in them.
+        var mainRead = Snapshot(main.Id, [Row(Main.RobloxUserId, 10)]);
+        Assert.Equal(new[] { "★ CCGP", "Not found in the clans read so far", "Not matched by RoRoRo yet" },
+            Headings(Model(Snaps(mainRead, Idle(alts.Id), Idle(rival.Id)))));
+
+        // Numbers the book kept for a clan now between battles still place the accounts they kept, and the rest weren't found
+        // in them; an idle read never stands in for a read of the members, and a remembered one never counts as read now.
+        var kept = new Dictionary<string, RecipeSnapshot> { [main.Id] = mainRead with { RememberedAt = Now.AddHours(-2) } };
+        Assert.Equal(new[] { "★ CCGP", "Not found in the clans read so far", "Not matched by RoRoRo yet" },
+            Headings(Model(Snaps(Idle(main.Id), Idle(alts.Id), Idle(rival.Id)), kept)));
+    }
+
     [Fact]
     public void MyAccountsGroupsMainFirstThenMineThenAccountsInNoWatchedClan()
     {
@@ -1376,13 +1420,12 @@ public class PanelModelsTests
         var top = SourceOf("s-0000000a", TopList, null, SourceRole.Watch);
         var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
         var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
-        RecipeSnapshot Idle(Source source) => new(WatchState.SourceIdle, "No clan battle running", [], [], 0) { SourceId = source.Id };
         InstalledRecipe[] installed = [Installed(Clan, "value"), Installed(TopList)];
         var leaderboard = new PanelSettings(Clan.Slug, SourceId: main.Id);
         var topList = new PanelSettings(TopList.Slug, SourceId: top.Id);
         var promotion = new PanelSettings(Clan.Slug, SourceId: alts.Id, ToSourceId: main.Id, Stat: "value");
 
-        var stopped = Live([top, main, alts], installed, Snaps(Idle(top), Idle(main), Snapshot(alts.Id, [Row(201, 12)])));
+        var stopped = Live([top, main, alts], installed, Snaps(Idle(top.Id), Idle(main.Id), Snapshot(alts.Id, [Row(201, 12)])));
         var board = PanelModels.LiveLeaderboard(stopped, leaderboard, new Dictionary<long, string>());
         Assert.Empty(board.Rows);
         Assert.Equal("Live only. Never saved. The last read brought nothing back.", board.Head.Note);

@@ -168,18 +168,38 @@ public class PanelTextTests
     {
         const string InNone = "Not in a watched clan";
 
-        Assert.Equal("No clans read yet", PanelText.NotFound(InNone, "clans", inHand: 0, readNow: 0, sources: 3));
-        Assert.Equal("Not found in the clans read so far", PanelText.NotFound(InNone, "clans", inHand: 1, readNow: 1, sources: 3));
-        Assert.Equal(InNone, PanelText.NotFound(InNone, "clans", inHand: 3, readNow: 3, sources: 3));
+        string NotFound(int inHand, int readNow, int sources, int idleNow = 0, string period = "battle") =>
+            PanelText.NotFound(InNone, "clan", "clans", period, inHand, readNow, idleNow, sources);
+
+        Assert.Equal("No clans read yet", NotFound(inHand: 0, readNow: 0, sources: 3));
+        Assert.Equal("Not found in the clans read so far", NotFound(inHand: 1, readNow: 1, sources: 3));
+        Assert.Equal(InNone, NotFound(inHand: 3, readNow: 3, sources: 3));
 
         // Every source remembered and none read now: the book keeps only the accounts it kept, so an account missing from
         // what it kept proves nothing about the clan.
-        Assert.Equal("Not found in the clans read so far", PanelText.NotFound(InNone, "clans", inHand: 3, readNow: 0, sources: 3));
+        Assert.Equal("Not found in the clans read so far", NotFound(inHand: 3, readNow: 0, sources: 3));
 
         // No source on at all: nothing was read, so nothing is known about the account either.
-        Assert.Equal("No clans read yet", PanelText.NotFound(InNone, "clans", inHand: 0, readNow: 0, sources: 0));
+        Assert.Equal("No clans read yet", NotFound(inHand: 0, readNow: 0, sources: 0));
+
+        // Read between periods is read, with no member list to find anyone in: said of every source once all were read so,
+        // and of the ones read so far while any is not. Rows read anywhere still come first, and "not in" still waits for all.
+        Assert.Equal("No clan is in a battle right now", NotFound(inHand: 0, readNow: 0, sources: 3, idleNow: 3));
+        Assert.Equal("No clan read so far is in a battle", NotFound(inHand: 0, readNow: 0, sources: 3, idleNow: 1));
+        Assert.Equal("Not found in the clans read so far", NotFound(inHand: 2, readNow: 2, sources: 3, idleNow: 1));
+        Assert.Equal("No clan is in an event right now", NotFound(inHand: 0, readNow: 0, sources: 2, idleNow: 2, period: "event"));
 
         Assert.Equal("Only in clans you're watching", PanelText.OnlyWatched("clans"));
         Assert.Equal("Not matched by RoRoRo yet", PanelText.NotMatched);
+    }
+
+    /// <summary>Only a reading from this session in the idle state is read between periods; a failure or no reading is not.</summary>
+    [Fact]
+    public void OnlyAnIdleReadingIsReadBetweenPeriods()
+    {
+        Assert.True(PanelText.ReadIdle(BoardFixtures.Idle("s-00000001")));
+        Assert.False(PanelText.ReadIdle(BoardFixtures.Unreachable("s-00000001")));
+        Assert.False(PanelText.ReadIdle(BoardFixtures.Snapshot("s-00000001", [BoardFixtures.Row(101, 10)])));
+        Assert.False(PanelText.ReadIdle(null));
     }
 }

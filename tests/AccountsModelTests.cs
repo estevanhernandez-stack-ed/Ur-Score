@@ -130,6 +130,28 @@ public class AccountsModelTests
     }
 
     /// <summary>
+    /// The same decision as My accounts, and it had the same fault: a clan read between battles has an idle reading with no
+    /// rows, so it counted as never read and the line said "No clans read yet" of clans that were read.
+    /// </summary>
+    [Fact]
+    public void FoundInSaysNoClanIsInABattleWhenTheClansWereReadBetweenBattles()
+    {
+        var clan = Sending(Clan);
+        Source[] sources =
+        [
+            new("s-00000001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main),
+            new("s-00000002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Mine),
+        ];
+
+        Assert.Equal("No clan is in a battle right now", AccountsModel.FoundIn(Alt, [clan], sources,
+            new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = BoardFixtures.Idle("s-00000001"), ["s-00000002"] = BoardFixtures.Idle("s-00000002") }));
+        Assert.Equal("No clan read so far is in a battle", AccountsModel.FoundIn(Alt, [clan], sources,
+            new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = BoardFixtures.Idle("s-00000001") }));
+        Assert.Equal("Not found in the clans read so far", AccountsModel.FoundIn(Alt, [clan], sources,
+            new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Read(101), ["s-00000002"] = BoardFixtures.Idle("s-00000002") }));
+    }
+
+    /// <summary>
     /// Backlog S1-12.7: the noun came from the first recipe alone. The line is about every recipe with a clans page, so when
     /// they name their groups differently it uses the word they all share.
     /// </summary>
@@ -142,6 +164,13 @@ public class AccountsModelTests
 
         Assert.Equal("Not in a watched source", AccountsModel.FoundIn(Alt, [Sending(Clan), Sending(guild)], sources, latest));
         Assert.Equal("Not in a watched clan", AccountsModel.FoundIn(Alt, [Sending(Clan), Sending(Clan with { Name = "Clan season" })], sources, latest));
+
+        // The period word is decided the same way and apart from the group's, so two clan recipes that time different things
+        // keep "clan" and share "period".
+        var season = Clan with { Name = "Clan season", Period = Clan.Period! with { Value = "season" } };
+        var idle = new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = BoardFixtures.Idle("s-00000001") };
+        Assert.Equal("No clan is in a period right now", AccountsModel.FoundIn(Alt, [Sending(Clan), Sending(season)], sources, idle));
+        Assert.Equal("No clan is in a battle right now", AccountsModel.FoundIn(Alt, [Sending(Clan)], sources, idle));
     }
 
     [Fact]
