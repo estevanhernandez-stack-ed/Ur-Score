@@ -206,12 +206,13 @@ public static partial class AlertCards
     /// number that isn't finite is said in words rather than as a symbol.
     /// </summary>
     public static string Number(double value) =>
-        double.IsFinite(value) ? value.ToString("#,0.##", CultureInfo.InvariantCulture)
+        double.IsFinite(value) ? value.ToString(Math.Abs(value) >= MaxNumber ? "R" : "#,0.##", CultureInfo.InvariantCulture)
         : value < 0 ? "a negative number too big to show"
         : "a number too big to show";
 
     /// <summary>A number as the number box shows it. Empty when it isn't finite: no box can hold it, so such an alert isn't changed.</summary>
-    public static string Editable(double value) => double.IsFinite(value) ? value.ToString("0.##", CultureInfo.InvariantCulture) : "";
+    public static string Editable(double value) => double.IsFinite(value)
+        ? value.ToString(Math.Abs(value) >= MaxNumber ? "R" : "0.##", CultureInfo.InvariantCulture) : "";
 
     /// <summary>The part after "Alert me when", also used by the result lines.</summary>
     public static string Condition(AlertKind kind, string label, double threshold, double windowMinutes, bool below) => kind switch
@@ -328,6 +329,9 @@ public static partial class AlertCards
     {
         value = 0;
         var typed = (text ?? "").Trim();
+        if (typed.Contains('e', StringComparison.OrdinalIgnoreCase)
+            && double.TryParse(typed, NumberStyles.Float, CultureInfo.InvariantCulture, out var exponent)
+            && exponent >= MaxNumber) return TooBig;
         if (CommaDecimal().IsMatch(typed)) return UseADot;
         if (LongDecimal().IsMatch(typed)) return TwoDecimals;
         if (!PlainNumber().IsMatch(typed)) return TypeANumber;
@@ -374,7 +378,8 @@ public static partial class AlertCards
     public static AlertsUi OpenChange(AlertLine line)
     {
         var draft = DraftOf(line.Rule);
-        var problem = line.Rule.Kind == AlertKind.Rate && IsOtherMinutes(draft.Minutes) ? OtherMinutes(draft.Minutes) : "";
+        var problem = Math.Abs(line.Rule.Threshold) >= MaxNumber ? ParseNumber(draft.Number, line.Rule.Kind, out _)
+            : line.Rule.Kind == AlertKind.Rate && IsOtherMinutes(draft.Minutes) ? OtherMinutes(draft.Minutes) : "";
         return new(line.Rule.MetricId, AlertEditMode.Changing, line.Rule.Kind, draft, Problem: problem);
     }
 

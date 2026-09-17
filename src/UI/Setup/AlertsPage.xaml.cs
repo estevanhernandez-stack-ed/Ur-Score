@@ -61,6 +61,7 @@ public partial class AlertsPage : UserControl, ISetupPage
     private void DrawLines()
     {
         Show(AlertsEmptyLine, AlertCards.EmptyLine(_services.Installed, _view));
+        AlertsResultLine.DataContext = _ui;
         Show(AlertsResultLine, AlertCards.OrphanResult(_view, _ui));
         AlertsNextLine.Visibility = _view.ShowNext ? Visibility.Visible : Visibility.Collapsed;
     }

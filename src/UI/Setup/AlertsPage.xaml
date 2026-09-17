@@ -117,7 +117,18 @@
         <ui:RowList x:Name="AlertCardList" ItemTemplate="{StaticResource AlertCardTemplate}"
                     AutomationProperties.Name="Your sent stats and their alerts" />
         <TextBlock x:Name="AlertsEmptyLine" Style="{StaticResource Muted}" Margin="0,0,0,12" Visibility="Collapsed" />
-        <TextBlock x:Name="AlertsResultLine" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed" />
+        <TextBlock x:Name="AlertsResultLine" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ResultIsProblem}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource MagentaBrush}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
         <TextBlock x:Name="AlertsNextLine" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,0,18" Visibility="Collapsed"
                    Text="{x:Static ui:AlertCards.NextInRoRoRo}" />
 

@@ -202,6 +202,48 @@ public class AlertCardsTests
             AlertCards.Check(AlertKind.Rate, new AlertDraft { Number = "250", Minutes = minutes }, "Diamonds"));
     }
 
+    [Theory]
+    [InlineData(1e15)]
+    [InlineData(1e300)]
+    [InlineData(double.MaxValue)]
+    public void ExtremeFiniteThresholdsStayCompactAndRequireAnExplicitReplacement(double threshold)
+    {
+        var rule = Rule(0, Diamonds, AlertKind.Rate, threshold, window: 10);
+        var view = AlertCards.Build([Sending("diamonds")], RulesOf(rule));
+        var line = Assert.Single(view.Cards[0].Alerts);
+        var changing = AlertCards.OpenChange(line);
+        var row = AlertCards.Rows(view, changing)[0];
+
+        Assert.True(line.Sentence.Length < 150);
+        Assert.True(changing.Draft!.Number.Length <= 24);
+        Assert.Equal(threshold, double.Parse(changing.Draft.Number, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("Use a number below 1,000,000,000,000,000.", row.Problem);
+        Assert.Equal(((AlertSpec?)null, row.Problem), AlertCards.Check(AlertKind.Rate, changing.Draft, "Diamonds"));
+        Assert.Equal(threshold, line.Rule.Threshold);
+        Assert.True(AlertCards.Rows(view, AlertsUi.Closed)[0].Lines[0].ShowChange);
+        Assert.True(AlertCards.Rows(view, AlertsUi.Closed)[0].Lines[0].ShowRemove);
+        Assert.Equal("Change the stops climbing alert for Diamonds", AlertCards.FocusAfterCancel(view, changing));
+        changing.Draft.Number = "250.25";
+        Assert.Equal((new AlertSpec(AlertKind.Rate, 250.25, 10, true, "Diamonds"), ""),
+            AlertCards.Check(AlertKind.Rate, changing.Draft, "Diamonds"));
+        Assert.Equal(threshold, line.Rule.Threshold);
+    }
+
+    [Theory]
+    [InlineData("1e300", "Use a number below 1,000,000,000,000,000.")]
+    [InlineData("1E400", "Use a number below 1,000,000,000,000,000.")]
+    [InlineData("1e6", "Type a number, like 100.")]
+    [InlineData("1e-300", "Type a number, like 100.")]
+    [InlineData("NaN", "Type a number, like 100.")]
+    [InlineData("Infinity", "Type a number, like 100.")]
+    [InlineData("-1e300", "Type a number, like 100.")]
+    public void UnsupportedNumericInputNeverBecomesASavedThreshold(string typed, string problem)
+    {
+        Assert.Equal(problem, AlertCards.ParseNumber(typed, AlertKind.Level, out var value));
+        Assert.Equal(0, value);
+        Assert.Equal(((AlertSpec?)null, problem), AlertCards.Check(AlertKind.Level, new AlertDraft { Number = typed }, "Rank"));
+    }
+
     /// <summary>
     /// Backlog AC-2.13. A number of minutes the box doesn't offer can only have come from the rule being changed, and Save said
     /// the generic "Choose how many minutes." over a box that had never shown one. It is still refused (controller ruling 3), and
