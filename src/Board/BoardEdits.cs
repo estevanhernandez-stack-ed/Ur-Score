@@ -20,6 +20,13 @@ public static class BoardEdits
         return $"Board {number}";
     }
 
+    public static string NewBoardName(string? typedName, string suggestedName, string? starterName)
+    {
+        var typed = BoardDefs.CleanName(typedName);
+        if (starterName is not null && (typed is null || typed == suggestedName)) return starterName;
+        return typed ?? suggestedName;
+    }
+
     /// <summary>Whether a draft has anything to save: a panel added, removed, moved, resized or re-set, or a new name. Where a pop-out sits doesn't count.</summary>
     public static bool Changed(BoardDef before, BoardDef after) =>
         BoardDefs.Key(before) != BoardDefs.Key(after) || before.Name != after.Name;
@@ -136,11 +143,13 @@ public static class BoardEdits
             : [.. boards.Select(b => b.Id == boardId ? b with { Name = clean } : b)];
     }
 
+    public static bool CanDuplicate(BoardDef board) => board.Follows is null || board.Panels.Count > 0;
+
     /// <summary>R13: right after the original, "name copy", new panel ids, and nothing popped out. A long name is cut to leave room for " copy".</summary>
     public static IReadOnlyList<BoardDef> Duplicate(IReadOnlyList<BoardDef> boards, string boardId)
     {
         var index = IndexOf(boards, boardId);
-        if (index < 0) return boards;
+        if (index < 0 || !CanDuplicate(boards[index])) return boards;
 
         const string Copy = " copy";
         var original = boards[index];

@@ -32,6 +32,33 @@ public class BoardEditsTests
         Assert.Equal("Rivals", replaced[1].Name);
     }
 
+    [Theory]
+    [InlineData(null, null, "Board 3")]
+    [InlineData("", null, "Board 3")]
+    [InlineData("  \t ", null, "Board 3")]
+    [InlineData("Board 3", null, "Board 3")]
+    [InlineData("  Rivals  ", null, "Rivals")]
+    [InlineData(null, "Battle", "Battle")]
+    [InlineData("  \t ", "Alts", "Alts")]
+    [InlineData("Board 3", "Battle", "Battle")]
+    [InlineData("  Board 3  ", "Alts", "Alts")]
+    [InlineData("board 3", "Battle", "board 3")]
+    [InlineData("  Rivals  ", "Battle", "Rivals")]
+    public void NewBoardNamingKeepsCustomTextElseUsesTheChosenDefault(string? typed, string? starter, string expected) =>
+        Assert.Equal(expected, BoardEdits.NewBoardName(typed, "Board 3", starter));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Battle")]
+    public void NewBoardNamingUsesTheExistingLengthLimitBeforeChoosingAFallback(string? starter)
+    {
+        var typed = new string('A', BoardDefs.MaxNameLength - 1) + " rest";
+
+        Assert.Equal(new string('A', BoardDefs.MaxNameLength - 1), BoardEdits.NewBoardName(typed, "Board 3", starter));
+        Assert.Equal(starter ?? new string('B', BoardDefs.MaxNameLength),
+            BoardEdits.NewBoardName(new string('B', BoardDefs.MaxNameLength + 1), new string('B', BoardDefs.MaxNameLength), starter));
+    }
+
     [Fact]
     public void RenameTrimsAndABlankNameChangesNothing()
     {
@@ -95,6 +122,33 @@ public class BoardEditsTests
         Assert.Same(one, BoardEdits.Delete(one, "b-1"));
         Assert.Equal(new[] { "b-2" }, BoardEdits.Delete(two, "b-1").Select(b => b.Id).ToArray());
         Assert.Same(two, BoardEdits.Delete(two, "b-9"));
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    public void OnlyAnEmptyFollowingStarterRefusesDuplication(bool follows, bool populated, bool allowed)
+    {
+        var original = BoardOf("b-1", populated ? [PanelType.Standing] : []) with { Follows = follows ? "battle" : null };
+        IReadOnlyList<BoardDef> boards = [original];
+
+        var result = BoardEdits.Duplicate(boards, original.Id);
+
+        Assert.Equal(allowed, BoardEdits.CanDuplicate(original));
+        if (!allowed)
+        {
+            Assert.Same(boards, result);
+            Assert.Same(original, Assert.Single(result));
+            return;
+        }
+
+        Assert.Equal(2, result.Count);
+        Assert.Same(original, result[0]);
+        Assert.Null(result[1].Follows);
+        Assert.NotEqual(original.Id, result[1].Id);
+        Assert.Equal(original.Panels.Count, result[1].Panels.Count);
     }
 
     [Fact]
@@ -176,6 +230,32 @@ public class BoardEditsTests
         Assert.Equal("b-2", onBoard.Id);
         Assert.Equal(PanelType.Records, panel.Type);
         Assert.Null(BoardEdits.Find(boards, "p-gone"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MissingAndEmptyRaceListsAreTheSameSettingsInEitherDirection(bool savedEmpty)
+    {
+        var saved = new PanelSettings(Clan.Slug, SourceIds: savedEmpty ? [] : null);
+        var replacement = saved with { SourceIds = savedEmpty ? null : [] };
+        var board = BoardOf("b", PanelType.Race) with
+        {
+            Panels = [new PanelDef("p-b-1", PanelType.Race, new PanelSize(), saved)],
+        };
+
+        var unchanged = BoardEdits.SetSettings(board, "p-b-1", replacement);
+
+        Assert.Same(board, unchanged);
+        Assert.Same(saved, unchanged.Panels[0].Settings);
+        Assert.Equal(BoardDefs.Key(board), BoardDefs.Key(board with
+        {
+            Panels = [board.Panels[0] with { Settings = replacement }],
+        }));
+        var changed = BoardEdits.SetSettings(board, "p-b-1", replacement with { Recipe = "another-recipe" });
+        Assert.NotSame(board, changed);
+        Assert.Equal("another-recipe", changed.Panels[0].Settings.Recipe);
+        Assert.Equal(Clan.Slug, board.Panels[0].Settings.Recipe);
     }
 
     [Fact]

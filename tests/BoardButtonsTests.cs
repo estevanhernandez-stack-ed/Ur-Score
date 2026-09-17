@@ -1,4 +1,5 @@
 using Labs626.UrScore.UI;
+using Labs626.UrScore.Board;
 
 namespace UrScore.Tests;
 
@@ -109,6 +110,26 @@ public class BoardButtonsTests
         Assert.True(one.RenameBoard);
         Assert.True(one.DuplicateBoard);
         Assert.False(one.DeleteBoard);
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    public void DuplicateButtonFollowsTheSelectedBoardsEligibility(bool follows, bool populated, bool allowed)
+    {
+        var board = new BoardDef("b-1", "Battle", populated
+            ? [new PanelDef("p-1", PanelType.Standing, new PanelSize(), new PanelSettings("recipe"))] : [],
+            Follows: follows ? "battle" : null);
+
+        var state = BoardButtons.For(true, false, false, false, false, selectedBoard: board);
+
+        Assert.Equal(allowed, state.DuplicateBoard);
+        Assert.True(state.RenameBoard);
+        Assert.True(state.BoardMenu);
+        Assert.False(state.DeleteBoard);
+        Assert.False(BoardButtons.For(true, false, false, false, false, editing: true, selectedBoard: board).DuplicateBoard);
     }
 
     /// <summary>⋯ opens the tab's own menu, so it takes a press for exactly as long as something on that menu does.</summary>

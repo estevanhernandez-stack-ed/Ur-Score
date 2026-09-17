@@ -1,3 +1,5 @@
+using Labs626.UrScore.Board;
+
 namespace Labs626.UrScore.UI;
 
 /// <summary>Which of the board's buttons, tabs and tab menu items take a press right now.</summary>
@@ -38,7 +40,7 @@ public static class BoardButtons
     /// <c>BoardMenu</c> is ⋯ beside the tabs, which opens the tab's own menu (backlog V3-S.8). It takes a press for
     /// exactly as long as one of the three commands on that menu does, so it never opens on nothing.
     /// </remarks>
-    public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing, int boards = 1, bool editing = false) => new(
+    public static BoardButtonStates For(bool loaded, bool running, bool starting, bool testing, bool importing, int boards = 1, bool editing = false, BoardDef? selectedBoard = null) => new(
         StartStop: loaded && !starting && (running || !testing),
         TestNow: loaded && !starting && !testing,
         EmptyState: !importing,
@@ -46,7 +48,7 @@ public static class BoardButtons
         Tabs: !editing,
         AddBoard: !editing,
         RenameBoard: !editing,
-        DuplicateBoard: !editing,
+        DuplicateBoard: !editing && (selectedBoard is null || BoardEdits.CanDuplicate(selectedBoard)),
         BoardMenu: !editing,
         EditBoard: !editing,
         AddPanel: editing,

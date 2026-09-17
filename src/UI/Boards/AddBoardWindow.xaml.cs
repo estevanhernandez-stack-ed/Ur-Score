@@ -65,12 +65,8 @@ public partial class AddBoardWindow : Window
         Finish(BoardDefs.FromStarter(starter, freshIds: true) with { Name = NameFor(starter.Name) });
 
     /// <summary>The typed name. A starter picked with the suggested name left alone takes the starter's name.</summary>
-    private string NameFor(string? starterName)
-    {
-        var typed = BoardDefs.CleanName(NewBoardNameBox.Text);
-        if (starterName is not null && (typed is null || typed == _suggestedName)) return starterName;
-        return typed ?? _suggestedName;
-    }
+    private string NameFor(string? starterName) =>
+        BoardEdits.NewBoardName(NewBoardNameBox.Text, _suggestedName, starterName);
 
     private void Finish(BoardDef board)
     {

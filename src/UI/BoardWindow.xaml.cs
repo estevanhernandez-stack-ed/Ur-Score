@@ -648,7 +648,8 @@ public partial class BoardWindow : Window
     /// <summary>What every button, tab and tab menu item takes right now, for <see cref="ApplyButtons"/> and the press guards.</summary>
     /// <remarks>Try again holds the empty state's button for its read the way Import recipe… does for its import.</remarks>
     private BoardButtonStates ButtonStates() =>
-        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing || _readingBook, _services.Boards.Count, Editing);
+        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing || _readingBook, _services.Boards.Count, Editing,
+            ShownBoard(_services.Boards));
 
     private void OnSetupClick(object sender, RoutedEventArgs e) => OpenSetup(null);
 
