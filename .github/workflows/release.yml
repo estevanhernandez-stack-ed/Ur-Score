@@ -43,13 +43,37 @@ jobs:
           Get-ChildItem artifacts -File
           Get-Content artifacts/manifest.sha256
 
+      # gh, not softprops/action-gh-release: on 2026-09-17 that action's uploader stalled or errored on
+      # plugin.zip three runs in a row (v0.3.5) while gh uploads to the same repo worked. The release
+      # stays a draft until every file is on it, so "latest" never points at a release without
+      # plugin.zip, and the two recipe files the setup guide links to (releases/latest/download/) ride
+      # along instead of being attached by hand. A draft left by a failed run is reused.
       - name: Create release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            artifacts/manifest.json
-            artifacts/manifest.sha256
-            artifacts/plugin.zip
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $files = @(
+            'artifacts/manifest.json', 'artifacts/manifest.sha256', 'artifacts/plugin.zip',
+            'recipes/pet-sim-99-clan-battle.recipe.json', 'recipes/pet-sim-99-profile.recipe.json')
+          foreach ($file in $files) { if (-not (Test-Path $file)) { throw "missing $file" } }
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            $pre = @(if ($tag -match 'rc|beta') { '--prerelease' })
+            gh release create $tag --draft --verify-tag --generate-notes --title $tag @pre
+            if ($LASTEXITCODE -ne 0) { throw "gh release create $tag failed" }
+          }
+
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            gh release upload $tag @files --clobber
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 3) { throw "uploading to $tag failed three times" }
+            Start-Sleep -Seconds (30 * $attempt)
+          }
+
+          gh release edit $tag --draft=false
+          if ($LASTEXITCODE -ne 0) { throw "publishing $tag failed" }
+          gh release view $tag --json assets --jq '.assets[].name'
