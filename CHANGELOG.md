@@ -3,6 +3,13 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- With both recipes imported, Setup › Your accounts' "Found in" text wraps instead of running into
+  the first Send box.
+
 ## 0.3.4 - 2026-09-17
 
 ### Changed

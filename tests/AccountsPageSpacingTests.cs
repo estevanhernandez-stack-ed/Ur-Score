@@ -27,4 +27,26 @@ public class AccountsPageSpacingTests
         Assert.Contains(muted.Elements(presentation + "Setter"), element =>
             (string?)element.Attribute("Property") == "TextWrapping" && (string?)element.Attribute("Value") == "Wrap");
     }
+
+    /// <summary>
+    /// With two recipes, each taking a 160 px Send column, "Found in" is left about as wide as "No clan is in a battle right
+    /// now", which then ran flush into the first Send box ("right now☑ Send"). The cell keeps a gap before the Send columns,
+    /// and both of its lines wrap into it instead of reaching them. Found in the 0.3.4 how-to screenshots.
+    /// </summary>
+    [Fact]
+    public void WhereAnAccountWasFoundWrapsBeforeTheSendColumns()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Ur-Score.csproj"))) directory = directory.Parent;
+        Assert.NotNull(directory);
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        var page = XDocument.Load(Path.Combine(directory.FullName, "src", "UI", "Setup", "AccountsPage.xaml"));
+
+        var foundIn = page.Descendants(presentation + "TextBlock").Single(element => (string?)element.Attribute("Text") == "{Binding FoundIn}");
+        var cell = foundIn.Parent!;
+        Assert.Equal("1", (string?)cell.Attribute("Grid.Column"));
+        var margin = ((string?)cell.Attribute("Margin") ?? "0").Split(',').Select(double.Parse).ToArray();
+        Assert.True(margin.Length == 4 && margin[2] >= 12, $"the Found in cell needs at least 12 px before the Send columns, has Margin='{cell.Attribute("Margin")}'");
+        Assert.All(cell.Elements(presentation + "TextBlock"), line => Assert.Equal("{StaticResource Muted}", (string?)line.Attribute("Style")));
+    }
 }

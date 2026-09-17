@@ -49,7 +49,9 @@
                                 <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" />
                             </DockPanel>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <!-- 12 px before the Send columns: with two recipes this column is about as wide as its longest
+                                 heading, and Muted wraps a line into the gap instead of running it into the first Send box. -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                                 <TextBlock Text="{Binding FoundIn}" Style="{StaticResource Muted}" />
                                 <!-- The recipe's own words for why this account's numbers are empty, beside the row where
                                      you decide what it sends (plan A44). Muted, not Refusal: it is a standing condition,
