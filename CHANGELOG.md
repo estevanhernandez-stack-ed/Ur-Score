@@ -3,36 +3,70 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
-## Unreleased
+## 0.3.4 - 2026-09-17
+
+### Changed
+
+- **Ur Score says what is true, or that it doesn't know yet.** Before anything was read, My accounts
+  and Setup › Your accounts filed every account under "Not in a watched clan". They now say "No clans
+  read yet", "No clan is in a battle right now" once every clan was read between battles, "Not found
+  in the clans read so far", "Only in clans you're watching" or "Not matched by RoRoRo yet", and keep
+  "Not in a watched clan" for when it is true. An Account card, Profile stat, Race and Diagnostics
+  after Stop give their read's own reason too, and a stat a read didn't bring back says "Not in the
+  last read." instead of a data path.
+- **What Ur Score just said stays on screen.** While Start waits it says it is asking RoRoRo for your
+  accounts, Test now says it is reading, and a read you ask for while stopped says what it found. A
+  failure's message stays until your next press, and the lines on Your accounts, Score book and
+  Recipes no longer vanish on the next refresh. A stopped board with RoRoRo closed no longer claims
+  to be reading.
+- **Each clan keeps its own picture.** The window wears your main clan's picture from the moment it
+  opens, instead of whichever clan was read last. Clan standing shows the logo of the clan it is
+  about, and a recipe's row in Setup shows its main clan's.
+- **A clan's chip says "watching" when the read in hand holds none of your accounts,** instead of
+  "yours" only because you added it that way.
+- **Numbers count what their labels say.** "#1 of 3" counts only players with a value for that stat,
+  the same players Promotion check ranks against. Standing's change is magenta for a fall. The sent
+  dot means sent in the last read, not at some point this session. A chart whose values are all
+  equal draws through the middle and names the value.
+- **A score book that can't be read offers Try again** instead of leaving Start and Test now off for
+  the session. It says why once, on the state line, and the board says what that stops.
+- **A close from outside keeps a pop-out popped out.** Closing every window from outside, as an
+  updater or taskkill does, used to bring pop-outs back to the board. Now they stay out and reopen at
+  the next start. The pop-out's own close, Return and Bring back still bring a panel back.
+- **Duplicate is off for the empty starter tab,** where it used to make the original tab disappear.
+  A starter with panels, or a board you made, duplicates as before.
 
 ### Fixed
 
-- Diagnostics and copied diagnostics explain last-read account claim conflicts by own-account and
-  source name, without implying current membership or successful sending. Claim rules are unchanged.
-- Panel tooltips use the live application theme rather than Windows chrome.
-- My accounts exposes last-read SENT status with the account name to UI Automation.
-- An orphaned alert failure uses the theme's failure color instead of ordinary body text.
-- Setup > Your accounts uses a compact gap between its explanatory notes.
-- The panel drag grip uses drawn dots rather than a font-dependent glyph and exposes a named
-  automation peer. Existing keyboard move controls remain available.
-- Profile stat settings explain when the selected source is switched off without blocking Save.
-- Past periods can explicitly omit the best-account stat to recover from a removed stat, while
-  retaining headline history and the existing saved format.
-- Extreme hand-edited alert thresholds stay compact and show the editing limit when Change opens;
-  saving requires an explicit valid replacement.
-- Empty source-following starters cannot be duplicated; populated starters and user-created boards
-  retain Duplicate.
-- Panel slots and pop-out windows wait for successful score-book loading. Failed loads can retry
-  without clearing saved placement, and a late load cannot resume startup after shutdown begins.
-- External pop-out closes preserve placement for next start, regardless of main-window close order.
-  Return to the board, Bring back, and Alt+F4 still return the panel explicitly.
-- A score book that can't be read says so once, on the state line with its reason; the board says
-  Start and Test now are off until it can be read, with Try again.
+- The drag handle is drawn, instead of a Braille character some PCs couldn't show, and dragging a
+  panel by it works as before. Its tooltip and the pop-out's "Return to the board" wear Ur Score's
+  theme.
+- Past battles can drop its best-account line ("Don't show your best account"), so a panel whose
+  stat was removed can be saved again.
+- Profile stat settings say when the chosen source is switched off, without blocking Save.
+- Setup › Diagnostics names an account a read skipped because another source of the same recipe
+  already held it, and which source.
+- A huge threshold typed into the rules file by hand reads short, and Change opens with the refusal
+  showing. A result for an alert that is no longer in the file shows in magenta.
+- Updating a recipe installed before stats had ticks shows its Show and Send ticks, and the change
+  list says when a recipe starts tracking the battle or reading past battles.
+- The import screen's "Kept in your score book" list names the period and its times beside the
+  headline items.
+- The gallery's Race card no longer counts switched-off clans, and Promotion check's card agrees with
+  its form about which recipes qualify.
+- Screen readers hear the sent dot with its account, the drag handle by name, and "Choose another"
+  with the panel it belongs to.
+- The two notes on Setup › Your accounts sit closer together.
+
+### Score book
+
+- Each rank also keeps how many players it was counted among, as `ranked`, beside `of`. A place kept
+  before this shows without a count.
 
 ### Documentation
 
-- Added board editing, gallery, tab-menu, pop-out, and saved-layout guidance; restored the missing
-  0.3.0 and 0.3.1 release summaries below.
+- README covers boards, tabs, the gallery, pop-outs and boards.json. This file gains the 0.3.1, 0.3.0
+  and 0.2.0 sections that had tags but no entries.
 
 ## 0.3.3 - 2026-09-16
 
