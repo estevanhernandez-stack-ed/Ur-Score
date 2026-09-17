@@ -3,19 +3,43 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-/// <summary>The import screen's words about the score book (spec §7.3, §14: headline items are listed as kept).</summary>
+/// <summary>The import screen's words about the headline, period and freshness details kept in the score book.</summary>
 public static class ImportText
 {
     public const string ShowEveryStat = "Show every game statistic (reads once from the hosts above)";
 
-    /// <summary>The headline items every successful read writes to the book. A group list writes nothing.</summary>
-    public static IReadOnlyList<string> Kept(Recipe recipe) =>
-        recipe.IsGroupList ? [] : [.. recipe.Headline.Select(h => h.Label)];
+    /// <summary>The details a recipe can keep beside ticked stats. A group list writes nothing.</summary>
+    public static IReadOnlyList<string> Kept(Recipe recipe)
+    {
+        if (recipe.IsGroupList) return [];
+
+        var kept = recipe.Headline.Select(headline => headline.Label).ToList();
+        if (recipe.Period is { } period)
+        {
+            var word = RecipeWords.Period(recipe);
+            kept.Add($"Which {word} each read belongs to");
+            if (period.Starts is not null && period.Ends is not null)
+                kept.Add($"When the {word} starts and ends");
+            else if (period.Starts is not null)
+                kept.Add($"When the {word} starts");
+            else if (period.Ends is not null)
+                kept.Add($"When the {word} ends");
+        }
+
+        if (recipe.LastStep.AsOf is { } asOf)
+        {
+            kept.Add(asOf.Stale is null
+                ? "When the source last updated the numbers"
+                : "When the source last updated the numbers, and whether it calls them stale");
+        }
+
+        return kept;
+    }
 
     public static string KeptNote(Recipe recipe) =>
         recipe.IsGroupList ? "Nothing from this recipe is kept. Its rows are groups, shown live only."
-        : recipe.Headline.Count == 0 ? "Every read keeps the stats you tick, for your own accounts only."
-        : "Every read keeps these headline items, and the stats you tick for your own accounts only.";
+        : Kept(recipe).Count == 0 ? "Every read keeps the stats you tick, for your own accounts only."
+        : "Every read keeps these details, and the stats you tick for your own accounts only.";
 
     /// <summary>A recipe with inputs has its values picked in Setup, where the search list helps.</summary>
     public static string InputsNote(Recipe recipe) =>

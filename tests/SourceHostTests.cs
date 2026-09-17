@@ -77,7 +77,17 @@ public class SourceHostTests
         Assert.Equal(new[] { "s-1", "s-2" }, seen.Order(StringComparer.Ordinal).ToArray());
         Assert.Equal(2, engine.Calls);
         Assert.Equal("s-2", host.Latest["s-2"].SourceId);
-        Assert.All(book.Lines, l => Assert.Equal(BookLine.TriggerManual, l.Trigger));
+        Assert.Equal(new[] { "s-1", "s-2" }, book.Lines.Select(line => line.Source).Order(StringComparer.Ordinal));
+        Assert.Equal("CCGP", Assert.Single(book.Lines, line => line.Source == "s-1").Inputs["clan"]);
+        Assert.Equal("K0i2", Assert.Single(book.Lines, line => line.Source == "s-2").Inputs["clan"]);
+        Assert.All(book.Lines, line =>
+        {
+            Assert.Equal(BookLine.TriggerManual, line.Trigger);
+            Assert.Equal(BookLine.KindRead, line.Kind);
+            Assert.Equal(5d, line.Accounts["111"].V["value"]);
+        });
+        Assert.True(host.Latest["s-1"].Recorded);
+        Assert.True(host.Latest["s-2"].Recorded);
     }
 
     [Fact]

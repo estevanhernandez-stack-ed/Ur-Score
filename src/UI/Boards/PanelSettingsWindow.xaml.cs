@@ -50,7 +50,7 @@ public partial class PanelSettingsWindow : Window
         FormTitle.Text = title;
         SaveSettingsButton.Content = adding ? "Add panel" : "Save";
 
-        var (group, groups) = PanelForms.GroupWords(live);
+        var (group, groups) = PanelForms.GroupWords(live, current?.Recipe);
         var sourceWord = type switch
         {
             PanelType.PromotionCheck => "from",
@@ -152,7 +152,7 @@ public partial class PanelSettingsWindow : Window
     /// <summary>Shows what's wrong with the form as it stands, and returns it.</summary>
     private string? Check()
     {
-        var problem = PanelForms.Problem(_type, PanelForms.Build(_type, Values(), _live), _live);
+        var problem = PanelForms.Problem(_type, PanelForms.Build(_type, Values(), _live), _live, _current?.Recipe);
         SettingsProblemLine.Text = problem ?? "";
         SettingsProblemLine.Visibility = problem is null ? Visibility.Collapsed : Visibility.Visible;
         return problem;

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Labs626.UrScore.Cli;
 using Labs626.UrScore.Recipes;
@@ -85,17 +86,39 @@ public class TryCommandTests
         Assert.DoesNotContain("7003003", output);
     }
 
-    [Fact]
-    public async Task JsonOutputParsesAndCarriesNoOtherPlayer()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task JsonOutputParsesAndCarriesNoOtherPlayer(bool includeAccount)
     {
         using var dir = TempDir.Create("urscore-try");
-        var (code, output) = await Run(Clan(), "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--json");
+        var args = new List<string> { "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--json" };
+        if (includeAccount) args.AddRange(["--account", "1647274201"]);
+        var (code, output) = await Run(Clan(), [.. args]);
 
         Assert.Equal(TryCommand.Ok, code);
         using var json = JsonDocument.Parse(output);
         Assert.Equal("Read", json.RootElement.GetProperty("outcome").GetString());
         Assert.Equal(3, json.RootElement.GetProperty("rowsSeen").GetInt32());
+        Assert.Equal(new[] { "A", "B" }, json.RootElement.GetProperty("pastPeriods").EnumerateArray().Select(period => period.GetString()));
         Assert.DoesNotContain("7002002", output);
+        Assert.DoesNotContain("7003003", output);
+        Assert.DoesNotContain("7001001", output);
+
+        var accounts = json.RootElement.GetProperty("accounts").EnumerateArray();
+        if (includeAccount)
+        {
+            var account = Assert.Single(accounts);
+            Assert.Equal(1647274201L, account.GetProperty("userId").GetInt64());
+            Assert.Equal(4200, account.GetProperty("values").GetProperty("value").GetDouble());
+            Assert.Equal(1, account.GetProperty("rank").GetProperty("value").GetInt32());
+            Assert.Equal(3, account.GetProperty("of").GetInt32());
+        }
+        else
+        {
+            Assert.Empty(accounts);
+            Assert.DoesNotContain("1647274201", output);
+        }
     }
 
     [Fact]
@@ -152,5 +175,42 @@ public class TryCommandTests
         Assert.True(TryCommand.Wants(["--try", "x.json"]));
         Assert.False(TryCommand.Wants([]));
         Assert.False(TryCommand.Wants(["--something"]));
+    }
+
+    [Fact]
+    public async Task TryRunsEvenWhenTheApplicationMutexAlreadyExists()
+    {
+        using var instance = new Mutex(false, @"Local\626labs.ur-score.single-instance");
+        var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        start.ArgumentList.Add(typeof(TryCommand).Assembly.Location);
+        start.ArgumentList.Add("--try");
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+
+            Assert.Equal(TryCommand.BadArguments, process.ExitCode);
+            Assert.Contains(TryCommand.Usage, await output);
+            Assert.Contains("--try needs a recipe file.", await output);
+            Assert.Equal("", await error);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync();
+            }
+        }
     }
 }

@@ -210,7 +210,7 @@ public partial class BoardWindow : Window
         // Only once shown: the constructor's first draw must not open windows ahead of the board.
         if (IsLoaded) SyncPopOuts();
 
-        _anchorSourceId = BoardEdits.AnchorSourceId(board, _services.Sources);
+        _anchorSourceId = BoardEdits.AnchorSourceId(board, _services.Sources, _services.Installed);
         var live = _services.CurrentBoard();
 
         // The reader is filled on a worker thread until the book has loaded; nothing may read it before then.

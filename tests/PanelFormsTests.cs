@@ -149,6 +149,9 @@ public class PanelFormsTests
         Assert.Equal(("clan", "clans"), PanelForms.GroupWords(Clan));
         Assert.Equal(("source", "sources"), PanelForms.GroupWords((Labs626.UrScore.Recipes.Recipe?)null));
         Assert.Equal(("clan", "clans"), PanelForms.GroupWords(Everything()));
+        Assert.Equal(("clan", "clans"), PanelForms.GroupWords(Everything(), ""));
+        Assert.Equal(("clan", "clans"), PanelForms.GroupWords(Everything(), Clan.Slug));
+        Assert.Equal(("source", "sources"), PanelForms.GroupWords(Everything(), "uninstalled-recipe"));
         Assert.Equal(("source", "sources"), PanelForms.GroupWords(Live([], [Installed(TopList)], new Dictionary<string, RecipeSnapshot>())));
     }
 
@@ -164,6 +167,27 @@ public class PanelFormsTests
         Assert.Equal(new FormValues(Source: MainClan.Id, Stat: ClanStat), PanelForms.Defaults(PanelType.PastPeriods, live));
         Assert.Equal(new FormValues(Source: TopSource.Id), PanelForms.Defaults(PanelType.Top, live));
         Assert.Equal(new FormValues(Stat: PanelForms.StatKey(Profile.Slug, "diamonds")), PanelForms.Defaults(PanelType.ProfileStat, live));
+    }
+
+    [Theory]
+    [InlineData(PanelType.Standing, "Choose a source.")]
+    [InlineData(PanelType.Race, "Choose 2 to 5 sources.")]
+    [InlineData(PanelType.PromotionCheck, "Choose a source.")]
+    public void AMissingSavedRecipeDoesNotBorrowAnotherRecipesWords(PanelType type, string expected)
+    {
+        var live = Everything();
+
+        Assert.Equal(expected, PanelForms.Problem(type, new PanelSettings("uninstalled-recipe"), live));
+        var rebuilt = PanelForms.Build(type, new FormValues(Source: "removed-source", Sources: ["removed-source"]), live);
+        Assert.Equal(expected, PanelForms.Problem(type, rebuilt, live, "uninstalled-recipe"));
+        Assert.Equal("Choose a clan.", PanelForms.Problem(PanelType.Standing,
+            new PanelSettings(Clan.Slug), live, "uninstalled-recipe"));
+    }
+
+    [Fact]
+    public void ABlankFormStillUsesTheFirstRecipesWords()
+    {
+        Assert.Equal("Choose a clan.", PanelForms.Problem(PanelType.Standing, new PanelSettings(""), Everything()));
     }
 
     [Fact]

@@ -215,6 +215,52 @@ public class SharedAccountsTests
     }
 
     [Fact]
+    public async Task AnotherHostCompletesWhileTheFirstHostHasARequestInFlight()
+    {
+        var inner = new GatedTransport();
+        var transport = new SpacedTransport(inner, TimeProvider.System, TimeSpan.Zero);
+        var headers = new Dictionary<string, string>();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var first = transport.GetAsync(new Uri("https://one.example/a"), headers, "a", cancellation.Token);
+        var sameHost = transport.GetAsync(new Uri("https://one.example/b"), headers, "b", cancellation.Token);
+        var otherHost = transport.GetAsync(new Uri("https://two.example/c"), headers, "c", cancellation.Token);
+
+        try
+        {
+            await otherHost;
+            Assert.False(first.IsCompleted);
+            Assert.False(sameHost.IsCompleted);
+            Assert.Equal(1, inner.FirstHostCalls);
+        }
+        finally
+        {
+            inner.Release.TrySetResult();
+            await Task.WhenAll(first, sameHost, otherHost);
+        }
+
+        Assert.Equal(2, inner.FirstHostCalls);
+    }
+
+    private sealed class GatedTransport : IRecipeTransport
+    {
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int FirstHostCalls;
+
+        public async Task<FetchResult> GetAsync(Uri url, IReadOnlyDictionary<string, string> headers, string label, CancellationToken cancellationToken)
+        {
+            if (url.Host == "one.example")
+            {
+                Interlocked.Increment(ref FirstHostCalls);
+                await Release.Task.WaitAsync(cancellationToken);
+            }
+
+            return new FetchResult(200, "{}", null);
+        }
+    }
+
+    [Fact]
     public async Task RequestsToOneHostGoOneAtATimeAndSpacedButOtherHostsDontWait()
     {
         var inner = new CountingTransport();

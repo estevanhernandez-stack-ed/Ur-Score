@@ -38,6 +38,12 @@ public sealed record RecipeState(
     public IReadOnlyDictionary<string, StatChoice> StatChoices => Stats ?? new Dictionary<string, StatChoice>();
 
     [JsonIgnore]
+    public IReadOnlyDictionary<string, StatChoice>? LegacyStatChoices { get; init; }
+
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, StatChoice> ChoicesForUpdate => Stats ?? LegacyStatChoices ?? StatChoices;
+
+    [JsonIgnore]
     public IReadOnlyList<string> SavedCounterNames => CounterNames ?? [];
 
     /// <summary>Tracked means Show or Send: the stats a read asks for. Only stats this recipe still offers.</summary>
@@ -164,7 +170,7 @@ public sealed class RecipeStore(string directory)
                 return null;
             }
 
-            return new InstalledRecipe(parsed.Recipe!, text, LoadState(parsed.Recipe!.Slug));
+            return new InstalledRecipe(parsed.Recipe!, text, LoadState(parsed.Recipe!));
         }
         catch (Exception ex)
         {
@@ -173,14 +179,37 @@ public sealed class RecipeStore(string directory)
         }
     }
 
-    private RecipeState LoadState(string slug)
+    private RecipeState LoadState(Recipe recipe)
     {
         try
         {
-            var file = StatePath(slug);
-            return File.Exists(file)
-                ? JsonSerializer.Deserialize<RecipeState>(File.ReadAllText(file), Options) ?? new RecipeState()
-                : new RecipeState();
+            var file = StatePath(recipe.Slug);
+            if (!File.Exists(file)) return new RecipeState();
+
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            var state = document.RootElement.Deserialize<RecipeState>(Options) ?? new RecipeState();
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || document.RootElement.EnumerateObject().Any(property =>
+                    string.Equals(property.Name, "stats", StringComparison.OrdinalIgnoreCase))
+                || recipe.IsGroupList || recipe.LastStep.Values.Count != 1 || recipe.LastStep.Counters is not null)
+                return state;
+
+            var legacy = document.RootElement.EnumerateObject().LastOrDefault(property =>
+                string.Equals(property.Name, "metricIdOverride", StringComparison.OrdinalIgnoreCase)).Value;
+            if (legacy.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)) return state;
+
+            var value = recipe.LastStep.Values[0];
+            var metricId = legacy.GetString();
+            metricId = string.IsNullOrWhiteSpace(metricId) ? value.MetricId : metricId.Trim();
+            if (string.IsNullOrWhiteSpace(metricId)) return state;
+
+            return state with
+            {
+                LegacyStatChoices = new Dictionary<string, StatChoice>(StringComparer.Ordinal)
+                {
+                    [value.Id] = new(Show: true, Send: true, MetricId: metricId),
+                },
+            };
         }
         catch (Exception)
         {

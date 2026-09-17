@@ -70,11 +70,23 @@ public static class PanelGallery
 
     /// <summary>
     /// The recipe a card speaks for: the one a panel added from it starts on (<see cref="PanelForms.Defaults"/>),
-    /// else the first installed recipe the type fits, else none.
+    /// else the first installed recipe the type fits, else none. Promotion check prefers an addable recipe,
+    /// the main's first, before these fallbacks.
     /// </summary>
     private static Recipe? CardRecipe(PanelType type, LiveBoard live) =>
-        live.FindRecipe(PanelForms.Build(type, PanelForms.Defaults(type, live), live).Recipe)?.Recipe
+        (type == PanelType.PromotionCheck ? PromotionRecipe(live) : null)
+        ?? live.FindRecipe(PanelForms.Build(type, PanelForms.Defaults(type, live), live).Recipe)?.Recipe
         ?? live.Installed.FirstOrDefault(i => PanelForms.Fits(type, i.Recipe))?.Recipe;
+
+    private static Recipe? PromotionRecipe(LiveBoard live)
+    {
+        var origin = PanelForms.SourceChoices(PanelType.PromotionCheck, PanelField.Source, live, new FormValues())
+            .FirstOrDefault(choice =>
+                PanelForms.SourceChoices(PanelType.PromotionCheck, PanelField.ToSource, live, new FormValues(Source: choice.Key)).Count > 0
+                && PanelForms.StatChoices(PanelType.PromotionCheck, live, new FormValues(Source: choice.Key), null).Count > 0);
+
+        return origin is null ? null : live.FindRecipe(live.FindSource(origin.Key)!.Recipe)?.Recipe;
+    }
 
     private static bool CanAdd(PanelType type, LiveBoard live)
     {
@@ -82,12 +94,10 @@ public static class PanelGallery
         return type switch
         {
             PanelType.Race => live.Sources
-                .Where(s => live.FindRecipe(s.Recipe) is { } installed && PanelForms.Fits(type, installed.Recipe))
+                .Where(s => s.Enabled && live.FindRecipe(s.Recipe) is { } installed && PanelForms.Fits(type, installed.Recipe))
                 .GroupBy(s => s.Recipe, StringComparer.Ordinal)
                 .Any(g => g.Count() >= 2),
-            PanelType.PromotionCheck => PanelForms.SourceChoices(type, PanelField.Source, live, none).Any(origin =>
-                PanelForms.SourceChoices(type, PanelField.ToSource, live, new FormValues(Source: origin.Key)).Count > 0
-                && PanelForms.StatChoices(type, live, new FormValues(Source: origin.Key), null).Count > 0),
+            PanelType.PromotionCheck => PromotionRecipe(live) is not null,
             PanelType.MyAccounts or PanelType.Records or PanelType.ProfileStat or PanelType.AccountCard =>
                 PanelForms.StatChoices(type, live, none, null).Count > 0,
             _ => PanelForms.SourceChoices(type, PanelField.Source, live, none).Count > 0,

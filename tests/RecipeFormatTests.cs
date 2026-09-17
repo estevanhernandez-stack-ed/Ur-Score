@@ -35,6 +35,10 @@ public class RecipeFormatTests
     [InlineData("Team", null, "Teams")]
     [InlineData("Your stats", null, "Stats")]
     [InlineData("Your clan", "Crews", "Crews")]
+    [InlineData("", null, "Items")]
+    [InlineData("   ", null, "Items")]
+    [InlineData("\t\r\n", null, "Items")]
+    [InlineData("", "Crews", "Crews")]
     public void AnInputsPluralComesFromTheRecipeOrItsLabel(string label, string? plural, string expected) =>
         Assert.Equal(expected, new RecipeInput("clan", label, null, plural).PluralLabel);
 }

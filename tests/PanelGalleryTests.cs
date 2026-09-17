@@ -59,6 +59,23 @@ public class PanelGalleryTests
         Assert.False(Card(cards, PanelType.ProfileStat).CanAdd);
     }
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    public void RaceNeedsTwoEnabledClans(bool mainEnabled, bool altEnabled, bool canAdd)
+    {
+        var live = Live(
+            [MainClan with { Enabled = mainEnabled }, AltClan with { Enabled = altEnabled }],
+            [Installed(Clan, "value")], NoReads);
+
+        var race = Card(PanelGallery.Cards(live), PanelType.Race);
+
+        Assert.Equal(canAdd, race.CanAdd);
+        Assert.Equal(canAdd ? "" : "Needs at least 2 clans of one recipe. Add them in Setup.", race.WhyNot);
+    }
+
     private const string GuildSeasonJson = """
         {
           "recipe": 1, "name": "Guild season", "credit": "Test data.", "metricId": "test.guild", "valueLabel": "Points",
@@ -110,6 +127,60 @@ public class PanelGalleryTests
         // Top reads the list's own period, and names groups the way its panel's name column does.
         Assert.Equal(new[] { "Top of the round", "Needs a recipe that lists groups.", "The top of the round live, with your guilds placed where they'd rank.", "" },
             Lines(cards, PanelType.Top));
+    }
+
+    [Fact]
+    public void PromotionCardSpeaksForAnAddableRecipeWhenTheMainHasNoPartner()
+    {
+        var guild = Guild;
+        var origin = SourceOf("s-00000004", guild, "First", SourceRole.Mine);
+        var target = SourceOf("s-00000005", guild, "Second", SourceRole.Watch);
+        var live = Live([MainClan, origin, target],
+            [Installed(Clan, "value"), Installed(guild, "value")], NoReads);
+
+        var card = Card(PanelGallery.Cards(live), PanelType.PromotionCheck);
+
+        Assert.True(card.CanAdd);
+        Assert.Equal("Needs a guild your accounts are in, and one to compare with (your main unless you pick another).", card.Needs);
+        Assert.Equal("Where each of your accounts would place in the other guild now. Live only.", card.Shows);
+        Assert.Empty(card.WhyNot);
+    }
+
+    [Fact]
+    public void PromotionPrefersTheMainRecipeWhenBothRecipesHaveValidPairs()
+    {
+        var guild = Guild;
+        var origin = SourceOf("s-00000004", guild, "First", SourceRole.Mine);
+        var target = SourceOf("s-00000005", guild, "Second", SourceRole.Watch);
+        var live = Live([origin, target, AltClan, MainClan],
+            [Installed(guild, "value"), Installed(Clan, "value")], NoReads);
+
+        var card = Card(PanelGallery.Cards(live), PanelType.PromotionCheck);
+
+        Assert.True(card.CanAdd);
+        Assert.Equal("Needs a clan your accounts are in, and one to compare with (your main unless you pick another).", card.Needs);
+        Assert.Equal("Where each of your accounts would place in the other clan now. Live only.", card.Shows);
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    public void PromotionRecipeNeedsAnOwnedOriginAndATickedStat(bool ownedOrigin, bool tickedStat, bool canAdd)
+    {
+        var guild = Guild;
+        var origin = SourceOf("s-00000004", guild, "First", ownedOrigin ? SourceRole.Mine : SourceRole.Watch);
+        var target = SourceOf("s-00000005", guild, "Second", SourceRole.Watch);
+        var live = Live([origin, target, MainClan, AltClan],
+            [Installed(Clan), tickedStat ? Installed(guild, "value") : Installed(guild)], NoReads);
+
+        var card = Card(PanelGallery.Cards(live), PanelType.PromotionCheck);
+
+        Assert.Equal(canAdd, card.CanAdd);
+        var group = canAdd ? "guild" : "clan";
+        Assert.Equal($"Needs a {group} your accounts are in, and one to compare with (your main unless you pick another).", card.Needs);
+        Assert.Equal(canAdd ? "" : "Needs a clan your accounts are in, another to compare with, and a ticked stat.", card.WhyNot);
     }
 
     [Fact]

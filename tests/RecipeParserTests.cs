@@ -422,6 +422,34 @@ public class RecipeParserTests
             Problems(With(perAccount, """, "period": { "value": "season", "past": "data.seasons" }""")));
     }
 
+    [Theory]
+    [InlineData("1234567.history")]
+    [InlineData("data.1234567.history")]
+    [InlineData("data.history.1234567")]
+    [InlineData("data.0001234567.history")]
+    [InlineData("data.999999999999999999999999999999.history")]
+    public void APastPathCannotPointAtAParticularPlayer(string path)
+    {
+        var result = RecipeParser.Parse(With(TwoSteps, $$""", "period": { "value": "season", "past": "{{path}}" }"""));
+
+        Assert.False(result.Ok);
+        Assert.Contains(result.Problems, problem => problem.Contains($"'{path}' names a number.", StringComparison.Ordinal)
+            && problem.EndsWith("Recipes can't point at a particular player; use a placeholder instead.", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("data.seasons")]
+    [InlineData("data.season2026.history")]
+    [InlineData("data.2026season.history")]
+    [InlineData("data.{season}.history")]
+    public void APastPathCanUseNamedFieldsAndKnownPlaceholders(string path)
+    {
+        var result = RecipeParser.Parse(With(TwoSteps, $$""", "period": { "value": "season", "past": "{{path}}" }"""));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        Assert.Equal(path, result.Recipe!.Period!.Past);
+    }
+
     [Fact]
     public void AsOfIsReadOnlyOnTheLastStep()
     {

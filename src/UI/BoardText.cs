@@ -212,6 +212,9 @@ public static class BoardText
     public static string PanelSettingsName(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "Panel settings" : $"Settings for {title.Trim()}";
 
+    public static string ChooseAnotherName(string? title) =>
+        string.IsNullOrWhiteSpace(title) ? "Choose another" : $"Choose another for {title.Trim()}";
+
     /// <summary>
     /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
     /// (D4); a board with no panels, including a following tab being edited; else none.

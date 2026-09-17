@@ -140,6 +140,46 @@ public class ClansModelTests
     }
 
     [Fact]
+    public void PickingAWatchedClanAsMainReusesItAndDemotesOnlyItsRecipesMain()
+    {
+        var watched = ClanSource("s-00000003", "NovaForge", SourceRole.Watch);
+        var main = ClanSource("s-00000001", "CCGP", SourceRole.Main);
+        var other = ClanSource("s-00000004", "Elsewhere", SourceRole.Main) with { Recipe = "other-recipe" };
+        Source[] sources = [main, watched, other];
+
+        var change = ClansModel.Pick(sources, Clan, " novaforge ", SourceRole.Main);
+
+        Assert.Null(change.Note);
+        Assert.Equal(watched.Id, change.SourceId);
+        Assert.Equal(3, change.Sources.Count);
+        Assert.Equal(watched with { Role = SourceRole.Main }, change.Sources.Single(source => source.Id == watched.Id));
+        Assert.Equal(main with { Role = SourceRole.Mine }, change.Sources.Single(source => source.Id == main.Id));
+        Assert.Equal(other, change.Sources.Single(source => source.Id == other.Id));
+        Assert.Equal(SourceRole.Watch, watched.Role);
+        Assert.Equal(SourceRole.Main, main.Role);
+
+        var lists = ClansModel.Lists(Clan, change.Sources, new Dictionary<string, RecipeSnapshot>(), [Main, Alt]);
+        Assert.Equal("NovaForge", lists.Main!.Name);
+        Assert.Equal(new[] { "NovaForge", "CCGP" }, lists.Mine.Select(row => row.Name));
+        Assert.Empty(lists.Watching);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PickingAWatchedClanAsMainEnablesIt(bool enabled)
+    {
+        var watched = ClanSource("s-00000003", "NovaForge", SourceRole.Watch, enabled);
+
+        var change = ClansModel.Pick([watched], Clan, "NovaForge", SourceRole.Main);
+
+        Assert.Null(change.Note);
+        Assert.Equal(watched.Id, change.SourceId);
+        Assert.Equal(watched with { Role = SourceRole.Main, Enabled = true }, Assert.Single(change.Sources));
+        Assert.Equal(watched with { Role = SourceRole.Main }, Assert.Single(SourceRules.MakeMain([watched], watched.Id)));
+    }
+
+    [Fact]
     public void WatchInsteadAndTheSwitchChangeOnlyTheirSource()
     {
         Source[] sources = [ClanSource("s-00000001", "CCGP", SourceRole.Main), ClanSource("s-00000002", "K0i2", SourceRole.Mine)];

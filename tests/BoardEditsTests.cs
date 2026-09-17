@@ -207,10 +207,77 @@ public class BoardEditsTests
             new PanelDef("p-3", PanelType.Race, new PanelSize(6), new PanelSettings(Clan.Slug, SourceIds: new List<string> { alt.Id, main.Id })),
         ]);
 
-        Assert.Equal(alt.Id, BoardEdits.AnchorSourceId(board, [main, alt]));
-        Assert.Equal(main.Id, BoardEdits.AnchorSourceId(board, [main, alt with { Enabled = false }]));
-        Assert.Equal(main.Id, BoardEdits.AnchorSourceId(board with { Panels = [] }, [alt, main]));
-        Assert.Null(BoardEdits.AnchorSourceId(board with { Panels = [] }, [alt]));
+        Assert.Equal(alt.Id, BoardEdits.AnchorSourceId(board, [main, alt], [Installed(Clan)]));
+        Assert.Equal(main.Id, BoardEdits.AnchorSourceId(board, [main, alt with { Enabled = false }], [Installed(Clan)]));
+        Assert.Equal(main.Id, BoardEdits.AnchorSourceId(board with { Panels = [] }, [alt, main], [Installed(Clan)]));
+        Assert.Null(BoardEdits.AnchorSourceId(board with { Panels = [] }, [alt], [Installed(Clan)]));
+    }
+
+    [Theory]
+    [InlineData(PanelType.MyAccounts)]
+    [InlineData(PanelType.Records)]
+    public void ARecipeOnlyPanelAnchorsBeforeAGroupList(PanelType type)
+    {
+        var own = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Mine);
+        var top = SourceOf("s-00000002", TopList, null, SourceRole.Watch);
+        var board = new BoardDef("b", "Battle",
+        [
+            new PanelDef("p-1", PanelType.Top, new PanelSize(6), new PanelSettings(TopList.Slug, SourceId: top.Id)),
+            new PanelDef("p-2", type, new PanelSize(6), new PanelSettings(Clan.Slug, Stat: "value")),
+        ]);
+
+        Assert.Equal(own.Id, BoardEdits.AnchorSourceId(board, [top, own], [Installed(Clan), Installed(TopList)]));
+    }
+
+    [Theory]
+    [InlineData(true, true, true, true, "s-own")]
+    [InlineData(false, true, true, true, "s-main")]
+    [InlineData(true, false, true, true, "s-main")]
+    [InlineData(false, true, false, true, "s-top")]
+    [InlineData(false, true, false, false, null)]
+    public void AnchorFallbackSkipsDisabledAndMissingRecipes(bool ownEnabled, bool ownInstalled, bool mainEnabled, bool topEnabled, string? expected)
+    {
+        var own = SourceOf("s-own", Clan, "CCGP", SourceRole.Mine) with { Enabled = ownEnabled };
+        var main = SourceOf("s-main", Profile, null, SourceRole.Main) with { Enabled = mainEnabled };
+        var top = SourceOf("s-top", TopList, null, SourceRole.Watch) with { Enabled = topEnabled };
+        var board = new BoardDef("b", "b",
+        [
+            new PanelDef("p-top", PanelType.Top, new PanelSize(6), new PanelSettings(TopList.Slug, SourceId: top.Id)),
+            new PanelDef("p-own", PanelType.MyAccounts, new PanelSize(6), new PanelSettings(Clan.Slug, Stat: "value")),
+        ]);
+        var installed = new[] { Installed(TopList), Installed(Profile), Installed(Clan) }
+            .Where(item => ownInstalled || item.Recipe.Slug != Clan.Slug).ToList();
+
+        Assert.Equal(expected, BoardEdits.AnchorSourceId(board, [top, main, own], installed));
+    }
+
+    [Fact]
+    public void AnExplicitOwnSourceWinsOverAnEarlierGroupListAndRecipeOnlyPanel()
+    {
+        var own = SourceOf("s-own", Clan, "CCGP", SourceRole.Mine);
+        var profile = SourceOf("s-profile", Profile, null, SourceRole.Mine);
+        var top = SourceOf("s-top", TopList, null, SourceRole.Watch);
+        var board = new BoardDef("b", "b",
+        [
+            new PanelDef("p-top", PanelType.Top, new PanelSize(6), new PanelSettings(TopList.Slug, SourceId: top.Id)),
+            new PanelDef("p-profile", PanelType.Records, new PanelSize(6), new PanelSettings(Profile.Slug, Stat: "diamonds")),
+            new PanelDef("p-own", PanelType.Standing, new PanelSize(6), new PanelSettings(Clan.Slug, SourceId: own.Id)),
+        ]);
+
+        Assert.Equal(own.Id, BoardEdits.AnchorSourceId(board, [top, profile, own], [Installed(TopList), Installed(Profile), Installed(Clan)]));
+    }
+
+    [Fact]
+    public void ABattleStarterWithNoOwnSourceCanStillAnchorItsTopList()
+    {
+        var recipe = Profile with { Period = Clan.Period };
+        var top = SourceOf("s-top", TopList, null, SourceRole.Watch);
+        var installed = new[] { Installed(recipe, "diamonds"), Installed(TopList) };
+        var starter = StarterBoards.Build(installed, [top], StarterBoards.Battle);
+
+        Assert.Equal(BoardEmpty.None, starter.Empty);
+        Assert.Contains(starter.Panels, panel => panel.Type == PanelType.MyAccounts);
+        Assert.Equal(top.Id, BoardEdits.AnchorSourceId(BoardDefs.FromStarter(starter, freshIds: false), [top], installed));
     }
 
     [Fact]

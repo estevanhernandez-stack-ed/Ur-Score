@@ -1,4 +1,5 @@
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
@@ -247,20 +248,30 @@ public static class BoardEdits
     public static string? AutomationIdOf(IReadOnlyList<BoardDef> boards, string panelId) =>
         Find(boards, panelId) is { } found ? AutomationIds(found.Board)[PanelIndex(found.Board, panelId)] : null;
 
-    /// <summary>The source the top bar's period line follows: the first panel's source that is still on, else the main.</summary>
-    public static string? AnchorSourceId(BoardDef board, IReadOnlyList<Source> sources)
+    /// <summary>The period line follows an enabled panel source, then a panel recipe's source, then the main, then a panel's group list.</summary>
+    public static string? AnchorSourceId(BoardDef board, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)
     {
         var enabled = sources.Where(s => s.Enabled).ToList();
+        bool IsOwnRecipe(Source source) => installed.Any(item => item.Recipe.Slug == source.Recipe && !item.Recipe.IsGroupList);
+        string? groupList = null;
         foreach (var panel in board.Panels)
         {
             var ids = new[] { panel.Settings.SourceId, panel.Settings.ToSourceId }.Concat(panel.Settings.SourceIds ?? Array.Empty<string>());
             foreach (var id in ids)
             {
-                if (enabled.FirstOrDefault(s => s.Id == id) is { } found) return found.Id;
+                if (enabled.FirstOrDefault(source => source.Id == id) is not { } found) continue;
+                if (IsOwnRecipe(found)) return found.Id;
+                if (installed.Any(item => item.Recipe.Slug == found.Recipe && item.Recipe.IsGroupList)) groupList ??= found.Id;
             }
         }
 
-        return enabled.FirstOrDefault(s => s.Role == SourceRole.Main)?.Id;
+        foreach (var panel in board.Panels)
+        {
+            if (enabled.FirstOrDefault(source => source.Recipe == panel.Settings.Recipe && IsOwnRecipe(source)) is { } found)
+                return found.Id;
+        }
+
+        return enabled.FirstOrDefault(source => source.Role == SourceRole.Main)?.Id ?? groupList;
     }
 
     /// <summary>Record equality compares a race's list by instance; this compares its ids in order, with no list the same as an empty one.</summary>

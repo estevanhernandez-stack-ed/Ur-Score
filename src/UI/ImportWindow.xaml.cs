@@ -57,12 +57,12 @@ public partial class ImportWindow : Window
         }
         else
         {
-            // A first import starts from the recipe's suggestions; an update from your saved ticks, untouched.
+            // An update also reviews legacy sends; loading them alone never enables reporting.
             var fresh = !comparison.IsUpdate;
             StatsTable.Load(recipe, _existing, installed, accountIds, ruleSentence,
                 readCounterNames is null ? null : _ => readCounterNames(),
                 ImportText.ShowEveryStat, review.Refusals,
-                fresh ? StatsTableModel.Suggested(recipe) : null);
+                fresh ? StatsTableModel.Suggested(recipe) : _existing.ChoicesForUpdate);
             Show(SuggestedLine, fresh ? ImportText.SuggestedNote(recipe) : "");
             StatsTable.Changed += (_, _) => Refresh();
         }

@@ -74,9 +74,10 @@ public class PanelModelsTests
         Assert.Equal("in the battle", model.PlaceSuffix);
         Assert.Equal("Clan points", model.TotalLabel);
         Assert.Equal("30,214,400", model.Total);
-        Assert.Equal(Records.Change(reader.HeadlineSeries(main.Id, "clan-points", Period), Now), model.Change);
+        Assert.Equal("+1.41M in 57m", model.Change);
+        Assert.Equal(ChangeDirection.Up, model.ChangeDirection);
         Assert.Equal("1 of 2", model.Accounts);
-        Assert.Equal(PanelText.PeriodLine(LivePeriod, Now, null), model.PeriodLine);
+        Assert.Equal("AutumnBattle · ends in 3d", model.PeriodLine);
         Assert.False(model.HasGap);
     }
 
@@ -91,13 +92,13 @@ public class PanelModelsTests
             Snaps(Snapshot(main.Id, [], [Place(14), Points(30_200_000)]), Snapshot(top.Id, null, groups: groups)));
 
         var withAbove = PanelModels.Standing(With(Group("Aurelian", 40_000_000, 13), Group("ccgp", 30_200_000, 14)), Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
-        var withGap = PanelModels.Standing(With(Group("Other", 40_000_000, 12), Group("CCGP", 30_200_000, 14)), Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
+        var withMissingRank = PanelModels.Standing(With(Group("Other", 40_000_000, 12), Group("CCGP", 30_200_000, 14)), Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
 
         Assert.True(withAbove.HasGap);
         Assert.Equal("To 13th", withAbove.GapLabel);
-        Assert.Equal($"{StatText.Abbrev(9_800_000)} behind", withAbove.Gap);
-        Assert.Equal(30.2 / 40, withAbove.GapFill, 3);
-        Assert.False(withGap.HasGap);
+        Assert.Equal("9.8M behind", withAbove.Gap);
+        Assert.Equal(0.755, withAbove.GapFill, 3);
+        Assert.False(withMissingRank.HasGap);
     }
 
     /// <summary>
@@ -126,8 +127,8 @@ public class PanelModelsTests
         var inTheTie = For("TiedB", tied);
         var firstOfTheTie = For("TiedA", tied);
 
-        Assert.Equal((true, "To 12th", $"{StatText.Abbrev(9_800_000)} behind"), (behindTheTie.HasGap, behindTheTie.GapLabel, behindTheTie.Gap));
-        Assert.Equal((true, "To 11th", $"{StatText.Abbrev(10_000_000)} behind"), (inTheTie.HasGap, inTheTie.GapLabel, inTheTie.Gap));
+        Assert.Equal((true, "To 12th", "9.8M behind"), (behindTheTie.HasGap, behindTheTie.GapLabel, behindTheTie.Gap));
+        Assert.Equal((true, "To 11th", "10M behind"), (inTheTie.HasGap, inTheTie.GapLabel, inTheTie.Gap));
         Assert.Equal((true, "To 11th"), (firstOfTheTie.HasGap, firstOfTheTie.GapLabel));
 
         // A tied group is never "above" the group it ties with.
@@ -163,7 +164,7 @@ public class PanelModelsTests
         var running = PanelModels.Standing(Live([main], [Installed(Clan, "value")], snaps, running: true, lastRead), Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
         var stopped = PanelModels.Standing(Live([main], [Installed(Clan, "value")], snaps, running: false, lastRead), Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
 
-        Assert.Equal(Records.Overdue(Now.AddMinutes(-10), Clan.EffectiveEverySeconds, Now), running.Head.Overdue);
+        Assert.True(running.Head.Overdue);
         Assert.False(stopped.Head.Overdue);
     }
 
@@ -1051,6 +1052,56 @@ public class PanelModelsTests
     }
 
     // ---- Profile stat ----
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProfileStatSaysNoEarlierReadForBothWindowsUntilThereAreTwoReadings(bool hasReading)
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var live = Live([profile], [Installed(Profile, "diamonds")],
+            Snaps(Snapshot(profile.Id, [Row(Main.RobloxUserId, 500, "diamonds")])), accounts: [Main]);
+        var reader = Reader();
+        if (hasReading) reader.Apply(Read(profile, Now, null, null, "diamonds", (Main.RobloxUserId, 500)));
+
+        var model = PanelModels.ProfileStat(live, reader, new PanelSettings(Profile.Slug, SourceId: profile.Id, Stat: "diamonds"));
+
+        var row = Assert.Single(model.Rows);
+        Assert.Equal("no earlier read", row.Today);
+        Assert.Equal("no earlier read", row.Week);
+        Assert.False(row.Missing);
+    }
+
+    [Theory]
+    [InlineData(-5, "+300")]
+    [InlineData(9, "+150")]
+    public void ProfileStatUsesLocalMidnightForTodayAndARollingSevenDaysForWeek(int offsetHours, string today)
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var zone = TimeZoneInfo.CreateCustomTimeZone("test-zone", TimeSpan.FromHours(offsetHours), "Test zone", "Test zone");
+        var live = Live([profile], [Installed(Profile, "diamonds")],
+            Snaps(Snapshot(profile.Id, [Row(Main.RobloxUserId, 500, "diamonds")])), accounts: [Main]) with
+        {
+            Time = new FixedTime(Now, zone),
+        };
+        var reader = Reader(
+            Read(profile, Now.AddDays(-8), null, null, "diamonds", (Main.RobloxUserId, 50)),
+            Read(profile, Now.AddDays(-7), null, null, "diamonds", (Main.RobloxUserId, 75)),
+            Read(profile, Now.AddDays(-7).AddMinutes(1), null, null, "diamonds", (Main.RobloxUserId, 90)),
+            Read(profile, Now.AddHours(-13).AddMinutes(-1), null, null, "diamonds", (Main.RobloxUserId, 150)),
+            Read(profile, Now.AddHours(-13), null, null, "diamonds", (Main.RobloxUserId, 200)),
+            Read(profile, Now.AddHours(-13).AddMinutes(1), null, null, "diamonds", (Main.RobloxUserId, 250)),
+            Read(profile, Now.AddHours(-3).AddMinutes(-1), null, null, "diamonds", (Main.RobloxUserId, 300)),
+            Read(profile, Now.AddHours(-3), null, null, "diamonds", (Main.RobloxUserId, 350)),
+            Read(profile, Now.AddHours(-3).AddMinutes(1), null, null, "diamonds", (Main.RobloxUserId, 400)),
+            Read(profile, Now, null, null, "diamonds", (Main.RobloxUserId, 500)));
+
+        var model = PanelModels.ProfileStat(live, reader, new PanelSettings(Profile.Slug, SourceId: profile.Id, Stat: "diamonds"));
+
+        var row = Assert.Single(model.Rows);
+        Assert.Equal(today, row.Today);
+        Assert.Equal("+425", row.Week);
+    }
 
     [Fact]
     public void ProfileStatShowsTodayAndSevenDayGainsAndKeepsMissingValuesLast()

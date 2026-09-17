@@ -65,16 +65,21 @@ public class SourcesTests
         Assert.Equal(SourceRole.Mine, source.Role);
     }
 
-    [Fact]
-    public void ThereIsOnlyOneMainPerRecipe()
+    [Theory]
+    [InlineData(SourceRole.Mine)]
+    [InlineData(SourceRole.Watch)]
+    public void ThereIsOnlyOneMainPerRecipe(SourceRole previousRole)
     {
         var sources = SourceRules.Add([], "clan-recipe", Clan("CCGP"), SourceRole.Main);
-        sources = SourceRules.Add(sources, "clan-recipe", Clan("K0i2"), SourceRole.Mine);
+        sources = SourceRules.Add(sources, "clan-recipe", Clan("K0i2"), previousRole);
         sources = SourceRules.Add(sources, "other-recipe", Clan("Elsewhere"), SourceRole.Main);
         var k0i2 = sources.Single(s => s.Inputs["clan"] == "K0i2");
 
         sources = SourceRules.MakeMain(sources, k0i2.Id);
 
+        Assert.Equal(3, sources.Count);
+        Assert.Equal(k0i2 with { Role = SourceRole.Main }, sources.Single(s => s.Id == k0i2.Id));
+        Assert.Equal(previousRole, k0i2.Role);
         Assert.Equal(SourceRole.Mine, sources.Single(s => s.Inputs["clan"] == "CCGP").Role);
         Assert.Equal(SourceRole.Main, sources.Single(s => s.Inputs["clan"] == "K0i2").Role);
         Assert.Equal(SourceRole.Main, sources.Single(s => s.Recipe == "other-recipe").Role);

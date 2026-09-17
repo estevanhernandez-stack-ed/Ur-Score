@@ -259,6 +259,13 @@ dotnet test tests/Ur-Score.Tests.csproj
 pwsh ./build/build-plugin.ps1
 ```
 
+The .NET 10.0.203 build has intermittently generated WPF application code without a `Main`
+entry point (CS5001). Absolute intermediate-path normalization initially passed clean and
+incremental builds, but the error returned after a XAML edit; the root cause remains unresolved.
+A fresh absolute `--artifacts-path` under this repo's `obj` directory has worked for validation.
+Use the same path for the build and `dotnet test --no-build`. Keep temporary build outputs under
+`obj`, not `artifacts`: the normal build can otherwise compile their generated C# files as source.
+
 `ROROROblox.PluginContract` 0.10.0 — the version that carries `ReportMetric` — is on nuget.org, so
 `nuget.config` names nuget.org and nothing else. The test suite needs nothing beyond that package —
 it reaches no live RoRoRo and no live source, standing in a fake for each — and is expected to pass

@@ -258,12 +258,15 @@ public static class PanelForms
     }
 
     /// <summary>What's wrong with a panel's settings, in the recipe's words, or null. The window refuses to save while there is one.</summary>
-    public static string? Problem(PanelType type, PanelSettings settings, LiveBoard live)
+    public static string? Problem(PanelType type, PanelSettings settings, LiveBoard live, string? fallbackRecipe = null)
     {
         var installed = live.FindRecipe(settings.Recipe);
+        var wordingRecipe = string.IsNullOrEmpty(settings.Recipe) ? fallbackRecipe : settings.Recipe;
         var (word, words) = installed is { Recipe.IsGroupList: false }
             ? GroupWords(installed.Recipe)
-            : type == PanelType.Top ? GroupWords((Recipe?)null) : GroupWords(live);
+            : type == PanelType.Top || (installed is null && !string.IsNullOrEmpty(wordingRecipe) && live.FindRecipe(wordingRecipe) is null)
+                ? GroupWords((Recipe?)null)
+                : GroupWords(live);
 
         foreach (var field in Fields(type, adding: false))
         {
@@ -281,8 +284,9 @@ public static class PanelForms
         return null;
     }
 
-    /// <summary>The words for a form with no recipe picked yet: the first recipe with inputs, else "source".</summary>
-    internal static (string Group, string Groups) GroupWords(LiveBoard live) => GroupWords(PanelText.GroupRecipe(live.Installed));
+    /// <summary>The saved recipe's words, or the first recipe with inputs when none is picked yet.</summary>
+    internal static (string Group, string Groups) GroupWords(LiveBoard live, string? recipe = null) =>
+        GroupWords(string.IsNullOrEmpty(recipe) ? PanelText.GroupRecipe(live.Installed) : live.FindRecipe(recipe)?.Recipe);
 
     /// <summary>A recipe's words for one group and several, lower case: "clan", "clans"; with no recipe, "source", "sources".</summary>
     internal static (string Group, string Groups) GroupWords(Recipe? recipe) =>

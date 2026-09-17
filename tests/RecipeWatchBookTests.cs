@@ -146,6 +146,43 @@ public class RecipeWatchBookTests
         Assert.Empty(book.Lines[1].Accounts);
     }
 
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    public async Task AnotherSourceCanKeepAndSendAnAccountWhenItsClaimExpires(int boundaryOffsetSeconds, bool expired)
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero));
+        var claims = new AccountClaims(time);
+        var host = new StubHost(true, AltAccount);
+        var firstBook = new MemoryBook();
+        var secondBook = new MemoryBook();
+        var engine = new StubEngine(() => Reading(EngineRow(111, 4200)));
+
+        await Watch(engine, host, firstBook, SourceOf(SourceRole.Main, "s-00000001"), claims: claims, time: time)
+            .RunOnceAsync(CancellationToken.None);
+        Assert.Equal(new[] { "111" }, Assert.Single(firstBook.Lines).Accounts.Keys);
+        Assert.Single(host.Reported);
+
+        time.Advance(TimeSpan.FromSeconds(Clan.EffectiveEverySeconds * 2 + boundaryOffsetSeconds));
+        await Watch(engine, host, secondBook, SourceOf(SourceRole.Mine, "s-00000002"), claims: claims, time: time)
+            .RunOnceAsync(CancellationToken.None);
+
+        var secondLine = Assert.Single(secondBook.Lines);
+        Assert.Equal(expired ? new[] { "111" } : Array.Empty<string>(), secondLine.Accounts.Keys);
+        Assert.Equal(expired ? 2 : 1, host.Reported.Count);
+
+        if (expired)
+        {
+            var returningBook = new MemoryBook();
+            await Watch(engine, host, returningBook, SourceOf(SourceRole.Main, "s-00000001"), claims: claims, time: time)
+                .RunOnceAsync(CancellationToken.None);
+
+            Assert.Empty(Assert.Single(returningBook.Lines).Accounts);
+            Assert.Equal(2, host.Reported.Count);
+        }
+    }
+
     /// <summary>
     /// Backlog S1-6.8. Your account WAS in this read: another source of the recipe read it first and keeps it (ruling R6).
     /// "None of your accounts were in this read." named a cause that wasn't the cause. A read that really had none still says so.
@@ -173,8 +210,11 @@ public class RecipeWatchBookTests
         Assert.Equal("None of your accounts were in this read.", nobody.NotRecordingReason);
     }
 
-    [Fact]
-    public async Task AGroupListIsShownAndNeverKept()
+    [Theory]
+    [InlineData(SourceRole.Watch)]
+    [InlineData(SourceRole.Mine)]
+    [InlineData(SourceRole.Main)]
+    public async Task AGroupListIsShownAndNeverKept(SourceRole role)
     {
         var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
         var recipe = RecipeParser.Parse(text).Recipe!;
@@ -183,12 +223,20 @@ public class RecipeWatchBookTests
         {
             Groups = [new GroupRow("Aurelian", new Dictionary<string, double> { ["value"] = 1 }, 1), new GroupRow("SkyHarbor", new Dictionary<string, double> { ["value"] = 2 }, 2)],
         };
+        var engine = new StubEngine(() => reading);
+        var host = new StubHost(true, AltAccount);
 
-        var snapshot = await Watch(new StubEngine(() => reading), new StubHost(true, AltAccount), book,
-            new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch), recipe: recipe, text: text)
+        var snapshot = await Watch(engine, host, book,
+            new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), role), recipe: recipe, text: text)
             .RunOnceAsync(CancellationToken.None);
 
+        Assert.Equal(1, engine.Calls);
+        Assert.Empty(engine.LastIds);
         Assert.Empty(book.Lines);
+        Assert.Empty(book.RecipeTexts);
+        Assert.Empty(host.Reported);
+        Assert.False(snapshot.Recorded);
+        Assert.Equal(WatchState.Showing, snapshot.State);
         Assert.Equal(2, snapshot.Groups.Count);
         Assert.Equal(RecipeWatch.NotRecordingGroups, snapshot.NotRecordingReason);
     }

@@ -42,6 +42,60 @@ public class ScoreBookReaderTests
     }
 
     [Fact]
+    public void AHeadlineSeriesFiltersReadingsAndPreservesSourceMetadata()
+    {
+        var stamp = Now.AddMinutes(-20);
+        var first = Read(Now.AddMinutes(-9), 10, asOf: Now.AddMinutes(-30), off: 60) with
+        {
+            AsOf = stamp,
+            Stale = true,
+        };
+        var second = Read(Now.AddMinutes(-6), 20, asOf: Now.AddMinutes(-25));
+        var otherPeriod = Read(Now.AddMinutes(-3), 30, period: "A");
+        var reader = Reader(
+            second, first, otherPeriod,
+            Read(Now.AddMinutes(-2), 40, source: "s-2"),
+            Read(Now.AddMinutes(-1), 50) with { Headline = new Dictionary<string, double> { ["clan-place"] = 7 } },
+            Final("B", Now, 999, 1) with { Headline = new Dictionary<string, double> { ["clan-points"] = 9990 } },
+            Read(Now.AddDays(-36), 60));
+
+        Assert.Equal(new[]
+        {
+            new SeriesPoint(first.T, 100, stamp, true, 60),
+            new SeriesPoint(second.T, 200, null, false, -300),
+        }, reader.HeadlineSeries("s-1", "clan-points", "B"));
+        Assert.Equal(new[] { 100d, 200d, 300d }, reader.HeadlineSeries("s-1", "clan-points", null).Select(point => point.Value));
+        Assert.Equal(400d, Assert.Single(reader.HeadlineSeries("s-2", "clan-points", "B")).Value);
+        Assert.Empty(reader.HeadlineSeries("missing-source", "clan-points", null));
+        Assert.Empty(reader.HeadlineSeries("s-1", "missing-headline", null));
+        Assert.Empty(reader.HeadlineSeries("s-1", "clan-points", "missing-period"));
+    }
+
+    [Fact]
+    public void HeadlineDuplicatesUseSourceTimestampsAndTheSixtySecondBoundary()
+    {
+        var stamp = Now.AddHours(-1);
+        var first = Read(Now.AddMinutes(-10), 5) with { AsOf = stamp };
+        var changed = Read(Now.AddMinutes(-6), 6) with { AsOf = stamp };
+        var unstamped = Read(Now.AddMinutes(-4), 6);
+        var boundary = Read(unstamped.T.AddSeconds(60), 6);
+        var reader = Reader(
+            first,
+            Read(Now.AddMinutes(-7), 5) with { AsOf = stamp },
+            changed, unstamped,
+            Read(unstamped.T.AddSeconds(59), 6),
+            boundary);
+
+        Assert.Equal(new[]
+        {
+            new SeriesPoint(first.T, 50, stamp, false, -300),
+            new SeriesPoint(changed.T, 60, stamp, false, -300),
+            new SeriesPoint(unstamped.T, 60, null, false, -300),
+            new SeriesPoint(boundary.T, 60, null, false, -300),
+        }, reader.HeadlineSeries("s-1", "clan-points", "B"));
+    }
+
+    [Fact]
     public void DuplicateReadingsCollapse()
     {
         // Ruling R4: same value and same asOf, or no asOf and under 60 s apart.

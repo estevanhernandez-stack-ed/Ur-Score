@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Source;
 
 namespace Labs626.UrScore.Recipes;
@@ -139,12 +140,45 @@ public static class ImportReview
         changes.AddRange(removed.Select(x => $"No longer: {x}"));
         var asks = added.Count > 0 || removed.Count > 0;
 
+        if (state is { Stats: null, LegacyStatChoices.Count: > 0 })
+        {
+            changes.Add("Review which stats to show and send. The choices start with what this recipe sent before stat ticks were added.");
+            asks = true;
+        }
+
         if (installed.EffectiveEverySeconds != incoming.EffectiveEverySeconds)
         {
             changes.Add($"Polls every {incoming.EffectiveEverySeconds}s instead of {installed.EffectiveEverySeconds}s.");
         }
 
-        var choices = state?.StatChoices ?? new Dictionary<string, StatChoice>();
+        if (installed.Period is null && incoming.Period is not null)
+        {
+            changes.Add($"Now tracks the current {RecipeWords.Period(incoming)}.");
+        }
+        else if (installed.Period is not null && incoming.Period is null)
+        {
+            changes.Add($"No longer tracks the current {RecipeWords.Period(installed)}.");
+        }
+        else if (installed.Period is { } beforePeriod && incoming.Period is { } afterPeriod
+            && (beforePeriod with { Past = null }) != (afterPeriod with { Past = null }))
+        {
+            changes.Add($"Changes how the current {RecipeWords.Period(incoming)} is read.");
+        }
+
+        if (installed.Period?.Past is null && incoming.Period?.Past is not null)
+        {
+            changes.Add($"Now reads past {RecipeWords.Periods(incoming)}.");
+        }
+        else if (installed.Period?.Past is not null && incoming.Period?.Past is null)
+        {
+            changes.Add($"No longer reads past {RecipeWords.Periods(installed)}. Your score book is kept.");
+        }
+        else if (!string.Equals(installed.Period?.Past, incoming.Period?.Past, StringComparison.Ordinal))
+        {
+            changes.Add($"Past {RecipeWords.Periods(incoming)} are read from a different place.");
+        }
+
+        var choices = state?.ChoicesForUpdate ?? new Dictionary<string, StatChoice>();
         var oldStats = RecipeStats.Offered(installed, choices.Keys).ToDictionary(s => s.Key, StringComparer.Ordinal);
         var newStats = RecipeStats.Offered(incoming, choices.Keys).ToDictionary(s => s.Key, StringComparer.Ordinal);
 

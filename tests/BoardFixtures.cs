@@ -6,12 +6,12 @@ using Labs626.UrScore.Recipes;
 
 namespace UrScore.Tests;
 
-/// <summary>A clock that stands still, in UTC, so "today" and "7 days" are fixed.</summary>
-internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
+/// <summary>A clock that stands still, in UTC unless a zone is supplied, so "today" and "7 days" are fixed.</summary>
+internal sealed class FixedTime(DateTimeOffset now, TimeZoneInfo? zone = null) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => now;
 
-    public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    public override TimeZoneInfo LocalTimeZone => zone ?? TimeZoneInfo.Utc;
 }
 
 /// <summary>Shared data for the board tests: four of your accounts, the worked recipes, and book lines.</summary>

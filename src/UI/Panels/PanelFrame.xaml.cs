@@ -117,6 +117,7 @@ public partial class PanelFrame : UserControl
         var title = (DataContext as PanelHead)?.Title;
         AutomationProperties.SetName(PopOutButton, BoardText.PopOutName(title));
         AutomationProperties.SetName(PanelSettingsButton, BoardText.PanelSettingsName(title));
+        AutomationProperties.SetName(ChooseAnotherButton, BoardText.ChooseAnotherName(title));
 
         EditTools.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
         PopOutButton.Visibility = GetShowPopOut(this) && !editing ? Visibility.Visible : Visibility.Collapsed;

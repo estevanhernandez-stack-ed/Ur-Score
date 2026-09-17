@@ -397,16 +397,22 @@ public class RecipeWatchTests
         Assert.Null(snapshot.Rows);
     }
 
-    [Fact]
-    public async Task ARecipeChangedWhileSendingSendsNoMore()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ARecipeChangedWhileSendingSendsNoMore(bool withBook)
     {
         // The switch lands during the first send's await. Both recipes use the stat key "value", so
         // the second account's reading would otherwise go out under the new recipe's metric id.
         var second = new HostAccount(Guid.Parse("3c1f0a2e-5b7d-4e8a-9f60-2d4b8c1e7a93"), 112, "Alt Two");
         var followers = RecipeParser.Parse(RecipeParserTests.Fixture("roblox-followers.recipe.json")).Recipe!;
         var host = new FakeHost(true, [MyAccount, second]);
-        var watch = Watch(new FakeEngine(() => Reading("battle=A", Row(111, 4200), Row(112, 5100))), host,
-            allowed: [Mine, second.AccountId]);
+        var book = withBook ? new MemoryBook() : null;
+        var text = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
+        var source = new Source("s-00000001", PetSim.Slug, Clan, SourceRole.Mine);
+        var watch = new RecipeWatch(new FakeEngine(() => Reading("battle=A", Row(111, 4200), Row(112, 5100))),
+            host, new FakeKeys(), new ReportPolicy([PointsStat], new HashSet<Guid> { Mine, second.AccountId }),
+            PetSim, Clan, ValueOnly, book, source, recipeText: text);
         host.OnFirstReport = () =>
         {
             watch.UpdateRecipe(followers, new Dictionary<string, string>(), ValueOnly);
@@ -420,6 +426,22 @@ public class RecipeWatchTests
         Assert.DoesNotContain(snapshot.Accounts, line => line.AccountId == second.AccountId);
         // Nor does the replaced recipe's first reading come back after the switch cleared it.
         Assert.Empty(snapshot.Accounts);
+        Assert.Equal(withBook, snapshot.Recorded);
+        var sent = Assert.Single(host.Reported);
+        Assert.Equal((Mine, PointsStat.MetricId, 4200d), (sent.Subject, sent.MetricId, sent.Value));
+        Assert.Equal(PetSim.Slug, snapshot.RecipeSlug);
+        if (book is not null)
+        {
+            var line = Assert.Single(book.Lines);
+            Assert.Equal(new BookRecipeRef(PetSim.Slug, BookFiles.Hash(text)), line.Recipe);
+            Assert.Equal(BookLine.KindRead, line.Kind);
+            Assert.Equal(source.Id, line.Source);
+            Assert.Equal("Noodle Clan", line.Inputs["clan"]);
+            Assert.Equal(new[] { "111", "112" }, line.Accounts.Keys.Order(StringComparer.Ordinal));
+            Assert.Equal(4200d, line.Accounts["111"].V["value"]);
+            Assert.Equal(5100d, line.Accounts["112"].V["value"]);
+            Assert.Equal(text, Assert.Single(book.RecipeTexts));
+        }
     }
 
     [Fact]

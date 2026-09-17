@@ -282,7 +282,7 @@ public sealed class RecipeWatch(
 
         var watchOnly = readSource?.Role == SourceRole.Watch;
         var unresolved = AccountMap.Unresolved(accounts);
-        var map = watchOnly ? new Dictionary<long, Guid>() : AccountMap.Build(accounts);
+        var map = watchOnly || readRecipe.IsGroupList ? new Dictionary<long, Guid>() : AccountMap.Build(accounts);
 
         var reading = await engine.ReadAsync(readRecipe, readInputs, [.. map.Keys], readTracked, cancellationToken).ConfigureAwait(false);
 

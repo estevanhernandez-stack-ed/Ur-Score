@@ -168,18 +168,37 @@ public class ScoreBookTests
     public void RemovingARecipeLeavesItsBook()
     {
         using var dir = TempDir.Create("urscore-book");
-        var store = new RecipeStore(Path.Combine(dir.Path, "recipes"));
+        var recipesRoot = Path.Combine(dir.Path, "recipes");
+        var store = new RecipeStore(recipesRoot);
         var text = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
         var recipe = RecipeParser.Parse(text).Recipe!;
         store.Save(recipe, text, new RecipeState());
+        var recipeFiles = Directory.GetFiles(recipesRoot);
+        Assert.Equal(2, recipeFiles.Length);
+        Assert.NotNull(store.Find(recipe.Slug));
 
         var root = Path.Combine(dir.Path, "scorebook");
         using var book = new ScoreBook(root, background: false);
-        book.Append(Line(T), text);
+        var reference = new BookRecipeRef(recipe.Slug, BookFiles.Hash(text));
+        var reading = Line(T) with { Recipe = reference };
+        var final = Line(T.AddMonths(1), BookLine.KindFinal) with { Recipe = reference };
+        book.Append(reading, text);
+        book.Append(final, text);
+        var keptFiles = new[]
+        {
+            BookFiles.MonthFile(root, recipe.Slug, reading.T),
+            BookFiles.MonthFile(root, recipe.Slug, final.T),
+            BookFiles.RecipeFile(root, recipe.Slug, reference.Hash),
+        }.ToDictionary(path => path, File.ReadAllBytes);
 
-        store.Remove(recipe.Slug);
+        Assert.True(store.Remove(recipe.Slug));
 
-        Assert.Single(BookFiles.ReadAll(root, Slug));
+        Assert.Null(store.Find(recipe.Slug));
+        Assert.All(recipeFiles, path => Assert.False(File.Exists(path)));
+        Assert.All(keptFiles, file => Assert.Equal(file.Value, File.ReadAllBytes(file.Key)));
+        Assert.Equal(new[] { BookJson.Serialize(reading), BookJson.Serialize(final) },
+            BookFiles.ReadAll(root, recipe.Slug).OrderBy(line => line.T).Select(BookJson.Serialize));
+        Assert.Equal(text, File.ReadAllText(BookFiles.RecipeFile(root, recipe.Slug, reference.Hash)));
     }
 
     [Fact]

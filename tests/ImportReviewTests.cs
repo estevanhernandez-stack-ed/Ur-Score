@@ -280,4 +280,113 @@ public class ImportReviewTests
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Changes what an empty answer means." }, comparison.Changes);
     }
+
+    [Fact]
+    public void AddingPeriodTrackingAndPastHistoryListsBothWithoutAsking()
+    {
+        var incoming = Load("petsim99-clan-battle.recipe.json");
+        var installed = incoming with { Period = null };
+
+        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Now tracks the current battle.", "Now reads past battles." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void AddingPeriodTrackingWithoutHistoryListsOnlyTheCurrentPeriod()
+    {
+        var recipe = Load("petsim99-clan-battle.recipe.json");
+        var incoming = recipe with { Period = recipe.Period! with { Past = null } };
+
+        var comparison = ImportReview.CompareToInstalled(incoming with { Period = null }, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Now tracks the current battle." }, comparison.Changes);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AddingOrRemovingOnlyHistoryDoesNotClaimTheCurrentPeriodChanged(bool adding)
+    {
+        var withHistory = Load("petsim99-clan-battle.recipe.json");
+        var withoutHistory = withHistory with { Period = withHistory.Period! with { Past = null } };
+
+        var comparison = ImportReview.CompareToInstalled(adding ? withoutHistory : withHistory,
+            adding ? withHistory : withoutHistory, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { adding ? "Now reads past battles." : "No longer reads past battles. Your score book is kept." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void RemovingPeriodTrackingUsesTheOldRecipesWordsAndKeepsTheBook()
+    {
+        var installed = Load("petsim99-clan-battle.recipe.json");
+
+        var comparison = ImportReview.CompareToInstalled(installed, installed with { Period = null }, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "No longer tracks the current battle.", "No longer reads past battles. Your score book is kept." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void AHistoryPathChangeIsListedWithoutClaimingHistoryIsNew()
+    {
+        var installed = Load("petsim99-clan-battle.recipe.json");
+        var incoming = installed with { Period = installed.Period! with { Past = "data.Archive" } };
+
+        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Past battles are read from a different place." }, comparison.Changes);
+    }
+
+    [Theory]
+    [InlineData("value")]
+    [InlineData("starts")]
+    [InlineData("ends")]
+    public void ACurrentPeriodDefinitionChangeIsListedOnce(string field)
+    {
+        var installed = Load("petsim99-clan-battle.recipe.json");
+        var period = installed.Period!;
+        var incoming = installed with
+        {
+            Period = field switch
+            {
+                "value" => period with { Value = "season" },
+                "starts" => period with { Starts = null },
+                _ => period with { Ends = null },
+            },
+        };
+
+        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { field == "value" ? "Changes how the current season is read." : "Changes how the current battle is read." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void PeriodMessagesUseTheRecipesOwnWords()
+    {
+        var recipe = Load("petsim99-clan-battle.recipe.json");
+        var incoming = recipe with { Period = recipe.Period! with { Value = "season" } };
+
+        var comparison = ImportReview.CompareToInstalled(incoming with { Period = null }, incoming, new FakeKeys());
+
+        Assert.Equal(new[] { "Now tracks the current season.", "Now reads past seasons." }, comparison.Changes);
+    }
+
+    [Fact]
+    public void EqualPeriodDefinitionsProduceNoChangeEvenAsSeparateInstances()
+    {
+        var installed = Load("petsim99-clan-battle.recipe.json");
+        var incoming = installed with { Period = installed.Period! with { } };
+
+        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Empty(comparison.Changes);
+    }
 }

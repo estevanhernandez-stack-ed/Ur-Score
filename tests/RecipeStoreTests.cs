@@ -115,7 +115,7 @@ public class RecipeStoreTests : IDisposable
     }
 
     [Fact]
-    public void AStateFileThatStillHasMetricIdOverrideLoadsAndIgnoresIt()
+    public void ALegacyMetricIdIsKeptForUpdateReviewWithoutEnablingReportsOnLoad()
     {
         Directory.CreateDirectory(_dir);
         File.WriteAllText(Path.Combine(_dir, $"{PetSim.Slug}.recipe.json"), PetSimText);
@@ -127,6 +127,9 @@ public class RecipeStoreTests : IDisposable
         Assert.Equal("Noodle Clan", state.InputValues["clan"]);
         Assert.Empty(state.StatChoices);
         Assert.Empty(state.SentStats(PetSim));
+        Assert.Equal(new StatChoice(Show: true, Send: true, MetricId: "my.points"),
+            Assert.Single(state.LegacyStatChoices!).Value);
+        Assert.Equal("value", Assert.Single(state.LegacyStatChoices!).Key);
     }
 
     [Fact]

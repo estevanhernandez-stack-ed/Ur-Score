@@ -16,6 +16,7 @@ public class PanelToolNamingTests
     {
         Assert.Equal("Pop out Past battles", BoardText.PopOutName("Past battles"));
         Assert.Equal("Settings for Past battles", BoardText.PanelSettingsName("Past battles"));
+        Assert.Equal("Choose another for Past battles", BoardText.ChooseAnotherName("Past battles"));
     }
 
     [Fact]
@@ -26,13 +27,17 @@ public class PanelToolNamingTests
 
         var popOuts = titles.Select(BoardText.PopOutName).ToList();
         var settings = titles.Select(BoardText.PanelSettingsName).ToList();
+        var chooseAnother = titles.Select(BoardText.ChooseAnotherName).ToList();
 
         Assert.Equal(titles.Length, popOuts.Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(titles.Length, settings.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(titles.Length, chooseAnother.Distinct(StringComparer.Ordinal).Count());
 
         // And each still says what pressing it does, not only which panel it belongs to.
         Assert.All(popOuts, name => Assert.StartsWith("Pop out ", name, StringComparison.Ordinal));
         Assert.All(settings, name => Assert.StartsWith("Settings for ", name, StringComparison.Ordinal));
+        Assert.All(chooseAnother, name => Assert.StartsWith("Choose another for ", name, StringComparison.Ordinal));
+        Assert.All(chooseAnother.Zip(titles), pair => Assert.EndsWith(pair.Second, pair.First, StringComparison.Ordinal));
         Assert.All(popOuts.Zip(titles), pair => Assert.EndsWith(pair.Second, pair.First, StringComparison.Ordinal));
     }
 
@@ -43,18 +48,20 @@ public class PanelToolNamingTests
         {
             Assert.Equal("Pop out", BoardText.PopOutName(nothing));
             Assert.Equal("Panel settings", BoardText.PanelSettingsName(nothing));
+            Assert.Equal("Choose another", BoardText.ChooseAnotherName(nothing));
         }
 
         Assert.Equal("Pop out Records", BoardText.PopOutName("  Records  "));
+        Assert.Equal("Choose another for Records", BoardText.ChooseAnotherName("  Records  "));
     }
 
     [Fact]
-    public void TheFrameNamesBothToolsFromTheHeadAndTheXamlFixesNeither()
+    public void TheFrameNamesAllThreeToolsFromTheHeadAndTheXamlFixesNone()
     {
         var xaml = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", "PanelFrame.xaml"));
         var code = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", "PanelFrame.xaml.cs"));
 
-        foreach (var tool in new[] { "PopOutButton", "PanelSettingsButton" })
+        foreach (var tool in new[] { "PopOutButton", "PanelSettingsButton", "ChooseAnotherButton" })
         {
             var element = Regex.Match(xaml, $"<Button x:Name=\"{tool}\".*?/>", RegexOptions.Singleline);
             Assert.True(element.Success, $"{tool} is no longer a Button in PanelFrame.xaml; this fence is looking in the wrong place.");
@@ -64,6 +71,7 @@ public class PanelToolNamingTests
         // The tools' names are set where every other tool state is, so a redrawn panel renames them with its title.
         Assert.Contains("AutomationProperties.SetName(PopOutButton, BoardText.PopOutName(title));", code);
         Assert.Contains("AutomationProperties.SetName(PanelSettingsButton, BoardText.PanelSettingsName(title));", code);
+        Assert.Contains("AutomationProperties.SetName(ChooseAnotherButton, BoardText.ChooseAnotherName(title));", code);
     }
 
     private static string RepoRoot()

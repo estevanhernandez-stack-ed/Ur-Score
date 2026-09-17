@@ -53,6 +53,38 @@ public class StatsTableModelTests
         Assert.False(StatsTableModel.AnyTicked(rows));
     }
 
+    [Theory]
+    [InlineData("Zones Unlocked", false)]
+    [InlineData("Bad.Name", true)]
+    public void AnUnrecognizedSavedCounterIsUntickedButKeepsItsPinnedChoice(string name, bool supportsCounters)
+    {
+        var recipe = supportsCounters
+            ? Profile
+            : RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+        var key = RecipeStats.CounterKey(name);
+        var choice = new StatChoice(true, true, "my.pinned.counter");
+        var saved = Saved((key, choice));
+
+        var rows = StatsTableModel.Build(recipe, saved, [name]);
+
+        var gone = Assert.Single(rows, row => row.Key == key);
+        Assert.False(gone.Offered);
+        Assert.Equal(name, gone.Label);
+        Assert.Equal($"{name} (no longer offered)", gone.DisplayLabel);
+        Assert.Equal(choice.MetricId, gone.MetricId);
+        Assert.False(gone.Show);
+        Assert.False(gone.Send);
+        Assert.False(gone.Ticked);
+        Assert.False(StatsTableModel.AnyTicked(rows));
+        Assert.Equal("", StatsTableModel.RuleLines(rows, metricId => $"rule for {metricId}"));
+
+        var choices = StatsTableModel.Choices(saved, rows);
+
+        Assert.Equal(choice, Assert.Single(choices).Value);
+        Assert.True(choices.ContainsKey(key));
+        Assert.Empty(new RecipeState(Stats: choices).SentStats(recipe));
+    }
+
     [Fact]
     public void SearchFiltersByLabelIgnoringCaseAndKeepsTickedRows()
     {
