@@ -381,13 +381,14 @@ public class BoardTextTests
     /// <summary>
     /// Backlog S1-14.2. A score book that couldn't be read left Start and Test now off for the whole session, with an exception's
     /// own message as the only reason and no way to try again. The line says why in plain words, the board says what that stops
-    /// and offers Try again.
+    /// and offers Try again. The board's heading says what the failure stops, not the failure again: the state line above
+    /// already says it, and the 2026-09-17 smoke showed the two reading as one sentence twice (backlog V3-S.21).
     /// </summary>
     [Fact]
     public void AScoreBookThatCouldNotBeReadSaysWhyInPlainWordsAndOffersTryAgain()
     {
         Assert.Equal("Reading your score book…", BoardText.BookStateLine(unread: false));
-        Assert.Equal("Your score book could not be read.", BoardText.BookStateLine(unread: true));
+        Assert.Equal("Your score book couldn't be read.", BoardText.BookStateLine(unread: true));
 
         Assert.Equal("Another program has a score book file open. Close it, then press Try again.",
             BoardText.BookUnread(new IOException("sharing", unchecked((int)0x80070020))));
@@ -396,9 +397,11 @@ public class BoardTextTests
         Assert.Equal("Something unexpected went wrong. Setup › Diagnostics has the details.",
             BoardText.BookUnread(new InvalidOperationException("Sequence contains no elements at C:\\somewhere")));
 
+        var (line, detail, button) = BoardText.EmptyState(BoardEmpty.BookUnread, Clan);
         Assert.Equal(
-            ("Your score book couldn't be read", "Start and Test now stay off until Ur Score can read it. Why it couldn't is on the line above.", "Try again"),
-            BoardText.EmptyState(BoardEmpty.BookUnread, Clan));
+            ("Start and Test now are off", "They come back once Ur Score can read your score book. The line above says what stopped it.", "Try again"),
+            (line, detail, button));
+        Assert.DoesNotContain("be read", line, StringComparison.Ordinal);
     }
 
     /// <summary>An unread book covers every board, over any other empty state, and goes as soon as the book is read.</summary>

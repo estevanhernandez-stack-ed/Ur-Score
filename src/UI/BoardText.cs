@@ -115,7 +115,7 @@ public static class BoardText
     }
 
     /// <summary>The state line before the score book is read: while it is being read, and once it couldn't be (S1-14.2).</summary>
-    public static string BookStateLine(bool unread) => unread ? "Your score book could not be read." : "Reading your score book…";
+    public static string BookStateLine(bool unread) => unread ? "Your score book couldn't be read." : "Reading your score book…";
 
     /// <summary>
     /// Why the score book couldn't be read, in plain words (S1-14.2), the way <see cref="BoardsNotSaved"/> says a board that
@@ -242,8 +242,9 @@ public static class BoardText
             BoardEmpty.NoSources => ($"Choose your main {group}",
                 "Type a few letters of its name in Setup, and Ur Score finds which of your accounts are in it.",
                 $"Choose your main {group}"),
-            BoardEmpty.BookUnread => ("Your score book couldn't be read",
-                "Start and Test now stay off until Ur Score can read it. Why it couldn't is on the line above.",
+            // The state line above already says the book couldn't be read, and why: the board says what that stops (V3-S.21).
+            BoardEmpty.BookUnread => ("Start and Test now are off",
+                "They come back once Ur Score can read your score book. The line above says what stopped it.",
                 "Try again"),
             BoardEmpty.NoPanels => ("This board has no panels yet",
                 editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Edit board.",

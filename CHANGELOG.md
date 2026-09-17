@@ -26,6 +26,8 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
   without clearing saved placement, and a late load cannot resume startup after shutdown begins.
 - External pop-out closes preserve placement for next start, regardless of main-window close order.
   Return to the board, Bring back, and Alt+F4 still return the panel explicitly.
+- A score book that can't be read says so once, on the state line with its reason; the board says
+  Start and Test now are off until it can be read, with Try again.
 
 ### Documentation
 

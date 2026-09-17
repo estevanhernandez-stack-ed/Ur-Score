@@ -236,7 +236,8 @@ for RoRoRo's list of your accounts (up to 20 seconds) it reads "Starting. Asking
 accounts…", and while Test now reads, "Reading every source once…". A read you ask for while
 stopped says what it found after "Not started." or "Stopped.": "Stopped. Last read: Reported to
 RoRoRo.", or the source in trouble by name. If the score book itself can't be read, the line says
-"Your score book could not be read.", the line under it says why, and the board offers Try again.
+"Your score book couldn't be read.", the line under it says why, and the board says Start and Test
+now are off until it can be, with Try again.
 And whenever any panel is drawing numbers from the score book rather than from this session, the
 sentence about their age is appended to whatever else the line says.
 
