@@ -28,6 +28,8 @@ public sealed record RecipeSnapshot(
 
     public IReadOnlyDictionary<string, string> StatMisses { get; init; } = new Dictionary<string, string>();
 
+    public IReadOnlyDictionary<long, string> ClaimConflicts { get; init; } = new Dictionary<long, string>();
+
     public IReadOnlyDictionary<(long UserId, string Stat), string> CellMisses { get; init; } = new Dictionary<(long UserId, string Stat), string>();
 
     public IReadOnlyList<string> CounterNames { get; init; } = [];
@@ -362,14 +364,15 @@ public sealed class RecipeWatch(
         }
 
         // Ruling R6: an account two sources of this recipe both saw belongs to the one that claimed it first.
-        var owned = OwnedMap(readRecipe, readSource, reading, map);
+        var conflicts = new Dictionary<long, string>();
+        var owned = OwnedMap(readRecipe, readSource, reading, map, conflicts);
 
         var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, map, owned);
 
         // What this cycle sends, filled as each send goes, so every snapshot below names only this read's sends (S1-F.5).
         var sentNow = new HashSet<(Guid AccountId, string Stat)>();
         RecipeSnapshot Kept(RecipeSnapshot snapshot) =>
-            snapshot with { Recorded = recorded, NotRecordingReason = notRecording, SentThisRead = sentNow };
+            snapshot with { Recorded = recorded, NotRecordingReason = notRecording, SentThisRead = sentNow, ClaimConflicts = conflicts };
 
         var mine = reading.Rows
             .Where(r => owned.ContainsKey(r.UserId))
@@ -390,7 +393,9 @@ public sealed class RecipeWatch(
 
         if (mine.Count == 0)
         {
-            var none = $"Read {seen} row(s); none of them are your accounts.";
+            var none = conflicts.Count > 0
+                ? $"Read {seen} row(s); your accounts in this read were already claimed by another source of this recipe."
+                : $"Read {seen} row(s); none of them are your accounts.";
             if (reading.Detail is not null) none += " " + reading.Detail;
             return Kept(Snapshot(readRecipe, readSource, WatchState.NoMatches, none, seen, unresolved, reading, map));
         }
@@ -452,15 +457,23 @@ public sealed class RecipeWatch(
     }
 
     /// <summary>Ruling R6. Accounts not in this read's rows (a private profile) need no claim.</summary>
-    private IReadOnlyDictionary<long, Guid> OwnedMap(Recipe readRecipe, Source? readSource, RecipeReading reading, IReadOnlyDictionary<long, Guid> map)
+    private IReadOnlyDictionary<long, Guid> OwnedMap(Recipe readRecipe, Source? readSource, RecipeReading reading, IReadOnlyDictionary<long, Guid> map,
+        Dictionary<long, string>? conflicts = null)
     {
         if (claims is null || readSource is null || map.Count == 0) return map;
 
         var window = TimeSpan.FromSeconds(readRecipe.EffectiveEverySeconds * 2);
         var inRows = reading.Rows.Select(r => r.UserId).ToHashSet();
-        return map
-            .Where(kv => !inRows.Contains(kv.Key) || claims.TryClaim(readRecipe.Slug, kv.Key, readSource.Id, window))
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        var owned = new Dictionary<long, Guid>();
+        foreach (var (userId, accountId) in map)
+        {
+            if (!inRows.Contains(userId) || claims.TryClaim(readRecipe.Slug, userId, readSource.Id, window, out var owner))
+                owned.Add(userId, accountId);
+            else if (conflicts is not null && owner is not null)
+                conflicts.Add(userId, owner);
+        }
+
+        return owned;
     }
 
     /// <summary>

@@ -11,13 +11,18 @@ public sealed class AccountClaims(TimeProvider time)
 
     private readonly Dictionary<(string Recipe, long UserId), (string SourceId, DateTimeOffset At)> _claims = [];
 
-    public bool TryClaim(string recipe, long userId, string sourceId, TimeSpan window)
+    public bool TryClaim(string recipe, long userId, string sourceId, TimeSpan window) =>
+        TryClaim(recipe, userId, sourceId, window, out _);
+
+    public bool TryClaim(string recipe, long userId, string sourceId, TimeSpan window, out string? conflictingSourceId)
     {
         var now = time.GetUtcNow();
+        conflictingSourceId = null;
         lock (_gate)
         {
             if (_claims.TryGetValue((recipe, userId), out var claim) && claim.SourceId != sourceId && now - claim.At < window)
             {
+                conflictingSourceId = claim.SourceId;
                 return false;
             }
 

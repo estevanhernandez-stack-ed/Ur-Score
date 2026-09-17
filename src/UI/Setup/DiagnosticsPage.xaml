@@ -19,6 +19,9 @@
                                        Style="{StaticResource Muted}" Margin="0,4,0,0" />
                             <TextBlock Text="{Binding Misses}" Style="{StaticResource Muted}" Margin="0,4,0,0"
                                        Visibility="{Binding HasMisses, Converter={StaticResource BoolToVisible}}" />
+                            <TextBlock Text="{Binding ClaimConflicts}" Style="{StaticResource Muted}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       AutomationProperties.Name="Last-read claim conflicts"
+                                       Visibility="{Binding HasClaimConflicts, Converter={StaticResource BoolToVisible}}" />
                         </StackPanel>
                     </Border>
                 </DataTemplate>

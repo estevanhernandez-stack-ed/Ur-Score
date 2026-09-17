@@ -89,6 +89,69 @@ public class DiagnosticsModelTests
         Assert.DoesNotContain("someone else's", misses);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ConflictsNameOwnAccountsAndOwnerAsLastReadEvidence(bool running)
+    {
+        var source = ForClan with { Id = "reader" };
+        var owner = ForClan with { Id = "owner", Inputs = new Dictionary<string, string> { ["clan"] = "Other" } };
+        var snapshot = new RecipeSnapshot(WatchState.NoMatches, null, [], [], 2)
+        {
+            RecipeSlug = Clan.Slug,
+            ClaimConflicts = new Dictionary<long, string> { [101] = owner.Id, [999] = "foreign-secret" },
+        };
+        var redactor = new Redactor(() => []);
+        var rows = DiagnosticsModel.Sources([Installed], [source, owner], new Dictionary<string, RecipeSnapshot> { [source.Id] = snapshot },
+            _ => Now.AddMinutes(-10), running, [Main], Now, redactor);
+        var row = rows[0];
+
+        Assert.True(row.HasClaimConflicts);
+        Assert.Contains("were claimed by another source", row.State);
+        Assert.Equal("Last read: estehernandez was skipped for recording and sending here because Other · Pet Sim 99 clan battle points held the account's claim. This does not confirm a successful send or current membership.", row.ClaimConflicts);
+        Assert.False(rows[1].HasClaimConflicts);
+        var copy = DiagnosticsModel.CopyText(Now, [Installed], [source, owner], rows, false, "host", "book", 0, 0, [], redactor);
+        Assert.Contains(row.ClaimConflicts, copy);
+        Assert.DoesNotContain("999", copy);
+        Assert.DoesNotContain("foreign-secret", copy);
+        Assert.Equal("", DiagnosticsModel.ClaimConflictText(Clan, snapshot, [source, owner], []));
+    }
+
+    [Fact]
+    public void ConflictOwnerRemovalAndRecipeChangesDoNotExposeStaleIdentities()
+    {
+        var source = ForClan;
+        var snapshot = new RecipeSnapshot(WatchState.Showing, null, [], [], 1)
+        {
+            RecipeSlug = Clan.Slug,
+            ClaimConflicts = new Dictionary<long, string> { [101] = "removed-owner" },
+        };
+        Assert.Contains("a source no longer configured held", DiagnosticsModel.ClaimConflictText(Clan, snapshot, [source], [Main]));
+        var row = DiagnosticsModel.Sources([Installed], [source], new Dictionary<string, RecipeSnapshot>
+        {
+            [source.Id] = snapshot with { RecipeSlug = "different-recipe" },
+        }, _ => Now, true, [Main], Now, new Redactor(() => [])).Single();
+        Assert.False(row.HasClaimConflicts);
+    }
+
+    [Fact]
+    public void ConflictTextIsRedactedForDisplayAndCopy()
+    {
+        var owner = ForClan with { Id = "owner", Inputs = new Dictionary<string, string> { ["clan"] = FakeKey } };
+        var snapshot = new RecipeSnapshot(WatchState.Showing, null, [], [], 1)
+        {
+            RecipeSlug = Clan.Slug,
+            ClaimConflicts = new Dictionary<long, string> { [101] = owner.Id },
+        };
+        var redactor = new Redactor(() => [FakeKey]);
+        var rows = DiagnosticsModel.Sources([Installed], [ForClan, owner], new Dictionary<string, RecipeSnapshot> { [ForClan.Id] = snapshot },
+            _ => Now, true, [Main], Now, redactor);
+        Assert.Contains(Redactor.Mask, rows[0].ClaimConflicts);
+        Assert.DoesNotContain(FakeKey, rows[0].ClaimConflicts);
+        var copy = DiagnosticsModel.CopyText(Now, [Installed], [ForClan, owner], rows, false, "host", "book", 0, 0, [], redactor);
+        Assert.DoesNotContain(FakeKey, copy);
+    }
+
     [Fact]
     public void CopiedDiagnosticsHideKeysKeepTheLastFortyTrailLinesAndNoBookContent()
     {

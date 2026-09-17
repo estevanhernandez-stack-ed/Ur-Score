@@ -138,9 +138,11 @@ public class RecipeWatchBookTests
         var book = new MemoryBook();
         var engine = new StubEngine(() => Reading(EngineRow(111, 4200)));
 
-        await Watch(engine, host, book, SourceOf(SourceRole.Main, "s-00000001"), claims: claims).RunOnceAsync(CancellationToken.None);
-        await Watch(engine, host, book, SourceOf(SourceRole.Mine, "s-00000002"), claims: claims).RunOnceAsync(CancellationToken.None);
+        var first = await Watch(engine, host, book, SourceOf(SourceRole.Main, "s-00000001"), claims: claims).RunOnceAsync(CancellationToken.None);
+        var second = await Watch(engine, host, book, SourceOf(SourceRole.Mine, "s-00000002"), claims: claims).RunOnceAsync(CancellationToken.None);
 
+        Assert.Empty(first.ClaimConflicts);
+        Assert.Equal(new KeyValuePair<long, string>(111, "s-00000001"), Assert.Single(second.ClaimConflicts));
         Assert.Single(host.Reported);
         Assert.Equal(new[] { "111" }, book.Lines[0].Accounts.Keys.ToArray());
         Assert.Empty(book.Lines[1].Accounts);
@@ -165,9 +167,11 @@ public class RecipeWatchBookTests
         Assert.Single(host.Reported);
 
         time.Advance(TimeSpan.FromSeconds(Clan.EffectiveEverySeconds * 2 + boundaryOffsetSeconds));
-        await Watch(engine, host, secondBook, SourceOf(SourceRole.Mine, "s-00000002"), claims: claims, time: time)
+        var second = await Watch(engine, host, secondBook, SourceOf(SourceRole.Mine, "s-00000002"), claims: claims, time: time)
             .RunOnceAsync(CancellationToken.None);
 
+        if (expired) Assert.Empty(second.ClaimConflicts);
+        else Assert.Equal("s-00000001", second.ClaimConflicts[111]);
         var secondLine = Assert.Single(secondBook.Lines);
         Assert.Equal(expired ? new[] { "111" } : Array.Empty<string>(), secondLine.Accounts.Keys);
         Assert.Equal(expired ? 2 : 1, host.Reported.Count);
@@ -181,6 +185,39 @@ public class RecipeWatchBookTests
             Assert.Empty(Assert.Single(returningBook.Lines).Accounts);
             Assert.Equal(2, host.Reported.Count);
         }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConflictsAreOwnOnlyPerReadAndDoNotNeedAScoreBook(bool attachBook)
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero));
+        var claims = new AccountClaims(time);
+        var window = TimeSpan.FromSeconds(Clan.EffectiveEverySeconds * 2);
+        Assert.True(claims.TryClaim(Clan.Slug, 111, "owner", window));
+        Assert.True(claims.TryClaim(Clan.Slug, 222, "foreign-owner", window));
+        var host = new StubHost(true, AltAccount);
+        var book = new MemoryBook();
+        var reading = Reading(EngineRow(111, 4200), EngineRow(222, 10));
+        var watch = new RecipeWatch(new StubEngine(() => reading), host, new NoKeys(),
+            new ReportPolicy([Points], new HashSet<Guid> { Alt }), Clan, Inputs, new HashSet<string> { "value" },
+            book: attachBook ? book : null, source: SourceOf(SourceRole.Mine, "reader"), recipeText: ClanText, claims: claims, time: time);
+
+        var blocked = await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(new KeyValuePair<long, string>(111, "owner"), Assert.Single(blocked.ClaimConflicts));
+        Assert.Contains("already claimed by another source", blocked.Detail);
+        Assert.Empty(host.Reported);
+
+        time.Advance(window);
+        var transferred = await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Empty(transferred.ClaimConflicts);
+        Assert.Single(host.Reported);
+        Assert.Equal("owner", blocked.ClaimConflicts[111]);
+
+        reading = RecipeReading.Stop(ReadingOutcome.Idle, "No battle running");
+        Assert.Empty((await watch.RunOnceAsync(CancellationToken.None)).ClaimConflicts);
+        if (!attachBook) Assert.Empty(book.Lines);
     }
 
     /// <summary>
