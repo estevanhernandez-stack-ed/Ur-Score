@@ -34,6 +34,8 @@ public static class PanelForms
 
     public const string TopAccountKey = "";
 
+    public const string NoStatKey = "";
+
     private const string ChooseAnother = "Choose another.";
 
     public static string StatKey(string recipe, string stat) => recipe + KeySeparator + stat;
@@ -151,9 +153,15 @@ public static class PanelForms
             if (stats.Count > 0) found.Add((installed, stats));
         }
 
-        return [.. found.SelectMany(f => f.Stats.Select(s => new FormChoice(
+        var choices = found.SelectMany(f => f.Stats.Select(s => new FormChoice(
             StatKey(f.Installed.Recipe.Slug, s.Key),
-            found.Count > 1 ? $"{s.Label} · {f.Installed.Recipe.Name}" : s.Label)))];
+            found.Count > 1 ? $"{s.Label} · {f.Installed.Recipe.Name}" : s.Label))).ToList();
+        if (type == PanelType.PastPeriods && live.FindRecipe(only)?.Recipe is { } recipe && Fits(type, recipe))
+        {
+            choices.Add(new FormChoice(NoStatKey, "Don't show your best account"));
+        }
+
+        return choices;
     }
 
     /// <summary>"Your top account", then your accounts by name. Never anyone else's.</summary>
@@ -209,11 +217,11 @@ public static class PanelForms
     }
 
     /// <summary>A saved panel's settings as form values, for ⋯ settings.</summary>
-    public static FormValues From(PanelSettings settings) => new(
+    public static FormValues From(PanelSettings settings, PanelType? type = null) => new(
         settings.SourceId,
         settings.SourceIds,
         settings.ToSourceId,
-        settings.Stat is { } stat && settings.Recipe.Length > 0 ? StatKey(settings.Recipe, stat) : null,
+        settings.Stat is { } stat && settings.Recipe.Length > 0 ? StatKey(settings.Recipe, stat) : type == PanelType.PastPeriods ? NoStatKey : null,
         settings.UserId is { } id ? id.ToString(CultureInfo.InvariantCulture) : TopAccountKey);
 
     /// <summary>
@@ -283,6 +291,13 @@ public static class PanelForms
 
         return null;
     }
+
+    public static string? Warning(PanelType type, PanelSettings settings, LiveBoard live) =>
+        type == PanelType.ProfileStat
+        && live.FindSource(settings.SourceId) is { Enabled: false } source
+        && source.Recipe == settings.Recipe
+            ? PanelText.SwitchedOff(live.SourceName(source))
+            : null;
 
     /// <summary>The saved recipe's words, or the first recipe with inputs when none is picked yet.</summary>
     internal static (string Group, string Groups) GroupWords(LiveBoard live, string? recipe = null) =>

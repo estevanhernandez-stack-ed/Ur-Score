@@ -42,7 +42,7 @@ public partial class PanelSettingsWindow : Window
         _type = type;
         _live = live;
         _current = current;
-        _saved = current is null ? null : PanelForms.From(current);
+        _saved = current is null ? null : PanelForms.From(current, type);
         _adding = adding;
         _fields = PanelForms.Fields(type, adding);
 
@@ -152,7 +152,11 @@ public partial class PanelSettingsWindow : Window
     /// <summary>Shows what's wrong with the form as it stands, and returns it.</summary>
     private string? Check()
     {
-        var problem = PanelForms.Problem(_type, PanelForms.Build(_type, Values(), _live), _live, _current?.Recipe);
+        var settings = PanelForms.Build(_type, Values(), _live);
+        var problem = PanelForms.Problem(_type, settings, _live, _current?.Recipe);
+        var warning = problem is null ? PanelForms.Warning(_type, settings, _live) : null;
+        SettingsWarningLine.Text = warning ?? "";
+        SettingsWarningLine.Visibility = warning is null ? Visibility.Collapsed : Visibility.Visible;
         SettingsProblemLine.Text = problem ?? "";
         SettingsProblemLine.Visibility = problem is null ? Visibility.Collapsed : Visibility.Visible;
         return problem;

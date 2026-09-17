@@ -86,6 +86,34 @@ public class PanelFormsTests
         Assert.Null(PanelForms.Build(PanelType.AccountCard, saved with { Account = null }, live).UserId);
     }
 
+    [Theory]
+    [InlineData(true, true, false, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, false, false, true)]
+    [InlineData(false, true, true, true)]
+    public void ProfileSourceWarningExplainsOffWithoutChangingThePickOrBlockingSave(
+        bool firstEnabled, bool secondEnabled, bool savedFirst, bool warns)
+    {
+        var first = ProfileSource with { Enabled = firstEnabled };
+        var second = ProfileSource with { Id = "s-00000019", Enabled = secondEnabled };
+        var live = Live([first, second], [Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>());
+        var values = new FormValues(Source: savedFirst ? first.Id : null, Stat: PanelForms.StatKey(Profile.Slug, "diamonds"));
+
+        var settings = PanelForms.Build(PanelType.ProfileStat, values, live);
+
+        Assert.Equal(savedFirst || firstEnabled || !secondEnabled ? first.Id : second.Id, settings.SourceId);
+        Assert.Equal(warns ? $"{live.SourceName(first)} is switched off, so it isn't read." : null,
+            PanelForms.Warning(PanelType.ProfileStat, settings, live));
+        Assert.Null(PanelForms.Problem(PanelType.ProfileStat, settings, live));
+        Assert.Equal(new[] { firstEnabled, secondEnabled }, live.Sources.Select(source => source.Enabled));
+        Assert.Contains(PanelField.Source, PanelForms.Fields(PanelType.ProfileStat, true, live, values));
+        var choices = PanelForms.SourceChoices(PanelType.ProfileStat, PanelField.Source, live, values);
+        var pick = PanelForms.Pick(choices, settings.SourceId, shown: true, saved: values.Source);
+        Assert.Equal(settings.SourceId, pick.Selected!.Key);
+        if (warns) Assert.EndsWith("off", pick.Selected.Label);
+        Assert.Null(PanelForms.Warning(PanelType.ProfileStat, settings with { SourceId = "removed" }, live));
+    }
+
     [Fact]
     public void SourcesAreOfferedMainFirstAndOnlyWhereThePanelFits()
     {
@@ -131,7 +159,7 @@ public class PanelFormsTests
             PanelForms.StatChoices(PanelType.MyAccounts, live, new FormValues(), null).Select(c => (c.Key, c.Label)).ToArray());
         Assert.Equal(new[] { "Diamonds", "Eggs hatched" },
             PanelForms.StatChoices(PanelType.ProfileStat, live, new FormValues(), null).Select(c => c.Label).ToArray());
-        Assert.Equal(new[] { ClanStat }, Keys(PanelForms.StatChoices(PanelType.PastPeriods, live, new FormValues(Source: MainClan.Id), null)));
+        Assert.Equal(new[] { ClanStat, PanelForms.NoStatKey }, Keys(PanelForms.StatChoices(PanelType.PastPeriods, live, new FormValues(Source: MainClan.Id), null)));
         Assert.Empty(PanelForms.StatChoices(PanelType.PromotionCheck, live, new FormValues(), null));
         Assert.Contains(PanelForms.StatKey(Profile.Slug, "rank"),
             Keys(PanelForms.StatChoices(PanelType.ProfileStat, live, new FormValues(), new PanelSettings(Profile.Slug, Stat: "rank"))));
@@ -167,6 +195,47 @@ public class PanelFormsTests
         Assert.Equal(new FormValues(Source: MainClan.Id, Stat: ClanStat), PanelForms.Defaults(PanelType.PastPeriods, live));
         Assert.Equal(new FormValues(Source: TopSource.Id), PanelForms.Defaults(PanelType.Top, live));
         Assert.Equal(new FormValues(Stat: PanelForms.StatKey(Profile.Slug, "diamonds")), PanelForms.Defaults(PanelType.ProfileStat, live));
+    }
+
+    [Fact]
+    public void PastPeriodsCanExplicitlyDropARemovedStatWithoutTickingAnother()
+    {
+        var live = Live([MainClan], [Installed(Clan)], new Dictionary<string, RecipeSnapshot>());
+        var current = new PanelSettings(Clan.Slug, SourceId: MainClan.Id, Stat: "removed-stat");
+        var saved = PanelForms.From(current, PanelType.PastPeriods);
+        var choices = PanelForms.StatChoices(PanelType.PastPeriods, live, saved, current);
+        var none = Assert.Single(choices);
+        Assert.Equal(new FormChoice(PanelForms.NoStatKey, "Don't show your best account"), none);
+        var held = PanelForms.Pick(choices, saved.Stat, shown: true, saved: saved.Stat);
+        Assert.Equal(saved.Stat, held.Held);
+        Assert.Null(held.Selected);
+        Assert.Equal("This panel's stat was removed. Choose another.", PanelForms.Problem(PanelType.PastPeriods, current, live));
+
+        var settings = PanelForms.Build(PanelType.PastPeriods, saved with { Stat = none.Key }, live);
+
+        Assert.Equal(new PanelSettings(Clan.Slug, SourceId: MainClan.Id), settings);
+        Assert.Null(PanelForms.Problem(PanelType.PastPeriods, settings, live));
+        Assert.Empty(live.Installed[0].State.TrackedStats(Clan));
+        Assert.Equal("removed-stat", current.Stat);
+        var reopened = PanelForms.From(settings, PanelType.PastPeriods);
+        Assert.Equal(none, PanelForms.Pick(choices, reopened.Stat, shown: true, saved: reopened.Stat).Selected);
+        Assert.Equal(settings, PanelForms.Build(PanelType.PastPeriods, reopened, live));
+    }
+
+    [Fact]
+    public void PastPeriodsNoStatChoiceIsLastAndSurvivesNewlyTickedStats()
+    {
+        var live = Everything();
+        var current = new PanelSettings(Clan.Slug, SourceId: MainClan.Id);
+        var saved = PanelForms.From(current, PanelType.PastPeriods);
+        var choices = PanelForms.StatChoices(PanelType.PastPeriods, live, saved, current);
+
+        Assert.Equal(ClanStat, choices[0].Key);
+        Assert.Equal(PanelForms.NoStatKey, choices[^1].Key);
+        Assert.Equal(ClanStat, PanelForms.Defaults(PanelType.PastPeriods, live).Stat);
+        Assert.Equal(choices[^1], PanelForms.Pick(choices, saved.Stat, shown: true, saved: saved.Stat).Selected);
+        Assert.Equal(current, PanelForms.Build(PanelType.PastPeriods, saved, live));
+        Assert.DoesNotContain(PanelForms.StatChoices(PanelType.MyAccounts, live, new FormValues(), null), choice => choice.Key == PanelForms.NoStatKey);
     }
 
     [Theory]
