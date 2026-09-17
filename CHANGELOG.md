@@ -3,6 +3,35 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Diagnostics and copied diagnostics explain last-read account claim conflicts by own-account and
+  source name, without implying current membership or successful sending. Claim rules are unchanged.
+- Panel tooltips use the live application theme rather than Windows chrome.
+- My accounts exposes last-read SENT status with the account name to UI Automation.
+- An orphaned alert failure uses the theme's failure color instead of ordinary body text.
+- Setup > Your accounts uses a compact gap between its explanatory notes.
+- The panel drag grip uses drawn dots rather than a font-dependent glyph and exposes a named
+  automation peer. Existing keyboard move controls remain available.
+- Profile stat settings explain when the selected source is switched off without blocking Save.
+- Past periods can explicitly omit the best-account stat to recover from a removed stat, while
+  retaining headline history and the existing saved format.
+- Extreme hand-edited alert thresholds stay compact and show the editing limit when Change opens;
+  saving requires an explicit valid replacement.
+- Empty source-following starters cannot be duplicated; populated starters and user-created boards
+  retain Duplicate.
+- Panel slots and pop-out windows wait for successful score-book loading. Failed loads can retry
+  without clearing saved placement, and a late load cannot resume startup after shutdown begins.
+- External pop-out closes preserve placement for next start, regardless of main-window close order.
+  Return to the board, Bring back, and Alt+F4 still return the panel explicitly.
+
+### Documentation
+
+- Added board editing, gallery, tab-menu, pop-out, and saved-layout guidance; restored the missing
+  0.3.0 and 0.3.1 release summaries below.
+
 ## 0.3.3 - 2026-09-16
 
 ### Added
@@ -18,7 +47,7 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 
 ### Changed
 
-- **Every popup is Ur Score's own.** The seven remaining stock Windows message boxes are gone.
+- **Confirmation dialogs are Ur Score's own.** The seven remaining stock Windows message boxes are gone.
   Three questions that need asking - delete a board, remove a recipe, add a clan past the limit -
   share one themed confirmation whose safe answer is the default. The two that were only reporting a
   failure say it where you are looking instead: a board that would not save keeps its reason on the
@@ -79,7 +108,28 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 
 - `written-rules.json` is no longer written.
 
-## Unreleased
+## 0.3.1
+
+### Added
+
+- Battle and Alts starter tabs follow their sources independently until each tab is edited.
+- An accounts-table panel shows your own accounts across the selected stats, with sorting,
+  totals, and a session-only selected account.
+- Recipe values can describe durations, dates, counted entries, suggested Show choices, and
+  sections used by the account card.
+
+## 0.3.0
+
+### Added
+
+- Saved boards as tabs, with new-board, rename, duplicate, and delete actions.
+- A panel gallery and settings forms for choosing each panel's source, stat, and accounts.
+- Draft board editing with drag reordering, keyboard move controls, sizes, Tall, and removal.
+- Always-on-top panel pop-outs that update live and restore their saved placement on restart.
+- `boards.json` stores board layouts, panel settings, and pop-out placement separately from the
+  score book. Account selections in layouts are restricted to your own accounts.
+
+## 0.2.0
 
 ### Added
 

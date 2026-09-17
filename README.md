@@ -126,6 +126,35 @@ a recipe reads.
    account starts on; untick one and it keeps being read, kept and shown, but stops sending — and
    the choice survives a restart.
 
+### Boards and panels
+
+The tabs across the top are separate boards. Starter tabs follow your sources until you change
+that tab; editing one does not freeze the others. Use **+ Board** for a board of your own. The
+**...** menu beside the tabs offers **Rename**, **Duplicate**, and **Delete** for the current board;
+right-clicking its tab or pressing **Shift+F10** opens the same menu.
+
+**+ Add panel** opens the gallery. Choose a panel, then pick the source, stat, or accounts its form
+asks for. Each panel's **Settings** button changes those choices later. A panel whose source or
+stat was removed says so and offers **Choose another**.
+
+**Edit board** opens a draft: drag the grip or use **Move earlier** and **Move later** to reorder,
+choose a size, tick **Tall**, or remove a panel. **Done** saves the draft. Panels currently flow in
+reading order; resizing can move the panels after them. Free placement and corner resizing are
+not available yet.
+
+**Pop out** puts a panel in its own always-on-top window. It keeps updating with the board, and
+its saved position is restored on the next start. Use the pop-out's **Return to the board** button
+or **Bring back** on its board slot to return it; **Alt+F4** on that pop-out also returns it.
+Closing Ur Score keeps pop-outs for the next start. A direct external close preserves their saved
+placement and does not reopen them during that session. Resizing a pop-out does not resize its
+board tile. Panel slots and pop-out windows wait until the score book loads successfully; a
+failed load offers **Try again** without clearing their saved placement.
+
+Boards, panel choices, and pop-out placement are stored in
+`%LOCALAPPDATA%\626labs.ur-score\boards.json`. The score book is separate: removing a panel or a
+board does not delete your recorded history. **Duplicate** is disabled for an empty starter that
+still follows its sources. Populated starters and user-created boards can be duplicated normally.
+
 ### Actually getting an alert
 
 The board and the reporting are independent of whether RoRoRo will ever alert on what's sent. For
