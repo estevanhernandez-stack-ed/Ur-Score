@@ -76,6 +76,35 @@
                 <Setter Property="Padding" Value="12" />
             </Style>
 
+            <Style TargetType="ToolTip">
+                <Setter Property="Background" Value="{DynamicResource RowBgBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource WhiteBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="8,5" />
+                <Setter Property="FontFamily" Value="{StaticResource BodyFont}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="MaxWidth" Value="320" />
+                <Setter Property="HasDropShadow" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToolTip">
+                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}"
+                                    CornerRadius="4" SnapsToDevicePixels="True">
+                                <ContentPresenter ContentSource="Content">
+                                    <ContentPresenter.ContentTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ContentPresenter.ContentTemplate>
+                                </ContentPresenter>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- Buttons. The fill and text never change on hover or press; a sheen in the text colour
                  lies over them instead, so a button reads the same in every theme. -->
             <Style TargetType="Button">

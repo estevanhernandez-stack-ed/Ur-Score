@@ -5,7 +5,7 @@
     <StackPanel MaxWidth="900" HorizontalAlignment="Left">
         <TextBlock Text="Your accounts" Style="{StaticResource Heading}" />
         <TextBlock x:Name="ListedLine" Style="{StaticResource Muted}" Margin="0,4,0,4" />
-        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
+        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,4"
                    Text="Send reports an account's sent stats to RoRoRo. Reading and keeping your scores happen either way." />
         <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
                    Text="Each picture comes from Roblox: Ur Score asks Roblox's picture service for your own accounts' pictures and keeps them on this PC. No other player's id is ever sent for a picture, and the leaderboard shows other members by name only." />

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace UrScore.Tests;
 
@@ -67,6 +68,66 @@ public partial class ThemeFenceTests
 
         Assert.True(unpainted.Count == 0,
             $"These brushes are used but never repainted from RoRoRo's palette: {string.Join(", ", unpainted)}.");
+    }
+
+    [Theory]
+    [InlineData("Drag to move")]
+    [InlineData("Return to the board")]
+    public void ToolTipsUseTheSharedTemplateAndFollowPaletteReplacements(string label)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+                XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+                var app = XDocument.Load(Path.Combine(RepoRoot(), "src", "App.xaml"));
+                var style = Assert.Single(app.Descendants(presentation + "Style"),
+                    element => (string?)element.Attribute("TargetType") == "ToolTip");
+                Assert.Null(style.Attribute(xaml + "Key"));
+                var dictionary = new XElement(presentation + "ResourceDictionary",
+                    new XAttribute(XNamespace.Xmlns + "x", xaml),
+                    app.Descendants(presentation + "SolidColorBrush").Select(element => new XElement(element)),
+                    new XElement(app.Descendants(presentation + "FontFamily").Single(element => (string?)element.Attribute(xaml + "Key") == "BodyFont")),
+                    new XElement(style));
+                var resources = (System.Windows.ResourceDictionary)System.Windows.Markup.XamlReader.Parse(dictionary.ToString());
+                var tooltip = new System.Windows.Controls.ToolTip { Content = label };
+                tooltip.Resources.MergedDictionaries.Add(resources);
+                Assert.True(tooltip.ApplyTemplate());
+                tooltip.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+                tooltip.Arrange(new System.Windows.Rect(tooltip.DesiredSize));
+                var border = Assert.IsType<System.Windows.Controls.Border>(System.Windows.Media.VisualTreeHelper.GetChild(tooltip, 0));
+                var presenter = Assert.IsType<System.Windows.Controls.ContentPresenter>(border.Child);
+                presenter.ApplyTemplate();
+                var text = Assert.IsType<System.Windows.Controls.TextBlock>(System.Windows.Media.VisualTreeHelper.GetChild(presenter, 0));
+                Assert.Equal(label, text.Text);
+                Assert.Equal(System.Windows.TextWrapping.Wrap, text.TextWrapping);
+                Assert.InRange(tooltip.ActualWidth, 1, 320);
+                Assert.Equal(new System.Windows.Thickness(1), border.BorderThickness);
+
+                foreach (var shade in new[] { System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White })
+                {
+                    var background = new System.Windows.Media.SolidColorBrush(shade);
+                    var foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Cyan);
+                    var edge = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Magenta);
+                    resources["RowBgBrush"] = background;
+                    resources["WhiteBrush"] = foreground;
+                    resources["EdgeBrush"] = edge;
+                    Assert.Same(background, border.Background);
+                    Assert.Same(foreground, text.Foreground);
+                    Assert.Same(edge, border.BorderBrush);
+                }
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     [GeneratedRegex(@"""(\w+Brush)""")]

@@ -57,7 +57,18 @@
                                                                     </Style>
                                                                 </Ellipse.Style>
                                                             </Ellipse>
-                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource RowCell}" />
+                                                            <TextBlock Text="{Binding Name}">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource RowCell}">
+                                                                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Sent}" Value="True">
+                                                                                <Setter Property="AutomationProperties.Name" Value="{Binding Name, StringFormat='{}{0}: sent to RoRoRo in the last read'}" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
                                                         </DockPanel>
                                                         <!-- Indented past the avatar slot and the sent dot (28 + 12 px, A26), so the
                                                              reason lines up under the name it is about. -->
