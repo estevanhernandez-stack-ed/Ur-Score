@@ -167,7 +167,12 @@ public static class TryCommand
 
     private sealed record StatSummary(string Key, int Found, int Missed, double? Smallest, double? Median, double? Largest);
 
-    private sealed record AccountSummary(long UserId, IReadOnlyDictionary<string, double> Values, IReadOnlyDictionary<string, int> Rank, int? Of);
+    /// <summary>
+    /// One account asked about: its values, its rank per stat, the row count (<c>Of</c>, as the book's <c>of</c>) and, per
+    /// stat, how many rows that rank was counted among (<c>Ranked</c>, as the book's <c>ranked</c>; backlog S1-6.9).
+    /// </summary>
+    private sealed record AccountSummary(
+        long UserId, IReadOnlyDictionary<string, double> Values, IReadOnlyDictionary<string, int> Rank, int? Of, IReadOnlyDictionary<string, int> Ranked);
 
     private sealed record TryReport(
         string Recipe, IReadOnlyList<string> Contacts, string Outcome, string? Detail, int RowsSeen, string? Period, string? PeriodEnds,
@@ -190,8 +195,9 @@ public static class TryCommand
             .Select(id => reading.Rows.FirstOrDefault(r => r.UserId == id) is { } row
                 ? new AccountSummary(id, row.Values,
                     ranks.Where(r => r.Value.ContainsKey(id)).ToDictionary(r => r.Key, r => r.Value[id], StringComparer.Ordinal),
-                    recipe.LastStep.PerAccount ? null : reading.Rows.Count)
-                : new AccountSummary(id, new Dictionary<string, double>(), new Dictionary<string, int>(), null))
+                    recipe.LastStep.PerAccount ? null : reading.Rows.Count,
+                    ranks.Where(r => r.Value.ContainsKey(id)).ToDictionary(r => r.Key, r => r.Value.Count, StringComparer.Ordinal))
+                : new AccountSummary(id, new Dictionary<string, double>(), new Dictionary<string, int>(), null, new Dictionary<string, int>()))
             .ToList();
 
         return new TryReport(
@@ -232,7 +238,8 @@ public static class TryCommand
         foreach (var account in report.Accounts)
         {
             var values = account.Values.Count == 0 ? "not in the results" : string.Join(", ", account.Values.Select(v => $"{v.Key}={N(v.Value)}"));
-            var rank = account.Rank.Count == 0 || account.Of is null ? "" : $", rank {string.Join(", ", account.Rank.Select(r => r.Value))} of {account.Of}";
+            // Each rank of its own field: "rank 1 of 2" counts the rows that had that stat, not every row read (backlog S1-6.9).
+            var rank = account.Rank.Count == 0 || account.Of is null ? "" : $", rank {string.Join(", ", account.Rank.Select(r => $"{r.Value} of {account.Ranked[r.Key]}"))}";
             output.WriteLine($"  {account.UserId}: {values}{rank}");
         }
 

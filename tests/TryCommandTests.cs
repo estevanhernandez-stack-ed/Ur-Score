@@ -62,6 +62,29 @@ public class TryCommandTests
         Assert.DoesNotContain("7001001", output);
     }
 
+    /// <summary>
+    /// Backlog S1-6.9: a rank is counted among the rows that have the stat, so "of" counts those rows too. A contributor with
+    /// no points was counted, printing "rank 1 of 3" for a place among two.
+    /// </summary>
+    [Fact]
+    public async Task ARankIsOfTheRowsThatHaveTheStat()
+    {
+        using var dir = TempDir.Create("urscore-try");
+        var clan = new RouteTransport(
+            ("https://ps99.biggamesapi.io/api/activeClanBattle", Battle),
+            ("https://ps99.biggamesapi.io/api/clan/", """
+                { "status": "ok", "data": { "Battles": { "B": { "Place": 3, "Points": 999, "PointContributions": [
+                    { "UserID": 1647274201, "Points": 4200 }, { "UserID": 7002002, "Points": 3100 }, { "UserID": 7003003 } ] } } } }
+                """));
+
+        var (_, output) = await Run(clan, "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--account", "1647274201");
+
+        Assert.Contains("Rows seen: 3", output);
+        Assert.Contains("value: found in 2, missed in 1", output);
+        Assert.Contains("1647274201: value=4200, rank 1 of 2", output);
+        Assert.DoesNotContain("7003003", output);
+    }
+
     [Fact]
     public async Task JsonOutputParsesAndCarriesNoOtherPlayer()
     {

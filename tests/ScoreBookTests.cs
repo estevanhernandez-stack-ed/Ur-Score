@@ -37,6 +37,8 @@ public class ScoreBookTests
 
         var back = BookJson.TryParse(json)!;
         Assert.Equal((T, "K0i2", 12418220d, 48), (back.T, back.Inputs["clan"], back.Accounts["1647274201"].V["value"], back.Accounts["1647274201"].Of!.Value));
+        // A line written before a rank kept its own field (backlog S1-6.9) has none, and reads as having none.
+        Assert.Null(back.Accounts["1647274201"].Ranked);
     }
 
     [Theory]

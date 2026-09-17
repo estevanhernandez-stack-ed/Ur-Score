@@ -14,7 +14,8 @@ public sealed record BookAccount(
     IReadOnlyDictionary<string, int>? Rank = null,
     int? Of = null,
     DateTimeOffset? AsOf = null,
-    bool? Stale = null);
+    bool? Stale = null,
+    IReadOnlyDictionary<string, int>? Ranked = null);
 
 /// <summary>One line of the score book (score book spec §5.2, §5.3).</summary>
 public sealed record BookLine(

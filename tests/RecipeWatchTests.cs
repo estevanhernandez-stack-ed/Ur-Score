@@ -201,6 +201,46 @@ public class RecipeWatchTests
         Assert.Equal(new[] { 200d }, host.Reported.Select(r => r.Value).ToArray());
     }
 
+    /// <summary>
+    /// Backlog S1-F.5. The board's sent dot read the session's remembered sends, so an account sent at the first read kept
+    /// its dot through reads with RoRoRo closed or its Send switched off. A snapshot now names what its own read sent, and
+    /// nothing else.
+    /// </summary>
+    [Fact]
+    public async Task AReadNamesWhatItSentThisTimeAndNothingSentBefore()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var engine = new FakeEngine(() => Reading("battle=A", Row(111, 4200)));
+        var watch = Watch(engine, host);
+
+        var sent = await watch.RunOnceAsync(CancellationToken.None);
+
+        host.Reachable = false;
+        var closed = await watch.RunOnceAsync(CancellationToken.None);
+
+        host.Reachable = true;
+        watch.UpdatePolicy([PointsStat], new HashSet<Guid>());
+        var refused = await watch.RunOnceAsync(CancellationToken.None);
+
+        engine.Read = () => RecipeReading.Stop(ReadingOutcome.Idle, "No clan battle running");
+        var stopped = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { (Mine, "value") }, sent.SentThisRead.ToArray());
+
+        // RoRoRo closed: the read has rows, and the session still remembers the earlier send, which is what the dot used to read.
+        Assert.Equal(WatchState.HostDown, closed.State);
+        Assert.NotNull(closed.Rows);
+        Assert.Equal(4200, Assert.Single(closed.Accounts).LastValues["value"]);
+        Assert.Empty(closed.SentThisRead);
+
+        // The account taken off the send list: read, refused, not sent.
+        Assert.NotNull(refused.Rows);
+        Assert.Single(host.Reported);
+        Assert.Empty(refused.SentThisRead);
+
+        Assert.Empty(stopped.SentThisRead);
+    }
+
     [Fact]
     public async Task DecliningTheAccountsCapabilityIsRejectedByName()
     {

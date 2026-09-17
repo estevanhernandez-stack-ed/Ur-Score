@@ -64,7 +64,11 @@ public static class LineBuilder
             Inputs(context.Source), new BookPeriod(past.Value), Headline(past.Headline, OtherIds(past.Rows, map)), stats, accounts);
     }
 
-    /// <summary>The user's rows with at least one tracked finite value, with competition ranks among every row on list recipes.</summary>
+    /// <summary>
+    /// The user's rows with at least one tracked finite value, with competition ranks on list recipes. <c>of</c> is the row
+    /// count (spec §5.2); <c>ranked</c> is, per stat, how many rows had a value and so were in that rank's field (backlog
+    /// S1-6.9). A count, never an id or a value of anyone else's.
+    /// </summary>
     private static IEnumerable<(string Id, BookAccount Account)> Accounts(
         IReadOnlyList<RecipeRow> rows, IReadOnlyDictionary<long, Guid> map, IReadOnlySet<string> tracked,
         IReadOnlyList<string> stats, bool list, IReadOnlyCollection<long>? onlyUsers)
@@ -79,13 +83,18 @@ public static class LineBuilder
             if (values.Count == 0) continue;
 
             Dictionary<string, int>? rank = null;
+            Dictionary<string, int>? ranked = null;
             if (ranks is not null)
             {
-                rank = ranks.Where(r => r.Value.ContainsKey(row.UserId)).ToDictionary(r => r.Key, r => r.Value[row.UserId], StringComparer.Ordinal);
-                if (rank.Count == 0) rank = null;
+                var placed = ranks.Where(r => r.Value.ContainsKey(row.UserId)).ToList();
+                if (placed.Count > 0)
+                {
+                    rank = placed.ToDictionary(r => r.Key, r => r.Value[row.UserId], StringComparer.Ordinal);
+                    ranked = placed.ToDictionary(r => r.Key, r => r.Value.Count, StringComparer.Ordinal);
+                }
             }
 
-            yield return (Id(row.UserId), new BookAccount(values, rank, list ? rows.Count : null));
+            yield return (Id(row.UserId), new BookAccount(values, rank, list ? rows.Count : null, Ranked: ranked));
         }
     }
 

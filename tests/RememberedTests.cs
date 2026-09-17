@@ -24,10 +24,11 @@ public class RememberedTests
         Read(MainClan, at, "AutumnBattle", new Dictionary<string, double> { ["clan-points"] = 14_020_550 }, "value", rows);
 
     /// <summary>
-    /// A kept reading carrying what the book keeps beside each value: the account's place among EVERY row the source
-    /// read, and how many rows that was. A null place is an account the reading kept no place for.
+    /// A kept reading carrying what the book keeps beside each value: the account's place among the rows the source read,
+    /// how many rows that was (<c>of</c>), and how many of them had the stat the place was counted among (<c>ranked</c>, null
+    /// for a line written before the book kept it). A null place is an account the reading kept no place for.
     /// </summary>
-    private static BookLine Ranked(DateTimeOffset at, int of, params (long UserId, double Value, int? Rank)[] rows) =>
+    private static BookLine Ranked(DateTimeOffset at, int of, int? ranked, params (long UserId, double Value, int? Rank)[] rows) =>
         Kept(at, [.. rows.Select(r => (r.UserId, r.Value))]) with
         {
             Accounts = rows.ToDictionary(
@@ -35,7 +36,8 @@ public class RememberedTests
                 r => new BookAccount(
                     new Dictionary<string, double> { ["value"] = r.Value },
                     r.Rank is { } rank ? new Dictionary<string, int> { ["value"] = rank } : null,
-                    of),
+                    of,
+                    Ranked: r.Rank is not null && ranked is { } field ? new Dictionary<string, int> { ["value"] = field } : null),
                 StringComparer.Ordinal),
         };
 
@@ -123,9 +125,15 @@ public class RememberedTests
     [Fact]
     public void ThePlaceTheReadingItselfWorkedOutComesBackWithTheRowsAndNothingIsWorkedOutHere()
     {
-        var kept = Remembered.From(Ranked(Now.AddHours(-3), of: 50, (Main.RobloxUserId, 4200, 7), (AltOne.RobloxUserId, 900, null)), MainClan, Clan, Yours)!;
+        // Fifty rows read, 49 of them with points: the place was counted among the 49 (backlog S1-6.9).
+        var kept = Remembered.From(Ranked(Now.AddHours(-3), of: 50, ranked: 49, (Main.RobloxUserId, 4200, 7), (AltOne.RobloxUserId, 900, null)), MainClan, Clan, Yours)!;
 
-        Assert.Equal(new RankInGroup(7, 50), kept.RememberedRanks[(Main.RobloxUserId, "value")]);
+        Assert.Equal(new RankInGroup(7, 49), kept.RememberedRanks[(Main.RobloxUserId, "value")]);
+
+        // A line kept before the book knew that field still has a true place. Its "of" counted rows with no points too, so it
+        // is not the field and isn't passed off as one: the place comes back with no count.
+        var older = Remembered.From(Ranked(Now.AddHours(-3), of: 50, ranked: null, (Main.RobloxUserId, 4200, 7)), MainClan, Clan, Yours)!;
+        Assert.Equal(new RankInGroup(7, null), older.RememberedRanks[(Main.RobloxUserId, "value")]);
 
         // An account the reading kept no place for gets none invented for it, and neither does a stat.
         Assert.DoesNotContain((AltOne.RobloxUserId, "value"), kept.RememberedRanks.Keys);
@@ -142,7 +150,7 @@ public class RememberedTests
     public void NeitherMyAccountsNorTheAccountCardEverWorksOutAPlaceFromARememberedSnapshotsOwnRows()
     {
         // Two of your accounts, kept out of the fifty rows the reading saw: Main placed 7th, AltOne's place was never kept.
-        var kept = Remembered.From(Ranked(Now.AddHours(-3), of: 50, (Main.RobloxUserId, 4200, 7), (AltOne.RobloxUserId, 900, null)), MainClan, Clan, Yours)!;
+        var kept = Remembered.From(Ranked(Now.AddHours(-3), of: 50, ranked: 50, (Main.RobloxUserId, 4200, 7), (AltOne.RobloxUserId, 900, null)), MainClan, Clan, Yours)!;
         var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
             remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
         var settings = new PanelSettings(Clan.Slug, MainClan.Id, Stat: "value");
@@ -161,6 +169,34 @@ public class RememberedTests
         Assert.DoesNotContain(
             mine.Select(r => r.InGroup).Concat(card.Facts.Concat(other.Facts).Select(f => f.Value)),
             text => text.EndsWith(" of 2", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Backlog S1-6.9, before the first read. The book used to hand back its row count as the field, so the board opened on
+    /// "#7 of 50" and the first read, counting only members with points, said "#7 of 49" of the same clan. The kept field is
+    /// shown when the line has it; a line from before it shows the place alone, because the row count isn't the field.
+    /// </summary>
+    [Fact]
+    public void ARememberedPlaceCountsTheSameFieldTheLiveReadDoesOrNoneAtAll()
+    {
+        var settings = new PanelSettings(Clan.Slug, MainClan.Id, Stat: "value");
+        (string Accounts, string Card) Shown(BookLine line)
+        {
+            var kept = Remembered.From(line, MainClan, Clan, Yours)!;
+            var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>(),
+                remembered: new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = kept });
+            return (
+                PanelModels.MyAccounts(live, Reader(), settings).Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId).InGroup,
+                PanelModels.AccountCard(live, Reader(), settings with { UserId = Main.RobloxUserId }).Facts.Single(f => f.Label == "In clan").Value);
+        }
+
+        Assert.Equal(("#7 of 49", "#7 of 49"), Shown(Ranked(Now.AddHours(-3), of: 50, ranked: 49, (Main.RobloxUserId, 4200, 7))));
+        Assert.Equal(("#7", "#7"), Shown(Ranked(Now.AddHours(-3), of: 50, ranked: null, (Main.RobloxUserId, 4200, 7))));
+
+        // And the live read of those same fifty rows, one with no points, says the same as the kept field.
+        IReadOnlyList<RecipeRow> rows = [Row(Main.RobloxUserId, 4200), .. Enumerable.Range(1, 48).Select(i => Row(9_000 + i, i < 7 ? 10_000 + i : 1)), Row(9_999, null)];
+        var read = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot> { [MainClan.Id] = Snapshot(MainClan.Id, rows) });
+        Assert.Equal("#7 of 49", PanelModels.MyAccounts(read, Reader(), settings).Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId).InGroup);
     }
 
     /// <summary>

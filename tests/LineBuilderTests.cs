@@ -51,6 +51,40 @@ public class LineBuilderTests
         }
     }
 
+    /// <summary>
+    /// Backlog S1-6.9. A rank is counted among the rows that have that stat, so "of how many" is that count too, per stat. The
+    /// line's <c>of</c> stays the row count spec §5.2 defines; <c>ranked</c> is the field each rank was counted in. Nothing
+    /// in it names another player: it is a count.
+    /// </summary>
+    [Fact]
+    public void EachRankKeepsHowManyRowsItWasCountedAmongForItsOwnStat()
+    {
+        // Fifty rows. One has no points; only ten have eggs.
+        var rows = Enumerable.Range(1, 50)
+            .Select(i => new RecipeRow(7_000_000 + i, new Dictionary<string, double>
+                {
+                    ["value"] = i * 100,
+                    ["eggs"] = i,
+                }.Where(kv => !(kv.Key == "value" && i == 3) && !(kv.Key == "eggs" && i <= 40)).ToDictionary(kv => kv.Key, kv => kv.Value)))
+            .ToList();
+        var map = new Dictionary<long, Guid> { [7_000_050] = A, [7_000_001] = B };
+
+        var line = LineBuilder.Reading(Context(Clan), ClanReading(rows), map, new HashSet<string> { "value", "eggs" })!;
+        var json = BookJson.Serialize(line);
+
+        var top = line.Accounts["7000050"];
+        Assert.Equal((1, 1, 50), (top.Rank!["value"], top.Rank["eggs"], top.Of!.Value));
+        Assert.Equal(new Dictionary<string, int> { ["value"] = 49, ["eggs"] = 10 }, top.Ranked);
+
+        // An account with no eggs has no eggs rank, and so no field for one either.
+        var low = line.Accounts["7000001"];
+        Assert.Equal(new Dictionary<string, int> { ["value"] = 49 }, low.Ranked);
+        Assert.Equal(new[] { "value" }, low.Rank!.Keys.ToArray());
+
+        Assert.Contains("\"of\":50,\"ranked\":{", json, StringComparison.Ordinal);
+        Assert.Equal(new Dictionary<string, int> { ["value"] = 49, ["eggs"] = 10 }, BookJson.TryParse(json)!.Accounts["7000050"].Ranked);
+    }
+
     [Fact]
     public void RanksAreCompetitionStyle()
     {
@@ -101,6 +135,7 @@ public class LineBuilderTests
         Assert.Equal((stamp.Time, (bool?)true), (line.Accounts["1"].AsOf!.Value, line.Accounts["1"].Stale));
         Assert.Null(line.Accounts["1"].Rank);
         Assert.Null(line.Accounts["1"].Of);
+        Assert.Null(line.Accounts["1"].Ranked);
     }
 
     [Fact]
@@ -144,6 +179,8 @@ public class LineBuilderTests
         Assert.Equal((BookLine.KindFinal, BookLine.TriggerBackfill, "Cannon"), (all.Kind, all.Trigger, all.Period!.Value));
         Assert.Equal(new[] { "7000001", "7000002" }, all.Accounts.Keys.Order(StringComparer.Ordinal).ToArray());
         Assert.Equal((1, 3), (all.Accounts["7000001"].Rank!["value"], all.Accounts["7000001"].Of!.Value));
+        // Three rows, and the third has no points: the rank was counted among two.
+        Assert.Equal(2, all.Accounts["7000001"].Ranked!["value"]);
         Assert.Equal(new[] { "7000002" }, one.Accounts.Keys.ToArray());
         Assert.Equal(435, one.Headline["clan-place"]);
     }

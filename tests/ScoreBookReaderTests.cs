@@ -99,7 +99,7 @@ public class ScoreBookReaderTests
             Read(Now.AddDays(-2).AddHours(1), 100), Read(Now.AddDays(-2).AddHours(10), 900),
             Read(Now.AddDays(-1).AddHours(1), 1000), Read(Now.AddDays(-1).AddHours(2), 1100));
 
-        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), ["s-1"], 111, "value", new ManualTime(Now));
+        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), "s-1", 111, "value", new ManualTime(Now));
 
         Assert.Equal((4200d, "B"), (records.BestPeriodValue!.Value, records.BestPeriod));
         Assert.Equal((1, "B"), (records.BestRank!.Value, records.BestRankPeriod));
@@ -109,6 +109,27 @@ public class ScoreBookReaderTests
         Assert.Equal(1000, records.FastestWeek);
     }
 
+    /// <summary>
+    /// Backlog S1-9.3. Two sources' readings of one account are not one series: a clan's points for an account are that
+    /// clan's, and a copy of one number read through another source can't be told from a new number. Interleaving them
+    /// drew a "rise" from one clan's 50 to the other's 1,010 that neither ever saw.
+    /// </summary>
+    [Fact]
+    public void ARecordIsOneSourcesOwnReadingsAndNeverAnotherSourcesInterleaved()
+    {
+        var day = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.FromHours(-5));
+        var reader = Reader(
+            Read(day.AddHours(9), 50, off: -300, source: "s-1"), Read(day.AddHours(20), 80, off: -300, source: "s-1"),
+            Read(day.AddHours(12), 1_000, off: -300, source: "s-2"), Read(day.AddHours(21), 1_010, off: -300, source: "s-2"));
+
+        var first = Records.For(reader, Slug, Source.KeyOf(K0i2), "s-1", 111, "value", new ManualTime(Now));
+        var second = Records.For(reader, Slug, Source.KeyOf(K0i2), "s-2", 111, "value", new ManualTime(Now));
+
+        // Merged, both came out 960. Each source's own: 50 to 80, and 1,000 to 1,010.
+        Assert.Equal((30d, 30d), (first.BiggestDay!.Value, first.FastestWeek!.Value));
+        Assert.Equal((10d, 10d), (second.BiggestDay!.Value, second.FastestWeek!.Value));
+    }
+
     [Fact]
     public void FastestWeekComparesAgainstTheLowestPointInWindowNotTheOldest()
     {
@@ -116,7 +137,7 @@ public class ScoreBookReaderTests
         // not from the first reading (1000 -> 5000 = 4000).
         var reader = Reader(Read(Now.AddDays(-2), 1000), Read(Now.AddDays(-1).AddHours(12), 100), Read(Now, 5000));
 
-        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), ["s-1"], 111, "value", new ManualTime(Now));
+        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), "s-1", 111, "value", new ManualTime(Now));
 
         Assert.Equal(4900, records.FastestWeek);
     }
@@ -128,7 +149,7 @@ public class ScoreBookReaderTests
         // largest (least negative) difference, per the doc comment on Records.FastestWeek.
         var reader = Reader(Read(Now.AddDays(-1), 500), Read(Now, 400));
 
-        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), ["s-1"], 111, "value", new ManualTime(Now));
+        var records = Records.For(reader, Slug, Source.KeyOf(K0i2), "s-1", 111, "value", new ManualTime(Now));
 
         Assert.Equal(-100, records.FastestWeek);
     }
@@ -231,7 +252,7 @@ public class ScoreBookReaderTests
         // 03:30 UTC is 22:30 the evening before at UTC-5, so both readings share one local day.
         var reader = Reader(Read(new DateTimeOffset(2026, 9, 18, 15, 0, 0, TimeSpan.Zero), 10), Read(new DateTimeOffset(2026, 9, 19, 3, 30, 0, TimeSpan.Zero), 70));
 
-        Assert.Equal(60, Records.For(reader, Slug, Source.KeyOf(K0i2), ["s-1"], 111, "value", new ManualTime(Now)).BiggestDay);
+        Assert.Equal(60, Records.For(reader, Slug, Source.KeyOf(K0i2), "s-1", 111, "value", new ManualTime(Now)).BiggestDay);
     }
 
     [Fact]

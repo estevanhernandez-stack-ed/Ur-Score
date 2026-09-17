@@ -6,11 +6,26 @@ public sealed record AccountRecords(
     double? BestPeriodValue, string? BestPeriod, int? BestRank, string? BestRankPeriod, int PeriodsPlayed,
     double? Highest, double? BiggestDay, double? FastestWeek);
 
+/// <summary>Which way a change went: <see cref="None"/> when there is no change to speak of (fewer than two readings).</summary>
+public enum ChangeDirection { None, Up, Down, Flat }
+
 /// <summary>Score book spec §9.5 and §9.6. Pure: derived from the reader, never written anywhere.</summary>
 public static class Records
 {
+    /// <summary>
+    /// One account's records for one stat, from ONE source's readings and the finals kept for its inputs.
+    /// <para>
+    /// One source, never several (backlog S1-9.3). This took any number of source ids and interleaved their series by time,
+    /// and a record is a rise from one reading to a later one: two clans' points for the same account are two different
+    /// numbers, so "biggest day" could run from one clan's 50 to the other's 1,010, a rise nobody ever made. Nor can a
+    /// reading of one source be matched to another's as the same observation: a copy of a number read through a lagging
+    /// list looks exactly like a new one. So there is no honest way to merge them, and this no longer can. A duplicate is
+    /// what it is inside one source, ruling R4, and <see cref="ScoreBookReader.Series"/> already collapses those. A panel
+    /// that looks across sources takes the best of each source's own records; a best is a max, so nothing is counted twice.
+    /// </para>
+    /// </summary>
     public static AccountRecords For(
-        ScoreBookReader reader, string slug, string inputsKey, IEnumerable<string> sourceIds, long userId, string stat, TimeProvider time)
+        ScoreBookReader reader, string slug, string inputsKey, string sourceId, long userId, string stat, TimeProvider time)
     {
         var finals = reader.Finals(slug, inputsKey)
             .Where(f => f.Accounts.TryGetValue(userId, out var account) && account.V.ContainsKey(stat))
@@ -26,10 +41,7 @@ public static class Records
         (int Rank, string Period)? bestRank = ranked.Count == 0 ? null : ranked.MinBy(x => x.Rank);
 
         var since = time.GetUtcNow() - ScoreBookReader.KeepReadings;
-        var series = sourceIds.Distinct(StringComparer.Ordinal)
-            .SelectMany(id => reader.Series(id, userId, stat, null, since))
-            .OrderBy(p => p.T)
-            .ToList();
+        var series = reader.Series(sourceId, userId, stat, null, since);
 
         var values = series.Select(p => p.Value).Concat(finals.Select(f => f.Account.V[stat])).ToList();
 
@@ -68,6 +80,16 @@ public static class Records
         Movement(series) is not { } moved
             ? NoEarlierRead
             : $"{(moved.Delta < 0 ? "-" : "+")}{StatText.Abbrev(Math.Abs(moved.Delta))} in {StatText.Span(moved.Span)}";
+
+    /// <summary>
+    /// Which way <see cref="Change"/> went, from the same <see cref="Movement"/> its words come from, so a panel can colour
+    /// the change without ever disagreeing with them (backlog S1-13.14). None with fewer than two readings.
+    /// </summary>
+    public static ChangeDirection Direction(IReadOnlyList<SeriesPoint> series) =>
+        Movement(series) is not { } moved ? ChangeDirection.None
+        : moved.Delta > 0 ? ChangeDirection.Up
+        : moved.Delta < 0 ? ChangeDirection.Down
+        : ChangeDirection.Flat;
 
     /// <summary>What <see cref="Change"/> says with fewer than two readings.</summary>
     public const string NoEarlierRead = "no earlier read";

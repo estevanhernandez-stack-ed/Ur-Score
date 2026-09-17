@@ -65,14 +65,24 @@ public sealed record RecipeSnapshot(
     /// <summary>Why this cycle kept nothing, when a book is attached and nothing was kept.</summary>
     public string? NotRecordingReason { get; init; }
 
+    /// <summary>
+    /// What THIS cycle sent to RoRoRo: one of your accounts and a stat key for each value that went. Empty for a cycle that
+    /// sent nothing, whatever an earlier one sent. <see cref="Accounts"/> is the session's memory of sends and outlives the
+    /// read that made them, so the board's sent dot, which means "went to RoRoRo just now", reads this (backlog S1-F.5).
+    /// </summary>
+    public IReadOnlySet<(Guid AccountId, string Stat)> SentThisRead { get; init; } = new HashSet<(Guid AccountId, string Stat)>();
+
     public ReadingPeriod? Period { get; init; }
 
     /// <summary>A group list's groups, shown live and never kept.</summary>
     public IReadOnlyList<GroupRow> Groups { get; init; } = [];
 }
 
-/// <summary>One account's place among every row a reading saw, and how many rows that was: "#7 of 50".</summary>
-public sealed record RankInGroup(int Rank, int Of);
+/// <summary>
+/// One account's place as a reading counted it, and how many players it was counted among, "#7 of 49": the rows with a value
+/// for that stat (backlog S1-6.9). A null count is a place kept before the book kept its field, shown as the place alone.
+/// </summary>
+public sealed record RankInGroup(int Rank, int? Of);
 
 /// <summary>
 /// One cycle for one source: ask for the user's accounts, read the recipe, keep the user's rows in the score
@@ -355,7 +365,11 @@ public sealed class RecipeWatch(
         var owned = OwnedMap(readRecipe, readSource, reading, map);
 
         var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, map, owned);
-        RecipeSnapshot Kept(RecipeSnapshot snapshot) => snapshot with { Recorded = recorded, NotRecordingReason = notRecording };
+
+        // What this cycle sends, filled as each send goes, so every snapshot below names only this read's sends (S1-F.5).
+        var sentNow = new HashSet<(Guid AccountId, string Stat)>();
+        RecipeSnapshot Kept(RecipeSnapshot snapshot) =>
+            snapshot with { Recorded = recorded, NotRecordingReason = notRecording, SentThisRead = sentNow };
 
         var mine = reading.Rows
             .Where(r => owned.ContainsKey(r.UserId))
@@ -420,7 +434,10 @@ public sealed class RecipeWatch(
                     var sent = await current.SendAsync(host, subject, stat.MetricId, value, observedAt, cancellationToken)
                         .ConfigureAwait(false);
 
-                    if (sent) Remember(readRecipe, readInputs, subject, accounts, stat.Key, value, observedAt);
+                    if (!sent) continue;
+
+                    sentNow.Add((subject, stat.Key));
+                    Remember(readRecipe, readInputs, subject, accounts, stat.Key, value, observedAt);
                 }
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)

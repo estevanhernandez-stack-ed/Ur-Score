@@ -100,6 +100,49 @@ public class PanelModelsTests
         Assert.False(withGap.HasGap);
     }
 
+    /// <summary>
+    /// Backlog S1-13.5. A group list ranks ties as competitions do (11, 12, 12, 14), and the gap looked only for rank minus one,
+    /// so the group behind a tie, and each group in it, showed no gap to anyone. The group above is the nearest one ranked
+    /// higher; the gap shows when the list holds every group ranked between, which is when that group's rank plus how many
+    /// share it is this one's.
+    /// </summary>
+    [Fact]
+    public void WithTiedRanksTheGapIsToTheNearestGroupRankedHigher()
+    {
+        var top = SourceOf("s-0000000a", TopList, null, SourceRole.Watch);
+        GroupRow Group(string name, double points, int rank) => new(name, new Dictionary<string, double> { ["value"] = points }, rank);
+
+        StandingModel For(string clan, params GroupRow[] groups)
+        {
+            var main = SourceOf("s-00000001", Clan, clan, SourceRole.Main);
+            var live = Live([main, top], [Installed(Clan, "value"), Installed(TopList)],
+                Snaps(Snapshot(main.Id, [], [Place(14), Points(30_200_000)]), Snapshot(top.Id, null, groups: groups)));
+            return PanelModels.Standing(live, Reader(), new PanelSettings(Clan.Slug, SourceId: main.Id));
+        }
+
+        GroupRow[] tied = [Group("Eleventh", 50_000_000, 11), Group("TiedA", 40_000_000, 12), Group("TiedB", 40_000_000, 12), Group("CCGP", 30_200_000, 14)];
+
+        var behindTheTie = For("CCGP", tied);
+        var inTheTie = For("TiedB", tied);
+        var firstOfTheTie = For("TiedA", tied);
+
+        Assert.Equal((true, "To 12th", $"{StatText.Abbrev(9_800_000)} behind"), (behindTheTie.HasGap, behindTheTie.GapLabel, behindTheTie.Gap));
+        Assert.Equal((true, "To 11th", $"{StatText.Abbrev(10_000_000)} behind"), (inTheTie.HasGap, inTheTie.GapLabel, inTheTie.Gap));
+        Assert.Equal((true, "To 11th"), (firstOfTheTie.HasGap, firstOfTheTie.GapLabel));
+
+        // A tied group is never "above" the group it ties with.
+        Assert.NotEqual("To 12th", inTheTie.GapLabel);
+
+        // 12, 12 and then 15: the 14th isn't in the list, so nothing proves the 12th is the group just above.
+        Assert.False(For("CCGP", Group("TiedA", 40_000_000, 12), Group("TiedB", 40_000_000, 12), Group("CCGP", 30_200_000, 15)).HasGap);
+
+        // Tied for first, alone in the list, or in a list that has no groups: there is no group above.
+        Assert.False(For("CCGP", Group("Other", 40_000_000, 1), Group("CCGP", 40_000_000, 1)).HasGap);
+        Assert.False(For("Other", Group("Other", 40_000_000, 1), Group("CCGP", 40_000_000, 1)).HasGap);
+        Assert.False(For("CCGP", Group("CCGP", 30_200_000, 14)).HasGap);
+        Assert.False(For("CCGP").HasGap);
+    }
+
     [Fact]
     public void APanelWhoseSourceWasRemovedSaysSoInTheRecipesWord()
     {
@@ -137,6 +180,34 @@ public class PanelModelsTests
         var model = PanelModels.Standing(Live([main], [Installed(Clan, "value")], snaps), reader, new PanelSettings(Clan.Slug, SourceId: main.Id));
 
         Assert.Equal(StatText.Dash, model.Change);
+        Assert.Equal(ChangeDirection.None, model.ChangeDirection);
+    }
+
+    /// <summary>
+    /// Backlog S1-13.14. The change was drawn in cyan, this app's good news, whichever way it went, so a clan that fell
+    /// during a battle read as one that rose. Its colour now comes from the same movement as its words, and the words
+    /// carry the sign, so the colour is never the only way to tell.
+    /// </summary>
+    [Fact]
+    public void AStandingChangeSaysWhichWayItWentInTheSameMovementAsItsWords()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var live = Live([main], [Installed(Clan, "value")], Snaps(Snapshot(main.Id, [], [Place(14), Points(29_000_000)], LivePeriod)));
+        StandingModel With(params double[] totals) => PanelModels.Standing(live,
+            Reader([.. totals.Select((total, i) => Read(main, Now.AddHours(-1).AddMinutes(i * 30), Period, Headline(total), "value"))]),
+            new PanelSettings(Clan.Slug, SourceId: main.Id));
+
+        var fell = With(30_000_000, 29_000_000);
+        var rose = With(28_000_000, 29_000_000);
+        var level = With(29_000_000, 29_000_000);
+        var once = With(29_000_000);
+
+        Assert.Equal(("-1M in 30m", ChangeDirection.Down), (fell.Change, fell.ChangeDirection));
+        Assert.Equal(("+1M in 30m", ChangeDirection.Up), (rose.Change, rose.ChangeDirection));
+        // Not a rise: no change is neither colour.
+        Assert.Equal(ChangeDirection.Flat, level.ChangeDirection);
+        Assert.Equal((Records.NoEarlierRead, ChangeDirection.None), (once.Change, once.ChangeDirection));
+        Assert.Equal(ChangeDirection.None, Records.Direction([]));
     }
 
     // ---- Race ----
@@ -277,8 +348,11 @@ public class PanelModelsTests
         IReadOnlyList<RecipeRow> ccgpRows = [Row(101, 14_020_550), Row(5, 20_000_000), Row(6, 1_000)];
         IReadOnlyList<RecipeRow> altRows = [Row(202, null), Row(201, 12_418_220), Row(101, 9_000_000), Row(7, 50)];
         var sentLine = new AccountLine("estehernandez", Main.AccountId, new Dictionary<string, double> { ["value"] = 14_020_550 }, Now);
+        // Sent by this very read (S1-F.5): the remembered line alone no longer makes a dot.
+        var mainRead = Snapshot(main.Id, ccgpRows, period: LivePeriod, sent: [sentLine])
+            with { SentThisRead = new HashSet<(Guid AccountId, string Stat)> { (Main.AccountId, "value") } };
         var live = Live([alts, main], [Installed(Clan, "value")],
-            Snaps(Snapshot(main.Id, ccgpRows, period: LivePeriod, sent: [sentLine]), Snapshot(alts.Id, altRows, period: LivePeriod)));
+            Snaps(mainRead, Snapshot(alts.Id, altRows, period: LivePeriod)));
         var reader = Reader(
             Read(alts, Now.AddHours(-1), Period, null, "value", (201, 12_000_000)),
             Read(alts, Now.AddMinutes(-3), Period, null, "value", (201, 12_418_220)));
@@ -302,6 +376,38 @@ public class PanelModelsTests
         Assert.Equal(Records.Change(reader.Series(alts.Id, 201, "value", Period, DateTimeOffset.MinValue), Now), model.Groups[1].Rows[0].Change);
 
         Assert.Equal("ItsJustEste", Assert.Single(model.Groups[2].Rows).Name);
+    }
+
+    /// <summary>
+    /// Backlog S1-F.5. The dot is read as "this account's number just went to RoRoRo", so it means exactly that: sent in its
+    /// source's last read, of this panel's stat. A send the session remembers from earlier is not a dot, and the legend says
+    /// which read it means.
+    /// </summary>
+    [Fact]
+    public void TheSentDotMeansSentInTheLastReadNotEarlierThisSession()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        // RoRoRo got this account's points on an earlier read (the session remembers them), but not on the last one.
+        var earlier = new AccountLine(Main.DisplayName, Main.AccountId, new Dictionary<string, double> { ["value"] = 14_000_000 }, Now.AddMinutes(-3));
+        var notThisRead = Snapshot(main.Id, [Row(Main.RobloxUserId, 14_020_550)], period: LivePeriod, sent: [earlier]);
+        var thisRead = notThisRead with { SentThisRead = new HashSet<(Guid AccountId, string Stat)> { (Main.AccountId, "value") } };
+        var anotherStat = notThisRead with { SentThisRead = new HashSet<(Guid AccountId, string Stat)> { (Main.AccountId, "eggs") } };
+
+        MyAccountsModel For(RecipeSnapshot snapshot) =>
+            PanelModels.MyAccounts(Live([main], [Installed(Clan, "value")], Snaps(snapshot)), Reader(), new PanelSettings(Clan.Slug, Stat: "value"));
+        bool Dot(RecipeSnapshot snapshot) => For(snapshot).Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId).Sent;
+
+        Assert.False(Dot(notThisRead));
+        Assert.True(Dot(thisRead));
+        Assert.False(Dot(anotherStat));
+        Assert.Equal("● sent to RoRoRo in the last read", For(thisRead).Head.Note);
+
+        // A remembered panel sent nothing this session, whatever it holds.
+        var kept = thisRead with { RememberedAt = Now.AddHours(-2) };
+        var remembered = PanelModels.MyAccounts(
+            Live([main], [Installed(Clan, "value")], Snaps(), remembered: new Dictionary<string, RecipeSnapshot> { [main.Id] = kept with { SentThisRead = new HashSet<(Guid AccountId, string Stat)>() } }),
+            Reader(), new PanelSettings(Clan.Slug, Stat: "value"));
+        Assert.All(remembered.Groups.SelectMany(g => g.Rows), r => Assert.False(r.Sent));
     }
 
     [Fact]
@@ -411,6 +517,58 @@ public class PanelModelsTests
         Assert.Equal("", rows.Single(r => r.UserId == AltTwo.RobloxUserId).Note);
     }
 
+    /// <summary>
+    /// Backlog S1-6.9. "#rank of N" ranked only the rows that had the stat and then counted every row as N, so a member with
+    /// no value made you "#1 of 4" where Promotion check, counting the same clan, ranked among 3. N is now how many rows the
+    /// rank was counted among: the ones with a value. Ties, one player and an empty read are the edges.
+    /// </summary>
+    [Fact]
+    public void RankInAGroupCountsOnlyTheRowsWithThatStatAsPromotionCheckDoes()
+    {
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var settings = new PanelSettings(Clan.Slug, Stat: "value");
+        (string Accounts, string Card) RankOf(long userId, params RecipeRow[] rows)
+        {
+            var live = Live([alts], [Installed(Clan, "value")], Snaps(Snapshot(alts.Id, rows, period: LivePeriod)));
+            var row = PanelModels.MyAccounts(live, Reader(), settings).Groups.SelectMany(g => g.Rows).Single(r => r.UserId == userId);
+            var card = PanelModels.AccountCard(live, Reader(), settings with { UserId = userId });
+            return (row.InGroup, card.Facts.Single(f => f.Label == "In clan").Value);
+        }
+
+        // Four rows, one with no points: your account is 1st of the 3 that have a value.
+        Assert.Equal(("#1 of 3", "#1 of 3"), RankOf(AltOne.RobloxUserId, Row(AltOne.RobloxUserId, 12_418_220), Row(7, 50), Row(8, null), Row(9, 3_000)));
+        // Competition ranks (1, 2, 2, 4): a tie shares the place, and every tied row is still counted.
+        Assert.Equal(("#2 of 4", "#2 of 4"), RankOf(AltOne.RobloxUserId, Row(7, 200), Row(AltOne.RobloxUserId, 100), Row(8, 100), Row(9, 50)));
+        // Alone in the read.
+        Assert.Equal(("#1 of 1", "#1 of 1"), RankOf(AltOne.RobloxUserId, Row(AltOne.RobloxUserId, 5)));
+        // Your account with no value of its own has no place, whoever else was read.
+        Assert.Equal(StatText.Dash, RankOf(AltOne.RobloxUserId, Row(AltOne.RobloxUserId, null), Row(7, 50)).Accounts);
+
+        // A read of no rows places nobody: every account sits under a heading with a dash.
+        var empty = Live([alts], [Installed(Clan, "value")], Snaps(Snapshot(alts.Id, [], period: LivePeriod)));
+        Assert.All(PanelModels.MyAccounts(empty, Reader(), settings).Groups.SelectMany(g => g.Rows), r => Assert.Equal(StatText.Dash, r.InGroup));
+    }
+
+    [Fact]
+    public void MyAccountsAndPromotionCheckCountTheSameClanTheSameWay()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        // CCGP read four members, and one of them has no points.
+        var live = Live([main, alts], [Installed(Clan, "value")], Snaps(
+            Snapshot(main.Id, [Row(Main.RobloxUserId, 14_000_000), Row(7, 20_000_000), Row(8, null), Row(6, 1_000)], period: LivePeriod),
+            Snapshot(alts.Id, [Row(AltOne.RobloxUserId, 12_418_220)], period: LivePeriod)));
+
+        var inCcgp = PanelModels.MyAccounts(live, Reader(), new PanelSettings(Clan.Slug, Stat: "value"))
+            .Groups.SelectMany(g => g.Rows).Single(r => r.UserId == Main.RobloxUserId);
+        var wouldPlace = PanelModels.PromotionCheck(live, new PanelSettings(Clan.Slug, SourceId: alts.Id, ToSourceId: main.Id, Stat: "value"))
+            .Rows.Single(r => r.Name == AltOne.DisplayName);
+
+        // Three members of CCGP have points. My accounts ranks among them; Promotion check ranks among them plus the account it moves.
+        Assert.Equal("#2 of 3", inCcgp.InGroup);
+        Assert.Equal("3rd of 4", wouldPlace.WouldPlace);
+    }
+
     // ---- Promotion check ----
 
     [Fact]
@@ -464,7 +622,7 @@ public class PanelModelsTests
             Final(alts, Now.AddDays(-9), "ArcadeBattle2026", Headline(18_000_000), "value", (201, 12_900_000)));
 
         var model = PanelModels.AccountCard(live, reader, new PanelSettings(Clan.Slug, Stat: "value"));
-        var records = Records.For(reader, Clan.Slug, alts.InputsKey, [alts.Id], 201, "value", live.Time);
+        var records = Records.For(reader, Clan.Slug, alts.InputsKey, alts.Id, 201, "value", live.Time);
         var series = reader.Series(alts.Id, 201, "value", Period, DateTimeOffset.MinValue);
 
         Assert.Equal("CElCPapa · K0i2", model.Head.Subtitle);
@@ -667,11 +825,33 @@ public class PanelModelsTests
 
         Assert.Equal(new[] { "Highest", "Biggest day", "Fastest 7 days" }, model.Facts.Select(f => f.Label).ToArray());
         var holder = new[] { Main, AltOne, AltTwo, Loose }
-            .Select(a => (Account: a, Found: Records.For(reader, Profile.Slug, profile.InputsKey, [profile.Id], a.RobloxUserId, "diamonds", live.Time)))
+            .Select(a => (Account: a, Found: Records.For(reader, Profile.Slug, profile.InputsKey, profile.Id, a.RobloxUserId, "diamonds", live.Time)))
             .Where(x => x.Found.Highest is not null)
             .MaxBy(x => x.Found.Highest)!;
         Assert.Equal($"{holder.Account.DisplayName} · {StatText.Abbrev(holder.Found.Highest!.Value)}", model.Facts[0].Value);
         Assert.Equal("Diamonds", model.Head.Subtitle);
+    }
+
+    /// <summary>
+    /// Backlog S1-9.3 on the panel. An account both of your clans read has two records, one per clan, and the panel shows the
+    /// better one. A merge of the two would put a 960 "rise" from one clan's points to the other's on a board that wants to
+    /// be believed during a battle.
+    /// </summary>
+    [Fact]
+    public void AnAccountTwoOfYourClansReadHoldsTheBestOfEachClansOwnRecordsNeverAMerge()
+    {
+        var main = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+        var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+        var reader = Reader(
+            Read(alts, Now.AddHours(-9), Period, null, "value", (201, 50)), Read(alts, Now.AddHours(-1), Period, null, "value", (201, 80)),
+            Read(main, Now.AddHours(-6), Period, null, "value", (201, 1_000)), Read(main, Now.AddMinutes(-30), Period, null, "value", (201, 1_010)));
+        var live = Live([main, alts], [Installed(Clan, "value")], Snaps());
+
+        var model = PanelModels.RecordsPanel(live, reader, new PanelSettings(Clan.Slug, Stat: "value"));
+
+        // K0i2 saw 50 then 80 (+30), CCGP saw 1,000 then 1,010 (+10). The best is K0i2's 30, not 1,010 less 50.
+        Assert.Equal(new FactModel("Biggest day", $"{AltOne.DisplayName} · {PanelText.Change(30, StatFormat.Number)}"), model.Facts.Single(f => f.Label == "Biggest day"));
+        Assert.Equal(new FactModel("Fastest 7 days", $"{AltOne.DisplayName} · {PanelText.Change(30, StatFormat.Number)}"), model.Facts.Single(f => f.Label == "Fastest 7 days"));
     }
 
     [Fact]

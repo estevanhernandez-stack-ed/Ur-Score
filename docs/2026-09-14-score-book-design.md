@@ -216,7 +216,7 @@ These are fixtures now, and ship as starter recipes once the owner and Claude ma
  "period":{"value":"ArcadeBattle2026","starts":"2026-08-29T18:00:00Z","ends":"2026-09-11T17:30:00Z"},
  "headline":{"clan-place":212,"clan-points":18902110},
  "stats":["value"],
- "accounts":{"1647274201":{"v":{"value":12418220},"rank":{"value":1},"of":48}},
+ "accounts":{"1647274201":{"v":{"value":12418220},"rank":{"value":1},"of":48,"ranked":{"value":47}}},
  "unavail":[]}
 ```
 
@@ -230,7 +230,7 @@ These are fixtures now, and ship as starter recipes once the owner and Claude ma
 | `headline` | By id, **finite numbers only**. No response text is kept |
 | `stats` | The tracked stat keys asked for (Show or Send) |
 | `accounts` | **Your accounts only**, by Roblox user id. `v` is each stat found; a miss is absent, never 0 |
-| `rank`, `of` | List steps: the account's competition rank (1, 2, 2, 4) among **all** rows, per stat, and the row count. Worked out before other rows are dropped |
+| `rank`, `of`, `ranked` | List steps: the account's competition rank (1, 2, 2, 4) among **all** rows that have the stat, per stat; the row count; and per stat, how many rows that rank was counted among, the N of "#7 of 47" (a row with no value is in neither). Worked out before other rows are dropped. Counts only. `ranked` was added 2026-09-16 (backlog S1-6.9); a line without it shows its place with no N |
 | `asOf`, `stale` | From §3.2: per account, or top level for list steps |
 | `unavail` | Your account ids the source couldn't show. No message text |
 
@@ -241,7 +241,7 @@ These are fixtures now, and ship as starter recipes once the owner and Claude ma
  "recipe":{"slug":"pet-sim-99-clan-battle-points","hash":"3f9a1c0b7e2d4a55"},
  "source":"s-7f3a","role":"mine","inputs":{"clan":"K0i2"},"period":{"value":"CannonBattle"},
  "headline":{"clan-place":435,"clan-points":67104},"stats":["value"],
- "accounts":{"1647274201":{"v":{"value":40210},"rank":{"value":1},"of":3}}}
+ "accounts":{"1647274201":{"v":{"value":40210},"rank":{"value":1},"of":3,"ranked":{"value":3}}}}
 ```
 
 `trigger` is `backfill` or `ended` (§6).
@@ -505,6 +505,16 @@ These come from `docs/2026-09-13-stats-games-icons-design.md` §6.3 and still ho
 - **Stalled:** an account's stat didn't change over the last two readings, while more than half of your other
   accounts in the same source did (at least two others). Display only.
 - **Missing values** sort last and never count as zero.
+- **A rank's N counts only who has a value:** "#7 of 47" is a place among the rows with that stat, live or
+  remembered, the same field Promotion check ranks against. Ties share a place (1, 2, 2, 4), and the gap to the
+  group above a tie measures to the nearest group ranked higher.
+- **A colour follows the sign:** Standing's change is cyan only for a rise, magenta for a fall, and neither for no
+  change; its words always carry the sign.
+- **The sent dot is the last read's:** it marks an account whose number for that stat went to RoRoRo in its
+  source's last read, not earlier in the session.
+- **No invented range:** a chart whose values are all equal draws through the middle with one grid line naming the
+  value; a chart drawn from zero keeps zero on its axis at either end.
+- **A record is one source's:** records never merge two sources' readings (§9.5).
 
 ## §10 The try-out command (stage 1)
 
@@ -523,7 +533,7 @@ These come from `docs/2026-09-13-stats-games-icons-design.md` §6.3 and still ho
   - headline ids and values;
   - per stat: found and missed counts, with the smallest, median and largest value;
   - counter names;
-  - for each `--account`: its values, rank and `of`;
+  - for each `--account`: its values, and each rank with how many rows had that stat ("rank 1 of 47");
   - `period.past` keys;
   - for group lists: the count, and the first 10 group names (clan names aren't players).
 - **Never printed:** a player's id, name or single value.

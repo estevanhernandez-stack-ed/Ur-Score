@@ -137,7 +137,11 @@ public sealed record LiveBoard(
 
 public sealed record StandingModel(
     PanelHead Head, string Place, string PlaceSuffix, string TotalLabel, string Total, string Change,
-    bool HasGap, string GapLabel, string Gap, double GapFill, bool HasAccounts, string Accounts, string PeriodLine);
+    bool HasGap, string GapLabel, string Gap, double GapFill, bool HasAccounts, string Accounts, string PeriodLine)
+{
+    /// <summary>Which way <see cref="Change"/> went, so the panel paints a fall as one (backlog S1-13.14).</summary>
+    public ChangeDirection ChangeDirection { get; init; }
+}
 
 public sealed record LegendItem(string Text, int Colour);
 
@@ -209,6 +213,9 @@ public static class PanelModels
 
     public const int TopCount = 10;
 
+    /// <summary>What My accounts' dot means, said where the dot is (backlog S1-F.5).</summary>
+    public const string SentLegend = "● sent to RoRoRo in the last read";
+
     private const string Dash = StatText.Dash;
 
     public static StandingModel Standing(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
@@ -228,9 +235,9 @@ public static class PanelModels
         var total = HeadlineNumber(snapshot, totalId);
         // Before the source's own period is known, "no period" reads the book as every period kept, not this one.
         var periodKnown = recipe.Period is null || snapshot?.Period is not null;
-        var change = totalId is null || !periodKnown
-            ? Dash
-            : Records.Change(reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value), live.Now);
+        // One series behind both the words and the colour, so the two can never tell different stories.
+        IReadOnlyList<SeriesPoint>? totals = totalId is null || !periodKnown ? null : reader.HeadlineSeries(source.Id, totalId, snapshot?.Period?.Value);
+        var change = totals is null ? Dash : Records.Change(totals, live.Now);
         var gap = Gap(live, name);
 
         var rows = snapshot?.Rows;
@@ -248,7 +255,10 @@ public static class PanelModels
             gap.Has, gap.Label, gap.Text, gap.Fill,
             hasAccounts,
             hasAccounts ? $"{mine} of {rows!.Count}" : "",
-            PanelText.PeriodLine(snapshot?.Period, live.Now, null));
+            PanelText.PeriodLine(snapshot?.Period, live.Now, null))
+        {
+            ChangeDirection = totals is null ? ChangeDirection.None : Records.Direction(totals),
+        };
     }
 
     public static RaceModel Race(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
@@ -370,13 +380,15 @@ public static class PanelModels
                 assigned.Add(account.RobloxUserId);
                 var value = ValueOf(rows.First(r => r.UserId == account.RobloxUserId), stat.Key);
                 var others = series.Where(kv => kv.Key != account.RobloxUserId).Select(kv => kv.Value);
-                var sent = snapshot.Accounts.Any(l => l.AccountId == account.AccountId && l.LastValues.ContainsKey(stat.Key));
+                // Sent by this source's last read, of this stat. The session's remembered sends outlive the read that made
+                // them, so reading those kept a dot lit through reads with RoRoRo closed or Send off (backlog S1-F.5).
+                var sent = snapshot.SentThisRead.Contains((account.AccountId, stat.Key));
 
                 lines.Add((value, new AccountLineModel(
                     account.RobloxUserId,
                     account.DisplayName,
                     PanelText.Value(value, stat.Format, zone),
-                    InGroup(snapshot, ranks, rows.Count, account.RobloxUserId, stat.Key, value),
+                    InGroup(snapshot, ranks, account.RobloxUserId, stat.Key, value),
                     RecentChange(series[account.RobloxUserId], stat.Format),
                     sent,
                     Records.Stalled(series[account.RobloxUserId], others),
@@ -422,7 +434,7 @@ public static class PanelModels
         }
 
         return new MyAccountsModel(
-            new PanelHead(title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: "● sent to RoRoRo", Remembered: remembered),
+            new PanelHead(title, $"by {RecipeWords.Lower(stat.Label)}", Overdue: overdue, Note: SentLegend, Remembered: remembered),
             stat.Label, $"In {group}", groups);
     }
 
@@ -546,10 +558,10 @@ public static class PanelModels
             // Counted only for a reading of this session; a remembered one is answered from the book (review C1).
             var ranks = snapshot.RememberedAt is null ? Ranking.Competition(listRows, stat.Key) : null;
             facts.Add(new FactModel($"In {RecipeWords.Group(recipe)}",
-                InGroup(snapshot, ranks, listRows.Count, pickedAccount.RobloxUserId, stat.Key, ValueOf(pickedRow, stat.Key))));
+                InGroup(snapshot, ranks, pickedAccount.RobloxUserId, stat.Key, ValueOf(pickedRow, stat.Key))));
         }
 
-        var records = Records.For(reader, recipe.Slug, pickedSource.InputsKey, [pickedSource.Id], pickedAccount.RobloxUserId, stat.Key, live.Time);
+        var records = Records.For(reader, recipe.Slug, pickedSource.InputsKey, pickedSource.Id, pickedAccount.RobloxUserId, stat.Key, live.Time);
         if (recipe.Period is not null)
         {
             facts.Add(new FactModel($"Best {RecipeWords.Period(recipe)}",
@@ -659,11 +671,13 @@ public static class PanelModels
 
         var zone = live.Time.LocalTimeZone;
 
+        // Each account's records in each of your sources, never a merge of two sources' readings (backlog S1-9.3): every fact
+        // below is the best one source holds, so an account read by two clans can't be credited with a rise between them.
         var all = (
             from account in live.Accounts
             where account.RobloxUserId != 0
             from source in SourcesYoursIn(live, recipe)
-            select (Account: account, Found: Records.For(reader, recipe.Slug, source.InputsKey, [source.Id], account.RobloxUserId, stat.Key, live.Time))
+            select (Account: account, Found: Records.For(reader, recipe.Slug, source.InputsKey, source.Id, account.RobloxUserId, stat.Key, live.Time))
         ).ToList();
 
         string Highest(Func<AccountRecords, double?> pick, Func<HostAccount, AccountRecords, double, string> text)
@@ -1035,26 +1049,32 @@ public static class PanelModels
         id is null ? null : snapshot?.Headline?.FirstOrDefault(h => h.Id == id)?.Number;
 
     /// <summary>
-    /// One account's place among every row its source read — "#7 of 50" — or a dash when there is no honest answer
-    /// (plan A40, review C1). The one door for a rank, so neither panel can grow its own.
+    /// One account's place among the rows its source read that have the stat — "#7 of 49" — or a dash when there is no
+    /// honest answer (plan A40, review C1). The one door for a rank, so neither panel can grow its own.
     /// <para>
-    /// A reading from this session carries every row, so <paramref name="live"/> is counted from it. A REMEMBERED one
-    /// carries your own accounts alone, and a place worked out from those would read "#1 of 4" of a group this never
-    /// counted — so it is answered from what the reading itself kept (<see cref="RecipeSnapshot.RememberedRanks"/>),
-    /// and from nothing else. A line that kept no place shows none: an empty "In clan" is honest, "#1 of 4" is not.
+    /// A reading from this session carries every row, so <paramref name="live"/> is counted from it, and N is how many rows
+    /// it ranked: a row with no value is in neither (backlog S1-6.9). Counting every row made a member with no points part
+    /// of a "#1 of 4" beside Promotion check's field of 3.
+    /// </para>
+    /// <para>
+    /// A REMEMBERED reading carries your own accounts alone, and a place worked out from those would read "#1 of 4" of a
+    /// group this never counted — so it is answered from what the reading itself kept (<see cref="RecipeSnapshot.RememberedRanks"/>),
+    /// and from nothing else. A line that kept no place shows none: an empty "In clan" is honest, "#1 of 4" is not. A line
+    /// that kept a place but not its field shows the place alone.
     /// </para>
     /// </summary>
     private static string InGroup(
-        RecipeSnapshot snapshot, IReadOnlyDictionary<long, int>? live, int rowsInHand, long userId, string stat, double? value)
+        RecipeSnapshot snapshot, IReadOnlyDictionary<long, int>? live, long userId, string stat, double? value)
     {
         if (value is null) return Dash;
 
         if (snapshot.RememberedAt is not null)
         {
-            return snapshot.RememberedRanks.TryGetValue((userId, stat), out var kept) ? $"#{kept.Rank} of {kept.Of}" : Dash;
+            if (!snapshot.RememberedRanks.TryGetValue((userId, stat), out var kept)) return Dash;
+            return kept.Of is { } of ? $"#{kept.Rank} of {of}" : $"#{kept.Rank}";
         }
 
-        return live is not null && live.TryGetValue(userId, out var rank) ? $"#{rank} of {rowsInHand}" : Dash;
+        return live is not null && live.TryGetValue(userId, out var rank) ? $"#{rank} of {live.Count}" : Dash;
     }
 
     private static double? ValueOf(RecipeRow row, string stat) => row.Values.TryGetValue(stat, out var value) ? value : null;
@@ -1080,7 +1100,13 @@ public static class PanelModels
         return [.. ordered.Select((g, i) => new RankedGroup(g.Row, g.Row.Rank ?? i + 1, g.Value))];
     }
 
-    /// <summary>The gap to the group just above, only when a group list holds both (spec §9.4).</summary>
+    /// <summary>
+    /// The gap to the group just above, only when a group list holds both (spec §9.4). A list ranks ties as competitions do
+    /// (11, 12, 12, 14), so the group above is the nearest one ranked HIGHER, never one this group ties with; and the list
+    /// holds every group ranked between them exactly when that group's rank plus how many share it is this group's rank.
+    /// 14th measures to 12th, each 12th to 11th, and 12, 14 with no 13th still shows none. Looking only for rank minus one
+    /// hid the gap behind every tie and inside it (backlog S1-13.5).
+    /// </summary>
     private static (bool Has, string Label, string Text, double Fill) Gap(LiveBoard live, string name)
     {
         foreach (var source in live.Sources.Where(s => s.Enabled))
@@ -1092,9 +1118,12 @@ public static class PanelModels
             var index = ordered.FindIndex(g => string.Equals(g.Row.Name, name, StringComparison.OrdinalIgnoreCase));
             if (index <= 0) continue;
 
-            var above = ordered[index - 1];
             var here = ordered[index];
-            if (above.Rank != here.Rank - 1 || above.Value is not { } a || here.Value is not { } h) continue;
+            var aboveIndex = ordered.FindLastIndex(index - 1, g => g.Rank < here.Rank);
+            if (aboveIndex < 0) continue;
+
+            var above = ordered[aboveIndex];
+            if (above.Rank + ordered.Count(g => g.Rank == above.Rank) != here.Rank || above.Value is not { } a || here.Value is not { } h) continue;
 
             return (true, $"To {PanelText.Ordinal(above.Rank)}", $"{StatText.Abbrev(Math.Max(0, a - h))} behind", a <= 0 ? 0 : Math.Clamp(h / a, 0, 1));
         }

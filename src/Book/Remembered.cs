@@ -68,15 +68,22 @@ public static class Remembered
 
             rows.Add(new RecipeRow(userId, values));
 
-            // The place the reading itself worked out, among every row it saw, and how many that was (review C1).
-            // Carried rather than dropped because the alternative downstream is a place worked out from YOUR rows
-            // alone — "#1 of 4" of a group this never counted. A line that kept no place gives none, and the panel
-            // then shows nothing, which is the honest answer.
-            if (account.Of is not { } of || of <= 0 || account.Rank is not { } kept) continue;
+            // The place the reading itself worked out, and how many rows it was counted among (review C1). Carried
+            // rather than dropped because the alternative downstream is a place worked out from YOUR rows alone — "#1
+            // of 4" of a group this never counted. A line that kept no place gives none, and the panel then shows
+            // nothing, which is the honest answer.
+            //
+            // The count is the stat's own field, "ranked" (backlog S1-6.9). A line kept before the book had one says only
+            // "of", the row count, which also counted rows with no value, so the first read would disagree with it about
+            // the same clan. Such a place comes back with no count, and the panel shows the place alone.
+            if (account.Rank is not { } kept) continue;
 
             foreach (var (stat, rank) in kept)
             {
-                if (values.ContainsKey(stat)) ranks[(userId, stat)] = new RankInGroup(rank, of);
+                if (!values.ContainsKey(stat)) continue;
+
+                int? field = account.Ranked?.GetValueOrDefault(stat) is { } n && n > 0 ? n : null;
+                ranks[(userId, stat)] = new RankInGroup(rank, field);
             }
         }
 
