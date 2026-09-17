@@ -93,8 +93,11 @@ try {
     # Every heading My accounts can file an account under. Only once every source has a reading from this session may it
     # say 'Not in a watched clan'; before that it says how much has been read (PanelText.NotFound), and a main clan with no
     # live battle is not 'read now'. The step proves the panel groups your accounts, so any true heading counts.
+    # A clan read between battles WAS read, so its accounts are headed by that fact rather than "No clans read yet"
+    # (V3-S.18) - and the owner's main clan is between battles nearly always, so these are the common case.
     $headings = @('Not in a watched clan', 'Not found in the clans read so far', 'No clans read yet',
-                  "Only in clans you're watching", 'Not matched by RoRoRo yet')
+                  "Only in clans you're watching", 'Not matched by RoRoRo yet',
+                  'No clan is in a battle right now', 'No clan read so far is in a battle')
     $grouped = @($accounts | Where-Object { $_ -like "*$Main" -or $_ -eq $Alt -or $headings -contains $_ }).Count -gt 0
     Check '3 My accounts groups your accounts by clan' $grouped ($accounts -join ' | ')
 
