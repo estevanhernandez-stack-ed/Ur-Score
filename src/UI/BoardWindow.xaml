@@ -113,8 +113,9 @@
                         AutomationProperties.Name="Add a board" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse x:Name="LiveDot" Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource CyanBrush}" Visibility="Collapsed" />
-                    <TextBlock x:Name="PeriodLine" Style="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="NoWrap"
-                               TextTrimming="CharacterEllipsis" />
+                    <!-- Ticks between reads (WithClock off: this line is one line wide, and the panel gives the end as a time). -->
+                    <ui:CountdownText x:Name="PeriodLine" WithClock="False" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                                      TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </DockPanel>
         </Border>

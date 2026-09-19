@@ -104,7 +104,9 @@ public class PanelModelsTests
         Assert.Equal("+1.41M in 57m", model.Change);
         Assert.Equal(ChangeDirection.Up, model.ChangeDirection);
         Assert.Equal("1 of 2", model.Accounts);
-        Assert.Equal("AutumnBattle · ends in 3d", model.PeriodLine);
+        // The end is kept as the instant, not as words: the panel's clock ticks it down between reads.
+        Assert.Equal("AutumnBattle", model.PeriodLine);
+        Assert.Equal(LivePeriod.Ends, model.Ends);
         Assert.False(model.HasGap);
     }
 

@@ -74,7 +74,9 @@
                     </TextBlock>
                     <TextBlock Text="Change" Style="{StaticResource KeyLabel}" />
                 </DockPanel>
-                <TextBlock Text="{Binding PeriodLine}" Style="{StaticResource Muted}" FontSize="11" Margin="0,12,0,0" />
+                <!-- The battle's name, then how long it has left to the second and when it ends, ticking between reads. -->
+                <ui:CountdownText Lead="{Binding PeriodLine}" Ends="{Binding Ends}" Style="{StaticResource Muted}" FontSize="11"
+                                  TextWrapping="Wrap" Margin="0,12,0,0" />
             </StackPanel>
             <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
                        Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />

@@ -66,16 +66,48 @@ public class PanelTextTests
         Assert.Equal("watching", PanelText.Chip(SourceRole.Watch));
     }
 
+    /// <summary>
+    /// The period's own end left this line on 2026-09-19: it ticks beside it instead (<see cref="TheCountdownIsExactAndSaysWhenItEnds"/>),
+    /// so the two can't say different things about the same end.
+    /// </summary>
     [Fact]
-    public void ThePeriodLineNamesThePeriodItsEndAndTheNextRead()
+    public void ThePeriodLineNamesThePeriodAndTheNextRead()
     {
         var period = new ReadingPeriod("AutumnBattle", Now.AddDays(-2), Now.AddHours(76));
 
         Assert.Equal(
-            $"AutumnBattle · ends in {StatText.Span(TimeSpan.FromHours(76))} · next read in {StatText.Span(TimeSpan.FromMinutes(2))}",
+            $"AutumnBattle · next read in {StatText.Span(TimeSpan.FromMinutes(2))}",
             PanelText.PeriodLine(period, Now, Now.AddMinutes(2)));
-        Assert.Equal("AutumnBattle · ended", PanelText.PeriodLine(period with { Ends = Now.AddMinutes(-1) }, Now, null));
+        Assert.Equal("AutumnBattle", PanelText.PeriodLine(period, Now, null));
+        Assert.Equal("AutumnBattle", PanelText.PeriodLine(period with { Ends = Now.AddMinutes(-1) }, Now, null));
         Assert.Equal("next read due", PanelText.PeriodLine(null, Now, Now.AddSeconds(-5)));
+    }
+
+    /// <summary>
+    /// The owner asked for an exact clock on battle day: "ends in 3d" can mean anything from 60 to 84 hours, and the
+    /// last hour of a battle is when it matters. Seconds tick, and the end is also given as a time you can plan around.
+    /// </summary>
+    [Fact]
+    public void TheCountdownIsExactAndSaysWhenItEnds()
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Chicago");
+
+        // 2026-09-25 16:00Z is 11:00 in Chicago (CDT).
+        var ends = new DateTimeOffset(2026, 9, 25, 16, 0, 0, TimeSpan.Zero);
+        Assert.Equal("ends in 5d 22:00:00 · Fri 25 Sep 11:00", PanelText.Countdown(ends, Now, zone));
+        Assert.Equal("ends in 5d 22:00:00", PanelText.Countdown(ends, Now, zone, withClock: false));
+
+        Assert.Equal("ends in 1d 0:00:01 · Fri 25 Sep 11:00", PanelText.Countdown(ends, ends.AddDays(-1).AddSeconds(-1), zone));
+        Assert.Equal("ends in 23:59:59 · Fri 25 Sep 11:00", PanelText.Countdown(ends, ends.AddDays(-1).AddSeconds(1), zone));
+        Assert.Equal("ends in 0:00:09 · Fri 25 Sep 11:00", PanelText.Countdown(ends, ends.AddSeconds(-9), zone));
+
+        // Its own second is still time left; at the end and after it, the battle is over and says so.
+        Assert.Equal("ends in 0:00:01 · Fri 25 Sep 11:00", PanelText.Countdown(ends, ends.AddSeconds(-1), zone));
+        Assert.Equal("ended", PanelText.Countdown(ends, ends, zone));
+        Assert.Equal("ended", PanelText.Countdown(ends, ends.AddHours(3), zone));
+
+        // The clock is the viewer's own, not the battle's: the same instant reads 16:00 in UTC.
+        Assert.Equal("ends in 5d 22:00:00 · Fri 25 Sep 16:00", PanelText.Countdown(ends, Now, TimeZoneInfo.Utc));
     }
 
     [Fact]

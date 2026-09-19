@@ -167,6 +167,13 @@ public sealed record StandingModel(
     /// <summary>Which way <see cref="Change"/> went, so the panel paints a fall as one (backlog S1-13.14).</summary>
     public ChangeDirection ChangeDirection { get; init; }
 
+    /// <summary>
+    /// When this panel's period ends, for the clock that ticks beside <see cref="PeriodLine"/> between reads, or null
+    /// with no period or no end. The panel keeps the instant, never a countdown worked out at read time: a number
+    /// drawn three minutes ago would be three minutes wrong.
+    /// </summary>
+    public DateTimeOffset? Ends { get; init; }
+
     /// <summary>The picture of the clan this panel is about, or null while there is none: never the window's, never another clan's.</summary>
     public string? Icon { get; init; }
 
@@ -294,6 +301,7 @@ public static class PanelModels
             hasAccounts ? $"{mine} of {rows!.Count}" : "",
             PanelText.PeriodLine(snapshot?.Period, live.Now, null))
         {
+            Ends = snapshot?.Period?.Ends,
             ChangeDirection = totals is null ? ChangeDirection.None : Records.Direction(totals),
             Icon = live.IconFor(source),
             HasIconSlot = recipe.Icon is not null,

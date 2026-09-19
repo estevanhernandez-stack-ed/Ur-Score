@@ -44,3 +44,6 @@ secrets/
 
 # Build and test transcripts written at the repo root by the build gate
 *-output.txt
+
+# Test run leftovers: blame-hang dumps and sequence files.
+tests/TestResults/

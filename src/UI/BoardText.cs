@@ -41,10 +41,21 @@ public static class BoardText
     public const string UnexpectedDetail = "Setup › Diagnostics has the details.";
 
     /// <summary>"AutumnBattle · ends in 3d · next read in 2m", or "Reads every 30m · next read in 12m" without a period.</summary>
-    public static string TopLine(LiveBoard live, string? anchorSourceId)
+    /// <summary>When the top line's own period ends, for the clock ticking beside it, or null with no period or end.</summary>
+    public static DateTimeOffset? TopEnds(LiveBoard live, string? anchorSourceId) =>
+        Anchor(live, anchorSourceId) is { } anchor ? live.SnapshotOf(anchor.Source.Id)?.Period?.Ends : null;
+
+    /// <summary>The source the top line speaks for: the board's anchor, else the first switched-on source that has a recipe.</summary>
+    private static (Source Source, Recipe Recipe)? Anchor(LiveBoard live, string? anchorSourceId)
     {
         var source = live.FindSource(anchorSourceId) ?? live.Sources.FirstOrDefault(s => s.Enabled);
-        if (source is null || live.FindRecipe(source.Recipe)?.Recipe is not { } recipe) return "";
+        return source is not null && live.FindRecipe(source.Recipe)?.Recipe is { } recipe ? (source, recipe) : null;
+    }
+
+    public static string TopLine(LiveBoard live, string? anchorSourceId)
+    {
+        if (Anchor(live, anchorSourceId) is not { } anchor) return "";
+        var (source, recipe) = anchor;
 
         DateTimeOffset? next = live.Running && live.LastRead.TryGetValue(source.Id, out var last)
             ? last.AddSeconds(recipe.EffectiveEverySeconds)

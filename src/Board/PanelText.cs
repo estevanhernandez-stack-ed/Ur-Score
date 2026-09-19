@@ -119,18 +119,36 @@ public static class PanelText
     public static string NextRead(DateTimeOffset due, DateTimeOffset now) =>
         due <= now ? "next read due" : $"next read in {StatText.Span(due - now)}";
 
-    /// <summary>"AutumnBattle · ends in 3d · next read in 2m" (spec §8's top bar line).</summary>
+    /// <summary>
+    /// "AutumnBattle · next read in 2m" (spec §8's top bar line). The period's end is not here: it ticks beside this
+    /// line, from the same <see cref="ReadingPeriod.Ends"/>, so a reader is never told two things about one end.
+    /// </summary>
     public static string PeriodLine(ReadingPeriod? period, DateTimeOffset now, DateTimeOffset? nextRead)
     {
         var parts = new List<string>();
-        if (period is not null)
-        {
-            parts.Add(period.Value);
-            if (period.Ends is { } ends) parts.Add(ends > now ? $"ends in {StatText.Span(ends - now)}" : "ended");
-        }
-
+        if (period is not null) parts.Add(period.Value);
         if (nextRead is { } next) parts.Add(NextRead(next, now));
         return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// How long a period has left, to the second, and when it ends in the viewer's own zone:
+    /// "ends in 5d 22:00:00 · Fri 25 Sep 11:00", or "ended" once it has. Asked for on battle day, where "ends in 3d"
+    /// covers anything from 60 to 84 hours and the last hour is the one that matters. The end second itself still
+    /// counts as time left; from the end onwards it is over.
+    /// </summary>
+    public static string Countdown(DateTimeOffset ends, DateTimeOffset now, TimeZoneInfo zone, bool withClock = true)
+    {
+        if (ends <= now) return "ended";
+
+        var left = ends - now;
+        var exact = left.Days > 0
+            ? $"{left.Days}d {left.Hours}:{left.Minutes:00}:{left.Seconds:00}"
+            : $"{left.Hours}:{left.Minutes:00}:{left.Seconds:00}";
+        if (!withClock) return $"ends in {exact}";
+
+        var clock = TimeZoneInfo.ConvertTime(ends, zone).ToString("ddd d MMM HH:mm", CultureInfo.InvariantCulture);
+        return $"ends in {exact} · {clock}";
     }
 
     public static string StaleSource(string group) => $"This panel's {group} was removed.";

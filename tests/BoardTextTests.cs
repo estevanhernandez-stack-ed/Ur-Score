@@ -20,6 +20,20 @@ public class BoardTextTests
             running: true, lastRead: new Dictionary<string, DateTimeOffset> { [MainClan.Id] = Now.AddMinutes(-1) });
 
         Assert.Equal(PanelText.PeriodLine(period, Now, Now.AddMinutes(-1).AddSeconds(Clan.EffectiveEverySeconds)), BoardText.TopLine(live, MainClan.Id));
+        // The top bar's own clock ticks this end down; the line above never speaks of it.
+        Assert.Equal(period.Ends, BoardText.TopEnds(live, MainClan.Id));
+        Assert.DoesNotContain("ends in", BoardText.TopLine(live, MainClan.Id), StringComparison.Ordinal);
+    }
+
+    /// <summary>A recipe that reads without a period has no end to count down, and the line stands alone.</summary>
+    [Fact]
+    public void WithoutAPeriodThereIsNothingToCountDown()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var live = Live([profile], [Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>());
+
+        Assert.Null(BoardText.TopEnds(live, profile.Id));
+        Assert.Null(BoardText.TopEnds(live, "no-such-source"));
     }
 
     [Fact]

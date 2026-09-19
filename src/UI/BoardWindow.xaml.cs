@@ -326,7 +326,8 @@ public partial class BoardWindow : Window
 
     private void RenderLinesCore(LiveBoard live)
     {
-        PeriodLine.Text = BoardText.TopLine(live, _anchorSourceId);
+        PeriodLine.Lead = BoardText.TopLine(live, _anchorSourceId);
+        PeriodLine.Ends = BoardText.TopEnds(live, _anchorSourceId);
         LiveDot.Visibility = live.Running ? Visibility.Visible : Visibility.Collapsed;
         StartStopButton.Content = live.Running ? "Stop" : "Start";
         AttributionLine.Text = BoardText.Attribution(live);

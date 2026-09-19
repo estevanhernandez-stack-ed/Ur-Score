@@ -3,6 +3,15 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **The battle's clock, to the second.** Clan standing and the board's top bar count the period down
+  as it runs, without waiting for a read: "SpaceMineBattle2026 · ends in 5d 21:20:02 · Fri 25 Sep
+  11:00". The panel also gives the end as a time you can plan around; the top bar keeps to the
+  countdown, which is all one line has room for. "ends in 3d" covered anything from 60 to 84 hours.
+
 ## 0.3.5 - 2026-09-17
 
 ### Fixed
