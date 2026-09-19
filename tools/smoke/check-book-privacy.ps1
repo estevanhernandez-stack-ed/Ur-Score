@@ -20,7 +20,8 @@ if ($mine.Count -eq 0) { "accounts.json lists no Roblox user ids."; exit 2 }
 $lines = 0; $reads = 0; $finals = 0; $broken = 0
 $notYoursAccountKeys = 0; $notYoursUnavail = 0; $watchWithAccounts = 0; $responseTextLines = 0
 $fieldLines = 0; $fieldWithAccounts = 0; $fieldStrayKeys = 0
-$fieldKeys = @('field-leader', 'field-top10', 'field-avg', 'field-bottom10', 'field-clans')
+$fieldKeys = @('field-leader', 'field-top10', 'field-avg', 'field-bottom10', 'field-clans',
+               'field-mine', 'field-mine-rank', 'field-above', 'field-gap-above')
 
 foreach ($file in Get-ChildItem $bookRoot -Recurse -Filter *.jsonl) {
     foreach ($text in [System.IO.File]::ReadLines($file.FullName)) {

@@ -3,6 +3,15 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **A clans-list read also keeps where you stand.** Beside the field's four numbers: your own clan's points as
+  that read saw them, the place you hold by points, the points of the place directly above you, and the gap to
+  it. The place above is a position, never a clan - whoever holds it, the series keeps meaning "the one to
+  catch". It is what a catch-up pace needs to survive a restart.
+
 ## 0.3.6 - 2026-09-19
 
 ### Added

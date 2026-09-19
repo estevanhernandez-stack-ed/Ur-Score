@@ -13,6 +13,9 @@ public class FieldSummaryTests
     private static GroupRow Clan(string name, double points, int? rank = null) =>
         new(name, new Dictionary<string, double> { ["points"] = points }, rank);
 
+    /// <summary>Your own clans, the way AppServices hands them over: the clan names your sources were set up with.</summary>
+    private static IReadOnlySet<string> Mine(params string[] names) => new HashSet<string>(names, StringComparer.Ordinal);
+
     [Fact]
     public void TheSummaryIsFourNumbersAndACount()
     {
@@ -89,5 +92,72 @@ public class FieldSummaryTests
         string[] keys = [FieldSummary.Leader, FieldSummary.Top10, FieldSummary.Average, FieldSummary.Bottom10, FieldSummary.Clans];
 
         Assert.Equal(["field-avg", "field-bottom10", "field-clans", "field-leader", "field-top10"], keys.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Where you stand in the field, for the catch-up pace: your own clan's points as the same read saw them, the
+    /// place you hold by points, the points of the place directly above you, and the gap to it. The place above is
+    /// a position, never a clan: whoever holds it, the series keeps meaning the same thing.
+    /// </summary>
+    [Fact]
+    public void YourPlaceAndTheOneAboveYouAreKept()
+    {
+        var rows = new List<GroupRow> { Clan("UN0", 700), Clan("K0i2", 180), Clan("CCGP", 90), Clan("BOSS", 200) };
+
+        var summary = FieldSummary.Of(rows, "points", Mine("K0i2", "CCGP"));
+
+        Assert.Equal(180, summary[FieldSummary.Mine]);
+        Assert.Equal(3, summary[FieldSummary.MineRank]);
+        Assert.Equal(200, summary[FieldSummary.Above]);
+        Assert.Equal(20, summary[FieldSummary.GapAbove]);
+    }
+
+    /// <summary>The leader has nobody above it, so there is no gap to keep — not a zero, which would read as a tie.</summary>
+    [Fact]
+    public void TheLeaderHasNoPlaceAbove()
+    {
+        var rows = new List<GroupRow> { Clan("K0i2", 700), Clan("BOSS", 200) };
+
+        var summary = FieldSummary.Of(rows, "points", Mine("K0i2"));
+
+        Assert.Equal(700, summary[FieldSummary.Mine]);
+        Assert.Equal(1, summary[FieldSummary.MineRank]);
+        Assert.False(summary.ContainsKey(FieldSummary.Above));
+        Assert.False(summary.ContainsKey(FieldSummary.GapAbove));
+    }
+
+    /// <summary>Your clan outside the list (it hasn't joined, or it is past the hundredth) leaves the field alone.</summary>
+    [Fact]
+    public void WithoutYourClanOnlyTheFieldIsKept()
+    {
+        var rows = new List<GroupRow> { Clan("UN0", 700), Clan("BOSS", 200) };
+
+        var summary = FieldSummary.Of(rows, "points", Mine("K0i2"));
+
+        Assert.Equal(700, summary[FieldSummary.Leader]);
+        Assert.False(summary.ContainsKey(FieldSummary.Mine));
+        Assert.False(summary.ContainsKey(FieldSummary.Above));
+    }
+
+    /// <summary>Two of your clans in one list: the better placed one is the one the catch-up numbers are about.</summary>
+    [Fact]
+    public void TheBetterPlacedOfYourClansIsTheOneMeasured()
+    {
+        var rows = new List<GroupRow> { Clan("UN0", 700), Clan("CCGP", 300), Clan("K0i2", 180) };
+
+        var summary = FieldSummary.Of(rows, "points", Mine("K0i2", "CCGP"));
+
+        Assert.Equal(300, summary[FieldSummary.Mine]);
+        Assert.Equal(2, summary[FieldSummary.MineRank]);
+        Assert.Equal(400, summary[FieldSummary.GapAbove]);
+    }
+
+    /// <summary>A clan name matches however it was typed: Setup takes what you type, the list has its own casing.</summary>
+    [Fact]
+    public void YourClansNameMatchesWhateverItsCasing()
+    {
+        var rows = new List<GroupRow> { Clan("UN0", 700), Clan("K0i2", 180) };
+
+        Assert.Equal(180, FieldSummary.Of(rows, "points", Mine("k0i2"))[FieldSummary.Mine]);
     }
 }

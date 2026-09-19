@@ -106,7 +106,8 @@ public sealed class RecipeWatch(
     string recipeText = "",
     AccountClaims? claims = null,
     FinalsIndex? finals = null,
-    TimeProvider? time = null)
+    TimeProvider? time = null,
+    Func<IReadOnlySet<string>>? myGroups = null)
 {
     internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
 
@@ -494,7 +495,8 @@ public sealed class RecipeWatch(
         if (book is null || readSource is null) return (false, null);
         if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
 
-        var line = LineBuilder.Reading(ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>());
+        var line = LineBuilder.Reading(
+            ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>(), myGroups?.Invoke());
         if (line is null) return (false, NotRecordingNoField);
 
         book.Append(line, readText);

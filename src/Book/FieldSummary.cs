@@ -25,6 +25,21 @@ public static class FieldSummary
     /// <summary>How many clans the numbers above cover, so a short read can't read as the field collapsing.</summary>
     public const string Clans = "field-clans";
 
+    /// <summary>Your own clan's points as this read saw them, beside the field's, so a gap is read from one instant.</summary>
+    public const string Mine = "field-mine";
+
+    /// <summary>The place your clan holds, worked out from the points in this read.</summary>
+    public const string MineRank = "field-mine-rank";
+
+    /// <summary>
+    /// The points of the place directly above yours. A position, never a clan: whoever holds it, the series keeps
+    /// meaning "the one to catch". It is what a catch-up pace needs to survive a restart.
+    /// </summary>
+    public const string Above = "field-above";
+
+    /// <summary>How far the place above is ahead, from the same read, so the gap never mixes two instants.</summary>
+    public const string GapAbove = "field-gap-above";
+
     private const int Cohort = 10;
 
     /// <summary>
@@ -35,19 +50,26 @@ public static class FieldSummary
     /// A list shorter than ten clans is its own top and bottom, and <see cref="Clans"/> says how many that was.
     /// </para>
     /// </summary>
-    public static IReadOnlyDictionary<string, double> Of(IReadOnlyList<GroupRow> groups, string valueKey)
+    /// <param name="mine">
+    /// The names of your own clans, so the read can say where you stand in the field. Your own clan may be named —
+    /// the ruling is about everyone else's — but only its number is kept, and the place above you is kept as a
+    /// position. With none of yours in the list, only the field's own numbers are.
+    /// </param>
+    public static IReadOnlyDictionary<string, double> Of(
+        IReadOnlyList<GroupRow> groups, string valueKey, IReadOnlySet<string>? mine = null)
     {
         if (groups.Count == 0 || string.IsNullOrEmpty(valueKey)) return new Dictionary<string, double>(StringComparer.Ordinal);
 
-        var points = groups
-            .Select(g => g.Values.TryGetValue(valueKey, out var value) ? value : (double?)null)
-            .OfType<double>()
-            .OrderByDescending(value => value)
+        var ranked = groups
+            .Select(g => (g.Name, Value: g.Values.TryGetValue(valueKey, out var value) ? value : (double?)null))
+            .Where(g => g.Value is not null)
+            .OrderByDescending(g => g.Value!.Value)
             .ToList();
 
-        if (points.Count == 0) return new Dictionary<string, double>(StringComparer.Ordinal);
+        if (ranked.Count == 0) return new Dictionary<string, double>(StringComparer.Ordinal);
 
-        return new Dictionary<string, double>(StringComparer.Ordinal)
+        var points = ranked.Select(g => g.Value!.Value).ToList();
+        var summary = new Dictionary<string, double>(StringComparer.Ordinal)
         {
             [Leader] = points[0],
             [Top10] = points.Take(Cohort).Average(),
@@ -55,5 +77,21 @@ public static class FieldSummary
             [Bottom10] = points.TakeLast(Cohort).Average(),
             [Clans] = points.Count,
         };
+
+        // The best placed of your clans is the one the catch-up numbers are about. Matched however the name was
+        // typed: Setup takes what you type, and the list has its own casing.
+        var yours = mine is null ? null : new HashSet<string>(mine, StringComparer.OrdinalIgnoreCase);
+        var at = yours is null ? -1 : ranked.FindIndex(g => yours.Contains(g.Name));
+        if (at < 0) return summary;
+
+        summary[Mine] = points[at];
+        summary[MineRank] = at + 1;
+        if (at > 0)
+        {
+            summary[Above] = points[at - 1];
+            summary[GapAbove] = points[at - 1] - points[at];
+        }
+
+        return summary;
     }
 }

@@ -17,7 +17,13 @@ public sealed record ReadContext(Labs626.UrScore.Core.Source Source, Recipe Reci
 /// </summary>
 public static class LineBuilder
 {
-    public static BookLine? Reading(ReadContext context, RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlySet<string> tracked)
+    /// <param name="myGroups">
+    /// Your own clans' names, for a group list: with them the line also says where you stand and what the place
+    /// above you holds. Without them, only the field's own numbers are kept.
+    /// </param>
+    public static BookLine? Reading(
+        ReadContext context, RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlySet<string> tracked,
+        IReadOnlySet<string>? myGroups = null)
     {
         var recipe = context.Recipe;
         if (reading.Outcome != ReadingOutcome.Read) return null;
@@ -26,7 +32,7 @@ public static class LineBuilder
         // (the owner's ruling, 2026-09-19). No account is matched on a group list, so none can be written.
         if (recipe.IsGroupList)
         {
-            var field = FieldSummary.Of(reading.Groups, recipe.LastStep.Values.FirstOrDefault()?.Id ?? "");
+            var field = FieldSummary.Of(reading.Groups, recipe.LastStep.Values.FirstOrDefault()?.Id ?? "", myGroups);
             return field.Count == 0
                 ? null
                 : new BookLine(

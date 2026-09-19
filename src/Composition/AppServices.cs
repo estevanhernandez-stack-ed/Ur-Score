@@ -564,8 +564,20 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         return new RecipeWatch(
             _engine, _host, Keys, PolicyFor(installed, source), installed.Recipe, source.Inputs, tracked,
-            _book, source, Accounts, installed.Text, _claims, _finals, _time);
+            _book, source, Accounts, installed.Text, _claims, _finals, _time, MyGroupNames);
     }
+
+    /// <summary>
+    /// The clans you set up, by name, asked for at each read rather than captured: a clans list uses them to say where
+    /// you stand in the field and what the place above you holds (<see cref="FieldSummary"/>). Only your own sources'
+    /// own inputs — a group list has none of its own.
+    /// </summary>
+    private IReadOnlySet<string> MyGroupNames() =>
+        Sources
+            .Where(s => FindInstalled(s.Recipe)?.Recipe.IsGroupList == false)
+            .SelectMany(s => s.Inputs.Values)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private int IntervalFor(Source source) =>
         FindInstalled(source.Recipe)?.Recipe.EffectiveEverySeconds ?? Recipe.MinimumEverySeconds;

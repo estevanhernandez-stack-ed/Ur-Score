@@ -27,9 +27,19 @@ follows.
    Your own clan's points and rank are already recorded by its own source, so they are not duplicated here.
    The alternative — the whole top-100 list, with names — was offered and declined.
 2. **Both surfaces.** A short pace line in Clan standing, and a Pace panel with the detail.
-3. **Open, to accept or drop:** a sixth number, `above` — the points of the place directly above yours. It
-   names no clan (the position, not its occupant) and it is what "pace to overtake" needs to survive a
-   restart. Without it, a rival's pace is measured only from readings since Ur Score started.
+3. **Accepted, same evening:** where you stand, and the place above you. The owner asked for the catch-up
+   pace as an alertable metric ("what we would need to catch up with x place, starting with the next clan
+   above us"), and that number cannot survive a restart without the neighbour's history. So a clans-list read
+   also keeps `field-mine` (your own clan's points as that read saw them), `field-mine-rank`, `field-above`
+   and `field-gap-above`. **The place above is a position, never a clan**: whoever holds it, the series keeps
+   meaning "the one to catch". Your own clan may be named; the ruling is about everyone else's.
+4. **The metrics to send are the pacing ones**, led by the catch-up pace for the next place up. Sent with no
+   account attached — the plugin contract allows that ("empty for a metric that is not about any one
+   account"), so RoRoRo keys it globally and every member of a clan can set the same alert.
+5. **Ticks live in Setup › Stats**, in a section of their own beside the per-account stats.
+6. **Out of reach is a state worth naming.** The end time is known, so a catch-up that needs more than your
+   best hour of this battle is reported as out of reach, and one that cannot be made even if the clan above
+   stopped is reported as out of reach for certain.
 
 ## What gets written
 
@@ -39,7 +49,9 @@ the same shape `clan-points` already uses, on a line with no accounts.
 ```
 { "v":1, "kind":"read", "t":"2026-09-19T17:02:00Z", "source":"s-000000NN", "role":"Top",
   "headline": { "field-leader":788623705, "field-top10":350978119,
-                "field-avg":82073868, "field-bottom10":21655539, "field-clans":100 } }
+                "field-avg":82073868, "field-bottom10":21655539, "field-clans":100,
+                "field-mine":181549159, "field-mine-rank":9,
+                "field-above":185957960, "field-gap-above":4408801 } }
 ```
 
 - `field-clans` is how many rows the average covers, so a short read can never read as a collapse in the
@@ -82,6 +94,18 @@ To pass them by the end you need 1.05M/h.
   their pace from this session's readings. Said plainly on the panel rather than implied.
 - When you are gaining slower, it says what it costs: "you do not pass them at these paces; you need 1.05M/h".
 - Nothing is projected past the battle's end.
+
+## Alerts on these numbers
+
+RoRoRo's contract settles most of the shape: a report may carry **no account** (`subject_id` empty), and rates
+are the host's to derive from cumulative values, not the plugin's to send. So:
+
+- **Pace alerts need no pace metric.** Send the clan's total with no account, and RoRoRo's existing "gains
+  fewer than N a minute for M minutes" rule is the pace alert, for every member who sets it.
+- **The catch-up pace is a level, not a total**, so it is sent as it is and alerted on with "crosses a
+  number": "tell me when catching 8th needs more than 2M an hour" is a leader's sentence, and every member
+  can set the same one.
+- **Out of reach** is that same metric crossing above your best hour, which the panel also says in words.
 
 ## Order of work
 
