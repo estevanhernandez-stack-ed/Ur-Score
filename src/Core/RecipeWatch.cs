@@ -124,7 +124,8 @@ public sealed class RecipeWatch(
 
     internal const string NotRecordingEnded = "It has ended, and its final result is saved.";
 
-    internal const string NotRecordingGroups = "Group lists are shown live and never kept.";
+    /// <summary>Kept for the state a group list can still be in: read, but with no clan carrying the value it lists by.</summary>
+    internal const string NotRecordingNoField = "This read brought no clan with a number, so there was nothing to keep.";
 
     internal const string NotRecordingNothingRead = "Nothing was read this time.";
 
@@ -357,9 +358,12 @@ public sealed class RecipeWatch(
 
         if (readRecipe.IsGroupList)
         {
+            // The field's own numbers are kept (FieldSummary): no clan is named, no account is matched, nothing is sent.
+            var (fieldRecorded, fieldReason) = RecordField(readRecipe, readText, readSource, trigger, reading);
             return Snapshot(readRecipe, readSource, WatchState.Showing, $"Read {reading.Groups.Count} groups.", seen, unresolved, reading, map) with
             {
-                NotRecordingReason = book is null ? null : NotRecordingGroups,
+                Recorded = fieldRecorded,
+                NotRecordingReason = fieldReason,
             };
         }
 
@@ -480,6 +484,23 @@ public sealed class RecipeWatch(
     /// Score book spec §5.4 and §6: finals first, from the same response, then this read's line, unless its
     /// period has already ended. Returns whether a reading line was kept, and why not.
     /// </summary>
+    /// <summary>
+    /// The clans-list half of <see cref="Record"/>: one line of <see cref="FieldSummary"/> numbers, so a later read can
+    /// say how fast the field was going. No rows, no accounts, no clan name, and no send — a group list never had any.
+    /// </summary>
+    private (bool Recorded, string? Reason) RecordField(
+        Recipe readRecipe, string readText, Source? readSource, string trigger, RecipeReading reading)
+    {
+        if (book is null || readSource is null) return (false, null);
+        if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
+
+        var line = LineBuilder.Reading(ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>());
+        if (line is null) return (false, NotRecordingNoField);
+
+        book.Append(line, readText);
+        return (true, null);
+    }
+
     private (bool Recorded, string? Reason) Record(
         Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, IReadOnlySet<string> readTracked, Source? readSource, string trigger,
         RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlyDictionary<long, Guid> owned)

@@ -1,5 +1,7 @@
 # Spec 5.6: another player's id never reaches disk. Loads your own Roblox user ids from accounts.json and
 # checks every score book line: its account keys, its unavailable ids, and that no line carries response text.
+# Since 2026-09-19 a clans list keeps the field's four numbers (FieldSummary): this also checks that such a line
+# carries nothing but those keys and no account, so no clan name can ride along with them.
 # Prints only pass/fail with counts, never an account id or another player's id.
 # Exit 0 when clean, 1 when anything is not yours, 2 when there is nothing to check.
 param([string]$DataFolder = (Join-Path $env:LOCALAPPDATA '626labs.ur-score'))
@@ -17,6 +19,8 @@ if ($mine.Count -eq 0) { "accounts.json lists no Roblox user ids."; exit 2 }
 
 $lines = 0; $reads = 0; $finals = 0; $broken = 0
 $notYoursAccountKeys = 0; $notYoursUnavail = 0; $watchWithAccounts = 0; $responseTextLines = 0
+$fieldLines = 0; $fieldWithAccounts = 0; $fieldStrayKeys = 0
+$fieldKeys = @('field-leader', 'field-top10', 'field-avg', 'field-bottom10', 'field-clans')
 
 foreach ($file in Get-ChildItem $bookRoot -Recurse -Filter *.jsonl) {
     foreach ($text in [System.IO.File]::ReadLines($file.FullName)) {
@@ -39,11 +43,20 @@ foreach ($file in Get-ChildItem $bookRoot -Recurse -Filter *.jsonl) {
         if ($text -match 'PointContributions|UserID|DisplayName|displayName') {
             $responseTextLines++
         }
+
+        # A clans-list line: every headline key must be one of the field's own, and it may hold no account.
+        $headlineKeys = @()
+        if ($line.headline) { $headlineKeys = @($line.headline.PSObject.Properties.Name) }
+        if (@($headlineKeys | Where-Object { $fieldKeys -contains $_ }).Count -gt 0) {
+            $fieldLines++
+            $fieldStrayKeys += @($headlineKeys | Where-Object { $fieldKeys -notcontains $_ }).Count
+            if ($line.accounts -and @($line.accounts.PSObject.Properties).Count -gt 0) { $fieldWithAccounts++ }
+        }
     }
 }
 
-$bad = $notYoursAccountKeys + $notYoursUnavail + $watchWithAccounts + $responseTextLines
-"Your ids: $($mine.Count). Lines: $lines ($reads read, $finals final). Unparseable lines skipped: $broken."
-"Problems: $bad (not-yours account keys: $notYoursAccountKeys, not-yours unavail ids: $notYoursUnavail, watch lines with accounts: $watchWithAccounts, response-text lines: $responseTextLines)."
+$bad = $notYoursAccountKeys + $notYoursUnavail + $watchWithAccounts + $responseTextLines + $fieldWithAccounts + $fieldStrayKeys
+"Your ids: $($mine.Count). Lines: $lines ($reads read, $finals final, $fieldLines field). Unparseable lines skipped: $broken."
+"Problems: $bad (not-yours account keys: $notYoursAccountKeys, not-yours unavail ids: $notYoursUnavail, watch lines with accounts: $watchWithAccounts, field lines with accounts: $fieldWithAccounts, stray keys on field lines: $fieldStrayKeys, response-text lines: $responseTextLines)."
 if ($bad -gt 0) { exit 1 }
 exit 0

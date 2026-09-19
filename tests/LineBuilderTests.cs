@@ -153,15 +153,30 @@ public class LineBuilderTests
     public void NothingOfYoursAndNoHeadlineIsNoLine() =>
         Assert.Null(LineBuilder.Reading(Context(Clan), ClanReading([Row(7_000_001, 5)]), new Dictionary<long, Guid>(), Points));
 
+    /// <summary>
+    /// A group list is a line of its own shape since 2026-09-19: the field's four numbers and a count, no clan named
+    /// and no account, so a later read can say how fast the field was going. A list with no number is still no line.
+    /// </summary>
     [Fact]
-    public void GroupListsAndStoppedReadsAreNeverALine()
+    public void AGroupListIsTheFieldsNumbersAndAStoppedReadIsNoLine()
     {
         var groups = new RecipeReading(ReadingOutcome.Read, null, [], [], null, 1)
         {
             Groups = [new GroupRow("Aurelian", new Dictionary<string, double> { ["value"] = 1 }, 1)],
         };
 
-        Assert.Null(LineBuilder.Reading(Context(TopClans, SourceRole.Watch), groups, new Dictionary<long, Guid>(), Points));
+        var field = LineBuilder.Reading(Context(TopClans, SourceRole.Watch), groups, new Dictionary<long, Guid>(), Points);
+        Assert.NotNull(field);
+        Assert.Equal(1, field.Headline["field-leader"]);
+        Assert.Equal(1, field.Headline["field-clans"]);
+        Assert.Empty(field.Accounts);
+        Assert.DoesNotContain("Aurelian", BookJson.Serialize(field), StringComparison.OrdinalIgnoreCase);
+
+        var noNumber = new RecipeReading(ReadingOutcome.Read, null, [], [], null, 1)
+        {
+            Groups = [new GroupRow("Aurelian", new Dictionary<string, double>(), 1)],
+        };
+        Assert.Null(LineBuilder.Reading(Context(TopClans, SourceRole.Watch), noNumber, new Dictionary<long, Guid>(), Points));
         Assert.Null(LineBuilder.Reading(Context(Clan), RecipeReading.Stop(ReadingOutcome.Idle, "No clan battle running"), new Dictionary<long, Guid> { [1] = A }, Points));
     }
 

@@ -251,7 +251,7 @@ public class RecipeWatchBookTests
     [InlineData(SourceRole.Watch)]
     [InlineData(SourceRole.Mine)]
     [InlineData(SourceRole.Main)]
-    public async Task AGroupListIsShownAndNeverKept(SourceRole role)
+    public async Task AGroupListKeepsTheFieldsNumbersAndNoClansName(SourceRole role)
     {
         var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
         var recipe = RecipeParser.Parse(text).Recipe!;
@@ -269,13 +269,26 @@ public class RecipeWatchBookTests
 
         Assert.Equal(1, engine.Calls);
         Assert.Empty(engine.LastIds);
-        Assert.Empty(book.Lines);
-        Assert.Empty(book.RecipeTexts);
         Assert.Empty(host.Reported);
-        Assert.False(snapshot.Recorded);
+        Assert.True(snapshot.Recorded);
+        Assert.Null(snapshot.NotRecordingReason);
         Assert.Equal(WatchState.Showing, snapshot.State);
         Assert.Equal(2, snapshot.Groups.Count);
-        Assert.Equal(RecipeWatch.NotRecordingGroups, snapshot.NotRecordingReason);
+
+        // One line: the field's shape, and nothing on it that could name a clan or reach an account.
+        var line = Assert.Single(book.Lines);
+        Assert.Equal(
+            new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                ["field-leader"] = 2, ["field-top10"] = 1.5, ["field-avg"] = 1.5, ["field-bottom10"] = 1.5, ["field-clans"] = 2,
+            },
+            line.Headline);
+        Assert.Empty(line.Accounts);
+        Assert.Empty(line.Stats);
+        Assert.Null(line.Unavail);
+        var written = BookJson.Serialize(line);
+        Assert.DoesNotContain("Aurelian", written, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SkyHarbor", written, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

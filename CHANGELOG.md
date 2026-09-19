@@ -11,6 +11,14 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
   as it runs, without waiting for a read: "SpaceMineBattle2026 · ends in 5d 21:20:02 · Fri 25 Sep
   11:00". The panel also gives the end as a time you can plan around; the top bar keeps to the
   countdown, which is all one line has room for. "ends in 3d" covered anything from 60 to 84 hours.
+- **The field's pace is now recordable.** A clans list used to be drawn live and thrown away, so nothing
+  could say how fast the rest of the battle was moving. Each read of one now keeps four numbers and a count:
+  the leader's points, the top-10 average, the bottom-10 average, the whole field's average, and how many
+  clans that covered. **No clan but your own is named on disk**, no account is matched to a list, and nothing
+  is sent. Ranked by points, never by the rank the list hands over: the live board disagreed with itself on
+  2026-09-19, showing rank 10 above rank 9.
+- **`pet-sim-99-top-clans.recipe.json` ships with the release**, so the top-100 board can be imported like any
+  other recipe. Every recipe in `recipes/` now rides each release, rather than a list kept in the workflow.
 
 ## 0.3.5 - 2026-09-17
 

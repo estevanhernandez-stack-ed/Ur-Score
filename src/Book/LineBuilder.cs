@@ -20,7 +20,22 @@ public static class LineBuilder
     public static BookLine? Reading(ReadContext context, RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlySet<string> tracked)
     {
         var recipe = context.Recipe;
-        if (reading.Outcome != ReadingOutcome.Read || recipe.IsGroupList) return null;
+        if (reading.Outcome != ReadingOutcome.Read) return null;
+
+        // A clans list keeps the field's shape, never its register: four numbers and a count, no clan named
+        // (the owner's ruling, 2026-09-19). No account is matched on a group list, so none can be written.
+        if (recipe.IsGroupList)
+        {
+            var field = FieldSummary.Of(reading.Groups, recipe.LastStep.Values.FirstOrDefault()?.Id ?? "");
+            return field.Count == 0
+                ? null
+                : new BookLine(
+                    BookLine.Version, BookLine.KindRead, context.At, context.OffsetMinutes, context.Trigger,
+                    new BookRecipeRef(recipe.Slug, context.RecipeHash), context.Source.Id, RoleText(context.Source.Role),
+                    Inputs(context.Source), Period(reading.Period), field, [],
+                    new Dictionary<string, BookAccount>(StringComparer.Ordinal),
+                    null, reading.ListAsOf?.Time, reading.ListAsOf?.Stale);
+        }
 
         var stats = tracked.Order(StringComparer.Ordinal).ToList();
         var headline = Headline(reading.Headline, OtherIds(reading.Rows, map));

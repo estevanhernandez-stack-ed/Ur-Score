@@ -55,9 +55,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           $tag = '${{ github.ref_name }}'
-          $files = @(
-            'artifacts/manifest.json', 'artifacts/manifest.sha256', 'artifacts/plugin.zip',
-            'recipes/pet-sim-99-clan-battle.recipe.json', 'recipes/pet-sim-99-profile.recipe.json')
+          # Every recipe in recipes/, not a list that goes stale: the setup guide links to
+          # releases/latest/download/<recipe>, and a recipe added later must ride the next release by itself.
+          $recipes = @(Get-ChildItem 'recipes/*.recipe.json' | ForEach-Object { $_.FullName })
+          if ($recipes.Count -eq 0) { throw 'no recipes to upload' }
+          $files = @('artifacts/manifest.json', 'artifacts/manifest.sha256', 'artifacts/plugin.zip') + $recipes
           foreach ($file in $files) { if (-not (Test-Path $file)) { throw "missing $file" } }
 
           gh release view $tag *> $null

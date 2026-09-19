@@ -1,0 +1,31 @@
+{
+  "recipe": 1,
+  "name": "Pet Sim 99 top clans",
+  "credit": "Data from Big Games' public Pet Simulator 99 API.",
+  "valueLabel": "Points",
+  "everySeconds": 300,
+  "steps": [
+    {
+      "url": "https://ps99.biggamesapi.io/api/activeClanBattle",
+      "take": {
+        "battle": "data.configName",
+        "battleStarts": "data.configData.StartTime",
+        "battleEnds": "data.configData.FinishTime"
+      },
+      "idleWithout": "battle",
+      "idleMessage": "No clan battle running"
+    },
+    {
+      "url": "https://ps99.biggamesapi.io/v1/clans/battles/{battle}",
+      "rows": "data.topClans",
+      "groupName": "name",
+      "value": "points",
+      "rank": "rank"
+    }
+  ],
+  "period": {
+    "value": "battle",
+    "starts": "battleStarts",
+    "ends": "battleEnds"
+  }
+}
