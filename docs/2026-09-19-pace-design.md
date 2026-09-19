@@ -107,6 +107,28 @@ are the host's to derive from cumulative values, not the plugin's to send. So:
   can set the same one.
 - **Out of reach** is that same metric crossing above your best hour, which the panel also says in words.
 
+## Measured on the owner's own board, 2026-09-19 19:53
+
+The first six reads, 25 minutes apart end to end, on K0i2 in SpaceMineBattle2026:
+
+| | points | over 25 min |
+|---|---|---|
+| K0i2 (9th) | 362,215,108 | 184,564,430/h |
+| the place above | 397,115,556 | 185,489,950/h |
+| the leader | 1,426,339,439 | 580,783,873/h |
+| top-10 average | 661,122,382 | 269,789,277/h |
+| field average | 157,296,990 | 66,095,584/h |
+
+Two things this settles:
+
+- **The catch-up maths works and is worth having.** The gap is 34,900,448 with 140 hours left, and at these
+  paces the clan above is pulling away at 925,519/h — so "you do not pass them" is the true answer, and the
+  number needed is about 1.2M/h more than the clan is doing.
+- **A pace needs its window stated, and a short one must not be projected.** Twenty-five minutes extrapolated
+  to 140 hours gives 26 billion, which is nonsense on its face. The panel measures over a stated window (the
+  last hour, and since the battle's start) and says which; a window under an hour is shown as "too early to
+  say" rather than projected.
+
 ## Order of work
 
 1. Record the four (or five) summary numbers from a group-list read. Tests + `check-book-privacy` updated to

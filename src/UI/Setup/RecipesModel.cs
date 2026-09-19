@@ -42,7 +42,8 @@ public static class RecipesModel
 
     public static string SourcesText(Recipe recipe, IReadOnlyList<Source> sources)
     {
-        if (recipe.IsGroupList) return "Shown live, never kept";
+        // Since 0.3.7 a list keeps the field's own numbers, and no name: saying "never kept" was true and stopped being so.
+        if (recipe.IsGroupList) return "Every row live; the field's numbers kept, no name";
         if (recipe.Inputs.Count == 0) return "";
 
         var count = sources.Count(s => string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal));

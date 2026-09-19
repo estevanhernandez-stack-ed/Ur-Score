@@ -66,7 +66,8 @@ public class RecipesModelTests
     {
         Assert.Equal("No clans yet", RecipesModel.SourcesText(Clan, []));
         Assert.Equal("1 clan", RecipesModel.SourcesText(Clan, [ClanSource("s-00000001", "CCGP")]));
-        Assert.Equal("Shown live, never kept", RecipesModel.SourcesText(RecipeParser.Parse(GroupList).Recipe!, []));
+        // A clans list keeps FieldSummary's numbers since 0.3.7, so "never kept" would now be false on screen.
+        Assert.Equal("Every row live; the field's numbers kept, no name", RecipesModel.SourcesText(RecipeParser.Parse(GroupList).Recipe!, []));
     }
 
     [Fact]
