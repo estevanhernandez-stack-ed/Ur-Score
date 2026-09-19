@@ -2,7 +2,6 @@
   "recipe": 1,
   "name": "Pet Sim 99 top clans",
   "credit": "Data from Big Games' public Pet Simulator 99 API.",
-  "valueLabel": "Points",
   "everySeconds": 300,
   "steps": [
     {
@@ -19,8 +18,33 @@
       "url": "https://ps99.biggamesapi.io/v1/clans/battles/{battle}",
       "rows": "data.topClans",
       "groupName": "name",
-      "value": "points",
-      "rank": "rank"
+      "rank": "rank",
+      "values": [
+        {
+          "id": "points",
+          "label": "Points",
+          "path": "points",
+          "metricId": "clan.battle.points"
+        },
+        {
+          "id": "members",
+          "label": "Members",
+          "path": "members",
+          "metricId": "clan.members"
+        },
+        {
+          "id": "capacity",
+          "label": "Member capacity",
+          "path": "memberCapacity",
+          "metricId": "clan.member.capacity"
+        },
+        {
+          "id": "contributors",
+          "label": "Contributors",
+          "path": "contributorCount",
+          "metricId": "clan.battle.contributors"
+        }
+      ]
     }
   ],
   "period": {

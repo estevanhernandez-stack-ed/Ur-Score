@@ -40,6 +40,17 @@ public static class FieldSummary
     /// <summary>How far the place above is ahead, from the same read, so the gap never mixes two instants.</summary>
     public const string GapAbove = "field-gap-above";
 
+    /// <summary>Your clan's members, and the most it can hold: the difference is a slot you can move an alt into.</summary>
+    public const string MineMembers = "field-mine-members";
+
+    public const string MineCapacity = "field-mine-capacity";
+
+    /// <summary>How many of your clan's members have scored in this battle. Members minus this is the roster sitting out.</summary>
+    public const string MineContributors = "field-mine-contributors";
+
+    /// <summary>The ids a list carries these counts under, when it carries them at all.</summary>
+    private const string MembersId = "members", CapacityId = "capacity", ContributorsId = "contributors";
+
     private const int Cohort = 10;
 
     /// <summary>
@@ -61,7 +72,7 @@ public static class FieldSummary
         if (groups.Count == 0 || string.IsNullOrEmpty(valueKey)) return new Dictionary<string, double>(StringComparer.Ordinal);
 
         var ranked = groups
-            .Select(g => (g.Name, Value: g.Values.TryGetValue(valueKey, out var value) ? value : (double?)null))
+            .Select(g => (g.Name, Row: g, Value: g.Values.TryGetValue(valueKey, out var value) ? value : (double?)null))
             .Where(g => g.Value is not null)
             .OrderByDescending(g => g.Value!.Value)
             .ToList();
@@ -86,6 +97,12 @@ public static class FieldSummary
 
         summary[Mine] = points[at];
         summary[MineRank] = at + 1;
+
+        // Only what the list actually carried: an absent count must never read as a full clan or an idle one.
+        foreach (var (id, key) in new[] { (MembersId, MineMembers), (CapacityId, MineCapacity), (ContributorsId, MineContributors) })
+        {
+            if (ranked[at].Row.Values.TryGetValue(id, out var count)) summary[key] = count;
+        }
         if (at > 0)
         {
             summary[Above] = points[at - 1];

@@ -45,6 +45,8 @@ public class ShippedRecipesTests
         Assert.True(recipe.IsGroupList);
         Assert.NotNull(recipe.Period);
         Assert.Equal("battle", recipe.Period.Value);
-        Assert.Single(recipe.LastStep.Values);
+        // Points first: the field is ranked by the first value a clans list declares.
+        Assert.Equal("points", recipe.LastStep.Values[0].Id);
+        Assert.Equal(["points", "members", "capacity", "contributors"], recipe.LastStep.Values.Select(v => v.Id));
     }
 }

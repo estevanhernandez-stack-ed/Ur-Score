@@ -160,4 +160,38 @@ public class FieldSummaryTests
 
         Assert.Equal(180, FieldSummary.Of(rows, "points", Mine("k0i2"))[FieldSummary.Mine]);
     }
+
+    /// <summary>
+    /// The counts behind two decisions a clan leader makes during a battle: whether there is a slot to move an alt
+    /// into, and how much of the roster is sitting out. Kept for your own clan only, and counts name nobody.
+    /// Measured on K0i2 on 2026-09-19: 74 of 75 members, 64 of them scoring.
+    /// </summary>
+    [Fact]
+    public void YourClansRosterCountsAreKept()
+    {
+        var rows = new List<GroupRow>
+        {
+            new("UN0", new Dictionary<string, double> { ["points"] = 700, ["members"] = 75, ["capacity"] = 75, ["contributors"] = 70 }, 1),
+            new("K0i2", new Dictionary<string, double> { ["points"] = 280, ["members"] = 74, ["capacity"] = 75, ["contributors"] = 64 }, 2),
+        };
+
+        var summary = FieldSummary.Of(rows, "points", Mine("K0i2"));
+
+        Assert.Equal(74, summary[FieldSummary.MineMembers]);
+        Assert.Equal(75, summary[FieldSummary.MineCapacity]);
+        Assert.Equal(64, summary[FieldSummary.MineContributors]);
+    }
+
+    /// <summary>A list that carries no roster counts keeps none: an absent count must never read as a full clan.</summary>
+    [Fact]
+    public void RosterCountsAreKeptOnlyWhenTheListCarriesThem()
+    {
+        var rows = new List<GroupRow> { Clan("UN0", 700), Clan("K0i2", 280) };
+
+        var summary = FieldSummary.Of(rows, "points", Mine("K0i2"));
+
+        Assert.False(summary.ContainsKey(FieldSummary.MineMembers));
+        Assert.False(summary.ContainsKey(FieldSummary.MineCapacity));
+        Assert.False(summary.ContainsKey(FieldSummary.MineContributors));
+    }
 }

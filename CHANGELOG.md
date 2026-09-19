@@ -3,6 +3,15 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Your clan's roster counts ride with the field.** A clans-list read also keeps your clan's members, what it
+  can hold, and how many of them have scored in this battle. Members against capacity is whether there is a
+  slot to move an alt into; members against contributors is how much of the roster is sitting out. Counts only,
+  naming nobody, and only what the list actually carried - an absent count never reads as a full clan.
+
 ## 0.3.7 - 2026-09-19
 
 ### Added
