@@ -1,0 +1,25 @@
+<UserControl x:Class="Labs626.UrScore.UI.PacePanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:Labs626.UrScore.UI">
+    <Border Style="{StaticResource PanelCard}">
+        <StackPanel>
+            <ui:PanelFrame DataContext="{Binding Head}" />
+            <!-- Key-value lines 12 apart, as Records has them: every line here is a pace or what one would take. -->
+            <ui:RowList ItemsSource="{Binding Facts}" AutomationProperties.Name="Pace, and what catching the place above would take"
+                        Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
+                <ui:RowList.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,12,0,0">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" Style="{StaticResource KeyValue}" TextWrapping="Wrap"
+                                       MaxWidth="240" TextAlignment="Right" />
+                            <TextBlock Text="{Binding Label}" Style="{StaticResource KeyLabel}" />
+                        </DockPanel>
+                    </DataTemplate>
+                </ui:RowList.ItemTemplate>
+            </ui:RowList>
+            <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
+                       Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />
+        </StackPanel>
+    </Border>
+</UserControl>

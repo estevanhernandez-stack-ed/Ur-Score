@@ -103,6 +103,7 @@ public static class PanelText
         PanelType.Top => $"Top of the {(TopPeriodRecipe(recipe, installed) is { } periodRecipe ? RecipeWords.Period(periodRecipe) : "list")}",
         PanelType.ProfileStat => "Profile stat",
         PanelType.AccountsTable => "Accounts table",
+        PanelType.Pace => recipe is null ? "Pace" : $"{RecipeWords.Capital(RecipeWords.Group(recipe))} pace",
         _ => "Live leaderboard",
     };
 

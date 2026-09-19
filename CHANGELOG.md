@@ -3,6 +3,19 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **A Pace panel.** How fast a clan is going now and on average, its best hour, where that lands by the end,
+  the field's own pace once a clans list is switched on, and what catching the place above would take. Add it
+  per clan, your own or a watched one.
+- **Out of reach is said out loud.** A chase is measured against this clan's best hour of this battle: it says
+  it is passed in so long, or what pace it needs, or that it is out of reach - and the certain version, out of
+  reach even if they stop now.
+- **Every pace states its window**, and a window under fifteen minutes says "too early to say" instead of a
+  number. Measured on the owner's board: 25 minutes carried across 140 hours projected 26 billion points.
+
 ## 0.3.8 - 2026-09-19
 
 ### Added

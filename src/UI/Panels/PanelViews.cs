@@ -19,6 +19,7 @@ public static class PanelViews
         PanelType.Top => new TopPanel(),
         PanelType.ProfileStat => new ProfileStatPanel(),
         PanelType.AccountsTable => new AccountsTablePanel(),
+        PanelType.Pace => new PacePanelView(),
         _ => new LiveLeaderboardPanel(),
     };
 
@@ -38,6 +39,7 @@ public static class PanelViews
             case TopPanel panel: panel.Render(PanelModels.Top(live, settings)); break;
             case ProfileStatPanel panel: panel.Render(PanelModels.ProfileStat(live, reader, settings)); break;
             case AccountsTablePanel panel: panel.Render(PanelModels.AccountsTable(live, reader, settings, session.Sort, session.PickedUserId)); break;
+            case PacePanelView panel: panel.Render(PacePanel.Of(live, reader, settings)); break;
             case LiveLeaderboardPanel panel: panel.Render(PanelModels.LiveLeaderboard(live, settings, names)); break;
         }
     }

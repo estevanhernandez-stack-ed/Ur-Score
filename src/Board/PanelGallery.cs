@@ -16,7 +16,7 @@ public static class PanelGallery
     public static IReadOnlyList<PanelType> Order { get; } =
     [
         PanelType.Standing, PanelType.Race, PanelType.MyAccounts, PanelType.PromotionCheck, PanelType.AccountCard,
-        PanelType.PastPeriods, PanelType.Records, PanelType.Top, PanelType.ProfileStat, PanelType.AccountsTable, PanelType.LiveLeaderboard,
+        PanelType.PastPeriods, PanelType.Records, PanelType.Pace, PanelType.Top, PanelType.ProfileStat, PanelType.AccountsTable, PanelType.LiveLeaderboard,
     ];
 
     /// <summary>The title <see cref="PanelModels"/> gives a panel of this type on the card's recipe (<see cref="CardRecipe"/>), for a panel not yet added.</summary>
@@ -53,6 +53,9 @@ public static class PanelGallery
                 PanelType.PastPeriods => ($"Needs a {group}.", $"Finished {period}s newest first: place, total and your best account.",
                     $"Needs a {group} whose recipe keeps past {period}s."),
                 PanelType.Records => ("Needs a stat.", $"Best {period}, best rank, highest value, biggest day and fastest 7 days.", TickFirst),
+                PanelType.Pace => ($"Needs a {group} whose recipe has a total and a {period}.",
+                    $"How fast it is going now, on average and at its best, where that lands by the end, and what catching the place above would take. The field's own pace once a {groups} list is switched on.",
+                    $"Add a {group} in Setup first."),
                 PanelType.Top => ("Needs a recipe that lists groups.", $"The top of the {period} live, with your {groups} placed where they'd rank.",
                     "Import a recipe that lists groups, and turn it on in Setup."),
                 PanelType.ProfileStat => ("Needs a stat from a recipe that reads without a period.", "Your accounts with value, today's gain and 7-day gain.",

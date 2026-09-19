@@ -7,7 +7,7 @@ namespace Labs626.UrScore.Board;
 
 using Source = Labs626.UrScore.Core.Source;
 
-public enum PanelType { Standing, Race, MyAccounts, PromotionCheck, AccountCard, PastPeriods, Records, Top, ProfileStat, LiveLeaderboard, AccountsTable }
+public enum PanelType { Standing, Race, MyAccounts, PromotionCheck, AccountCard, PastPeriods, Records, Top, ProfileStat, LiveLeaderboard, AccountsTable, Pace }
 
 /// <summary>What a panel shows. Stage 1 fills these from the starter board; stage 2 saves them in boards.json.</summary>
 public sealed record PanelSettings(
@@ -1052,7 +1052,7 @@ public static class PanelModels
 
     private sealed record RankedGroup(GroupRow Row, int Rank, double? Value);
 
-    private static PanelHead StaleSource(LiveBoard live, PanelSettings settings, string title) =>
+    internal static PanelHead StaleSource(LiveBoard live, PanelSettings settings, string title) =>
         new(title, Stale: PanelText.StaleSource(live.FindRecipe(settings.Recipe)?.Recipe is { } recipe ? RecipeWords.Group(recipe) : "source"));
 
     private static AccountCardModel EmptyCard(PanelHead head) => new(head, "", Dash, [], [], [], "");

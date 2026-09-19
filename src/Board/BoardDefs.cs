@@ -44,7 +44,7 @@ public static class BoardDefs
     /// <summary>What a panel added from the gallery starts at.</summary>
     public static PanelSize DefaultSize(PanelType type) => type switch
     {
-        PanelType.Standing or PanelType.AccountCard or PanelType.Records => new PanelSize(PanelSize.Small),
+        PanelType.Standing or PanelType.AccountCard or PanelType.Records or PanelType.Pace => new PanelSize(PanelSize.Small),
         PanelType.LiveLeaderboard or PanelType.AccountsTable => new PanelSize(PanelSize.Wide),
         _ => new PanelSize(PanelSize.Half),
     };
