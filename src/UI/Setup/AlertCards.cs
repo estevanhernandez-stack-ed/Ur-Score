@@ -26,6 +26,9 @@ public sealed class AlertDraft
     public string Minutes { get; set; } = "";
 
     public string Direction { get; set; } = AlertCards.Below;
+
+    /// <summary>Whether RoRoRo also says when this comes right again. Off unless the user ticks it.</summary>
+    public bool TellMeWhenItRecovers { get; set; }
 }
 
 public enum AlertEditMode { None, ChoosingKind, Adding, Changing }
@@ -57,13 +60,16 @@ public sealed record AlertCardRow(
     bool ShowKinds, bool ShowRateKind, bool ShowLevelKind, AlertTarget RateTarget, AlertTarget LevelTarget, string RateKindName, string LevelKindName,
     bool ShowRateEditor, bool ShowLevelEditor, AlertDraft? Draft, IReadOnlyList<string> MinuteChoices,
     string ConfirmText, string ConfirmName, string CancelName, string NumberName, string MinutesName, string DirectionName,
-    string Problem, string Result, bool ResultIsProblem)
+    string Problem, string Result, bool ResultIsProblem, string Whose = "an account's", string RecoverName = "")
 {
     public bool HasNote => Note.Length > 0;
 
     public bool HasNoAlerts => NoAlerts.Length > 0;
 
     public bool ShowEditor => ShowRateEditor || ShowLevelEditor;
+
+    /// <summary>A label that already names the clan needs no subject in front of it.</summary>
+    public bool HasWhose => Whose.Length > 0;
 
     public bool HasProblem => Problem.Length > 0;
 
@@ -94,6 +100,15 @@ public static partial class AlertCards
     public const string NoSentStat = "Nothing is sent to RoRoRo yet. Tick Send on a stat in Setup › Stats, or a number "
         + "under Clan and field on the same page, and it gets a card here.";
     public const string TypeANumber = "Type a number, like 100.";
+
+    /// <summary>
+    /// The tick beside the editor. An alert fires once, on the crossing, so without this one there
+    /// is nothing to tell you it is over — and silence reads the same as nothing being wrong.
+    /// </summary>
+    public const string AlsoTellMe = "Also tell me when it comes right again";
+
+    /// <summary>The second sentence on a card, under the alert's own, when the rule asked for it.</summary>
+    public const string AndTellsYou = "And RoRoRo tells you when it comes right again.";
     public const string UseADot = "Use a dot for decimals, like 1.5.";
     public const string TwoDecimals = "Use at most two decimal places, like 1.25.";
     public const string AboveZero = "Use a number above 0.";
@@ -192,7 +207,9 @@ public static partial class AlertCards
             };
 
             // The stat's label from the recipe, whatever the rule's own label says (A4).
-            lines.Add(new AlertLine(rule, Sentence(rule.Kind, stat.Label, rule.Threshold, rule.WindowMinutes, rule.AlertWhenBelow), mark, isManaged));
+            var sentence = Sentence(rule.Kind, stat.Label, rule.Threshold, rule.WindowMinutes, rule.AlertWhenBelow, stat.MetricId);
+            if (rule.TellMeWhenItRecovers) sentence += " " + AndTellsYou;
+            lines.Add(new AlertLine(rule, sentence, mark, isManaged));
         }
 
         IReadOnlyList<AlertKind> canAdd = stat.Sent && rules.Problem == RulesProblem.None ? [.. Offered.Where(k => !managed.Contains(k))] : [];
@@ -247,12 +264,13 @@ public static partial class AlertCards
     public static string Condition(
         AlertKind kind, string label, double threshold, double windowMinutes, bool below, string? metricId = null)
     {
-        var whose = Whose(metricId);
+        var whose = Whose(metricId, label);
+        var subject = whose.Length == 0 ? label : $"{whose} {label}";
         return kind switch
         {
-            AlertKind.Rate => $"{whose} {label} gains fewer than {Number(threshold)} a minute for {Number(windowMinutes)} {(windowMinutes == 1 ? "minute" : "minutes")}",
-            AlertKind.Level => $"{whose} {label} goes {(below ? Below : Above)} {Number(threshold)}",
-            _ => $"{whose} {label} changes",
+            AlertKind.Rate => $"{subject} gains fewer than {Number(threshold)} a minute for {Number(windowMinutes)} {(windowMinutes == 1 ? "minute" : "minutes")}",
+            AlertKind.Level => $"{subject} goes {(below ? Below : Above)} {Number(threshold)}",
+            _ => $"{subject} changes",
         };
     }
 
@@ -269,11 +287,20 @@ public static partial class AlertCards
     private static string ClanLabel(string label, string? clan) =>
         string.IsNullOrWhiteSpace(clan) ? label : $"{clan.Trim()} {RecipeWords.Lower(label)}";
 
-    /// <summary>Whose number this is. A clan-and-field id is nobody's account, and never was.</summary>
-    private static string Whose(string? metricId) =>
-        metricId is not null && FieldMetrics.All.Any(m => string.Equals(m.MetricId, metricId, StringComparison.Ordinal))
-            ? "your clan's"
-            : "an account's";
+    /// <summary>
+    /// Whose number this is, as the sentence needs it. A clan-and-field id is nobody's account and
+    /// never was, so it is "your clan's" — unless the label already starts with the clan's name, in
+    /// which case it is nobody's: "your clan's K0i2 clan points" says the same thing twice.
+    /// </summary>
+    private static string Whose(string? metricId, string label)
+    {
+        var known = metricId is null
+            ? null
+            : FieldMetrics.All.FirstOrDefault(m => string.Equals(m.MetricId, metricId, StringComparison.Ordinal));
+
+        if (known is null) return "an account's";
+        return string.Equals(known.Label, label, StringComparison.Ordinal) ? "your clan's" : "";
+    }
 
     public static string Sentence(
         AlertKind kind, string label, double threshold, double windowMinutes, bool below, string? metricId = null) =>
@@ -338,6 +365,7 @@ public static partial class AlertCards
         Number = Editable(rule.Threshold),
         Minutes = Editable(rule.WindowMinutes > 0 ? rule.WindowMinutes : DefaultMinutes),
         Direction = rule.AlertWhenBelow ? Below : Above,
+        TellMeWhenItRecovers = rule.TellMeWhenItRecovers,
     };
 
     /// <summary>
@@ -410,12 +438,13 @@ public static partial class AlertCards
         {
             // Only a choice the box offers, matched as text: "Infinity", "NaN", 0 or a rule's own 20 never reach the file.
             var chosen = Minutes.Where(m => string.Equals(Editable(m), draft.Minutes?.Trim(), StringComparison.Ordinal)).ToList();
-            if (chosen.Count == 1) return (new AlertSpec(kind, threshold, chosen[0], AlertWhenBelow: true, label), "");
+            if (chosen.Count == 1)
+                return (new AlertSpec(kind, threshold, chosen[0], AlertWhenBelow: true, label, draft.TellMeWhenItRecovers), "");
             return (null, IsOtherMinutes(draft.Minutes) ? OtherMinutes(draft.Minutes!.Trim()) : ChooseMinutes);
         }
 
         return draft.Direction is Below or Above
-            ? (new AlertSpec(kind, threshold, 0, draft.Direction == Below, label), "")
+            ? (new AlertSpec(kind, threshold, 0, draft.Direction == Below, label, draft.TellMeWhenItRecovers), "")
             : (null, ChooseDirection);
     }
 
@@ -440,7 +469,8 @@ public static partial class AlertCards
     /// <summary>After Turn on or Save wrote (or didn't): the result on the card; a file that can't be opened or written keeps the editor open.</summary>
     public static AlertsUi AfterWrite(AlertsUi ui, RuleWrite outcome, AlertSpec spec)
     {
-        var condition = Condition(spec.Kind, spec.Label, spec.Threshold, spec.WindowMinutes, spec.AlertWhenBelow, ui.MetricId);
+        var condition = Condition(spec.Kind, spec.Label, spec.Threshold, spec.WindowMinutes, spec.AlertWhenBelow, ui.MetricId)
+            + (spec.TellMeWhenItRecovers ? ", and again when it comes right" : "");
         return outcome switch
         {
             RuleWrite.Done when ui.Mode == AlertEditMode.Changing => Said(ui.MetricId, $"Changed. RoRoRo will now alert you when {condition}.", false),
@@ -497,6 +527,7 @@ public static partial class AlertCards
             ShowLevelKind: mode == AlertEditMode.ChoosingKind && card.CanAdd.Contains(AlertKind.Level),
             RateTarget: new AlertTarget(id, AlertKind.Rate), LevelTarget: new AlertTarget(id, AlertKind.Level),
             RateKindName: KindName(AlertKind.Rate, label), LevelKindName: KindName(AlertKind.Level, label),
+            Whose: Whose(id, label), RecoverName: $"{AlsoTellMe}, for {label}",
             ShowRateEditor: editing && ui.Kind == AlertKind.Rate, ShowLevelEditor: editing && ui.Kind == AlertKind.Level,
             Draft: editing ? ui.Draft : null, MinuteChoices: MinuteChoices(editing ? ui.Draft?.Minutes : null),
             ConfirmText: mode == AlertEditMode.Changing ? "Save" : "Turn on",

@@ -555,6 +555,52 @@ public class AlertCardsTests
         Assert.Equal(stat, AlertCards.Sentence(AlertKind.Level, "Diamonds", 10, 0, below: false));
     }
 
+    /// <summary>
+    /// A label that already names the clan needs no subject in front of it. Seen on screen before
+    /// this: "Alert me when your clan's K0i2 clan points goes below" — which says the same thing
+    /// twice. The catalogue label on its own still gets one, because then nothing else says whose.
+    /// </summary>
+    [Fact]
+    public void ALabelThatAlreadyNamesTheClanGetsNoSubject()
+    {
+        var named = AlertCards.Sentence(AlertKind.Level, "K0i2 clan points", 500, 0, below: true, "clan.standing.points");
+        var plain = AlertCards.Sentence(AlertKind.Level, "Clan points", 500, 0, below: true, "clan.standing.points");
+
+        Assert.Equal("Alert me when K0i2 clan points goes below 500.", named);
+        Assert.Equal("Alert me when your clan's Clan points goes below 500.", plain);
+    }
+
+    /// <summary>
+    /// The tick survives the round trip: draft to spec to the rules file and back into the draft a
+    /// Change opens on. Without the last leg, opening an existing recovery rule to edit its number
+    /// would quietly turn its recovery off.
+    /// </summary>
+    [Fact]
+    public void TheRecoveryTickSurvivesTheRoundTrip()
+    {
+        var draft = new AlertDraft { Number = "500", Direction = AlertCards.Below, TellMeWhenItRecovers = true };
+        var (spec, problem) = AlertCards.Check(AlertKind.Level, draft, "Clan points");
+
+        Assert.Equal("", problem);
+        Assert.NotNull(spec);
+        Assert.True(spec.TellMeWhenItRecovers);
+
+        var rule = new AlertRule(0, "clan.standing.points", AlertKind.Level, 500, 0, true, RuleOwner.UrScore, "Clan points", true);
+        Assert.True(AlertCards.DraftOf(rule).TellMeWhenItRecovers);
+
+        // And a rule that never asked stays off through the same path.
+        var quiet = rule with { TellMeWhenItRecovers = false };
+        Assert.False(AlertCards.DraftOf(quiet).TellMeWhenItRecovers);
+    }
+
+    /// <summary>A card whose rule asked says so, under the alert's own sentence.</summary>
+    [Fact]
+    public void ACardSaysWhenItWillAlsoTellYouItIsOver()
+    {
+        Assert.Contains("comes right again", AlertCards.AndTellsYou, StringComparison.Ordinal);
+        Assert.Contains("comes right again", AlertCards.AlsoTellMe, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ThePageSaysWhatToDoWhenThereIsNoCard()
     {
