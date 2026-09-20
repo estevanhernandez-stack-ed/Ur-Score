@@ -76,4 +76,24 @@ public class RecipesModelTests
         Assert.Equal(
             "Remove Pet Sim 99 profile? It stops being read. Its score book stays on this PC, so importing it again carries on where it left off.",
             RecipesModel.ConfirmRemove(Profile));
+
+    /// <summary>
+    /// The page offers what you do not have. An installed recipe is a row of its own above; offering it again would
+    /// read as a second copy of the same thing.
+    /// </summary>
+    [Fact]
+    public void OnlyTheBuiltInRecipesYouHaveNotInstalledAreOffered()
+    {
+        var all = RecipesModel.BuiltIn([]);
+        Assert.NotEmpty(all);
+        Assert.All(all, item => Assert.False(string.IsNullOrWhiteSpace(item.Hosts)));
+        Assert.Contains(all, item => item.AddName.StartsWith("Add ", StringComparison.Ordinal));
+
+        var one = BuiltInRecipes.All[0];
+        var installed = RecipeParser.Parse(one.Text).Recipe!;
+        var rest = RecipesModel.BuiltIn([new InstalledRecipe(installed, one.Text, new RecipeState())]);
+
+        Assert.Equal(all.Count - 1, rest.Count);
+        Assert.DoesNotContain(rest, item => item.Slug == one.Slug);
+    }
 }

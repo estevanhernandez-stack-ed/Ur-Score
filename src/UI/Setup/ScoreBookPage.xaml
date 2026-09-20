@@ -20,6 +20,18 @@
         <TextBlock x:Name="BookFolderProblemLine" Style="{StaticResource Refusal}" Margin="0,6,0,0" Visibility="Collapsed" />
         <TextBlock x:Name="BookPendingLine" Style="{StaticResource Muted}" Margin="0,6,0,0" Visibility="Collapsed" />
 
+        <!-- Another PC's book joins this one: every machine mints its own source ids, so readings are matched to a
+             source by its recipe and the clan it follows, never by an id this PC has never seen. -->
+        <TextBlock Text="ANOTHER PC" Style="{StaticResource SectionLabel}" Margin="0,20,0,6" />
+        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                   Text="Ran Ur Score on another PC? Bring its readings in and the two become one history. Copy that PC's 626labs.ur-score folder here first, on a stick or a share." />
+        <StackPanel Orientation="Horizontal">
+            <Button x:Name="BringBookButton" Content="Bring in a book…" Click="OnBringBookClick"
+                    AutomationProperties.Name="Bring in a score book from another PC" />
+            <TextBlock x:Name="BringBookLine" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+        </StackPanel>
+        <TextBlock x:Name="BringBookProblemLine" Style="{StaticResource Refusal}" Margin="0,6,0,0" Visibility="Collapsed" />
+
         <TextBlock Text="PER RECIPE" Style="{StaticResource SectionLabel}" Margin="0,20,0,6" />
         <TextBlock x:Name="BookLoadingLine" Style="{StaticResource Muted}" Visibility="Collapsed" Text="Reading your score book…" />
         <ui:RowList x:Name="BookRecipesList" AutomationProperties.Name="What the score book keeps for each recipe">

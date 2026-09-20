@@ -42,6 +42,9 @@ public interface ISetupServices
 
     bool ReaderLoaded { get; }
 
+    /// <summary>Reads the score book again, after something outside a read has added to it (bringing in another PC's book).</summary>
+    Task ReloadBookAsync();
+
     bool Running { get; }
 
     /// <summary>The newest snapshot per source id, from a timed read, Test now, or a Setup read-once.</summary>

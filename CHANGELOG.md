@@ -3,6 +3,20 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.4.0 - 2026-09-20
+
+### Added
+
+- **The recipes come with Ur Score.** Setup › Recipes lists what it ships - the clan battle, your accounts'
+  profiles, the top clans - each one press away, with the hosts it would contact shown beside it. No download, no
+  file picker, no JSON. Adding one still opens the same review screen, because seeing what a recipe will contact
+  before it is added is the promise, whatever the text came from. Importing a file works exactly as before.
+- **Bring in a score book from another PC.** Setup › Score book takes the other machine's Ur Score folder and joins
+  its readings to this one's. Every PC mints its own source ids, so readings are matched to a source by its recipe
+  and the clan it follows, then rewritten to this PC's ids - the two machines become one history instead of two
+  halves. Anything already here is skipped, a clan this PC doesn't follow is named rather than guessed at, and a
+  recipe that isn't installed here is named too.
+
 ## 0.3.12 - 2026-09-20
 
 ### Fixed

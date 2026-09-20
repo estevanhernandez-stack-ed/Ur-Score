@@ -51,6 +51,26 @@
         <TextBlock x:Name="RecipesEmptyLine" Style="{StaticResource Muted}" Margin="0,0,0,8" Visibility="Collapsed"
                    Text="No recipes yet. Import one to start." />
         <TextBlock x:Name="RecipeProblemsLine" Style="{StaticResource Refusal}" Margin="0,0,0,8" Visibility="Collapsed" />
+        <!-- The recipes Ur Score carries with it: nothing to download, nothing to find in a folder. Each still opens
+             the same review screen, so the hosts it will contact are seen before it is added. -->
+        <TextBlock x:Name="BuiltInLabel" Text="READY TO ADD" Style="{StaticResource SectionLabel}" Margin="0,18,0,6" Visibility="Collapsed" />
+        <ui:RowList x:Name="BuiltInList" AutomationProperties.Name="Recipes that come with Ur Score" Visibility="Collapsed">
+            <ui:RowList.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource Card}" Padding="12,10" Margin="0,0,0,8">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Add" Tag="{Binding Slug}" Click="OnAddBuiltInClick" VerticalAlignment="Center"
+                                    AutomationProperties.Name="{Binding AddName}" />
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Hosts}" FontFamily="{StaticResource MonoFont}" Style="{StaticResource Muted}" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                </DataTemplate>
+            </ui:RowList.ItemTemplate>
+        </ui:RowList>
+
         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
             <Button x:Name="ImportRecipeButton" Content="Import recipe…" Style="{StaticResource PrimaryButton}" Click="OnImportClick"
                     AutomationProperties.Name="Import a recipe file" />

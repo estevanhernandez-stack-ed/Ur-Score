@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
+using Microsoft.Win32;
 
 namespace Labs626.UrScore.UI;
 
@@ -10,6 +12,8 @@ namespace Labs626.UrScore.UI;
 public partial class ScoreBookPage : UserControl, ISetupPage
 {
     private readonly ISetupServices _services;
+
+    private bool _bringing;
 
     public ScoreBookPage(ISetupServices services)
     {
@@ -33,6 +37,48 @@ public partial class ScoreBookPage : UserControl, ISetupPage
         var items = ScoreBookModel.NotRecording(_services.Installed, _services.Sources, _services.Latest, _services.Running, everListed);
         NotRecordingList.ItemsSource = items;
         AllRecordingLine.Visibility = items.Count == 0 && _services.Sources.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Brings another PC's book into this one. The folder picked is that machine's data folder (or its scorebook):
+    /// its readings are matched to this PC's sources by recipe and clan, rewritten to this PC's ids, and appended.
+    /// Anything already here is skipped, and a clan this PC doesn't follow is named rather than guessed at.
+    /// </summary>
+    private async void OnBringBookClick(object sender, RoutedEventArgs e)
+    {
+        if (_bringing) return;
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Pick the other PC's Ur Score folder",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+
+        _bringing = true;
+        BringBookButton.IsEnabled = false;
+        Show(BringBookProblemLine, "");
+        BringBookLine.Text = "Reading that book…";
+
+        try
+        {
+            var outcome = await Task.Run(() => BookImport.Run(dialog.FolderName, _services));
+            BringBookLine.Text = outcome.Message;
+            Show(BringBookProblemLine, outcome.Problem);
+            if (outcome.Added > 0) await _services.ReloadBookAsync();
+        }
+        catch (Exception ex)
+        {
+            BringBookLine.Text = "";
+            Show(BringBookProblemLine, _services.Redactor.Redact($"That book could not be brought in: {ex.Message}"));
+        }
+        finally
+        {
+            _bringing = false;
+            BringBookButton.IsEnabled = true;
+            Refresh();
+        }
     }
 
     private void OnOpenFolderClick(object sender, RoutedEventArgs e)

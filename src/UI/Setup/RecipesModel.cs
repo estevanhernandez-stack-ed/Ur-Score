@@ -6,6 +6,12 @@ namespace Labs626.UrScore.UI;
 
 using Source = Labs626.UrScore.Core.Source;
 
+/// <summary>One recipe Ur Score carries with it, as the Recipes page offers it: not yet installed, one press away.</summary>
+public sealed record BuiltInItem(string Slug, string Name, string Hosts)
+{
+    public string AddName => $"Add {Name}";
+}
+
 public sealed record RecipeItem(string Slug, string Name, string Hosts, string Every, string Sources, string? IconFile)
 {
     public string RemoveName => $"Remove {Name}";
@@ -40,6 +46,22 @@ public static class RecipesModel
                 ? PanelText.IconName(LiveBoard.NameOf(main, i.Recipe), i.Recipe)
                 : "",
         })];
+
+    /// <summary>
+    /// The recipes Ur Score ships that are not installed yet, with the hosts each would contact. An installed one is
+    /// a row of its own above; offering it again would read as a second copy.
+    /// </summary>
+    public static IReadOnlyList<BuiltInItem> BuiltIn(IReadOnlyList<InstalledRecipe> installed) =>
+    [
+        .. BuiltInRecipes.All
+            .Where(b => !installed.Any(i => string.Equals(i.Recipe.Slug, b.Slug, StringComparison.Ordinal)))
+            .Select(b => new BuiltInItem(
+                b.Slug,
+                b.Name,
+                RecipeParser.Parse(b.Text).Recipe is { } recipe
+                    ? string.Join(", ", RecipeHosts.ContactedBy(recipe).Order(StringComparer.Ordinal))
+                    : "")),
+    ];
 
     public static string SourcesText(Recipe recipe, IReadOnlyList<Source> sources)
     {

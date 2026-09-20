@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
@@ -30,9 +31,48 @@ public partial class RecipesPage : UserControl, ISetupPage
             ? ""
             : "Some recipe files could not be read: " + string.Join(" | ", _services.RecipeProblems));
 
+        // Only the ones not installed yet: an installed recipe is a row above, not an offer.
+        var offered = RecipesModel.BuiltIn(_services.Installed);
+        BuiltInList.ItemsSource = offered;
+        var show = offered.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        BuiltInList.Visibility = show;
+        BuiltInLabel.Visibility = show;
+
         _settingBox = true;
         StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
         _settingBox = false;
+    }
+
+    /// <summary>
+    /// A recipe that ships inside Ur Score, added without a download or a file picker. It runs the same import as a
+    /// file does, review screen and all, so what it will contact is seen before it is added.
+    /// </summary>
+    private async void OnAddBuiltInClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string slug || BuiltInRecipes.Find(slug) is not { } builtIn) return;
+        if (_importing) return;
+
+        _importing = true;
+        ImportRecipeButton.IsEnabled = false;
+        var before = new ImportLines(RecipesLine.Text, ImportProblemLine.Visibility == Visibility.Visible ? ImportProblemLine.Text : "");
+
+        try
+        {
+            Show(ImportProblemLine, "");
+            var outcome = await ImportFlow.RunTextAsync(_window, _services, builtIn.Text, text => Show(RecipesLine, text.Length > 0 ? text : before.News));
+
+            var after = ImportFlow.LinesAfter(before, outcome);
+            Show(RecipesLine, after.News);
+            Show(ImportProblemLine, after.Problem);
+            // As a file import does: the recipe's own Clans page takes over, carrying what the import said (S1-12.4).
+            if (outcome is { ChooseSources: true }) _window.ShowPage(SetupPages.ClansId(outcome.Slug), outcome.Message);
+        }
+        finally
+        {
+            _importing = false;
+            ImportRecipeButton.IsEnabled = true;
+            Refresh();
+        }
     }
 
     private async void OnImportClick(object sender, RoutedEventArgs e)

@@ -49,6 +49,17 @@ public static class ImportFlow
             return Problem($"Could not read that file: {ex.Message}");
         }
 
+        return await RunTextAsync(owner, services, text, status);
+    }
+
+    /// <summary>
+    /// The same import, from a recipe that is already in hand: one that ships inside Ur Score
+    /// (<see cref="BuiltInRecipes"/>), so there is nothing to download and no file to find. It goes through the very
+    /// same review — every host it will contact, and what each one receives — because where the text came from
+    /// changes nothing about what a person is agreeing to.
+    /// </summary>
+    public static async Task<ImportOutcome?> RunTextAsync(Window owner, ISetupServices services, string text, Action<string>? status = null)
+    {
         var parsed = RecipeParser.Parse(text);
         if (!parsed.Ok)
         {

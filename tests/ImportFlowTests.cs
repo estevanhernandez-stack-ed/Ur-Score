@@ -138,6 +138,8 @@ public class ImportFlowTests : IDisposable
 
         public bool ReaderLoaded => throw new NotSupportedException();
 
+        public Task ReloadBookAsync() => throw new NotSupportedException();
+
         public bool Running => throw new NotSupportedException();
 
         public IReadOnlyDictionary<string, RecipeSnapshot> Latest => throw new NotSupportedException();

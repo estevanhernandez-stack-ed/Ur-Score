@@ -277,6 +277,18 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     public Task LoadBookAsync() => _bookLoader.LoadAsync(LoadBookOnceAsync);
 
+    /// <summary>
+    /// Reads the book again after something outside a read wrote to it — bringing in another PC's book. The reader
+    /// replaces a slug's data on load, so this is safe to call over a book already read, and the panels redraw from it.
+    /// </summary>
+    public async Task ReloadBookAsync()
+    {
+        var root = _book.Root;
+        var reader = Reader;
+        await Task.Run(() => reader.Load(BookFiles.Slugs(root)));
+        RaiseChanged();
+    }
+
     private async Task LoadBookOnceAsync()
     {
         var root = _book.Root;

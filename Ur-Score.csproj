@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>626labs.ur-score</AssemblyName>
     <RootNamespace>Labs626.UrScore</RootNamespace>
-    <Version>0.3.12</Version>
+    <Version>0.4.0</Version>
     <Company>626 Labs LLC</Company>
     <Product>RoRoRo Ur Score</Product>
     <Description>Reads your accounts' numbers from wherever a recipe says, keeps them on your scoreboard and in your score book, and hands them to RoRoRo.</Description>
@@ -19,6 +19,12 @@
          own use the EXE's, so this one line gives the title bar, taskbar and Alt+Tab the icon. -->
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- The recipes ship inside the binary as well as beside the release, so a first run needs no download.
+       Same files either way, so BuiltInRecipes and the release can never drift. -->
+  <ItemGroup>
+    <EmbeddedResource Include="recipes\*.recipe.json" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="ROROROblox.PluginContract" Version="0.10.0" />
