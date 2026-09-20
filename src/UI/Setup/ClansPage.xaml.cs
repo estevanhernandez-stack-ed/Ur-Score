@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using Labs626.UrScore.Board;
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
@@ -92,7 +93,10 @@ public partial class ClansPage : UserControl, ISetupPage
                 TopSwitch.Content = $"Top of the {period}";
                 AutomationProperties.SetName(TopSwitch, $"Top of the {period}");
                 TopSwitch.IsChecked = top.Enabled;
-                TopLine.Text = $"The leading {RecipeWords.GroupsLower(recipe)} from {topRecipe.Name}, for the Top of the {period} panel. Shown live, never kept.";
+                // "Shown live, never kept" stopped being true in 0.3.10, and it was the screen where you switch the
+                // list ON — the worst place for it. Same pass as ImportText, 2026-09-20.
+                TopLine.Text = $"The leading {RecipeWords.GroupsLower(recipe)} from {topRecipe.Name}, for the Top of the {period} panel. "
+                    + $"Every read keeps where yours stands, how the field is doing, and the top {GroupRows.Top} by name.";
             }
 
             Show(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.Sources, _services.Installed, accounts.Count)));

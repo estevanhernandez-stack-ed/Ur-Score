@@ -538,6 +538,23 @@ public class AlertCardsTests
         Assert.Equal("RoRoRo's rules file can't be read right now. Setup › Alerts says why.", AlertCards.StatLine(RulesRead.Unusable(RulesProblem.NotJson), Diamonds));
     }
 
+    /// <summary>
+    /// A clan-and-field number belongs to no account and is reported without one, so its sentence must not call it
+    /// an account's. Every one of the six said "an account's" until 0.5.3.
+    /// </summary>
+    [Fact]
+    public void AClanNumbersSentenceIsNotAboutAnAccount()
+    {
+        var clan = AlertCards.Sentence(AlertKind.Level, "Clan place", 10, 0, below: false, "clan.standing.place");
+        var stat = AlertCards.Sentence(AlertKind.Level, "Diamonds", 10, 0, below: false, "ps99.diamonds");
+
+        Assert.Equal("Alert me when your clan's Clan place goes above 10.", clan);
+        Assert.Equal("Alert me when an account's Diamonds goes above 10.", stat);
+
+        // No id at all keeps the old subject, so every existing caller reads as it did.
+        Assert.Equal(stat, AlertCards.Sentence(AlertKind.Level, "Diamonds", 10, 0, below: false));
+    }
+
     [Fact]
     public void ThePageSaysWhatToDoWhenThereIsNoCard()
     {

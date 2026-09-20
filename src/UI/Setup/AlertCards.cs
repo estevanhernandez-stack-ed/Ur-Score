@@ -233,16 +233,35 @@ public static partial class AlertCards
     public static string Editable(double value) => double.IsFinite(value)
         ? value.ToString(Math.Abs(value) >= MaxNumber ? "R" : "0.##", CultureInfo.InvariantCulture) : "";
 
-    /// <summary>The part after "Alert me when", also used by the result lines.</summary>
-    public static string Condition(AlertKind kind, string label, double threshold, double windowMinutes, bool below) => kind switch
+    /// <summary>
+    /// The part after "Alert me when", also used by the result lines.
+    /// <para>
+    /// The subject is "an account's" for a stat and "your clan's" for a clan-and-field number, which belongs to no
+    /// account and is reported without one. Until 0.5.3 every sentence said "an account's", so all six of the
+    /// clan numbers described themselves as something they are not.
+    /// </para>
+    /// </summary>
+    public static string Condition(
+        AlertKind kind, string label, double threshold, double windowMinutes, bool below, string? metricId = null)
     {
-        AlertKind.Rate => $"an account's {label} gains fewer than {Number(threshold)} a minute for {Number(windowMinutes)} {(windowMinutes == 1 ? "minute" : "minutes")}",
-        AlertKind.Level => $"an account's {label} goes {(below ? Below : Above)} {Number(threshold)}",
-        _ => $"an account's {label} changes",
-    };
+        var whose = Whose(metricId);
+        return kind switch
+        {
+            AlertKind.Rate => $"{whose} {label} gains fewer than {Number(threshold)} a minute for {Number(windowMinutes)} {(windowMinutes == 1 ? "minute" : "minutes")}",
+            AlertKind.Level => $"{whose} {label} goes {(below ? Below : Above)} {Number(threshold)}",
+            _ => $"{whose} {label} changes",
+        };
+    }
 
-    public static string Sentence(AlertKind kind, string label, double threshold, double windowMinutes, bool below) =>
-        $"Alert me when {Condition(kind, label, threshold, windowMinutes, below)}.";
+    /// <summary>Whose number this is. A clan-and-field id is nobody's account, and never was.</summary>
+    private static string Whose(string? metricId) =>
+        metricId is not null && FieldMetrics.All.Any(m => string.Equals(m.MetricId, metricId, StringComparison.Ordinal))
+            ? "your clan's"
+            : "an account's";
+
+    public static string Sentence(
+        AlertKind kind, string label, double threshold, double windowMinutes, bool below, string? metricId = null) =>
+        $"Alert me when {Condition(kind, label, threshold, windowMinutes, below, metricId)}.";
 
     public static string ProblemNote(RulesProblem problem) => problem switch
     {
@@ -405,7 +424,7 @@ public static partial class AlertCards
     /// <summary>After Turn on or Save wrote (or didn't): the result on the card; a file that can't be opened or written keeps the editor open.</summary>
     public static AlertsUi AfterWrite(AlertsUi ui, RuleWrite outcome, AlertSpec spec)
     {
-        var condition = Condition(spec.Kind, spec.Label, spec.Threshold, spec.WindowMinutes, spec.AlertWhenBelow);
+        var condition = Condition(spec.Kind, spec.Label, spec.Threshold, spec.WindowMinutes, spec.AlertWhenBelow, ui.MetricId);
         return outcome switch
         {
             RuleWrite.Done when ui.Mode == AlertEditMode.Changing => Said(ui.MetricId, $"Changed. RoRoRo will now alert you when {condition}.", false),
@@ -419,7 +438,7 @@ public static partial class AlertCards
     {
         var rule = line.Rule;
         return outcome == RuleWrite.Done
-            ? Said(target.MetricId, $"Removed. RoRoRo won't alert you when {Condition(rule.Kind, label, rule.Threshold, rule.WindowMinutes, rule.AlertWhenBelow)} any more.", false)
+            ? Said(target.MetricId, $"Removed. RoRoRo won't alert you when {Condition(rule.Kind, label, rule.Threshold, rule.WindowMinutes, rule.AlertWhenBelow, target.MetricId)} any more.", false)
             : Said(target.MetricId, Failed(outcome, label), true);
     }
 

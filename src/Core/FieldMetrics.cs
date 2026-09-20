@@ -103,8 +103,24 @@ public static class FieldMetrics
         Add(GapAbove, gap);
         if (gap > 0 && ends is { } end) Add(PaceNeeded, Needed(gap, mine, above, now, end));
 
-        if (Difference(summary, FieldSummary.MineCapacity, FieldSummary.MineMembers) is { } free) Add(FreeSlots, free);
-        if (Difference(summary, FieldSummary.MineMembers, FieldSummary.MineContributors) is { } idle) Add(IdleMembers, idle);
+        // Room in the clan. A capacity under its own member count is a bad read, not a negative slot, so it says nothing.
+        if (summary.TryGetValue(FieldSummary.MineCapacity, out var capacity)
+            && summary.TryGetValue(FieldSummary.MineMembers, out var members)
+            && capacity >= members)
+        {
+            Add(FreeSlots, capacity - members);
+        }
+
+        // Members on zero, floored at none. Contributors can EXCEED members, because it counts everyone who has
+        // scored in this battle including people who have since left the clan — measured on the owner's own board
+        // 2026-09-20: 72 members, 73 contributors. Until 0.5.3 that case returned nothing at all, so this number
+        // had never once been sent on the board it was written for. Floored rather than dropped: with at least as
+        // many scorers as members, no member is known to be sitting on zero, and that is the answer, not a silence.
+        if (summary.TryGetValue(FieldSummary.MineMembers, out var roster)
+            && summary.TryGetValue(FieldSummary.MineContributors, out var scored))
+        {
+            Add(IdleMembers, Math.Max(0, roster - scored));
+        }
 
         return values;
 
@@ -125,7 +141,4 @@ public static class FieldMetrics
         return Pace.Chase(gap, ours.PerHour, theirs.PerHour, end - now, best: null).Needed;
     }
 
-    /// <summary>The difference between two counts, or null unless the read carried both and it makes sense.</summary>
-    private static double? Difference(IReadOnlyDictionary<string, double> summary, string bigger, string smaller) =>
-        summary.TryGetValue(bigger, out var a) && summary.TryGetValue(smaller, out var b) && a >= b ? a - b : null;
 }

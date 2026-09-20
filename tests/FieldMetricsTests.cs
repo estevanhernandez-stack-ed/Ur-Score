@@ -115,6 +115,36 @@ public class FieldMetricsTests
         Assert.False(Has(values, FieldMetrics.PaceNeeded));
     }
 
+    /// <summary>
+    /// Contributors can EXCEED members: it counts everyone who has scored in this battle, including people who
+    /// have since left the clan. Measured on the owner's board 2026-09-20 — 72 members, 73 contributors — and
+    /// until 0.5.3 that case returned nothing at all, so idle-members had never once been sent on the very board
+    /// it was written for. Floored at none: with at least as many scorers as members, no member is known to be
+    /// sitting on zero, and that is an answer, not a silence.
+    /// </summary>
+    [Fact]
+    public void MoreScorersThanMembersIsNoneOnZero()
+    {
+        var values = FieldMetrics.Of(
+            Standing(members: 72, capacity: 75, contributors: 73),
+            Rising(8e9, 260_000_000), Rising(8.9e9, 200_000_000), Now, Ends);
+
+        Assert.Equal(0, Value(values, FieldMetrics.IdleMembers));
+        Assert.Equal(3, Value(values, FieldMetrics.FreeSlots));
+    }
+
+    /// <summary>A capacity under its own member count is a bad read, not a negative slot.</summary>
+    [Fact]
+    public void ACapacityBelowTheRosterSaysNothing()
+    {
+        var values = FieldMetrics.Of(
+            Standing(members: 75, capacity: 70, contributors: 60),
+            Rising(8e9, 260_000_000), Rising(8.9e9, 200_000_000), Now, Ends);
+
+        Assert.False(Has(values, FieldMetrics.FreeSlots));
+        Assert.Equal(15, Value(values, FieldMetrics.IdleMembers));
+    }
+
     /// <summary>A list that carried no member counts must not read as a full clan with everyone scoring.</summary>
     [Fact]
     public void ACountTheListNeverCarriedIsNotSentAsZero()
