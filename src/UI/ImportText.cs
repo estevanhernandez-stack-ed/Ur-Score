@@ -20,13 +20,27 @@ public static class ImportText
     /// <summary>What a recipe keeps beside the stats you tick, named the way the screen says them.</summary>
     public static IReadOnlyList<string> Kept(Recipe recipe)
     {
-        var kept = recipe.IsGroupList
-            ? [
+        List<string> kept;
+        if (recipe.IsGroupList)
+        {
+            // FieldSummary rides every line whatever the recipe claims, so these two are true of any list.
+            kept =
+            [
                 "Where yours stands in the list, and what the place above it holds",
                 "How the whole field is doing: the leader, the top ten, the average and the bottom ten",
-                $"The top {GroupRows.Top} by name, with the places either side of yours",
-            ]
-            : recipe.Headline.Select(headline => headline.Label).ToList();
+            ];
+
+            // The names are the only part that depends on the claim, and they come off the same predicate the
+            // writer uses, so this line and GroupRows.Keep cannot say different things (V3-S.31).
+            if (recipe.KeepsGroupNames)
+            {
+                kept.Add($"The top {GroupRows.Top} by name, with the places either side of yours");
+            }
+        }
+        else
+        {
+            kept = recipe.Headline.Select(headline => headline.Label).ToList();
+        }
         if (recipe.Period is { } period)
         {
             var word = RecipeWords.Period(recipe);
@@ -49,8 +63,14 @@ public static class ImportText
         return kept;
     }
 
+    /// <summary>
+    /// What a read keeps, in one sentence. A list may only be described as holding no players when the recipe has
+    /// SAID its groups are clans: "group" is whatever a recipe's <c>groupName</c> points at, so a list of people
+    /// has the identical shape, and this is the one screen whose job is telling you what you are agreeing to.
+    /// </summary>
     public static string KeptNote(Recipe recipe) =>
-        recipe.IsGroupList ? "Every read keeps these. A list like this holds no players, so no player is kept."
+        recipe.KeepsGroupNames ? "Every read keeps these. A list like this holds no players, so no player is kept."
+        : recipe.IsGroupList ? "Every read keeps these. No name from this list is kept, because the recipe does not say its groups are clans and Ur Score will not write names on a guess."
         : Kept(recipe).Count == 0 ? "Every read keeps the stats you tick, for your own accounts only."
         : "Every read keeps these details, and the stats you tick for your own accounts only.";
 

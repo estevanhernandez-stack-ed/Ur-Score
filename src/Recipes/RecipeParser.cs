@@ -63,6 +63,7 @@ public static class RecipeParser
             var valueLabel = OptionalString(root, "valueLabel") ?? "Value";
             var icon = OptionalString(root, "icon");
             var placeLabel = OptionalString(root, "placeLabel");
+            var groupsAreClans = OptionalBool(root, "groupsAreClans", false, "the recipe", problems);
 
             if (!TryInt(root, "everySeconds", out var everySeconds) || everySeconds <= 0)
             {
@@ -93,7 +94,7 @@ public static class RecipeParser
                 ? new RecipeParseResult(null, problems)
                 : new RecipeParseResult(
                     new Recipe(version, name!, credit!, author, everySeconds, inputs, keys, steps, headline,
-                        icon, placeLabel ?? Recipe.DefaultPlaceLabel, period),
+                        icon, placeLabel ?? Recipe.DefaultPlaceLabel, period, groupsAreClans),
                     []);
         }
     }

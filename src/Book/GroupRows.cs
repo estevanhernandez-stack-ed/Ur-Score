@@ -22,14 +22,21 @@ public static class GroupRows
     public const int Top = 25;
 
     /// <summary>
-    /// The clans worth keeping from one read, by name, or nothing when the read brought none with that value.
-    /// Ranked by the value itself, as <see cref="FieldSummary"/> ranks it, never by the rank the list handed over.
+    /// The clans worth keeping from one read, by name, or nothing when the read brought none with that value —
+    /// and nothing at all unless <paramref name="groupsAreClans"/>, the recipe's own claim that its groups are
+    /// clans and not people (V3-S.25). Ranked by the value itself, as <see cref="FieldSummary"/> ranks it, never
+    /// by the rank the list handed over.
     /// </summary>
     public static IReadOnlyDictionary<string, double> Keep(
-        IReadOnlyList<GroupRow> groups, string valueKey, IReadOnlySet<string>? mine)
+        IReadOnlyList<GroupRow> groups, string valueKey, IReadOnlySet<string>? mine, bool groupsAreClans)
     {
         var kept = new Dictionary<string, double>(StringComparer.Ordinal);
         if (groups.Count == 0 || string.IsNullOrEmpty(valueKey)) return kept;
+
+        // The recipe has to SAY its groups are clans before one name goes to disk, because "group" is only ever
+        // whatever its groupName points at and a list of PLAYERS has the identical shape. FieldSummary rides the
+        // same line and covers the whole field either way, so the bands stay true with nothing here named.
+        if (!groupsAreClans) return kept;
 
         var ranked = groups
             .Select(g => (g.Name, Value: g.Values.TryGetValue(valueKey, out var value) ? value : (double?)null))

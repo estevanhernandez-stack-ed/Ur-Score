@@ -113,6 +113,28 @@ public class ImportTextTests
     }
 
     /// <summary>
+    /// A group list that does NOT claim its groups are clans keeps no names, and the consent screen says so instead
+    /// of promising that no player is kept. That promise was true of the two recipes we wrote and unprovable for
+    /// anyone else's: "group" is whatever a recipe's <c>groupName</c> points at, so a list of PLAYERS has the same
+    /// shape. Both the sentence and the keeping now come off <see cref="Recipe.KeepsGroupNames"/>, so the screen
+    /// cannot drift from the writer again — which is the half of V3-S.31 that 0.5.3 left open.
+    /// </summary>
+    [Fact]
+    public void AGroupListThatDoesNotClaimClansKeepsNoNamesAndSaysSo()
+    {
+        var undeclared = RecipeParser.Parse(GroupList).Recipe!;
+        Assert.False(undeclared.KeepsGroupNames);
+
+        var kept = ImportText.Kept(undeclared);
+        Assert.DoesNotContain(kept, line => line.Contains("by name", StringComparison.Ordinal));
+        Assert.Contains("How the whole field is doing: the leader, the top ten, the average and the bottom ten", kept);
+
+        var note = ImportText.KeptNote(undeclared);
+        Assert.Contains("does not say its groups are clans", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("holds no players", note, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A clans list says what it keeps. It used to say "nothing from this recipe is kept", which stopped being
     /// true in 0.3.10 and stayed on the consent screen until 0.5.3 — the one screen whose job is telling you what
     /// you are agreeing to. The owner's direction, 2026-09-20: we are holding it, so say so.
@@ -120,8 +142,9 @@ public class ImportTextTests
     [Fact]
     public void AGroupListSaysWhatItKeeps()
     {
-        var parsed = RecipeParser.Parse(GroupList);
+        var parsed = RecipeParser.Parse(GroupList.Replace("\"everySeconds\": 180", "\"groupsAreClans\": true, \"everySeconds\": 180", StringComparison.Ordinal));
         Assert.True(parsed.Ok, string.Join(" ", parsed.Problems));
+        Assert.True(parsed.Recipe!.KeepsGroupNames);
 
         var kept = ImportText.Kept(parsed.Recipe!);
         Assert.Equal(

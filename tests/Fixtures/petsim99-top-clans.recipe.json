@@ -3,6 +3,7 @@
   "name": "Pet Sim 99 top clans",
   "credit": "Data from Big Games' public Pet Simulator 99 API. Built from the top 100 clans by all-time points.",
   "valueLabel": "Points",
+  "groupsAreClans": true,
   "everySeconds": 300,
   "steps": [
     { "url": "https://ps99.biggamesapi.io/api/activeClanBattle",

@@ -22,7 +22,8 @@ public sealed record Recipe(
     IReadOnlyList<RecipeHeadline> Headline,
     string? Icon = null,
     string PlaceLabel = Recipe.DefaultPlaceLabel,
-    RecipePeriod? Period = null)
+    RecipePeriod? Period = null,
+    bool GroupsAreClans = false)
 {
     public const int SupportedVersion = 1;
 
@@ -37,6 +38,18 @@ public sealed record Recipe(
 
     /// <summary>The last step reads groups (clans), not players: never matched to accounts, sent or recorded.</summary>
     public bool IsGroupList => LastStep.GroupName is not null;
+
+    /// <summary>
+    /// The recipe states that its groups are CLANS and not people, which is what lets a read keep them by name.
+    /// <para>
+    /// "Group" is only ever whatever a recipe's <c>groupName</c> points at, so the shape of a list says nothing
+    /// about what is in it. The two shipped recipes point at clans and the owner's ruling of 2026-09-20 covers
+    /// them ("it's just game stuff"); a recipe we did not write whose rows are PLAYERS would put strangers'
+    /// usernames on disk down the identical path, which no ruling covers. So the claim has to be made by the
+    /// recipe, not assumed by us, and it is false until made (V3-S.25).
+    /// </para>
+    /// </summary>
+    public bool KeepsGroupNames => IsGroupList && GroupsAreClans;
 
     /// <summary>File name and identity. Name plus author, so two people's same-named recipes do not collide.</summary>
     public string Slug => Slugify(Author is null ? Name : $"{Name} {Author}");

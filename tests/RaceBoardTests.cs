@@ -132,6 +132,30 @@ public class RaceBoardTests
         Assert.Equal(["C11", "C12", "C13", "C7", "C8", "C9"], race.Series.Skip(2).Select(s => s.Label).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// A clans list that does not say its groups are clans keeps no names (V3-S.25), so there is no band and no
+    /// standings — and the panel says why rather than coming up empty. An empty race chart mid-battle is the worst
+    /// possible way to discover that a recipe is missing one line of JSON. Owner's direction, 2026-09-20: say so on
+    /// the import screen AND where the names would have been.
+    /// </summary>
+    [Fact]
+    public void AClansListThatDoesNotSayItsGroupsAreClansSaysWhyTheBoardIsEmpty()
+    {
+        var field = Field;
+        var undeclared = TopClans with { GroupsAreClans = false };
+        Source[] all = [Mine, field];
+        var live = Live(all, [Installed(Clan, "value"), Installed(undeclared)],
+            all.ToDictionary(s => s.Id, s => Snapshot(s.Id, [], period: LivePeriod), StringComparer.Ordinal));
+        var reader = Reader(
+            Read(Mine, Now.AddHours(-1), Period, new Dictionary<string, double> { ["clan-points"] = 400 }, "value"),
+            Read(Mine, Now, Period, new Dictionary<string, double> { ["clan-points"] = 900 }, "value"));
+
+        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
+
+        Assert.Contains("does not say its groups are clans", race.Head.Note, StringComparison.Ordinal);
+        Assert.False(race.HasStandings);
+    }
+
     /// <summary>Two of your clans keep their own colours, and neither is drawn again as a rival.</summary>
     [Fact]
     public void YourOwnClansAreNeverDrawnAsRivals()

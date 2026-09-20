@@ -411,6 +411,14 @@ public static class PanelModels
             }
         }
 
+        // An empty board has two very different causes, and only one of them is worth a sentence: nothing read
+        // yet is ordinary, a recipe that never keeps names is a thing you have to be told (V3-S.25).
+        if (FieldOf(live) is { } fieldSource
+            && live.FindRecipe(fieldSource.Recipe)?.Recipe is { IsGroupList: true, GroupsAreClans: false } list)
+        {
+            notes.Add(PanelText.GroupNamesNotKept(list));
+        }
+
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
         var span = from is null
             ? $"since the {RecipeWords.Period(recipe)} started"
@@ -952,16 +960,23 @@ public static class PanelModels
         }
 
         var ordered = OrderGroups(groups, key);
-        var yours = live.Sources.Where(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: false }).ToList();
-        var mainNames = yours.Where(s => s.Role == SourceRole.Main).Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var yourNames = yours.Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Why a row is on this list and whether the row is YOURS are two questions, and one name answered both
+        // until V3-S.33. A clan you watch earns its place past the cut, because seeing it is the point of watching
+        // it, and is not tinted, because the tint says "this is mine". Ruled by the owner, 2026-09-20.
+        var followed = live.Sources.Where(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: false }).ToList();
+        var mainNames = followed.Where(s => s.Role == SourceRole.Main).Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var shownNames = followed.Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // SourceName is the recipe's MAIN input; MyClanNames takes every input a source carries, so every name this
+        // list can show for one of yours is already in it. The derivations differ, the answer cannot disagree.
+        var yourNames = SourceRules.MyClanNames(live.Sources, live.Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var rows = new List<(double Sort, TopRow Row)>();
         for (var i = 0; i < ordered.Count; i++)
         {
             var group = ordered[i];
             var isYours = yourNames.Contains(group.Row.Name);
-            if (i >= TopCount && !isYours) continue;
+            if (i >= TopCount && !shownNames.Contains(group.Row.Name)) continue;
 
             var name = mainNames.Contains(group.Row.Name) ? $"{group.Row.Name} ★" : group.Row.Name;
             rows.Add((group.Rank, new TopRow(group.Rank.ToString(CultureInfo.InvariantCulture), name, PanelText.Short(group.Value), isYours, false)));
@@ -971,7 +986,7 @@ public static class PanelModels
         double? lowest = values.Count == 0 ? null : values.Min();
         var placed = new HashSet<string>(ordered.Select(g => g.Row.Name), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var mineSource in yours)
+        foreach (var mineSource in followed)
         {
             var name = live.SourceName(mineSource);
             if (!placed.Add(name)) continue;
@@ -984,14 +999,14 @@ public static class PanelModels
             // Below every value the list itself shows, "~N+1" would claim a rank the list never proved.
             if (lowest is { } low && total < low)
             {
-                rows.Add((double.MaxValue, new TopRow("below the list", shown, StatText.Abbrev(total), true, true)));
+                rows.Add((double.MaxValue, new TopRow("below the list", shown, StatText.Abbrev(total), yourNames.Contains(name), true)));
                 continue;
             }
 
             if (Records.WouldPlace(total, values) is not { } place) continue;
 
             // Sits just before the group it would outrank, not after: "~2" among 990/980 lands between them.
-            rows.Add((place.Place - 0.5, new TopRow($"~{place.Place}", shown, StatText.Abbrev(total), true, true)));
+            rows.Add((place.Place - 0.5, new TopRow($"~{place.Place}", shown, StatText.Abbrev(total), yourNames.Contains(name), true)));
         }
 
         return new TopModel(head, nameColumn, valueColumn, [.. rows.OrderBy(r => r.Sort).Select(r => r.Row)]);

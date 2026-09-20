@@ -17,6 +17,27 @@ public class ShippedRecipesTests
         return Directory.EnumerateFiles(Path.Combine(directory.FullName, "recipes"), "*.recipe.json");
     }
 
+    /// <summary>
+    /// Every shipped group list states that its groups are clans, because a list that does not keeps no names at
+    /// all (V3-S.25) and the way you would find that out is an empty race chart mid-battle. The claim is one line of
+    /// JSON and it is not inferable from the recipe's shape, so nothing but a test can stop it being forgotten.
+    /// </summary>
+    [Fact]
+    public void EveryShippedGroupListSaysItsGroupsAreClans()
+    {
+        var lists = Files()
+            .Select(file => (Name: Path.GetFileName(file), RecipeParser.Parse(File.ReadAllText(file)).Recipe))
+            .Where(r => r.Recipe is { IsGroupList: true })
+            .ToList();
+
+        Assert.NotEmpty(lists);
+        foreach (var (name, recipe) in lists)
+        {
+            Assert.True(recipe!.GroupsAreClans, $"{name}: a group list must declare \"groupsAreClans\": true or it keeps no names.");
+            Assert.True(recipe.KeepsGroupNames);
+        }
+    }
+
     [Fact]
     public void EveryShippedRecipeParses()
     {
