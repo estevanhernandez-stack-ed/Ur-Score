@@ -7,8 +7,9 @@ using static UrScore.Tests.BoardFixtures;
 namespace UrScore.Tests;
 
 /// <summary>
-/// The race chart draws the board itself, not a list you maintain: the top ten while one of your clans is in it, the
-/// top twenty when none is, always in the faint colour so your own clans stay the bright lines.
+/// The race chart draws the clans you are racing — three either side of yours — each its own line with its own name,
+/// and the whole board goes on the card's standings list. Twenty clans in one colour was unreadable, and the ones
+/// that decide your place are your neighbours, not the leader.
 /// </summary>
 public class RaceBoardTests
 {
@@ -57,49 +58,81 @@ public class RaceBoardTests
         return (live, Reader([.. lines]));
     }
 
-    [Fact]
-    public void InTheTopTenTheChartDrawsTheTopTen()
+    private static RaceModel Race(int place, params Source[] sources)
     {
-        var (live, reader) = Board(place: 4, Mine);
+        var (live, reader) = Board(place, sources);
+        return PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [.. sources.Select(s => s.Id)]));
+    }
 
-        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
+    [Fact]
+    public void TheClansEitherSideOfYouAreDrawnByName()
+    {
+        var race = Race(10, Mine);
 
-        // Your clan, plus the nine others of the top ten.
-        Assert.Equal(10, race.Series.Count);
+        // Yours, then C7, C8, C9 above and C11, C12, C13 below — the six that decide whether you move a place.
+        Assert.Equal(7, race.Series.Count);
         Assert.Equal("★ K0i2", race.Series[0].Label);
-        // The muted grey, not the edge colour: on navy the edge colour is the background.
-        Assert.All(race.Series.Skip(1), s => Assert.Equal(3, s.Colour));
-        Assert.DoesNotContain(race.Series.Skip(1), s => s.Label == "K0i2");
-        Assert.Contains(race.Legend, l => l.Text == "9 other clans");
+        Assert.Equal(["C11", "C12", "C13", "C7", "C8", "C9"], race.Series.Skip(1).Select(s => s.Label).Order(StringComparer.Ordinal));
+        Assert.All(race.Legend.Skip(1), item => Assert.Contains("C", item.Text, StringComparison.Ordinal));
     }
 
+    /// <summary>Six neighbours need six tellable lines and the theme has five colours, so the sixth is dashed.</summary>
     [Fact]
-    public void BelowTheTopTenTheChartDrawsTwenty()
+    public void EveryLineIsTellableFromEveryOther()
     {
-        var (live, reader) = Board(place: 14, Mine);
+        var race = Race(10, Mine);
 
-        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
-
-        Assert.Equal(20, race.Series.Count);
-        Assert.Contains(race.Legend, l => l.Text == "19 other clans");
+        var drawn = race.Series.Select(s => (s.Colour, s.Dash)).ToList();
+        Assert.Equal(drawn.Count, drawn.Distinct().Count());
+        Assert.Contains(drawn, d => d.Dash > 0);
     }
 
-    /// <summary>Two of your clans keep their own colours, and neither is drawn twice.</summary>
+    /// <summary>At the top of the board there is nobody above: the band is what there is, never padded out.</summary>
     [Fact]
-    public void YourOwnClansAreNeverDrawnAsOthers()
+    public void TheLeaderHasOnlyTheClansBelowIt()
     {
-        var (live, reader) = Board(place: 4, Mine, Other);
+        var race = Race(1, Mine);
 
-        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id, Other.Id]));
+        Assert.Equal(4, race.Series.Count);
+        Assert.Equal(["C2", "C3", "C4"], race.Series.Skip(1).Select(s => s.Label).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>Two of your clans keep their own colours, and neither is drawn again as a rival.</summary>
+    [Fact]
+    public void YourOwnClansAreNeverDrawnAsRivals()
+    {
+        var race = Race(10, Mine, Other);
 
         Assert.Equal("★ K0i2", race.Series[0].Label);
         Assert.Equal("CCGP", race.Series[1].Label);
-        Assert.Equal(0, race.Series[0].Colour);
-        Assert.Equal(1, race.Series[1].Colour);
-        Assert.Single(race.Series, s => s.Label == "★ K0i2");
+        Assert.DoesNotContain(race.Series.Skip(2), s => s.Label is "K0i2" or "CCGP");
     }
 
-    /// <summary>With no clans list switched on, the chart is what it always was: the clans you picked.</summary>
+    /// <summary>
+    /// The names the chart cannot hold live on the card: the whole board by place, with each clan's distance from
+    /// yours, and yours marked so it is found at a glance.
+    /// </summary>
+    [Fact]
+    public void TheStandingsCarryTheNamesAndTheGaps()
+    {
+        var race = Race(10, Mine);
+
+        Assert.True(race.HasStandings);
+        Assert.Equal(25, race.Standings.Count);
+        Assert.Equal("1st", race.Standings[0].Place);
+        Assert.Equal("C1", race.Standings[0].Name);
+
+        var yours = race.Standings.Single(s => s.Yours);
+        Assert.Equal("K0i2", yours.Name);
+        Assert.Equal("10th", yours.Place);
+        Assert.Equal("", yours.Gap);
+
+        // C9 is one place above: 1,200 more at this read's scale.
+        Assert.Equal("+1.2K", race.Standings[8].Gap);
+        Assert.StartsWith("-", race.Standings[10].Gap, StringComparison.Ordinal);
+    }
+
+    /// <summary>With no clans list switched on, the chart is what it always was: the clans you picked, and no list.</summary>
     [Fact]
     public void WithoutAClansListNothingElseIsDrawn()
     {
@@ -112,6 +145,7 @@ public class RaceBoardTests
         var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
 
         Assert.Single(race.Series);
-        Assert.DoesNotContain(race.Legend, l => l.Text.EndsWith("other clans", StringComparison.Ordinal));
+        Assert.False(race.HasStandings);
+        Assert.True(race.FromZero);
     }
 }

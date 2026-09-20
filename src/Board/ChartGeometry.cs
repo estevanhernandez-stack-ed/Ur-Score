@@ -3,9 +3,13 @@ namespace Labs626.UrScore.Board;
 public sealed record ChartPoint(DateTimeOffset T, double Value);
 
 /// <summary>One line: its label, its points in time order, and which theme brush draws it (0 cyan, 1 magenta, 2 white, 3 muted, 4 edge).</summary>
-public sealed record ChartSeries(string Label, IReadOnlyList<ChartPoint> Points, int Colour);
+/// <summary>
+/// <paramref name="Dash"/> is how the line is drawn when the palette runs out: 0 solid, 1 dashed, 2 dotted. Six
+/// clans around you need six tellable lines, and the theme has five colours.
+/// </summary>
+public sealed record ChartSeries(string Label, IReadOnlyList<ChartPoint> Points, int Colour, int Dash = 0);
 
-public sealed record ChartLine(int Colour, IReadOnlyList<(double X, double Y)> Points);
+public sealed record ChartLine(int Colour, IReadOnlyList<(double X, double Y)> Points, int Dash = 0);
 
 public sealed record ChartGridLine(double Y, string Label);
 
@@ -61,7 +65,7 @@ public static class ChartGeometry
             var middle = Top + plotHeight / 2;
             var flat = series
                 .Where(s => s.Points.Count > 0)
-                .Select(s => new ChartLine(s.Colour, [.. s.Points.OrderBy(p => p.T).Select(p => (X(p.T), middle))]))
+                .Select(s => new ChartLine(s.Colour, [.. s.Points.OrderBy(p => p.T).Select(p => (X(p.T), middle))], s.Dash))
                 .ToList();
             return new ChartLayout(flat, [new ChartGridLine(middle, labels ? PanelText.Short(minV) : "")]);
         }
@@ -70,7 +74,7 @@ public static class ChartGeometry
 
         var lines = series
             .Where(s => s.Points.Count > 0)
-            .Select(s => new ChartLine(s.Colour, [.. s.Points.OrderBy(p => p.T).Select(p => (X(p.T), Y(p.Value)))]))
+            .Select(s => new ChartLine(s.Colour, [.. s.Points.OrderBy(p => p.T).Select(p => (X(p.T), Y(p.Value)))], s.Dash))
             .ToList();
 
         var grid = Enumerable.Range(0, GridLines)

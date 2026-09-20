@@ -3,6 +3,17 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.4.2 - 2026-09-20
+
+### Changed
+
+- **The race chart draws the clans you are racing, by name.** Three either side of yours, each with its own colour
+  and its own legend entry, and a dash pattern once the theme's five colours repeat. Twenty clans sharing one grey
+  could not be told apart, and the ones that decide your place are your neighbours, not the leader.
+- **The whole board is on the card.** A Standings button opens the top 25 by place: clan, points, and how far each
+  is from yours, with yours in cyan. It stays open across reads, and there is no button without a clans list.
+- **"Bring in stats"**, not "bring in a book", on Setup › Score book.
+
 ## 0.4.1 - 2026-09-20
 
 ### Changed

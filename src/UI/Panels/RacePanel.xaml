@@ -24,6 +24,45 @@
                         </DataTemplate>
                     </ui:RowList.ItemTemplate>
                 </ui:RowList>
+                <!-- The names live here, not on the chart: seven lines is as many as can be told apart, and the board
+                     is twenty-five. Shut until asked for, so the card stays a chart. -->
+                <StackPanel x:Name="StandingsRow" Orientation="Horizontal" Margin="0,4,0,0"
+                            Visibility="{Binding HasStandings, Converter={StaticResource BoolToVisible}}">
+                    <Button x:Name="StandingsButton" Content="Standings" Style="{StaticResource FlatButton}" Padding="0,2"
+                            Click="OnStandingsClick" AutomationProperties.Name="Show the standings" />
+                </StackPanel>
+                <ui:RowList x:Name="StandingsList" ItemsSource="{Binding Standings}" Margin="0,6,0,0" Visibility="Collapsed"
+                            AutomationProperties.Name="The board, by place">
+                    <ui:RowList.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="44" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="72" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Place}" Style="{StaticResource Muted}" FontSize="12" />
+                                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Yours}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource CyanBrush}" />
+                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Grid.Column="2" Text="{Binding Points}" Style="{StaticResource Muted}" FontSize="12" Margin="8,0,0,0" />
+                                <TextBlock Grid.Column="3" Text="{Binding Gap}" Style="{StaticResource Muted}" FontSize="12"
+                                           TextAlignment="Right" />
+                            </Grid>
+                        </DataTemplate>
+                    </ui:RowList.ItemTemplate>
+                </ui:RowList>
             </StackPanel>
             <TextBlock x:Name="PanelNote" Text="{Binding Head.Note}" Style="{StaticResource PanelNoteText}"
                        Visibility="{Binding Head.HasNote, Converter={StaticResource BoolToVisible}}" />

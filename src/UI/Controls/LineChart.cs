@@ -50,6 +50,14 @@ public sealed class LineChart : Canvas
 
     public static string BrushKeyFor(int colour) => BrushKeys[((colour % BrushKeys.Length) + BrushKeys.Length) % BrushKeys.Length];
 
+    /// <summary>How a line is drawn when its colour is already taken: solid, dashed, then dotted.</summary>
+    public static DoubleCollection? DashFor(int dash) => (((dash % 3) + 3) % 3) switch
+    {
+        1 => [4, 3],
+        2 => [1, 2],
+        _ => null,
+    };
+
     private void Redraw()
     {
         Children.Clear();
@@ -83,6 +91,7 @@ public sealed class LineChart : Canvas
                 Points = new PointCollection(line.Points.Select(p => new Point(p.X, p.Y))),
             };
             polyline.SetResourceReference(Shape.StrokeProperty, BrushKeyFor(line.Colour));
+            if (DashFor(line.Dash) is { } dashes) polyline.StrokeDashArray = dashes;
             Children.Add(polyline);
         }
     }

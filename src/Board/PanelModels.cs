@@ -194,8 +194,18 @@ public sealed record LegendItem(string Text, int Colour);
 /// nothing is the story. With the whole board drawn it is false: anchoring twenty clans at zero squeezes the pack
 /// into a band, and which of them you are gaining on is the story then.
 /// </summary>
+/// <summary>One clan on the standings list under the race chart: where it is, and how far from you.</summary>
+public sealed record RaceStanding(string Place, string Name, string Points, string Gap, bool Yours);
+
 public sealed record RaceModel(
-    PanelHead Head, IReadOnlyList<ChartSeries> Series, IReadOnlyList<LegendItem> Legend, string ChartName, bool FromZero = true);
+    PanelHead Head, IReadOnlyList<ChartSeries> Series, IReadOnlyList<LegendItem> Legend, string ChartName, bool FromZero = true)
+{
+    /// <summary>The board as a list, names and all, for the card's own standings. Empty without a clans list.</summary>
+    public IReadOnlyList<RaceStanding> Standings { get; init; } = [];
+
+    /// <summary>Whether there is a board to offer: no clans list, no button.</summary>
+    public bool HasStandings => Standings.Count > 0;
+}
 
 public sealed record AccountLineModel(
     long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing,
@@ -378,14 +388,14 @@ public static class PanelModels
             remembered |= live.IsRemembered(source.Id);
         }
 
-        // The board itself, from the clans a list kept by name (owner's ruling, 2026-09-20): the top ten while one of
-        // yours is in it, else the top twenty, so the lines around you are always on the chart. Drawn in the faint
-        // colour so your own clans stay the bright ones, and given one legend entry rather than twenty.
+        // The clans you are actually racing: three above and three below, each its own line with its own name.
+        // Twenty clans in one grey was unreadable ("I can barely see the other clan's lines", 2026-09-20), and the
+        // ones that decide your place are the neighbours, not the leader.
         var board = BoardLines(live, reader, sources, series.Count);
-        if (board.Count > 0)
+        foreach (var (line, points) in board)
         {
-            series.AddRange(board);
-            legend.Add(new LegendItem(board.Count == 1 ? "1 other clan" : $"{board.Count} other clans", RivalColour));
+            series.Add(line);
+            legend.Add(new LegendItem($"{line.Label} {StatText.Abbrev(points)}", line.Colour));
         }
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
@@ -398,55 +408,100 @@ public static class PanelModels
             return new RaceModel(head with { Note = string.Join(" ", notes.Prepend("Waiting for the first read.")) }, [], [], "");
         }
 
-        return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}", board.Count == 0);
+        return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}", board.Count == 0)
+        {
+            Standings = Standings(live, reader, sources),
+        };
     }
 
-    /// <summary>
-    /// The muted palette colour: every clan that is not yours shares it, so yours are the ones that read. Not the
-    /// edge colour, which was the first choice and drew nineteen clans the same shade as the background.
-    /// </summary>
-    private const int RivalColour = 3;
+    /// <summary>How many clans either side of yours are drawn: the ones that decide whether you move a place.</summary>
+    private const int Neighbours = 3;
 
-    /// <summary>How much of the board is drawn when one of your clans is in the top ten, and when it is not.</summary>
-    private const int BoardNear = 10, BoardFar = 20;
+    /// <summary>How much of the board the standings list offers, names and all.</summary>
+    private const int StandingsShown = 25;
 
     /// <summary>
-    /// The other clans on the race chart, from the rows a clans list kept (<see cref="GroupRows"/>). Nothing at all
-    /// without a switched-on list, or before it has been read twice — a line needs more than one point.
+    /// The clans you are racing, from the rows a clans list kept (<see cref="GroupRows"/>): three above and three
+    /// below the best placed of yours, each with its own colour, and a dash pattern once the palette repeats. Nothing
+    /// at all without a switched-on list, or before it has been read twice — a line needs more than one point.
     /// </summary>
-    private static List<ChartSeries> BoardLines(
+    private static List<(ChartSeries Line, double Points)> BoardLines(
         LiveBoard live, ScoreBookReader reader, IReadOnlyList<Source> drawn, int colourFrom)
     {
-        var lines = new List<ChartSeries>();
-        var field = live.Sources.FirstOrDefault(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: true });
-        if (field is null) return lines;
+        var lines = new List<(ChartSeries, double)>();
+        if (FieldOf(live) is not { } field) return lines;
 
         var period = live.SnapshotOf(field.Id)?.Period?.Value;
         var board = reader.GroupsLatest(field.Id, period);
         if (board.Count == 0) return lines;
 
-        var mine = drawn
-            .SelectMany(s => s.Inputs.Values)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        // Where the best placed of your clans sits decides how much of the board is worth drawing.
-        var best = board.Select((g, at) => (g.Name, At: at)).FirstOrDefault(g => mine.Contains(g.Name)).At;
-        var inBoard = board.Any(g => mine.Contains(g.Name));
-        var take = inBoard && best < BoardNear ? BoardNear : BoardFar;
-
-        foreach (var (name, _) in board.Take(take))
+        var mine = MineNames(drawn);
+        var at = -1;
+        for (var i = 0; i < board.Count; i++)
         {
+            if (!mine.Contains(board[i].Name)) continue;
+            at = i;
+            break;
+        }
+
+        // None of yours on the board yet: the top of it is the next best thing to show.
+        var from = at < 0 ? 0 : Math.Max(0, at - Neighbours);
+        var to = at < 0 ? Math.Min(board.Count, Neighbours * 2 + 1) : Math.Min(board.Count, at + Neighbours + 1);
+
+        var colour = colourFrom;
+        for (var i = from; i < to; i++)
+        {
+            var (name, points) = board[i];
             if (mine.Contains(name)) continue;
 
-            var points = reader.GroupSeries(field.Id, name, period).Select(p => new ChartPoint(p.T, p.Value)).ToList();
-            if (points.Count < 2) continue;
+            var series = reader.GroupSeries(field.Id, name, period).Select(p => new ChartPoint(p.T, p.Value)).ToList();
+            if (series.Count < 2) continue;
 
-            lines.Add(new ChartSeries(name, points, RivalColour));
+            lines.Add((new ChartSeries(name, series, colour, colour / LineChartColours), points));
+            colour++;
         }
 
         return lines;
     }
+
+    /// <summary>
+    /// The board as a list: place, clan, points, and how far each is from the best placed of yours. Names live here
+    /// rather than on the chart, where seven lines is already as much as can be told apart.
+    /// </summary>
+    private static IReadOnlyList<RaceStanding> Standings(LiveBoard live, ScoreBookReader reader, IReadOnlyList<Source> drawn)
+    {
+        if (FieldOf(live) is not { } field) return [];
+
+        var board = reader.GroupsLatest(field.Id, live.SnapshotOf(field.Id)?.Period?.Value);
+        if (board.Count == 0) return [];
+
+        var mine = MineNames(drawn);
+        var yours = board.FirstOrDefault(g => mine.Contains(g.Name)).Value;
+
+        return
+        [
+            .. board.Take(StandingsShown).Select((g, i) => new RaceStanding(
+                PanelText.Ordinal(i + 1),
+                g.Name,
+                StatText.Abbrev(g.Value),
+                yours <= 0 || mine.Contains(g.Name) ? "" : PanelText.Signed(g.Value - yours),
+                mine.Contains(g.Name))),
+        ];
+    }
+
+    /// <summary>How many colours the chart has before it starts repeating them with a dash.</summary>
+    private const int LineChartColours = 5;
+
+    /// <summary>The switched-on clans list, whose readings carry the board.</summary>
+    private static Source? FieldOf(LiveBoard live) =>
+        live.Sources.FirstOrDefault(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: true });
+
+    /// <summary>The clan names already drawn as yours, so the board never draws one of them twice.</summary>
+    private static HashSet<string> MineNames(IReadOnlyList<Source> drawn) =>
+        drawn
+            .SelectMany(s => s.Inputs.Values)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public static MyAccountsModel MyAccounts(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
