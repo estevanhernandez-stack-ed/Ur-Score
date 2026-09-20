@@ -7,13 +7,14 @@ using Labs626.UrScore.Board;
 namespace Labs626.UrScore.UI;
 
 /// <summary>
-/// A line chart: <see cref="Polyline"/>s over a faint grid, placed by <see cref="ChartGeometry"/>. Every
-/// brush is a theme brush referenced by key, so a theme switch repaints it (ThemeFenceTests).
+/// A line chart: <see cref="Polyline"/>s over a faint grid, placed by <see cref="ChartGeometry"/>. The grid and
+/// its labels are theme brushes referenced by key, so a theme switch repaints them (ThemeFenceTests); the series
+/// colours are <see cref="ChartPalette"/>'s, which a theme deliberately leaves alone.
 /// </summary>
 public sealed class LineChart : Canvas
 {
-    /// <summary>Series colours in order: cyan, magenta, white, muted, edge.</summary>
-    public static readonly string[] BrushKeys = ["CyanBrush", "MagentaBrush", "WhiteBrush", "MutedTextBrush", "EdgeBrush"];
+    /// <summary>Series colours in order, from <see cref="ChartPalette"/>.</summary>
+    public static readonly string[] BrushKeys = ChartPalette.Keys;
 
     public static readonly DependencyProperty SeriesProperty = DependencyProperty.Register(
         nameof(Series), typeof(IReadOnlyList<ChartSeries>), typeof(LineChart), new PropertyMetadata(null, (d, _) => ((LineChart)d).Redraw()));

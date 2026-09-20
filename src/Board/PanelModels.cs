@@ -457,7 +457,7 @@ public static class PanelModels
             var series = reader.GroupSeries(field.Id, name, period).Select(p => new ChartPoint(p.T, p.Value)).ToList();
             if (series.Count < 2) continue;
 
-            lines.Add((new ChartSeries(name, series, colour, colour / LineChartColours), points));
+            lines.Add((new ChartSeries(name, series, colour, colour / ChartPalette.Count), points));
             colour++;
         }
 
@@ -488,9 +488,6 @@ public static class PanelModels
                 mine.Contains(g.Name))),
         ];
     }
-
-    /// <summary>How many colours the chart has before it starts repeating them with a dash.</summary>
-    private const int LineChartColours = 5;
 
     /// <summary>The switched-on clans list, whose readings carry the board.</summary>
     private static Source? FieldOf(LiveBoard live) =>

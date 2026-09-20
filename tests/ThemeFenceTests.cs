@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -135,6 +136,30 @@ public partial class ThemeFenceTests
 
     [GeneratedRegex(@"\{DynamicResource\s+(\w+Brush)\}")]
     private static partial Regex UsedBrush();
+
+    /// <summary>
+    /// The one set of brushes a theme deliberately leaves alone. A line colour is what says which clan a line
+    /// is, so repainting the scale from the host palette would move a clan from green to grey while the legend
+    /// beside it still read green. They are declared in App.xaml and never touched by ThemeService - stated
+    /// here so the next reader can tell the exception from an oversight.
+    /// </summary>
+    [Fact]
+    public void TheChartsSeriesColoursAreNeverRepainted()
+    {
+        var root = RepoRoot();
+        var theme = File.ReadAllText(Path.Combine(root, "src", "Theming", "ThemeService.cs"));
+        var app = File.ReadAllText(Path.Combine(root, "src", "App.xaml"));
+
+        Assert.NotEmpty(ChartPalette.Keys);
+        Assert.All(ChartPalette.Keys, key =>
+        {
+            Assert.Contains("x:Key=" + Quote + key + Quote, app, StringComparison.Ordinal);
+            Assert.DoesNotContain(Quote + key + Quote, theme, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>A double quote, so the two searches above can be written without escaping one.</summary>
+    private const string Quote = "\"";
 
     private static string RepoRoot()
     {

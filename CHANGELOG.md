@@ -27,6 +27,11 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 
 ### Changed
 
+- **The battle race has real colours.** The chart used to draw from cyan, magenta, white and two greys, so on a
+  seven-line band six rivals were shades of the same thing. There are now eight series colours — cyan, magenta,
+  yellow, green, violet, orange, periwinkle and near-white — which is enough for the whole band, so no line falls
+  back to a dash. They are Ur Score's own and a theme change leaves them alone: a line's colour is what says which
+  clan it is.
 - **Setup › Alerts lists the clans list too.** It used to be left out of the "what leaves this plugin" cards
   because it sends for no account. Now that it can send clan numbers, it has a card that names them — or says
   where to tick one.

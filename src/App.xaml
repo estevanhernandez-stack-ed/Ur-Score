@@ -18,6 +18,18 @@
             <SolidColorBrush x:Key="RowHoverBrush" Color="#1D2E41" />
             <SolidColorBrush x:Key="EdgeBrush" Color="#6B7F92" />
 
+            <!-- Chart series colours (ChartPalette). Deliberately NOT repainted by ThemeService: a line's
+                 colour is what says which clan it is, and a theme change must not move a clan from green to
+                 grey while its legend still reads green. The first two are the brand's own. -->
+            <SolidColorBrush x:Key="Series1Brush" Color="#17D4FA" />
+            <SolidColorBrush x:Key="Series2Brush" Color="#F22F89" />
+            <SolidColorBrush x:Key="Series3Brush" Color="#FFD23F" />
+            <SolidColorBrush x:Key="Series4Brush" Color="#5BE37D" />
+            <SolidColorBrush x:Key="Series5Brush" Color="#C77DFF" />
+            <SolidColorBrush x:Key="Series6Brush" Color="#FF7A45" />
+            <SolidColorBrush x:Key="Series7Brush" Color="#6C8BFF" />
+            <SolidColorBrush x:Key="Series8Brush" Color="#E8E8F0" />
+
             <FontFamily x:Key="DisplayFont">Segoe UI Variable Display, Segoe UI</FontFamily>
             <FontFamily x:Key="BodyFont">Segoe UI Variable Text, Segoe UI</FontFamily>
             <FontFamily x:Key="MonoFont">Cascadia Code, Consolas</FontFamily>

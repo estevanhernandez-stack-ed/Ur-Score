@@ -76,15 +76,32 @@ public class RaceBoardTests
         Assert.All(race.Legend.Skip(1), item => Assert.Contains("C", item.Text, StringComparison.Ordinal));
     }
 
-    /// <summary>Six neighbours need six tellable lines and the theme has five colours, so the sixth is dashed.</summary>
+    /// <summary>
+    /// Every line its own colour, and at the band's size no line has to fall back to a dash. The owner's verdict
+    /// on 2026-09-20 was that they were all the same colour — they were: the old set was cyan, magenta, white and
+    /// two greys, so six rivals shared three near-identical neutrals. The band is at most eight lines and
+    /// <see cref="ChartPalette"/> now has eight colours, so a dash is the overflow it was meant to be.
+    /// </summary>
     [Fact]
-    public void EveryLineIsTellableFromEveryOther()
+    public void EveryLineHasItsOwnColourWithNoneLeftOnADash()
     {
-        var race = Race(10, Mine);
+        var race = Race(10, Mine, Other);
 
-        var drawn = race.Series.Select(s => (s.Colour, s.Dash)).ToList();
-        Assert.Equal(drawn.Count, drawn.Distinct().Count());
-        Assert.Contains(drawn, d => d.Dash > 0);
+        var colours = race.Series.Select(s => s.Colour).ToList();
+        Assert.Equal(8, colours.Count);
+        Assert.Equal(colours.Count, colours.Distinct().Count());
+        Assert.All(race.Series, s => Assert.Equal(0, s.Dash));
+        Assert.True(colours.Max() < ChartPalette.Count, "a line took a colour the palette does not have");
+    }
+
+    /// <summary>The palette has to hold the whole band, or the chart is back to telling lines apart by dash.</summary>
+    [Fact]
+    public void ThePaletteHoldsTheWholeBand()
+    {
+        // Yours, plus three either side. A second clan of yours takes one more.
+        Assert.True(ChartPalette.Count >= (3 * 2) + 2,
+            $"ChartPalette has {ChartPalette.Count} colours; a band of three either side of two of your clans needs 8.");
+        Assert.Equal(ChartPalette.Count, ChartPalette.Keys.Distinct(StringComparer.Ordinal).Count());
     }
 
     /// <summary>At the top of the board there is nobody above: the band is what there is, never padded out.</summary>
