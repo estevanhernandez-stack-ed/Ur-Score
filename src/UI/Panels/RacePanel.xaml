@@ -6,7 +6,8 @@
         <StackPanel>
             <ui:PanelFrame DataContext="{Binding Head}" />
             <StackPanel Margin="0,10,0,0" Visibility="{Binding Head.HasBody, Converter={StaticResource BoolToVisible}}">
-                <ui:LineChart Height="170" Series="{Binding Series}" FromZero="True" ShowLabels="True"
+                <!-- Taller since the board joined the chart, and the axis follows the data rather than zero when it does. -->
+                <ui:LineChart Height="240" Series="{Binding Series}" FromZero="{Binding FromZero}" ShowLabels="True"
                               AutomationProperties.Name="{Binding ChartName}" />
                 <ui:RowList ItemsSource="{Binding Legend}" Margin="0,8,0,0">
                     <ui:RowList.ItemsPanel>

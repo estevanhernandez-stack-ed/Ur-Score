@@ -17,7 +17,11 @@ public sealed record ChartLayout(IReadOnlyList<ChartLine> Lines, IReadOnlyList<C
 /// </summary>
 public static class ChartGeometry
 {
-    public const int GridLines = 4;
+    /// <summary>
+    /// How many lines the value axis is read by. Six rather than four since 2026-09-20: with twenty clans on the
+    /// race chart, four left too much unlabelled space to tell who was where.
+    /// </summary>
+    public const int GridLines = 6;
 
     public const double LabelWidth = 40;
 

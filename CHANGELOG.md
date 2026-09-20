@@ -3,6 +3,15 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.4.1 - 2026-09-20
+
+### Changed
+
+- **The race chart reads at a glance with the board on it.** Taller (240 px), six value lines rather than four,
+  and the axis follows the data instead of anchoring at zero once other clans are drawn - twenty lines pinned to
+  zero squeezed the pack into a band. A race of your own clans still starts at zero, where growth from nothing is
+  the story.
+
 ## 0.4.0 - 2026-09-20
 
 ### Added

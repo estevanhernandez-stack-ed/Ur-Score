@@ -189,7 +189,13 @@ public sealed record StandingModel(
 
 public sealed record LegendItem(string Text, int Colour);
 
-public sealed record RaceModel(PanelHead Head, IReadOnlyList<ChartSeries> Series, IReadOnlyList<LegendItem> Legend, string ChartName);
+/// <summary>
+/// <paramref name="FromZero"/> keeps the axis anchored at zero for a race of your own clans, where the growth from
+/// nothing is the story. With the whole board drawn it is false: anchoring twenty clans at zero squeezes the pack
+/// into a band, and which of them you are gaining on is the story then.
+/// </summary>
+public sealed record RaceModel(
+    PanelHead Head, IReadOnlyList<ChartSeries> Series, IReadOnlyList<LegendItem> Legend, string ChartName, bool FromZero = true);
 
 public sealed record AccountLineModel(
     long UserId, string Name, string Value, string InGroup, string Change, bool Sent, bool Stalled, bool Missing,
@@ -392,7 +398,7 @@ public static class PanelModels
             return new RaceModel(head with { Note = string.Join(" ", notes.Prepend("Waiting for the first read.")) }, [], [], "");
         }
 
-        return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}");
+        return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}", board.Count == 0);
     }
 
     /// <summary>
