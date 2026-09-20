@@ -192,10 +192,7 @@ public sealed class ReportPolicy(
               + "usernames for the leaderboard. Set resolveNames to false in settings.json to stop it."
             : "Name lookups are off: no other member's Roblox id leaves this machine for any reason.";
 
-        var field = SentFieldMetrics.Count == 0
-            ? ""
-            : $"It also sends {JoinWithAnd([.. SentFieldMetrics.Select(m => m.Label.ToLowerInvariant())])} about your clan's "
-              + $"standing, as {JoinWithAnd([.. SentFieldMetrics.Select(m => m.MetricId)])}, with no account attached. ";
+        var field = SentFieldMetrics.Count == 0 ? "" : "It also sends " + FieldClause() + " ";
 
         if (SentStats.Count == 0)
         {
@@ -208,6 +205,21 @@ public sealed class ReportPolicy(
         var metricIds = JoinWithAnd([.. SentStats.Select(stat => stat.MetricId)]);
         return $"Ur Score sends {labels} for {scope}, as {metricIds}. {field}Nothing else reaches RoRoRo. " + nameLookups;
     }
+
+    /// <summary>
+    /// What the clan-and-field ticks send, said on their own. A clans list has no account sentence to hang them
+    /// off — it sends for no account and never will — so its card in Setup › Alerts reads this instead.
+    /// </summary>
+    public string DescribeField() =>
+        SentFieldMetrics.Count == 0
+            ? "Nothing is sent to RoRoRo from this list: no clan number is ticked. Tick one in Setup › Stats, under Clan and field."
+            : "Ur Score sends " + FieldClause()
+              + " No other clan is named, and no player's id or number ever leaves this plugin.";
+
+    /// <summary>The middle of both sentences above, so the two can never come to say different things.</summary>
+    private string FieldClause() =>
+        $"{JoinWithAnd([.. SentFieldMetrics.Select(m => m.Label.ToLowerInvariant())])} about your clan's standing, "
+        + $"as {JoinWithAnd([.. SentFieldMetrics.Select(m => m.MetricId)])}, with no account attached.";
 
     private static string JoinWithAnd(IReadOnlyList<string> items) => items.Count switch
     {

@@ -35,4 +35,36 @@ public class AlertsModelTests
 
         Assert.Equal("Nothing is sent to RoRoRo: you only watch its clans.", item.Line);
     }
+
+    /// <summary>
+    /// A clans list sends for no account, but from 0.5.0 it may send the clan-and-field numbers you ticked — so it
+    /// gets a card, and the card names them. It used to be filtered out of this window altogether.
+    /// </summary>
+    [Fact]
+    public void AClansListsCardNamesTheClanNumbersItSends()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var state = new RecipeState(SentFieldMetrics: [FieldMetrics.Place, FieldMetrics.PaceNeeded]);
+
+        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main, Alt], [], resolveNames: false, _ => (7, 0)));
+
+        Assert.Equal("Pet Sim 99 top clans", item.RecipeName);
+        Assert.Contains("clan.standing.place", item.Line, StringComparison.Ordinal);
+        Assert.Contains("clan.standing.pace-needed", item.Line, StringComparison.Ordinal);
+        Assert.Contains("with no account attached", item.Line, StringComparison.Ordinal);
+        Assert.Contains("no player's id or number ever leaves this plugin", item.Line, StringComparison.Ordinal);
+        Assert.Equal("Sent 7, dropped 0 this session.", item.Counts);
+    }
+
+    [Fact]
+    public void AClansListWithNothingTickedSaysWhereToTickIt()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+
+        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", new RecipeState())], [Main], [], resolveNames: false, _ => (0, 0)));
+
+        Assert.Equal(
+            "Nothing is sent to RoRoRo from this list: no clan number is ticked. Tick one in Setup › Stats, under Clan and field.",
+            item.Line);
+    }
 }

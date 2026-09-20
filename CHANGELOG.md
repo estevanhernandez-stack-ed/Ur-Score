@@ -25,6 +25,12 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
   first fifteen minutes after Ur Score starts, and again for fifteen minutes whenever you gain or lose a place — the
   place above is a position, and when it changes hands its history is somebody else's.
 
+### Changed
+
+- **Setup › Alerts lists the clans list too.** It used to be left out of the "what leaves this plugin" cards
+  because it sends for no account. Now that it can send clan numbers, it has a card that names them — or says
+  where to tick one.
+
 ## 0.4.2 - 2026-09-20
 
 ### Changed
