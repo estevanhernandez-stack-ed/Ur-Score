@@ -3,6 +3,27 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.4 - 2026-09-20
+
+### Added
+
+- **"Also tell me when it comes right again."** A tick on any alert rule. Ticked, you get a second
+  alert when the number comes back over its line — "K0i2 clan points is back above 9,000,000,000", or
+  "is climbing again" for a rate rule. Off unless you tick it, and it goes wherever that rule's alerts
+  already go.
+
+  This is the other half of a change in RoRoRo: an alert fires once now, on the crossing, so silence
+  afterwards means "still bad" — which on a lock screen looks exactly like nothing being wrong. The
+  tick is what tells you it is over. **It needs RoRoRo 1.30 or newer.** On an older RoRoRo the tick
+  saves and does nothing; the rule still alerts as it always did.
+
+### Fixed
+
+- **The alert editor said "an account's" about numbers that belong to no account.** All six clan
+  numbers described themselves as something they are not, in the one place you set them up. It names
+  the right subject now — and where the label already carries your clan's name, it does not say it
+  twice: "Alert me when K0i2 clan points goes below ...".
+
 ## 0.5.3 - 2026-09-20
 
 ### Added
