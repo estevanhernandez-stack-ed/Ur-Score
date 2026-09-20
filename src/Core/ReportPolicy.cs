@@ -31,10 +31,17 @@ public sealed record PolicyDecision(bool Allowed, string? Reason);
 /// </para>
 /// </summary>
 public sealed class ReportPolicy(
-    IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects, int sent = 0, int dropped = 0)
+    IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects,
+    IReadOnlyList<FieldMetric>? sentFieldMetrics = null, int sent = 0, int dropped = 0)
 {
     /// <summary>The stats with Send on, each with the metric id the user pinned. A copy, like the allow list.</summary>
     public IReadOnlyList<SentStat> SentStats { get; } = [.. sentStats];
+
+    /// <summary>
+    /// The clan-and-field numbers with Send on. These belong to no account, so they pass a gate of their own:
+    /// the only check is that the number was ticked, because there is no subject to check it against.
+    /// </summary>
+    public IReadOnlyList<FieldMetric> SentFieldMetrics { get; } = [.. sentFieldMetrics ?? []];
 
     /// <summary>
     /// A COPY, deliberately. Held by reference, a caller mutating the set afterwards would widen
@@ -59,8 +66,10 @@ public sealed class ReportPolicy(
     /// never rise. <see cref="RecipeWatch.UpdatePolicy"/> is the only caller.
     /// </para>
     /// </summary>
-    public ReportPolicy With(IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects) =>
-        new(sentStats, allowedSubjects, Sent, Dropped);
+    public ReportPolicy With(
+        IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects,
+        IReadOnlyList<FieldMetric>? sentFieldMetrics = null) =>
+        new(sentStats, allowedSubjects, sentFieldMetrics ?? SentFieldMetrics, Sent, Dropped);
 
     public PolicyDecision Evaluate(Guid subject, string candidateMetricId, double value)
     {
@@ -83,6 +92,51 @@ public sealed class ReportPolicy(
         }
 
         return new PolicyDecision(true, null);
+    }
+
+    /// <summary>
+    /// Whether a clan-and-field number may go. No subject, so no allow list: what stands in for it is that the
+    /// number is one this catalogue offers AND one the user ticked, under the fixed id the catalogue gives it.
+    /// </summary>
+    public PolicyDecision EvaluateField(FieldMetric metric, double value)
+    {
+        if (!SentFieldMetrics.Any(m => string.Equals(m.Key, metric.Key, StringComparison.Ordinal)))
+        {
+            return new PolicyDecision(false, $"'{metric.Label}' is not set to send.");
+        }
+
+        if (FieldMetrics.Find(metric.Key) is not { } known || !string.Equals(known.MetricId, metric.MetricId, StringComparison.Ordinal))
+        {
+            return new PolicyDecision(false, $"'{metric.Key}' is not a clan-and-field number this version sends.");
+        }
+
+        if (!double.IsFinite(value))
+        {
+            return new PolicyDecision(false, $"The value was {value}, which is not a finite number.");
+        }
+
+        return new PolicyDecision(true, null);
+    }
+
+    /// <summary>
+    /// One clan-and-field number, sent with no subject. <c>Guid.Empty</c> is RoRoRo's documented carrier for an
+    /// observation that belongs to no account (<c>MetricReportSinkAdapter</c>), and it words the alert without
+    /// one — which is right, because none of these numbers is about an account.
+    /// </summary>
+    public async Task<bool> SendFieldAsync(
+        IHostClient client, FieldMetric metric, double value, DateTimeOffset observedAt, CancellationToken cancellationToken)
+    {
+        if (!EvaluateField(metric, value).Allowed)
+        {
+            Dropped++;
+            return false;
+        }
+
+        await client.ReportMetricAsync(Guid.Empty, metric.MetricId, value, observedAt, cancellationToken)
+            .ConfigureAwait(false);
+
+        Sent++;
+        return true;
     }
 
     /// <summary>
@@ -138,14 +192,21 @@ public sealed class ReportPolicy(
               + "usernames for the leaderboard. Set resolveNames to false in settings.json to stop it."
             : "Name lookups are off: no other member's Roblox id leaves this machine for any reason.";
 
+        var field = SentFieldMetrics.Count == 0
+            ? ""
+            : $"It also sends {JoinWithAnd([.. SentFieldMetrics.Select(m => m.Label.ToLowerInvariant())])} about your clan's "
+              + $"standing, as {JoinWithAnd([.. SentFieldMetrics.Select(m => m.MetricId)])}, with no account attached. ";
+
         if (SentStats.Count == 0)
         {
-            return "Ur Score sends nothing to RoRoRo: no stat is set to send. " + nameLookups;
+            return SentFieldMetrics.Count == 0
+                ? "Ur Score sends nothing to RoRoRo: no stat is set to send. " + nameLookups
+                : "Ur Score sends no account's stats to RoRoRo: no stat is set to send. " + field + nameLookups;
         }
 
         var labels = JoinWithAnd([.. SentStats.Select(stat => stat.Label)]);
         var metricIds = JoinWithAnd([.. SentStats.Select(stat => stat.MetricId)]);
-        return $"Ur Score sends {labels} for {scope}, as {metricIds}. Nothing else reaches RoRoRo. " + nameLookups;
+        return $"Ur Score sends {labels} for {scope}, as {metricIds}. {field}Nothing else reaches RoRoRo. " + nameLookups;
     }
 
     private static string JoinWithAnd(IReadOnlyList<string> items) => items.Count switch

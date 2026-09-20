@@ -38,7 +38,12 @@ public partial class StatsPage : UserControl, ISetupPage
     {
         var groupLists = _services.Installed.Where(i => i.Recipe.IsGroupList).Select(i => i.Recipe.Name).ToList();
         Show(StatsGroupListLine, groupLists.Count == 0 ? ""
-            : $"{string.Join(", ", groupLists)} {(groupLists.Count == 1 ? "has" : "have")} no stats to tick. Group rows are shown live on the board.");
+            : $"{string.Join(", ", groupLists)} {(groupLists.Count == 1 ? "has" : "have")} no account stats to tick — its rows are "
+              + "other people's clans. What it can send is in Clan and field, below.");
+
+        // Outside the early return below: the clan-and-field section stands on its own, and it has to show even
+        // when a clans list is the only recipe installed and the Stats table has nothing to draw.
+        LoadField();
 
         var choices = _services.Installed
             .Where(i => !i.Recipe.IsGroupList)
@@ -92,6 +97,43 @@ public partial class StatsPage : UserControl, ISetupPage
 
         // Spec §7.3: no saved names and a recipe with counters means one read when the page opens.
         if (recipe.LastStep.Counters is not null && !StatsTable.HasSavedNames) _ = StatsTable.ReadNamesAsync(_closing.Token);
+    }
+
+    /// <summary>The clans list this section is about, or null when none is installed and the section stays hidden.</summary>
+    private InstalledRecipe? ClansList =>
+        FieldMetricsModel.ListFor(_services.Installed);
+
+    private void LoadField()
+    {
+        if (ClansList is not { } list)
+        {
+            FieldSection.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        FieldSection.Visibility = Visibility.Visible;
+        FieldLine.Text = FieldMetricsModel.Line(list, _services.Sources, _services.Installed);
+        FieldNumbers.ItemsSource = FieldMetricsModel.Items(list.State);
+        Show(FieldSavedLine, "");
+    }
+
+    private void OnSaveFieldClick(object sender, RoutedEventArgs e)
+    {
+        if (ClansList is not { } list) return;
+
+        try
+        {
+            var ticked = FieldMetricsModel.Ticked(FieldNumbers.ItemsSource.Cast<FieldMetricItem>());
+            _services.SaveRecipeState(list.Recipe, list.State with { SentFieldMetrics = ticked });
+            LoadField();
+            Show(FieldSavedLine, ticked.Count == 0
+                ? "Saved. No clan number is sent."
+                : $"Saved. {ticked.Count} clan number(s) go to RoRoRo from the next read.");
+        }
+        catch (Exception ex)
+        {
+            Show(FieldSavedLine, _services.Redactor.Redact($"Could not save those numbers: {ex.Message}"));
+        }
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)

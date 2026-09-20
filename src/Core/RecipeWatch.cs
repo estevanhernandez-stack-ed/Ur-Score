@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Grpc.Core;
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
@@ -159,6 +160,16 @@ public sealed class RecipeWatch(
     /// </summary>
     private (RecipeSnapshot Snapshot, string? KeyFingerprint)? _held;
 
+    /// <summary>
+    /// This session's clans-list readings: your clan's points, and the points of the place above it, so a chase
+    /// has two paces to work with. Only the last <see cref="Pace.LongestCurrent"/> is kept — a pace older than
+    /// that is not a current one — and nothing here outlives the process, so after a restart the numbers that
+    /// need a pace go quiet until there are <see cref="Pace.Shortest"/> of readings again.
+    /// </summary>
+    private readonly List<SeriesPoint> _fieldMine = [];
+
+    private readonly List<SeriesPoint> _fieldAbove = [];
+
     public ReportPolicy Policy => policy;
 
     public Recipe Recipe => recipe;
@@ -171,9 +182,11 @@ public sealed class RecipeWatch(
         }
     }
 
-    public void UpdatePolicy(IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects)
+    public void UpdatePolicy(
+        IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects,
+        IReadOnlyList<FieldMetric>? sentFieldMetrics = null)
     {
-        lock (_gate) policy = policy.With(sentStats, allowedSubjects);
+        lock (_gate) policy = policy.With(sentStats, allowedSubjects, sentFieldMetrics);
     }
 
     /// <summary>A role change (make main, watch a clan) applies to the next cycle, with no new watch.</summary>
@@ -359,9 +372,22 @@ public sealed class RecipeWatch(
 
         if (readRecipe.IsGroupList)
         {
-            // The field's own numbers are kept (FieldSummary): no clan is named, no account is matched, nothing is sent.
+            // The field's own numbers are kept (FieldSummary): no clan is named and no account is matched. What
+            // goes out is the clan-and-field numbers the user ticked, each with no subject at all (FieldMetrics).
             var (fieldRecorded, fieldReason) = RecordField(readRecipe, readText, readSource, trigger, reading);
-            return Snapshot(readRecipe, readSource, WatchState.Showing, $"Read {reading.Groups.Count} groups.", seen, unresolved, reading, map) with
+
+            var field = $"Read {reading.Groups.Count} groups.";
+            try
+            {
+                var sentField = await SendFieldAsync(readRecipe, readInputs, reading, hostUp, cancellationToken).ConfigureAwait(false);
+                if (sentField > 0) field += $" Sent {sentField} clan number(s) to RoRoRo.";
+            }
+            catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
+            {
+                return Snapshot(readRecipe, readSource, WatchState.Rejected, RejectedMessage("host.metrics.report"), seen, unresolved, reading, map);
+            }
+
+            return Snapshot(readRecipe, readSource, WatchState.Showing, field, seen, unresolved, reading, map) with
             {
                 Recorded = fieldRecorded,
                 NotRecordingReason = fieldReason,
@@ -489,6 +515,80 @@ public sealed class RecipeWatch(
     /// The clans-list half of <see cref="Record"/>: one line of <see cref="FieldSummary"/> numbers, so a later read can
     /// say how fast the field was going. No rows, no accounts, no clan name, and no send — a group list never had any.
     /// </summary>
+    /// <summary>
+    /// The clan-and-field numbers this read can say, each sent under its fixed id with no account attached.
+    /// Returns how many went.
+    /// <para>
+    /// The place above is a POSITION, so its points fall whenever you gain a place and the clan holding it
+    /// changes. That is not a pace, it is a different clan, so the series starts again from this read rather
+    /// than averaging two clans together.
+    /// </para>
+    /// </summary>
+    private async Task<int> SendFieldAsync(
+        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, RecipeReading reading, bool hostUp,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<FieldMetric> wanted;
+        lock (_gate) wanted = policy.SentFieldMetrics;
+        if (wanted.Count == 0 || !hostUp) return 0;
+
+        var valueKey = readRecipe.LastStep.Values.FirstOrDefault()?.Id ?? "";
+        var summary = FieldSummary.Of(reading.Groups, valueKey, myGroups?.Invoke());
+        if (summary.Count == 0) return 0;
+
+        var now = (time ?? TimeProvider.System).GetUtcNow();
+        Remember(_fieldMine, summary, FieldSummary.Mine, now);
+        Remember(_fieldAbove, summary, FieldSummary.Above, now);
+
+        List<SeriesPoint> mine, above;
+        lock (_gate)
+        {
+            mine = [.. _fieldMine];
+            above = [.. _fieldAbove];
+        }
+
+        var values = FieldMetrics.Of(summary, mine, above, now, reading.Period?.Ends);
+        var sent = 0;
+
+        foreach (var metric in wanted)
+        {
+            if (values.FirstOrDefault(v => string.Equals(v.Metric.Key, metric.Key, StringComparison.Ordinal)) is not { } value) continue;
+
+            // Re-taken each send, like the account loop: a number unticked mid-cycle is refused by the policy
+            // the send actually uses, not by the list this loop started with.
+            ReportPolicy current;
+            lock (_gate)
+            {
+                if (RecipeChanged(readRecipe, readInputs)) break;
+                current = policy;
+            }
+
+            if (await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false)) sent++;
+        }
+
+        return sent;
+    }
+
+    /// <summary>One reading of a field number, dropping anything older than a current pace may reach back.</summary>
+    private void Remember(List<SeriesPoint> series, IReadOnlyDictionary<string, double> summary, string key, DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            if (!summary.TryGetValue(key, out var value))
+            {
+                // No number this read: whatever is there is about something else now.
+                series.Clear();
+                return;
+            }
+
+            // A fall means the position changed hands. The old clan's points are not this one's history.
+            if (series.Count > 0 && value < series[^1].Value) series.Clear();
+
+            series.Add(new SeriesPoint(now, value, null, false, 0));
+            series.RemoveAll(p => now - p.T > Pace.LongestCurrent);
+        }
+    }
+
     private (bool Recorded, string? Reason) RecordField(
         Recipe readRecipe, string readText, Source? readSource, string trigger, RecipeReading reading)
     {

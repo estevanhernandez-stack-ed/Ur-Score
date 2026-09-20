@@ -30,10 +30,12 @@ public class RecipeWatchBookTests
     private static RecipeWatch Watch(
         IRecipeEngine engine, StubHost host, IScoreBook book, Source source,
         SharedAccounts? shared = null, AccountClaims? claims = null, IReadOnlySet<string>? tracked = null,
-        FinalsIndex? finals = null, TimeProvider? time = null, Recipe? recipe = null, string? text = null) =>
-        new(engine, host, new NoKeys(), new ReportPolicy([Points], new HashSet<Guid> { Alt }), recipe ?? Clan, Inputs,
+        FinalsIndex? finals = null, TimeProvider? time = null, Recipe? recipe = null, string? text = null,
+        IReadOnlyList<FieldMetric>? field = null, IReadOnlySet<string>? myGroups = null) =>
+        new(engine, host, new NoKeys(), new ReportPolicy([Points], new HashSet<Guid> { Alt }, field), recipe ?? Clan, Inputs,
             tracked ?? new HashSet<string> { "value" },
-            book, source, shared, text ?? ClanText, claims, finals, time);
+            book, source, shared, text ?? ClanText, claims, finals, time,
+            myGroups is null ? null : () => myGroups);
 
     [Fact]
     public async Task AReadIsKeptWithOnlyYourAccountsAndStillSent()
@@ -292,6 +294,137 @@ public class RecipeWatchBookTests
         var written = BookJson.Serialize(line);
         Assert.Contains("SkyHarbor", written, StringComparison.Ordinal);
         Assert.DoesNotContain("UserID", written, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A clans list has no account to send for and never will — and that is exactly why these may go: they are
+    /// about the position your clan holds, not about anyone's account, so they carry no subject at all. The
+    /// owner asked for them on 2026-09-20 so a clan can be told one name to set an alert on.
+    /// </summary>
+    [Fact]
+    public async Task AWatchedClansListStillSendsTheClanNumbersYouTicked()
+    {
+        var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
+        var recipe = RecipeParser.Parse(text).Recipe!;
+        var host = new StubHost(true, AltAccount);
+        var clock = new ManualTime(new DateTimeOffset(2026, 9, 20, 18, 0, 0, TimeSpan.Zero));
+        var ends = clock.Now.AddHours(10);
+
+        double mine = 8_000_000_000, above = 8_900_000_000;
+        var engine = new StubEngine(() => new RecipeReading(ReadingOutcome.Read, null, [], [], "battle=B", 3)
+        {
+            Period = new ReadingPeriod("B", null, ends),
+            Groups =
+            [
+                new GroupRow("UN0", new Dictionary<string, double> { ["value"] = 21_000_000_000 }, 1),
+                new GroupRow("V1LN", new Dictionary<string, double> { ["value"] = above }, 2),
+                new GroupRow("K0i2", new Dictionary<string, double> { ["value"] = mine, ["members"] = 74, ["capacity"] = 75 }, 3),
+            ],
+        });
+
+        var watch = Watch(engine, host, new MemoryBook(),
+            new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
+            time: clock, recipe: recipe, text: text,
+            field: FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.PaceNeeded, FieldMetrics.FreeSlots]),
+            myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" });
+
+        // First read: no pace yet, so what it would take is not guessed at.
+        await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(["clan.standing.points", "clan.standing.free-slots"], host.Reported.Select(r => r.MetricId));
+        Assert.All(host.Reported, r => Assert.Equal(Guid.Empty, r.Subject));
+
+        // Half an hour on, both clans have moved, and now there is a pace for each of them.
+        host.Reported.Clear();
+        clock.Advance(TimeSpan.FromMinutes(30));
+        mine += 130_000_000;
+        above += 100_000_000;
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(
+            ["clan.standing.points", "clan.standing.pace-needed", "clan.standing.free-slots"],
+            host.Reported.Select(r => r.MetricId));
+        Assert.All(host.Reported, r => Assert.Equal(Guid.Empty, r.Subject));
+
+        // 870M behind with 9.5 hours left, while they make 200M an hour: about 291.6M an hour.
+        var needed = host.Reported.Single(r => r.MetricId == "clan.standing.pace-needed").Value;
+        Assert.Equal(200_000_000 + (870_000_000 / 9.5), needed, 1);
+        Assert.Contains("Sent 3 clan number(s)", snapshot.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticking nothing is the default, and it is silence: the read is still kept.</summary>
+    [Fact]
+    public async Task AClansListWithNoClanNumbersTickedSendsNothing()
+    {
+        var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
+        var recipe = RecipeParser.Parse(text).Recipe!;
+        var host = new StubHost(true, AltAccount);
+        var book = new MemoryBook();
+        var engine = new StubEngine(() => new RecipeReading(ReadingOutcome.Read, null, [], [], "battle=B", 1)
+        {
+            Groups = [new GroupRow("K0i2", new Dictionary<string, double> { ["value"] = 8e9 }, 1)],
+        });
+
+        var snapshot = await Watch(engine, host, book,
+            new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
+            recipe: recipe, text: text, myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" })
+            .RunOnceAsync(CancellationToken.None);
+
+        Assert.Empty(host.Reported);
+        Assert.True(snapshot.Recorded);
+        Assert.Single(book.Lines);
+    }
+
+    /// <summary>
+    /// The place above is a position, not a clan. Gain a place and its points fall, because somebody else holds it
+    /// now — so the series starts again rather than averaging two clans into one pace.
+    /// </summary>
+    [Fact]
+    public async Task GainingAPlaceStartsThePlaceAbovesHistoryAgain()
+    {
+        var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
+        var recipe = RecipeParser.Parse(text).Recipe!;
+        var host = new StubHost(true, AltAccount);
+        var clock = new ManualTime(new DateTimeOffset(2026, 9, 20, 18, 0, 0, TimeSpan.Zero));
+        var ends = clock.Now.AddHours(10);
+
+        // Third of three throughout, until the last read, where the two above us have both been overtaken by
+        // other clans and the place above us is held by one with fewer points than the last holder.
+        var mine = 8_000_000_000d;
+        double first = 21e9, second = 8.9e9;
+        var engine = new StubEngine(() => new RecipeReading(ReadingOutcome.Read, null, [], [], "battle=B", 3)
+        {
+            Period = new ReadingPeriod("B", null, ends),
+            Groups =
+            [
+                new GroupRow("A", new Dictionary<string, double> { ["value"] = first }, 1),
+                new GroupRow("B", new Dictionary<string, double> { ["value"] = second }, 2),
+                new GroupRow("K0i2", new Dictionary<string, double> { ["value"] = mine }, 3),
+            ],
+        });
+
+        var watch = Watch(engine, host, new MemoryBook(),
+            new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
+            time: clock, recipe: recipe, text: text,
+            field: FieldMetrics.Offered([FieldMetrics.PaceNeeded]),
+            myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" });
+
+        await watch.RunOnceAsync(CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(30));
+        mine += 130_000_000;
+        second += 100_000_000;
+        await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Single(host.Reported);
+
+        // We take a place: the position above us is now held by a clan with fewer points than the last one.
+        host.Reported.Clear();
+        clock.Advance(TimeSpan.FromMinutes(30));
+        mine += 130_000_000;
+        first = 8.9e9;
+        second = 8.5e9;
+        await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Empty(host.Reported);
     }
 
     [Fact]

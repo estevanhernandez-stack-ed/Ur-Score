@@ -138,3 +138,35 @@ Two things this settles:
 3. Own-clan pace: the Clan standing line and the Pace panel's own-clan lines, from the book as it is.
 4. The field lines and the overtake calculator, as history accrues.
 5. Release, so the owner's installed copy starts recording.
+
+## Built, 2026-09-20 (0.5.0)
+
+The section above became `FieldMetrics`, six numbers under fixed ids, ticked in Setup › Stats' own **Clan and
+field** section and stored on the clans list's state (`sentFieldMetrics`):
+
+| tick | id | what |
+|---|---|---|
+| Clan points | `clan.standing.points` | your clan's total; a **rate rule** on it is your clan's pace |
+| Clan place | `clan.standing.place` | where you stand, 1 being the leader |
+| Points behind the place above | `clan.standing.gap-above` | zero while you lead |
+| Points an hour needed to pass them | `clan.standing.pace-needed` | the gap over the time left, **plus their pace** |
+| Free clan slots | `clan.standing.free-slots` | capacity less members |
+| Members on zero | `clan.standing.idle-members` | members less contributors |
+
+The ids are fixed by the version rather than pinned per install, unlike a stat's, because the whole point is
+that a leader names one and every member sets the same alert. `ReportPolicy.EvaluateField` refuses an id the
+catalogue does not offer, so a hand-edited state file cannot redirect one — in particular not onto
+`clan.battle.points`, which an account's own clan points already use.
+
+Two rulings the build needed:
+
+- **A watched clans list may send these, and only these.** Spec §3.5 (a group list never sends) and §4.1 (a
+  watched source never sends) are about ACCOUNTS: a clans list's rows are other people's clans and a watch is
+  somebody else's account. Nothing here is an account — every number is about the position your own clan holds,
+  and each goes out with `Guid.Empty` as its subject, which RoRoRo keys globally and words without a player.
+  The account gate in `PolicyFor` is untouched; the field ticks ride beside it.
+- **The place above is a position, so its history restarts when it changes hands.** The two series the chase
+  needs are kept in the watch, in memory, for the last two hours — a pace older than that is not a current one.
+  A fall in the position's points means a different clan holds it, so the series starts again rather than
+  averaging two clans into one pace. Nothing survives a restart, so after one the catch-up number goes quiet
+  until there are fifteen minutes of readings again; everything else sends from the first read.

@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>626labs.ur-score</AssemblyName>
     <RootNamespace>Labs626.UrScore</RootNamespace>
-    <Version>0.4.2</Version>
+    <Version>0.5.0</Version>
     <Company>626 Labs LLC</Company>
     <Product>RoRoRo Ur Score</Product>
     <Description>Reads your accounts' numbers from wherever a recipe says, keeps them on your scoreboard and in your score book, and hands them to RoRoRo.</Description>

@@ -20,5 +20,30 @@
         </StackPanel>
         <TextBlock x:Name="StatsEmptyLine" Style="{StaticResource Muted}" Visibility="Collapsed"
                    Text="No recipe with stats to choose yet. Import one in Recipes." />
+
+        <StackPanel x:Name="FieldSection" Margin="0,28,0,0" Visibility="Collapsed">
+            <TextBlock Text="CLAN AND FIELD" Style="{StaticResource SectionLabel}" />
+            <TextBlock x:Name="FieldLine" Style="{StaticResource Muted}" Margin="0,0,0,12" />
+            <ui:RowList x:Name="FieldNumbers" AutomationProperties.Name="Clan and field numbers">
+                <ui:RowList.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                            <StackPanel>
+                                <CheckBox IsChecked="{Binding Send, Mode=TwoWay}" Content="{Binding Label}"
+                                          AutomationProperties.Name="{Binding Label}" />
+                                <TextBlock Text="{Binding What}" Style="{StaticResource Muted}" Margin="24,4,0,0" />
+                                <TextBlock Text="{Binding MetricId}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                           Margin="24,4,0,0" Foreground="{DynamicResource CyanBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ui:RowList.ItemTemplate>
+            </ui:RowList>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <Button x:Name="SaveFieldButton" Content="Save clan numbers" Style="{StaticResource PrimaryButton}"
+                        Click="OnSaveFieldClick" />
+                <TextBlock x:Name="FieldSavedLine" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            </StackPanel>
+        </StackPanel>
     </StackPanel>
 </UserControl>

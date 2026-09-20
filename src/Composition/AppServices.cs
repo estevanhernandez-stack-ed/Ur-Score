@@ -608,9 +608,17 @@ public sealed class AppServices : ISetupServices, IDisposable
     private ReportPolicy PolicyFor(InstalledRecipe installed, Source source)
     {
         var sources = Sources;
-        if (source.Role == SourceRole.Watch || !ReportPolicies.SendsByRole(installed, sources)) return new ReportPolicy([], new HashSet<Guid>());
 
-        return new ReportPolicy(installed.State.SentStats(installed.Recipe), ReportPolicies.Allowed(installed, KnownAccounts, sources));
+        // A clans list's ACCOUNT gate stays shut, whatever is ticked: its rows are other people's clans, and the
+        // rules above are about accounts. Its clan-and-field numbers ride beside that gate, not through it —
+        // no subject, no clan but yours, and its own ticks (FieldMetrics).
+        IReadOnlyList<FieldMetric> field = installed.Recipe.IsGroupList
+            ? FieldMetrics.Offered(installed.State.FieldMetricKeys)
+            : [];
+
+        if (source.Role == SourceRole.Watch || !ReportPolicies.SendsByRole(installed, sources)) return new ReportPolicy([], new HashSet<Guid>(), field);
+
+        return new ReportPolicy(installed.State.SentStats(installed.Recipe), ReportPolicies.Allowed(installed, KnownAccounts, sources), field);
     }
 
     /// <summary>
@@ -664,9 +672,10 @@ public sealed class AppServices : ISetupServices, IDisposable
     private static void UpdatePolicy(RecipeWatch watch, ReportPolicy wanted)
     {
         var current = watch.Policy;
-        if (current.SentStats.SequenceEqual(wanted.SentStats) && current.AllowedSubjects.SetEquals(wanted.AllowedSubjects)) return;
+        if (current.SentStats.SequenceEqual(wanted.SentStats) && current.AllowedSubjects.SetEquals(wanted.AllowedSubjects)
+            && current.SentFieldMetrics.SequenceEqual(wanted.SentFieldMetrics)) return;
 
-        watch.UpdatePolicy(wanted.SentStats, wanted.AllowedSubjects);
+        watch.UpdatePolicy(wanted.SentStats, wanted.AllowedSubjects, wanted.SentFieldMetrics);
     }
 
     private void ApplySources()

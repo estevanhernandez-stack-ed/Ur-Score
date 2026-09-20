@@ -3,6 +3,28 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.0 - 2026-09-20
+
+### Added
+
+- **Alerts on your clan's standing.** Setup › Stats has a new **Clan and field** section: tick a number and it goes
+  to RoRoRo, so an alert can fire on it. A clan leader can name one and tell the clan to set the same alert, because
+  the ids are fixed by the version rather than chosen per install:
+
+  | tick | id |
+  |---|---|
+  | Clan points (a rate rule on it is your clan's pace) | `clan.standing.points` |
+  | Clan place | `clan.standing.place` |
+  | Points behind the place above | `clan.standing.gap-above` |
+  | Points an hour needed to pass them | `clan.standing.pace-needed` |
+  | Free clan slots | `clan.standing.free-slots` |
+  | Members on zero | `clan.standing.idle-members` |
+
+  Each goes out with **no account attached**, so the alert is worded about the clan, not a player. Nothing is ticked
+  until you tick it. The catch-up number needs a pace for the clan above as well as yours, so it stays quiet for the
+  first fifteen minutes after Ur Score starts, and again for fifteen minutes whenever you gain or lose a place — the
+  place above is a position, and when it changes hands its history is somebody else's.
+
 ## 0.4.2 - 2026-09-20
 
 ### Changed

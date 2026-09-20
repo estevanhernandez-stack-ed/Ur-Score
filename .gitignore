@@ -47,3 +47,4 @@ secrets/
 
 # Test run leftovers: blame-hang dumps and sequence files.
 tests/TestResults/
+*_wpftmp.csproj

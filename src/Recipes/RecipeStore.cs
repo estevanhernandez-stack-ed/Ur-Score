@@ -20,8 +20,17 @@ public sealed record RecipeState(
     IReadOnlyDictionary<string, string>? Inputs = null,
     IReadOnlyList<string>? ExcludedAccountIds = null,
     IReadOnlyDictionary<string, StatChoice>? Stats = null,
-    IReadOnlyList<string>? CounterNames = null)
+    IReadOnlyList<string>? CounterNames = null,
+    IReadOnlyList<string>? SentFieldMetrics = null)
 {
+    /// <summary>
+    /// The clan-and-field numbers ticked on a clans list. Keys only: unlike a stat, these ids are fixed by the
+    /// version, not pinned per install, because the whole point of them is that every member of a clan can set
+    /// an alert on the same name.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> FieldMetricKeys => SentFieldMetrics ?? [];
+
     [JsonIgnore]
     public IReadOnlyDictionary<string, string> InputValues => Inputs ?? new Dictionary<string, string>();
 
