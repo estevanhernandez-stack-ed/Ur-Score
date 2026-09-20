@@ -90,7 +90,8 @@ public static partial class AlertCards
 
     public const string NextInRoRoRo = "Next, in RoRoRo: Settings › Alerts › turn on Metric alerts and choose where they go (desktop, Discord, phone).";
     public const string NoRecipe = "Import a recipe first.";
-    public const string NoSentStat = "No stat is sent to RoRoRo yet. Tick Send on a stat in Setup › Stats, and it gets a card here.";
+    public const string NoSentStat = "Nothing is sent to RoRoRo yet. Tick Send on a stat in Setup › Stats, or a number "
+        + "under Clan and field on the same page, and it gets a card here.";
     public const string TypeANumber = "Type a number, like 100.";
     public const string UseADot = "Use a dot for decimals, like 1.5.";
     public const string TwoDecimals = "Use at most two decimal places, like 1.25.";
@@ -113,7 +114,14 @@ public static partial class AlertCards
 
     // ---- cards ----
 
-    /// <summary>A card per sent metric id in recipe order (A10), then one per metric id Ur Score has a rule for that you no longer send (A11).</summary>
+    /// <summary>
+    /// A card per sent metric id in recipe order (A10), then one per metric id Ur Score has a rule for that you no
+    /// longer send (A11).
+    /// <para>
+    /// The clan-and-field numbers a clans list sends get cards too, from 0.5.2. Without them 0.5.0 shipped six
+    /// metrics a member could tick and then had nowhere to set an alert on — which was the entire point of them.
+    /// </para>
+    /// </summary>
     public static AlertsView Build(IReadOnlyList<InstalledRecipe> installed, RulesRead rules)
     {
         var recipes = installed.Where(i => !i.Recipe.IsGroupList).ToList();
@@ -121,13 +129,24 @@ public static partial class AlertCards
             .SelectMany(i => i.State.SentStats(i.Recipe))
             .GroupBy(s => s.MetricId, StringComparer.Ordinal)
             .Select(g => new AlertStat(g.Key, g.First().Label, Sent: true))
+            .Concat(installed
+                .Where(i => i.Recipe.IsGroupList)
+                .SelectMany(i => FieldMetrics.Offered(i.State.FieldMetricKeys))
+                .GroupBy(m => m.MetricId, StringComparer.Ordinal)
+                .Select(g => new AlertStat(g.Key, g.First().Label, Sent: true)))
             .ToList();
         var sentIds = sent.Select(s => s.MetricId).ToHashSet(StringComparer.Ordinal);
         var stale = rules.Rules
             .Where(r => r.Owner == RuleOwner.UrScore && !sentIds.Contains(r.MetricId))
             .GroupBy(r => r.MetricId, StringComparer.Ordinal)
             .OrderBy(g => g.Key, StringComparer.Ordinal)
-            .Select(g => new AlertStat(g.Key, PinnedLabel(recipes, g.Key) ?? g.Select(r => r.Label).FirstOrDefault(l => l is not null) ?? g.Key, Sent: false));
+            .Select(g => new AlertStat(
+                g.Key,
+                PinnedLabel(recipes, g.Key)
+                    ?? FieldMetrics.All.FirstOrDefault(m => string.Equals(m.MetricId, g.Key, StringComparison.Ordinal))?.Label
+                    ?? g.Select(r => r.Label).FirstOrDefault(l => l is not null)
+                    ?? g.Key,
+                Sent: false));
 
         var cards = sent.Concat(stale).Select(stat => Card(stat, rules)).ToList();
         var showNext = rules.Problem == RulesProblem.None && cards.Any(c => c.Stat.Sent && c.Alerts.Count > 0);

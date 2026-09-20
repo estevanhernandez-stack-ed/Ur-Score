@@ -48,7 +48,7 @@ public static class FieldMetrics
     public static IReadOnlyList<FieldMetric> All { get; } =
     [
         new(Points, "Clan points", "clan.standing.points",
-            "Your clan's points in this battle. A rate rule on this is your clan's pace."),
+            "Your clan's points in this battle. A rate rule on it is your clan's pace, per minute."),
         new(Place, "Clan place", "clan.standing.place",
             "Where your clan stands in the list, 1 being the leader."),
         new(GapAbove, "Points behind the place above", "clan.standing.gap-above",

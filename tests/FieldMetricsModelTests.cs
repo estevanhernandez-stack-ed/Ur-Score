@@ -90,6 +90,43 @@ public class FieldMetricsModelTests
         Assert.DoesNotContain(FieldMetricsModel.NoClanSet, line, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A WATCHED clan is somebody else's, and the role's whole contract is that nothing about it is sent or kept.
+    /// Until 0.5.2 the set filtered only on the recipe's shape, so watching a rival made its standing yours: if it
+    /// placed above you, FieldSummary took ITS points as field-mine and its place, gap and roster counts went to
+    /// RoRoRo under your clan's ids. It was live on the owner's own board, which watches CCGP.
+    /// </summary>
+    [Fact]
+    public void AWatchedClanIsNotOneOfYours()
+    {
+        var clans = Clans();
+        var clan = Clan();
+        var sources = new[]
+        {
+            SourceFor(clans, null, "s-00000009"),
+            SourceFor(clan, "K0i2", "s-00000001"),
+            SourceFor(clan, "DarkLegion", "s-00000002") with { Role = SourceRole.Watch },
+        };
+
+        Assert.Equal(["K0i2"], FieldMetricsModel.MyClanNames(sources, [clan, clans]));
+        Assert.DoesNotContain("DarkLegion", FieldMetricsModel.Line(clans, sources, [clan, clans]), StringComparison.Ordinal);
+    }
+
+    /// <summary>A switched-off source is not read, so its clan is not one the numbers can be about either.</summary>
+    [Fact]
+    public void ASwitchedOffClanIsNotOneOfYours()
+    {
+        var clans = Clans();
+        var clan = Clan();
+        var sources = new[]
+        {
+            SourceFor(clan, "K0i2", "s-00000001"),
+            SourceFor(clan, "Dormant", "s-00000002") with { Enabled = false },
+        };
+
+        Assert.Equal(["K0i2"], FieldMetricsModel.MyClanNames(sources, [clan, clans]));
+    }
+
     /// <summary>A clans list's own source carries no clan of yours, so it is never mistaken for one.</summary>
     [Fact]
     public void TheClansListsOwnSourceNamesNoClanOfYours()

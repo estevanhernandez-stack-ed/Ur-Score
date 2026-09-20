@@ -37,6 +37,41 @@ public class AlertsModelTests
     }
 
     /// <summary>
+    /// Ticking a clan number has to produce somewhere to set the alert on it. 0.5.0 shipped six metrics a member
+    /// could tick and then had nowhere to add a rule for — which was the entire point of them — because Build
+    /// filtered group lists out. Found by review before the clan saw it.
+    /// </summary>
+    [Fact]
+    public void ATickedClanNumberGetsAnAlertCard()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var state = new RecipeState(SentFieldMetrics: [FieldMetrics.GapAbove, FieldMetrics.Points]);
+
+        var view = AlertCards.Build([new InstalledRecipe(clans, "", state)], new RulesRead(RulesProblem.None, true, [], []));
+
+        Assert.Equal(
+            ["clan.standing.points", "clan.standing.gap-above"],
+            view.Cards.Select(c => c.Stat.MetricId));
+        Assert.All(view.Cards, c => Assert.True(c.Stat.Sent));
+        Assert.All(view.Cards, c => Assert.NotEmpty(c.CanAdd));
+        Assert.Equal("Points behind the place above", view.Cards[1].Stat.Label);
+        Assert.Equal("", AlertCards.EmptyLine([new InstalledRecipe(clans, "", state)], view));
+    }
+
+    /// <summary>With nothing ticked anywhere, the empty line points at both places a tick lives.</summary>
+    [Fact]
+    public void TheEmptyLineNamesTheClanAndFieldSectionToo()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var installed = new[] { new InstalledRecipe(clans, "", new RecipeState()) };
+
+        var view = AlertCards.Build(installed, new RulesRead(RulesProblem.None, true, [], []));
+
+        Assert.Empty(view.Cards);
+        Assert.Contains("Clan and field", AlertCards.EmptyLine(installed, view), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A clans list sends for no account, but from 0.5.0 it may send the clan-and-field numbers you ticked — so it
     /// gets a card, and the card names them. It used to be filtered out of this window altogether.
     /// </summary>

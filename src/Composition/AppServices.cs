@@ -586,7 +586,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     private IReadOnlySet<string> MyGroupNames() =>
         Sources
-            .Where(s => FindInstalled(s.Recipe)?.Recipe.IsGroupList == false)
+            .Where(s => s.Enabled && s.Role != SourceRole.Watch && FindInstalled(s.Recipe)?.Recipe.IsGroupList == false)
             .SelectMany(s => s.Inputs.Values)
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

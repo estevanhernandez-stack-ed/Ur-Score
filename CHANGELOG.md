@@ -3,6 +3,29 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.2 - 2026-09-20
+
+Three things a multi-agent review found in 0.5.0 before the clan did.
+
+### Fixed
+
+- **A clan you WATCH is no longer treated as one of yours.** Watching a rival made its standing your standing:
+  if it placed above you, its points were written to your score book as your clan's and its place, gap and
+  roster counts went to RoRoRo under your clan's ids. The set a read uses to find your row now excludes watched
+  and switched-off sources, which is what the role has always promised.
+- **A ticked clan number gets an alert card.** 0.5.0 let you tick six numbers and then gave you nowhere to set
+  an alert on them, because Setup › Alerts filtered clans lists out of its cards. They get cards now, and the
+  "nothing is sent yet" line names Clan and field as well as Stats.
+- **No pace is projected from a window too short to mean it.** "On this pace" needs an hour behind it — twenty-five
+  minutes carried across a five-day battle is the 26-billion nonsense the design doc warned about — and the chase
+  row now measures the clan above over the same two-hour window the sent metric uses, instead of averaging the
+  whole battle.
+
+### Changed
+
+- The clan-points tick says a rate rule gives your clan's pace **per minute**, which is what RoRoRo's rate rules
+  measure.
+
 ## 0.5.1 - 2026-09-20
 
 ### Changed

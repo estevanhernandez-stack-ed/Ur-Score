@@ -35,10 +35,20 @@ public static class PaceText
             ? TooEarly
             : $"{PerHour(window.PerHour)} since {TimeZoneInfo.ConvertTime(window.From, zone).ToString("ddd HH:mm", CultureInfo.InvariantCulture)}";
 
-    /// <summary>Where the current pace lands by the end, or nothing to say when there is no pace or no end.</summary>
+    /// <summary>
+    /// Where the current pace lands by the end, or nothing to say when there is no pace, no end, or too little
+    /// behind the pace to project it.
+    /// <para>
+    /// Under an hour is not projected, which the design doc settled and the code did not do until 0.5.2: measured
+    /// on the owner's board 2026-09-19, twenty-five minutes carried across the battle's remaining 140 hours came
+    /// out at 26 billion, "which is nonsense on its face". A pace worth a projection has an hour behind it.
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan ShortestToProject = TimeSpan.FromHours(1);
+
     public static string OnThisPace(PaceWindow? pace, double latest, DateTimeOffset? ends, DateTimeOffset now, TimeZoneInfo zone)
     {
-        if (pace is null) return TooEarly;
+        if (pace is null || pace.Span < ShortestToProject) return TooEarly;
         if (ends is not { } end || end <= now) return "—";
 
         var at = latest + (pace.PerHour * (end - now).TotalHours);
@@ -170,8 +180,13 @@ public static class PacePanel
     {
         if (mine is null || FieldSource(live) is not { } field) return null;
 
+        // The same window the sent metric uses (FieldMetrics.Needed), not the whole battle: an all-time average
+        // for the clan above turns "you pass them in 25m" into a sentence about a pace neither of you is going.
         var gaps = reader.HeadlineSeries(field.Id, FieldSummary.GapAbove, period?.Value);
-        var above = Pace.Over(reader.HeadlineSeries(field.Id, FieldSummary.Above, period?.Value), DateTimeOffset.MinValue);
+        var above = Pace.Over(
+            reader.HeadlineSeries(field.Id, FieldSummary.Above, period?.Value),
+            now - Pace.LongestCurrent,
+            Pace.LongestCurrent);
         if (gaps.Count == 0 || above is null) return null;
 
         var places = reader.HeadlineSeries(field.Id, FieldSummary.MineRank, period?.Value);

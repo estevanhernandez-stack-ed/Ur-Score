@@ -453,9 +453,13 @@ public static class PanelModels
 
         if (start is not { } at) return null;
 
+        // Only a line that HAS something to lose stops the trim. Seen on the owner's board 2026-09-20: CCGP is
+        // watched and not in this battle, so it had no points at all, and a blanket "every line keeps two points"
+        // refused the trim for a line that was already empty -- leaving the whole band crammed at the right.
         for (var i = 0; i < mine; i++)
         {
-            if (series[i].Points.Count(p => p.T >= at) < 2) return null;
+            var had = series[i].Points.Count;
+            if (had >= 2 && series[i].Points.Count(p => p.T >= at) < 2) return null;
         }
 
         return at;

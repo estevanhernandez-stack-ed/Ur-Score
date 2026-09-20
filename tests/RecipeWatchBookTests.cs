@@ -425,6 +425,17 @@ public class RecipeWatchBookTests
         await watch.RunOnceAsync(CancellationToken.None);
 
         Assert.Empty(host.Reported);
+
+        // And it really is a restart, not a one-read gap: review on 2026-09-20 deleted series.Clear() and this
+        // test still passed, because the read after a fall is refused by Pace either way. Half an hour on there
+        // are two readings of the NEW holder and a pace again -- with the old holder's history still in the
+        // series there would be a fall inside the window and no pace at all.
+        clock.Advance(TimeSpan.FromMinutes(30));
+        mine += 130_000_000;
+        second = 8.6e9;
+        await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Single(host.Reported);
     }
 
     [Fact]

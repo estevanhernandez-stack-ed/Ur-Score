@@ -542,8 +542,11 @@ public class AlertCardsTests
     public void ThePageSaysWhatToDoWhenThereIsNoCard()
     {
         Assert.Equal("Import a recipe first.", AlertCards.EmptyLine([], AlertCards.Empty));
-        Assert.Equal("No stat is sent to RoRoRo yet. Tick Send on a stat in Setup › Stats, and it gets a card here.",
-            AlertCards.EmptyLine([Sending()], AlertCards.Build([Sending()], RulesOf())));
+        Assert.Equal(AlertCards.NoSentStat, AlertCards.EmptyLine([Sending()], AlertCards.Build([Sending()], RulesOf())));
+
+        // Both places a tick lives are named, so a member who ticked a clan number is not told nothing is sent.
+        Assert.Contains("Setup › Stats", AlertCards.NoSentStat, StringComparison.Ordinal);
+        Assert.Contains("Clan and field", AlertCards.NoSentStat, StringComparison.Ordinal);
         Assert.Equal("", AlertCards.EmptyLine([Sending("diamonds")], AlertCards.Build([Sending("diamonds")], RulesOf())));
     }
 

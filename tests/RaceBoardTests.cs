@@ -183,6 +183,35 @@ public class RaceBoardTests
         Assert.Equal("clan points since the clans list was first read", race.Head.Subtitle);
     }
 
+    /// <summary>
+    /// A clan of yours with nothing in this battle must not hold the window open. Seen on the owner's board on
+    /// 2026-09-20: CCGP is watched and not in this battle, so its line had no points at all — and a blanket "every
+    /// line of yours keeps two points" refused the trim on behalf of a line that had nothing to lose, leaving the
+    /// whole band crammed into the right-hand edge of the chart.
+    /// </summary>
+    [Fact]
+    public void AClanOfYoursWithNoReadingsDoesNotHoldTheWindowOpen()
+    {
+        var field = Field;
+        Source[] all = [Mine, Other, field];
+        var live = Live(all, [Installed(Clan, "value"), Installed(TopClans)],
+            all.ToDictionary(s => s.Id, s => Snapshot(s.Id, [], period: LivePeriod), StringComparer.Ordinal));
+
+        // Mine has ten hours of readings; Other (watched, not in this battle) has none at all.
+        var reader = Reader(
+            Read(Mine, Now.AddHours(-10), Period, new Dictionary<string, double> { ["clan-points"] = 100 }, "value"),
+            Read(Mine, Now.AddHours(-1), Period, new Dictionary<string, double> { ["clan-points"] = 400 }, "value"),
+            Read(Mine, Now, Period, new Dictionary<string, double> { ["clan-points"] = 900 }, "value"),
+            FieldRead(field, Now.AddHours(-1), BoardAt(10, 1_000)),
+            FieldRead(field, Now, BoardAt(10, 1_200)));
+
+        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id, Other.Id]));
+
+        Assert.Equal("clan points since the clans list was first read", race.Head.Subtitle);
+        Assert.Equal([400d, 900d], race.Series[0].Points.Select(p => p.Value));
+        Assert.Empty(race.Series[1].Points);
+    }
+
     /// <summary>No band, no trim: your own history is the whole point of the chart when there is nothing to race.</summary>
     [Fact]
     public void WithNothingToRaceYourWholeHistoryIsStillDrawn()
