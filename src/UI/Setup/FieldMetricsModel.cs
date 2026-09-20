@@ -73,7 +73,7 @@ public static class FieldMetricsModel
     /// </summary>
     public static string Line(InstalledRecipe list, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)
     {
-        var mine = MyClanNames(sources, installed);
+        var mine = SourceRules.MyClanNames(sources, installed);
         var from = $"From {list.Recipe.Name}, about ";
         return mine.Count == 0
             ? from + "your clan. " + NoClanSet
@@ -84,25 +84,4 @@ public static class FieldMetricsModel
     /// <summary>Two names read "A and B", three "A, B and C": a comma-run reads as a list of one long name.</summary>
     private static string AndList(IReadOnlyList<string> names) =>
         names.Count <= 1 ? string.Join("", names) : $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}";
-
-    /// <summary>
-    /// The clan names your own sources carry — the same set a read uses to find your row (<c>MyGroupNames</c>). A
-    /// group list's own source has no inputs of its own, so it never names a clan here.
-    /// <para>
-    /// A WATCHED clan is not one of yours, and that is the whole contract of the role: "never matched to your
-    /// accounts, never sent, and no account recorded". Until 0.5.2 this filtered only on the recipe's shape, so
-    /// watching a rival made its standing your standing — and if it placed above you, FieldSummary took ITS points
-    /// as field-mine, wrote them to the book, and sent its place, its gap and its roster counts to RoRoRo under
-    /// your clan's ids. Found by review on 2026-09-20; it was live on the owner's own board, which watches CCGP.
-    /// </para>
-    /// </summary>
-    public static IReadOnlyList<string> MyClanNames(IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)
-    {
-        var lists = installed.Where(i => i.Recipe.IsGroupList).Select(i => i.Recipe.Slug).ToHashSet(StringComparer.Ordinal);
-        return [.. sources
-            .Where(s => s.Enabled && s.Role != SourceRole.Watch && !lists.Contains(s.Recipe))
-            .SelectMany(s => s.Inputs.Values)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)];
-    }
 }

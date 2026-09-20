@@ -13,6 +13,44 @@ public class SourcesTests
 
     private static Dictionary<string, string> Clan(string name) => new() { ["clan"] = name };
 
+    /// <summary>
+    /// "This clan is mine" is a positive claim, and a source whose recipe is not installed cannot support it: with no
+    /// recipe there is no telling whether its inputs name a clan of yours or a field of everybody's. The two
+    /// surviving copies of this filter disagreed on exactly this case — <c>AppServices</c> dropped such a source,
+    /// <c>FieldMetricsModel</c> kept it — and a filter free to disagree with itself is what V3-S.31 exists to stop.
+    /// </summary>
+    [Fact]
+    public void ASourceWhoseRecipeIsNotInstalledNamesNoClanOfYours()
+    {
+        var installed = Installed("petsim99-clan-battle.recipe.json");
+        var slug = installed.Recipe.Slug;
+
+        IReadOnlyList<Source> sources =
+        [
+            new("s-1", slug, Clan("K0i2"), SourceRole.Main),
+            new("s-2", "some-recipe-that-was-uninstalled", Clan("Ghost"), SourceRole.Mine),
+        ];
+
+        Assert.Equal(["K0i2"], SourceRules.MyClanNames(sources, [installed]));
+    }
+
+    /// <summary>A clan you only WATCH is never one of yours, and neither is one whose source is switched off.</summary>
+    [Fact]
+    public void WatchedAndSwitchedOffClansAreNotYours()
+    {
+        var installed = Installed("petsim99-clan-battle.recipe.json");
+        var slug = installed.Recipe.Slug;
+
+        IReadOnlyList<Source> sources =
+        [
+            new("s-1", slug, Clan("K0i2"), SourceRole.Main),
+            new("s-2", slug, Clan("H8ER"), SourceRole.Watch),
+            new("s-3", slug, Clan("Dormant"), SourceRole.Mine, Enabled: false),
+        ];
+
+        Assert.Equal(["K0i2"], SourceRules.MyClanNames(sources, [installed]));
+    }
+
     [Fact]
     public void AnInputKeyIgnoresOrderCaseAndSpaces()
     {

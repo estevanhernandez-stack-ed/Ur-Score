@@ -585,11 +585,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// own inputs — a group list has none of its own.
     /// </summary>
     private IReadOnlySet<string> MyGroupNames() =>
-        Sources
-            .Where(s => s.Enabled && s.Role != SourceRole.Watch && FindInstalled(s.Recipe)?.Recipe.IsGroupList == false)
-            .SelectMany(s => s.Inputs.Values)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        SourceRules.MyClanNames(Sources, Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private int IntervalFor(Source source) =>
         FindInstalled(source.Recipe)?.Recipe.EffectiveEverySeconds ?? Recipe.MinimumEverySeconds;

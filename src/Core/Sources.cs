@@ -178,5 +178,38 @@ public static class SourceRules
     public static IReadOnlyList<Source> ForgetRecipe(IReadOnlyList<Source> sources, string recipe) =>
         [.. sources.Where(s => s.Recipe != recipe)];
 
+    /// <summary>
+    /// The clan names your own sources carry: the one answer to "which clans are mine", taken by the score book, the
+    /// send, the alert labels and the board alike. This filter was hand-rolled in three places and drifted twice
+    /// (V3-S.31), so there is one of it now and every caller takes it.
+    /// <para>
+    /// A WATCHED clan is never one of yours — that is the whole contract of the role: "never matched to your
+    /// accounts, never sent, and no account recorded". A group list carries the field rather than a clan of yours,
+    /// so its own source names nobody. Nor does a source whose recipe is not installed: this set makes the positive
+    /// claim "this clan is mine", and without the recipe there is no way to tell whether its inputs name a clan at
+    /// all. The two surviving copies disagreed on exactly that case until they were collapsed into this one.
+    /// </para>
+    /// <para>
+    /// Both of the drifts this replaces were live on the owner's own board, which watches CCGP. Until 0.5.2 the
+    /// send's copy filtered only on the recipe's shape, so watching a rival made its standing your standing: placed
+    /// above you, FieldSummary took ITS points as field-mine, wrote them to the book, and sent its place, its gap
+    /// and its roster counts to RoRoRo under your clan's ids. The board's copy was left role-blind by that fix, so
+    /// a watched rival placed above you still anchored the race band on itself, bolded itself as yours in the
+    /// standings, and measured every other clan's gap from its points instead of yours. Found by review on
+    /// 2026-09-20 (V3-S.30, V3-S.31).
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> MyClanNames(IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)
+    {
+        var lists = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var recipe in installed) lists[recipe.Recipe.Slug] = recipe.Recipe.IsGroupList;
+
+        return [.. sources
+            .Where(s => s.Enabled && s.Role != SourceRole.Watch && lists.TryGetValue(s.Recipe, out var isList) && !isList)
+            .SelectMany(s => s.Inputs.Values)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
+    }
+
     public static string NewId() => "s-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant();
 }

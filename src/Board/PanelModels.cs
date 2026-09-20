@@ -426,7 +426,7 @@ public static class PanelModels
 
         return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}", board.Count == 0)
         {
-            Standings = Standings(live, reader, sources),
+            Standings = Standings(live, reader),
         };
     }
 
@@ -486,11 +486,12 @@ public static class PanelModels
         var board = reader.GroupsLatest(field.Id, period);
         if (board.Count == 0) return lines;
 
-        var mine = MineNames(drawn);
+        var alreadyDrawn = DrawnNames(drawn);
+        var yours = SourceRules.MyClanNames(live.Sources, live.Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var at = -1;
         for (var i = 0; i < board.Count; i++)
         {
-            if (!mine.Contains(board[i].Name)) continue;
+            if (!yours.Contains(board[i].Name)) continue;
             at = i;
             break;
         }
@@ -503,7 +504,7 @@ public static class PanelModels
         for (var i = from; i < to; i++)
         {
             var (name, points) = board[i];
-            if (mine.Contains(name)) continue;
+            if (alreadyDrawn.Contains(name)) continue;
 
             var series = reader.GroupSeries(field.Id, name, period).Select(p => new ChartPoint(p.T, p.Value)).ToList();
             if (series.Count < 2) continue;
@@ -519,14 +520,14 @@ public static class PanelModels
     /// The board as a list: place, clan, points, and how far each is from the best placed of yours. Names live here
     /// rather than on the chart, where seven lines is already as much as can be told apart.
     /// </summary>
-    private static IReadOnlyList<RaceStanding> Standings(LiveBoard live, ScoreBookReader reader, IReadOnlyList<Source> drawn)
+    private static IReadOnlyList<RaceStanding> Standings(LiveBoard live, ScoreBookReader reader)
     {
         if (FieldOf(live) is not { } field) return [];
 
         var board = reader.GroupsLatest(field.Id, live.SnapshotOf(field.Id)?.Period?.Value);
         if (board.Count == 0) return [];
 
-        var mine = MineNames(drawn);
+        var mine = SourceRules.MyClanNames(live.Sources, live.Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var yours = board.FirstOrDefault(g => mine.Contains(g.Name)).Value;
 
         return
@@ -544,8 +545,12 @@ public static class PanelModels
     private static Source? FieldOf(LiveBoard live) =>
         live.Sources.FirstOrDefault(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: true });
 
-    /// <summary>The clan names already drawn as yours, so the board never draws one of them twice.</summary>
-    private static HashSet<string> MineNames(IReadOnlyList<Source> drawn) =>
+    /// <summary>
+    /// The clan names this panel already draws, yours and watched alike, so the board never draws one of them twice.
+    /// This is not the same question as "which clans are mine" — it was one name for both until V3-S.31, which is
+    /// how a watched rival came to anchor the band and bold itself in the standings.
+    /// </summary>
+    private static HashSet<string> DrawnNames(IReadOnlyList<Source> drawn) =>
         drawn
             .SelectMany(s => s.Inputs.Values)
             .Where(name => !string.IsNullOrWhiteSpace(name))

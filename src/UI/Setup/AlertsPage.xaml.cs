@@ -54,7 +54,7 @@ public partial class AlertsPage : UserControl, ISetupPage
     /// is as good a guess as the page can make without a read in hand.
     /// </summary>
     private string? Clan() =>
-        FieldMetricsModel.MyClanNames(_services.Sources, _services.Installed).FirstOrDefault();
+        SourceRules.MyClanNames(_services.Sources, _services.Installed).FirstOrDefault();
 
     private AlertsView Read() => AlertCards.Build(_services.Installed, RulesFile.Read(_services.RulesPath), Clan());
 
