@@ -68,6 +68,9 @@ public sealed record AlertCardRow(
 
     public bool ShowEditor => ShowRateEditor || ShowLevelEditor;
 
+    /// <summary>A label that already names the clan needs no subject in front of it.</summary>
+    public bool HasWhose => Whose.Length > 0;
+
     public bool HasProblem => Problem.Length > 0;
 
     public bool ShowResult => Result.Length > 0 && !ResultIsProblem;
@@ -261,12 +264,13 @@ public static partial class AlertCards
     public static string Condition(
         AlertKind kind, string label, double threshold, double windowMinutes, bool below, string? metricId = null)
     {
-        var whose = Whose(metricId);
+        var whose = Whose(metricId, label);
+        var subject = whose.Length == 0 ? label : $"{whose} {label}";
         return kind switch
         {
-            AlertKind.Rate => $"{whose} {label} gains fewer than {Number(threshold)} a minute for {Number(windowMinutes)} {(windowMinutes == 1 ? "minute" : "minutes")}",
-            AlertKind.Level => $"{whose} {label} goes {(below ? Below : Above)} {Number(threshold)}",
-            _ => $"{whose} {label} changes",
+            AlertKind.Rate => $"{subject} gains fewer than {Number(threshold)} a minute for {Number(windowMinutes)} {(windowMinutes == 1 ? "minute" : "minutes")}",
+            AlertKind.Level => $"{subject} goes {(below ? Below : Above)} {Number(threshold)}",
+            _ => $"{subject} changes",
         };
     }
 
@@ -283,11 +287,20 @@ public static partial class AlertCards
     private static string ClanLabel(string label, string? clan) =>
         string.IsNullOrWhiteSpace(clan) ? label : $"{clan.Trim()} {RecipeWords.Lower(label)}";
 
-    /// <summary>Whose number this is. A clan-and-field id is nobody's account, and never was.</summary>
-    private static string Whose(string? metricId) =>
-        metricId is not null && FieldMetrics.All.Any(m => string.Equals(m.MetricId, metricId, StringComparison.Ordinal))
-            ? "your clan's"
-            : "an account's";
+    /// <summary>
+    /// Whose number this is, as the sentence needs it. A clan-and-field id is nobody's account and
+    /// never was, so it is "your clan's" — unless the label already starts with the clan's name, in
+    /// which case it is nobody's: "your clan's K0i2 clan points" says the same thing twice.
+    /// </summary>
+    private static string Whose(string? metricId, string label)
+    {
+        var known = metricId is null
+            ? null
+            : FieldMetrics.All.FirstOrDefault(m => string.Equals(m.MetricId, metricId, StringComparison.Ordinal));
+
+        if (known is null) return "an account's";
+        return string.Equals(known.Label, label, StringComparison.Ordinal) ? "your clan's" : "";
+    }
 
     public static string Sentence(
         AlertKind kind, string label, double threshold, double windowMinutes, bool below, string? metricId = null) =>
@@ -514,7 +527,7 @@ public static partial class AlertCards
             ShowLevelKind: mode == AlertEditMode.ChoosingKind && card.CanAdd.Contains(AlertKind.Level),
             RateTarget: new AlertTarget(id, AlertKind.Rate), LevelTarget: new AlertTarget(id, AlertKind.Level),
             RateKindName: KindName(AlertKind.Rate, label), LevelKindName: KindName(AlertKind.Level, label),
-            Whose: Whose(id), RecoverName: $"{AlsoTellMe}, for {label}",
+            Whose: Whose(id, label), RecoverName: $"{AlsoTellMe}, for {label}",
             ShowRateEditor: editing && ui.Kind == AlertKind.Rate, ShowLevelEditor: editing && ui.Kind == AlertKind.Level,
             Draft: editing ? ui.Draft : null, MinuteChoices: MinuteChoices(editing ? ui.Draft?.Minutes : null),
             ConfirmText: mode == AlertEditMode.Changing ? "Save" : "Turn on",

@@ -64,7 +64,8 @@
                     <!-- Stops climbing, in words: the number and the minutes are the parts you fill in. -->
                     <WrapPanel Margin="0,4,0,0" Visibility="{Binding ShowRateEditor, Converter={StaticResource BoolToVisible}}">
                         <TextBlock Text="Alert me when" Style="{StaticResource SentenceText}" />
-                        <TextBlock Text="{Binding Whose}" Style="{StaticResource SentenceText}" />
+                        <TextBlock Text="{Binding Whose}" Style="{StaticResource SentenceText}"
+                                   Visibility="{Binding HasWhose, Converter={StaticResource BoolToVisible}}" />
                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Style="{StaticResource SentenceText}" />
                         <TextBlock Text="gains fewer than" Style="{StaticResource SentenceText}" />
                         <TextBox Text="{Binding Draft.Number, UpdateSourceTrigger=PropertyChanged}" Width="110" Margin="0,0,6,6"
@@ -79,7 +80,8 @@
                     <!-- Crosses a number, in words: above or below, and the number. -->
                     <WrapPanel Margin="0,4,0,0" Visibility="{Binding ShowLevelEditor, Converter={StaticResource BoolToVisible}}">
                         <TextBlock Text="Alert me when" Style="{StaticResource SentenceText}" />
-                        <TextBlock Text="{Binding Whose}" Style="{StaticResource SentenceText}" />
+                        <TextBlock Text="{Binding Whose}" Style="{StaticResource SentenceText}"
+                                   Visibility="{Binding HasWhose, Converter={StaticResource BoolToVisible}}" />
                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Style="{StaticResource SentenceText}" />
                         <TextBlock Text="goes" Style="{StaticResource SentenceText}" />
                         <ComboBox ItemsSource="{Binding DirectionChoices}" SelectedItem="{Binding Draft.Direction, Mode=OneWay}" Width="90"
