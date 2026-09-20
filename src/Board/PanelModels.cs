@@ -395,8 +395,11 @@ public static class PanelModels
         return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}");
     }
 
-    /// <summary>The faint palette colour: every clan that is not yours shares it, so yours are the ones that read.</summary>
-    private const int RivalColour = 4;
+    /// <summary>
+    /// The muted palette colour: every clan that is not yours shares it, so yours are the ones that read. Not the
+    /// edge colour, which was the first choice and drew nineteen clans the same shade as the background.
+    /// </summary>
+    private const int RivalColour = 3;
 
     /// <summary>How much of the board is drawn when one of your clans is in the top ten, and when it is not.</summary>
     private const int BoardNear = 10, BoardFar = 20;

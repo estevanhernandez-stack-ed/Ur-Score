@@ -67,7 +67,8 @@ public class RaceBoardTests
         // Your clan, plus the nine others of the top ten.
         Assert.Equal(10, race.Series.Count);
         Assert.Equal("★ K0i2", race.Series[0].Label);
-        Assert.All(race.Series.Skip(1), s => Assert.Equal(4, s.Colour));
+        // The muted grey, not the edge colour: on navy the edge colour is the background.
+        Assert.All(race.Series.Skip(1), s => Assert.Equal(3, s.Colour));
         Assert.DoesNotContain(race.Series.Skip(1), s => s.Label == "K0i2");
         Assert.Contains(race.Legend, l => l.Text == "9 other clans");
     }

@@ -3,6 +3,14 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.3.12 - 2026-09-20
+
+### Fixed
+
+- **The other clans on the race chart are visible.** They were drawn in the edge colour, which on navy is the
+  background: the legend said nineteen clans and the chart showed one line. They use the muted grey now, with your
+  own clans still in the bright palette.
+
 ## 0.3.11 - 2026-09-20
 
 ### Fixed
