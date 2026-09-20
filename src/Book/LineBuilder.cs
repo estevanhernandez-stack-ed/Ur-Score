@@ -32,7 +32,8 @@ public static class LineBuilder
         // (the owner's ruling, 2026-09-19). No account is matched on a group list, so none can be written.
         if (recipe.IsGroupList)
         {
-            var field = FieldSummary.Of(reading.Groups, recipe.LastStep.Values.FirstOrDefault()?.Id ?? "", myGroups);
+            var valueKey = recipe.LastStep.Values.FirstOrDefault()?.Id ?? "";
+            var field = FieldSummary.Of(reading.Groups, valueKey, myGroups);
             return field.Count == 0
                 ? null
                 : new BookLine(
@@ -40,7 +41,8 @@ public static class LineBuilder
                     new BookRecipeRef(recipe.Slug, context.RecipeHash), context.Source.Id, RoleText(context.Source.Role),
                     Inputs(context.Source), Period(reading.Period), field, [],
                     new Dictionary<string, BookAccount>(StringComparer.Ordinal),
-                    null, reading.ListAsOf?.Time, reading.ListAsOf?.Stale);
+                    null, reading.ListAsOf?.Time, reading.ListAsOf?.Stale,
+                    GroupRows.Keep(reading.Groups, valueKey, myGroups));
         }
 
         var stats = tracked.Order(StringComparer.Ordinal).ToList();

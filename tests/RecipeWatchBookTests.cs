@@ -275,7 +275,7 @@ public class RecipeWatchBookTests
         Assert.Equal(WatchState.Showing, snapshot.State);
         Assert.Equal(2, snapshot.Groups.Count);
 
-        // One line: the field's shape, and nothing on it that could name a clan or reach an account.
+        // One line: the field's shape, the clans a chart can draw (owner's ruling, 2026-09-20), and no account.
         var line = Assert.Single(book.Lines);
         Assert.Equal(
             new Dictionary<string, double>(StringComparer.Ordinal)
@@ -286,9 +286,12 @@ public class RecipeWatchBookTests
         Assert.Empty(line.Accounts);
         Assert.Empty(line.Stats);
         Assert.Null(line.Unavail);
+        Assert.Equal(new Dictionary<string, double>(StringComparer.Ordinal) { ["SkyHarbor"] = 2, ["Aurelian"] = 1 }, line.Groups);
+
+        // Clans by name, never a player: a group list matches no account, so none can ride along.
         var written = BookJson.Serialize(line);
-        Assert.DoesNotContain("Aurelian", written, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("SkyHarbor", written, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SkyHarbor", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("UserID", written, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

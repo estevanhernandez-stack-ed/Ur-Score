@@ -372,6 +372,16 @@ public static class PanelModels
             remembered |= live.IsRemembered(source.Id);
         }
 
+        // The board itself, from the clans a list kept by name (owner's ruling, 2026-09-20): the top ten while one of
+        // yours is in it, else the top twenty, so the lines around you are always on the chart. Drawn in the faint
+        // colour so your own clans stay the bright ones, and given one legend entry rather than twenty.
+        var board = BoardLines(live, reader, sources, series.Count);
+        if (board.Count > 0)
+        {
+            series.AddRange(board);
+            legend.Add(new LegendItem(board.Count == 1 ? "1 other clan" : $"{board.Count} other clans", RivalColour));
+        }
+
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
         var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started",
             Overdue: overdue, Note: string.Join(" ", notes), Remembered: remembered);
@@ -383,6 +393,50 @@ public static class PanelModels
         }
 
         return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}");
+    }
+
+    /// <summary>The faint palette colour: every clan that is not yours shares it, so yours are the ones that read.</summary>
+    private const int RivalColour = 4;
+
+    /// <summary>How much of the board is drawn when one of your clans is in the top ten, and when it is not.</summary>
+    private const int BoardNear = 10, BoardFar = 20;
+
+    /// <summary>
+    /// The other clans on the race chart, from the rows a clans list kept (<see cref="GroupRows"/>). Nothing at all
+    /// without a switched-on list, or before it has been read twice — a line needs more than one point.
+    /// </summary>
+    private static List<ChartSeries> BoardLines(
+        LiveBoard live, ScoreBookReader reader, IReadOnlyList<Source> drawn, int colourFrom)
+    {
+        var lines = new List<ChartSeries>();
+        var field = live.Sources.FirstOrDefault(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: true });
+        if (field is null) return lines;
+
+        var period = live.SnapshotOf(field.Id)?.Period?.Value;
+        var board = reader.GroupsLatest(field.Id, period);
+        if (board.Count == 0) return lines;
+
+        var mine = drawn
+            .SelectMany(s => s.Inputs.Values)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Where the best placed of your clans sits decides how much of the board is worth drawing.
+        var best = board.Select((g, at) => (g.Name, At: at)).FirstOrDefault(g => mine.Contains(g.Name)).At;
+        var inBoard = board.Any(g => mine.Contains(g.Name));
+        var take = inBoard && best < BoardNear ? BoardNear : BoardFar;
+
+        foreach (var (name, _) in board.Take(take))
+        {
+            if (mine.Contains(name)) continue;
+
+            var points = reader.GroupSeries(field.Id, name, period).Select(p => new ChartPoint(p.T, p.Value)).ToList();
+            if (points.Count < 2) continue;
+
+            lines.Add(new ChartSeries(name, points, RivalColour));
+        }
+
+        return lines;
     }
 
     public static MyAccountsModel MyAccounts(LiveBoard live, ScoreBookReader reader, PanelSettings settings)

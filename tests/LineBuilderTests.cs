@@ -154,8 +154,9 @@ public class LineBuilderTests
         Assert.Null(LineBuilder.Reading(Context(Clan), ClanReading([Row(7_000_001, 5)]), new Dictionary<long, Guid>(), Points));
 
     /// <summary>
-    /// A group list is a line of its own shape since 2026-09-19: the field's four numbers and a count, no clan named
-    /// and no account, so a later read can say how fast the field was going. A list with no number is still no line.
+    /// A group list is a line of its own shape since 2026-09-19: the field's four numbers and a count, so a later read
+    /// can say how fast the field was going, and since 2026-09-20 the clans a chart can draw, by name and bounded
+    /// (<see cref="GroupRows"/>). No account either way. A list with no number is still no line.
     /// </summary>
     [Fact]
     public void AGroupListIsTheFieldsNumbersAndAStoppedReadIsNoLine()
@@ -170,7 +171,7 @@ public class LineBuilderTests
         Assert.Equal(1, field.Headline["field-leader"]);
         Assert.Equal(1, field.Headline["field-clans"]);
         Assert.Empty(field.Accounts);
-        Assert.DoesNotContain("Aurelian", BookJson.Serialize(field), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, field.Groups!["Aurelian"]);
 
         var noNumber = new RecipeReading(ReadingOutcome.Read, null, [], [], null, 1)
         {

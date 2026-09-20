@@ -1,4 +1,5 @@
 using Labs626.UrScore.Board;
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
@@ -42,8 +43,9 @@ public static class RecipesModel
 
     public static string SourcesText(Recipe recipe, IReadOnlyList<Source> sources)
     {
-        // Since 0.3.7 a list keeps the field's own numbers, and no name: saying "never kept" was true and stopped being so.
-        if (recipe.IsGroupList) return "Every row live; the field's numbers kept, no name";
+        // 0.3.7 kept the field's numbers; 0.3.10 also keeps the clans a chart draws, capped (GroupRows). Each wording
+        // was true when written and stopped being true a day later, which is why this line says what is kept, not what isn't.
+        if (recipe.IsGroupList) return $"Every row live; the top {GroupRows.Top} and yours kept";
         if (recipe.Inputs.Count == 0) return "";
 
         var count = sources.Count(s => string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal));

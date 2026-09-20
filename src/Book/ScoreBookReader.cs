@@ -80,6 +80,22 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
         return Collapse(points);
     }
 
+    /// <summary>
+    /// One clan's points over time, from the rows a clans list kept by name (<see cref="GroupRows"/>). Empty for a
+    /// clan that was never kept — the top of the board, your own and their neighbours are what a list keeps.
+    /// </summary>
+    public IReadOnlyList<SeriesPoint> GroupSeries(string sourceId, string groupName, string? period) =>
+        Collapse(Readings(sourceId, period, DateTimeOffset.MinValue)
+            .Where(l => l.Groups is not null && l.Groups.ContainsKey(groupName))
+            .Select(l => new SeriesPoint(l.T, l.Groups![groupName], l.AsOf, l.Stale ?? false, l.Off)));
+
+    /// <summary>Every clan the latest reading kept, best placed first: what a chart can offer to draw.</summary>
+    public IReadOnlyList<(string Name, double Value)> GroupsLatest(string sourceId, string? period)
+    {
+        var last = Readings(sourceId, period, DateTimeOffset.MinValue).LastOrDefault(l => l.Groups is { Count: > 0 });
+        return last is null ? [] : [.. last.Groups!.OrderByDescending(g => g.Value).Select(g => (g.Key, g.Value))];
+    }
+
     public IReadOnlyList<SeriesPoint> HeadlineSeries(string sourceId, string headlineId, string? period) =>
         Collapse(Readings(sourceId, period, DateTimeOffset.MinValue)
             .Where(l => l.Headline.ContainsKey(headlineId))

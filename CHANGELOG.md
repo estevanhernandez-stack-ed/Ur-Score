@@ -3,6 +3,24 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.3.10 - 2026-09-20
+
+### Added
+
+- **The race chart draws the board.** The top ten while one of your clans is in it, the top twenty when none is,
+  so the clans around you appear without you listing them. Yours keep their own colours; the rest share the faint
+  one and get a single legend entry. A clan with no readings is simply not drawn.
+- **Your own pace, on the Pace panel.** Your accounts' combined pace and their share of the clan's points, from
+  readings the book already kept.
+
+### Changed
+
+- **"Now" is called "Current"**, and it was always the clan's pace, never your own - which is why your accounts
+  now have lines of their own beneath it.
+- **A clans list keeps the clans a chart can draw**, by name: the top 25, your own clans and the place either side
+  of each. Public game standings, capped so the book stays small - about 200 KB a day rather than 700 KB. The
+  field's own numbers (leader, top ten, average, bottom ten) still cover the whole board.
+
 ## 0.3.9 - 2026-09-19
 
 ### Added

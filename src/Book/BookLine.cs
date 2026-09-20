@@ -34,7 +34,8 @@ public sealed record BookLine(
     IReadOnlyDictionary<string, BookAccount> Accounts,
     IReadOnlyList<string>? Unavail = null,
     DateTimeOffset? AsOf = null,
-    bool? Stale = null)
+    bool? Stale = null,
+    IReadOnlyDictionary<string, double>? Groups = null)
 {
     public const int Version = 1;
 

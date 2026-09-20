@@ -53,7 +53,7 @@ public class PacePanelTests
         var model = PacePanel.Of(Board(Mine), reader, new PanelSettings(Clan.Slug, SourceId: Mine.Id));
 
         Assert.Equal("K0i2", model.Head.Subtitle);
-        Assert.Equal("300/h over 1h", ValueOf(model, "Now"));
+        Assert.Equal("300/h over 1h", ValueOf(model, "Current"));
         Assert.StartsWith("225/h since ", ValueOf(model, "Average"));
         Assert.StartsWith("300/h since ", ValueOf(model, "Best hour"));
 
@@ -74,7 +74,7 @@ public class PacePanelTests
 
         var model = PacePanel.Of(Board(Mine), reader, new PanelSettings(Clan.Slug, SourceId: Mine.Id));
 
-        Assert.Equal(PaceText.TooEarly, ValueOf(model, "Now"));
+        Assert.Equal(PaceText.TooEarly, ValueOf(model, "Current"));
         Assert.Equal(PaceText.TooEarly, ValueOf(model, "Average"));
         Assert.Equal(PaceText.TooEarly, ValueOf(model, "Best hour"));
         Assert.Equal(PaceText.TooEarly, ValueOf(model, "On this pace"));
@@ -130,6 +130,25 @@ public class PacePanelTests
 
         Assert.Equal("CCGP", model.Head.Subtitle);
         Assert.Equal("watching", model.Head.Chip);
-        Assert.Equal("300/h over 2h", ValueOf(model, "Now"));
+        Assert.Equal("300/h over 2h", ValueOf(model, "Current"));
+    }
+
+    /// <summary>
+    /// The owner asked on 2026-09-20 whether "Now" was their pace or the clan's. It was always the clan's; their own
+    /// accounts now have their own lines, from readings the book already kept.
+    /// </summary>
+    [Fact]
+    public void YourOwnAccountsHaveTheirOwnPaceAndShare()
+    {
+        var reader = Reader(
+            Read(Mine, Now.AddHours(-2), Period, Points(400), "value", (101, 20), (201, 10)),
+            Read(Mine, Now, Period, Points(1_000), "value", (101, 60), (201, 30)));
+
+        var model = PacePanel.Of(Board(Mine), reader, new PanelSettings(Clan.Slug, SourceId: Mine.Id));
+
+        // The clan gained 600 in two hours; these two accounts 60 of it.
+        Assert.Equal("300/h over 2h", ValueOf(model, "Current"));
+        Assert.Equal("30/h", ValueOf(model, "Your 2 accounts"));
+        Assert.Equal("90 · 9.0% of the clan", ValueOf(model, "Your share"));
     }
 }

@@ -1,3 +1,4 @@
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.UI;
@@ -66,8 +67,8 @@ public class RecipesModelTests
     {
         Assert.Equal("No clans yet", RecipesModel.SourcesText(Clan, []));
         Assert.Equal("1 clan", RecipesModel.SourcesText(Clan, [ClanSource("s-00000001", "CCGP")]));
-        // A clans list keeps FieldSummary's numbers since 0.3.7, so "never kept" would now be false on screen.
-        Assert.Equal("Every row live; the field's numbers kept, no name", RecipesModel.SourcesText(RecipeParser.Parse(GroupList).Recipe!, []));
+        // A clans list keeps the field's numbers (0.3.7) and the clans a chart draws (0.3.10), so both older words are now false.
+        Assert.Equal($"Every row live; the top {GroupRows.Top} and yours kept", RecipesModel.SourcesText(RecipeParser.Parse(GroupList).Recipe!, []));
     }
 
     [Fact]

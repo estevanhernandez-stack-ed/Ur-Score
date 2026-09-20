@@ -366,4 +366,30 @@ public class ScoreBookReaderTests
         Assert.Equal("5h", StatText.Span(TimeSpan.FromHours(5)));
         Assert.Equal("3d", StatText.Span(TimeSpan.FromDays(3)));
     }
+
+    /// <summary>
+    /// A clan's own line on the chart comes from the rows a clans list kept by name, and only for the clans it kept:
+    /// the top of the board, your own and their neighbours (the owner's ruling, 2026-09-20).
+    /// </summary>
+    [Fact]
+    public void AKeptClanHasASeriesAndAnUnkeptOneHasNone()
+    {
+        var reader = Reader(
+            FieldRead(Now.AddMinutes(-30), new Dictionary<string, double>(StringComparer.Ordinal) { ["UN0"] = 100, ["K0i2"] = 40 }),
+            FieldRead(Now, new Dictionary<string, double>(StringComparer.Ordinal) { ["UN0"] = 160, ["K0i2"] = 70 }));
+
+        var leader = reader.GroupSeries("s-top", "UN0", "B");
+        Assert.Equal(new[] { 100d, 160d }, leader.Select(p => p.Value).ToArray());
+        Assert.Empty(reader.GroupSeries("s-top", "NeverKept", "B"));
+
+        var latest = reader.GroupsLatest("s-top", "B");
+        Assert.Equal(new[] { "UN0", "K0i2" }, latest.Select(g => g.Name).ToArray());
+        Assert.Equal(160, latest[0].Value);
+    }
+
+    private static BookLine FieldRead(DateTimeOffset t, IReadOnlyDictionary<string, double> groups) => new(
+        BookLine.Version, BookLine.KindRead, t, -300, BookLine.TriggerTimer, new BookRecipeRef("pet-sim-99-top-clans", "3f9a1c0b7e2d4a55"),
+        "s-top", "watch", new Dictionary<string, string>(), new BookPeriod("B"),
+        new Dictionary<string, double> { ["field-leader"] = groups.Values.Max() }, [],
+        new Dictionary<string, BookAccount>(StringComparer.Ordinal), null, null, null, groups);
 }
