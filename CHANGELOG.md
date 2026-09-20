@@ -3,6 +3,18 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.1 - 2026-09-20
+
+### Changed
+
+- **The battle race lines up.** Your own clan is in the book from the battle's first minute; a rival only from
+  the first clans-list read that kept it — so the chart drew your line across the whole width and squeezed the
+  whole band into its last tenth. The band sets the window now, every line uses the full width, and the card's
+  subtitle says which window it is instead of still claiming the whole battle. With nothing to race, your whole
+  history is drawn as before.
+- Two clans of yours read "K0i2 and CCGP", not "K0i2, CCGP", and the gap number reads "the clan one place above
+  you", not "the clan in the place above you".
+
 ## 0.5.0 - 2026-09-20
 
 ### Added

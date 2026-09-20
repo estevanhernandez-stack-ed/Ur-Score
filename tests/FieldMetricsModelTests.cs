@@ -85,6 +85,7 @@ public class FieldMetricsModelTests
         var line = FieldMetricsModel.Line(clans, sources, [clan, clans]);
 
         Assert.Contains("about K0i2", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("K0i2,", line, StringComparison.Ordinal);
         Assert.Contains("no account attached", line, StringComparison.Ordinal);
         Assert.DoesNotContain(FieldMetricsModel.NoClanSet, line, StringComparison.Ordinal);
     }
@@ -98,5 +99,21 @@ public class FieldMetricsModelTests
         var sources = new[] { SourceFor(clans, "not-mine", "s-00000009"), SourceFor(clan, "K0i2", "s-00000001") };
 
         Assert.Equal(["K0i2"], FieldMetricsModel.MyClanNames(sources, [clan, clans]));
+    }
+
+    /// <summary>Two clans read "A and B": a comma-run reads as one long name ("about the best placed of K0i2, CCGP").</summary>
+    [Fact]
+    public void TwoClansOfYoursAreNamedWithAnAnd()
+    {
+        var clans = Clans();
+        var clan = Clan();
+        var sources = new[]
+        {
+            SourceFor(clans, null, "s-00000009"),
+            SourceFor(clan, "K0i2", "s-00000001"),
+            SourceFor(clan, "CCGP", "s-00000002"),
+        };
+
+        Assert.Contains("the best placed of K0i2 and CCGP.", FieldMetricsModel.Line(clans, sources, [clan, clans]), StringComparison.Ordinal);
     }
 }

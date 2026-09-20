@@ -149,6 +149,57 @@ public class RaceBoardTests
         Assert.StartsWith("-", race.Standings[10].Gap, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Your own clan is in the book from the battle's first minute; a rival only from the first clans-list read
+    /// that kept it. Drawn untrimmed, yours spans the chart and the whole band is a stub in its last tenth — which
+    /// is what the owner saw on 2026-09-20: "I can barely see the other clan's lines ... they're over to the right."
+    /// The band sets the window instead, and the subtitle says so rather than still claiming the whole battle.
+    /// </summary>
+    [Fact]
+    public void TheBandSetsTheWindowSoEveryLineUsesTheWholeChart()
+    {
+        var field = Field;
+        Source[] all = [Mine, field];
+        var live = Live(all, [Installed(Clan, "value"), Installed(TopClans)],
+            all.ToDictionary(s => s.Id, s => Snapshot(s.Id, [], period: LivePeriod), StringComparer.Ordinal));
+
+        var reader = Reader(
+            Read(Mine, Now.AddHours(-10), Period, new Dictionary<string, double> { ["clan-points"] = 100 }, "value"),
+            Read(Mine, Now.AddHours(-5), Period, new Dictionary<string, double> { ["clan-points"] = 300 }, "value"),
+            Read(Mine, Now.AddHours(-1), Period, new Dictionary<string, double> { ["clan-points"] = 400 }, "value"),
+            Read(Mine, Now, Period, new Dictionary<string, double> { ["clan-points"] = 900 }, "value"),
+            FieldRead(field, Now.AddHours(-1), BoardAt(10, 1_000)),
+            FieldRead(field, Now, BoardAt(10, 1_200)));
+
+        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
+
+        Assert.Equal(7, race.Series.Count);
+        Assert.All(race.Series, s => Assert.True(
+            s.Points.Count >= 2 && s.Points[0].T >= Now.AddHours(-1),
+            $"{s.Label} starts at {(s.Points.Count == 0 ? "nothing" : s.Points[0].T.ToString())}, before the band does"));
+
+        // Yours keeps only the readings inside the window, not the ten hours before it.
+        Assert.Equal([400d, 900d], race.Series[0].Points.Select(p => p.Value));
+        Assert.Equal("clan points since the clans list was first read", race.Head.Subtitle);
+    }
+
+    /// <summary>No band, no trim: your own history is the whole point of the chart when there is nothing to race.</summary>
+    [Fact]
+    public void WithNothingToRaceYourWholeHistoryIsStillDrawn()
+    {
+        var live = Live([Mine], [Installed(Clan, "value")],
+            new Dictionary<string, RecipeSnapshot> { [Mine.Id] = Snapshot(Mine.Id, [], period: LivePeriod) });
+        var reader = Reader(
+            Read(Mine, Now.AddHours(-10), Period, new Dictionary<string, double> { ["clan-points"] = 100 }, "value"),
+            Read(Mine, Now, Period, new Dictionary<string, double> { ["clan-points"] = 900 }, "value"));
+
+        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
+
+        Assert.Equal(2, Assert.Single(race.Series).Points.Count);
+        Assert.Equal(Now.AddHours(-10), race.Series[0].Points[0].T);
+        Assert.Equal("clan points since the battle started", race.Head.Subtitle);
+    }
+
     /// <summary>With no clans list switched on, the chart is what it always was: the clans you picked, and no list.</summary>
     [Fact]
     public void WithoutAClansListNothingElseIsDrawn()

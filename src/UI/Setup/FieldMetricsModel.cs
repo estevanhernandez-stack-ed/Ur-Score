@@ -77,9 +77,13 @@ public static class FieldMetricsModel
         var from = $"From {list.Recipe.Name}, about ";
         return mine.Count == 0
             ? from + "your clan. " + NoClanSet
-            : from + (mine.Count == 1 ? $"{mine[0]}. " : $"the best placed of {string.Join(", ", mine)}. ")
+            : from + (mine.Count == 1 ? $"{mine[0]}. " : $"the best placed of {AndList(mine)}. ")
               + "Each number goes to RoRoRo with no account attached, so an alert on it is worded about the clan, not a player.";
     }
+
+    /// <summary>Two names read "A and B", three "A, B and C": a comma-run reads as a list of one long name.</summary>
+    private static string AndList(IReadOnlyList<string> names) =>
+        names.Count <= 1 ? string.Join("", names) : $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}";
 
     /// <summary>
     /// The clan names your own sources carry — the same set a read uses to find your row (<c>MyGroupNames</c>). A

@@ -398,8 +398,24 @@ public static class PanelModels
             legend.Add(new LegendItem($"{line.Label} {StatText.Abbrev(points)}", line.Colour));
         }
 
+        // Every line over the same window. Your own clan is recorded from the battle's first minute, a rival only
+        // from the first clans-list read that kept it — so untrimmed, yours spans the chart and the whole band is a
+        // stub in its last tenth: "I can barely see the other clan's lines ... they're over to the right"
+        // (2026-09-20). Trimmed to where the band begins, all of them use the full width and can be compared.
+        var from = RaceWindow(series, board.Count);
+        if (from is { } start)
+        {
+            for (var i = 0; i < series.Count; i++)
+            {
+                series[i] = series[i] with { Points = [.. series[i].Points.Where(p => p.T >= start)] };
+            }
+        }
+
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
-        var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} since the {RecipeWords.Period(recipe)} started",
+        var span = from is null
+            ? $"since the {RecipeWords.Period(recipe)} started"
+            : "since the clans list was first read";
+        var head = new PanelHead(title, $"{RecipeWords.Lower(totalLabel)} {span}",
             Overdue: overdue, Note: string.Join(" ", notes), Remembered: remembered);
 
         // No source's period is known yet: every point in "series" would be mixing periods together.
@@ -412,6 +428,37 @@ public static class PanelModels
         {
             Standings = Standings(live, reader, sources),
         };
+    }
+
+    /// <summary>
+    /// Where the race chart starts, or null to draw everything there is.
+    /// <para>
+    /// The band's earliest reading: the whole band is kept, and only your own line — which starts far earlier —
+    /// gives anything up. Null when there is no band to line up with, and null when the trim would leave one of
+    /// your own lines with fewer than two points, because a squeezed line beats a missing one.
+    /// </para>
+    /// </summary>
+    private static DateTimeOffset? RaceWindow(IReadOnlyList<ChartSeries> series, int bandCount)
+    {
+        if (bandCount == 0 || series.Count <= bandCount) return null;
+
+        var mine = series.Count - bandCount;
+        DateTimeOffset? start = null;
+        for (var i = mine; i < series.Count; i++)
+        {
+            if (series[i].Points.Count == 0) continue;
+            var first = series[i].Points[0].T;
+            if (start is null || first < start) start = first;
+        }
+
+        if (start is not { } at) return null;
+
+        for (var i = 0; i < mine; i++)
+        {
+            if (series[i].Points.Count(p => p.T >= at) < 2) return null;
+        }
+
+        return at;
     }
 
     /// <summary>How many clans either side of yours are drawn: the ones that decide whether you move a place.</summary>

@@ -52,7 +52,7 @@ public static class FieldMetrics
         new(Place, "Clan place", "clan.standing.place",
             "Where your clan stands in the list, 1 being the leader."),
         new(GapAbove, "Points behind the place above", "clan.standing.gap-above",
-            "How far ahead the clan in the place above you is. Zero while you lead."),
+            "How far ahead the clan one place above you is. Zero while you lead."),
         new(PaceNeeded, "Points an hour needed to pass them", "clan.standing.pace-needed",
             "What you would have to make every hour, at the pace they are going, to take the place above before the battle ends."),
         new(FreeSlots, "Free clan slots", "clan.standing.free-slots",
