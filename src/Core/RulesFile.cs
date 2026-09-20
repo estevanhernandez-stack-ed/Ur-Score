@@ -20,10 +20,12 @@ public enum RuleWrite { Done, AlreadyThere, NotThere, CantOpen, NotJson, NotALis
 
 /// <summary>One rule RoRoRo can read, at its <see cref="Index"/> in the file's list. A missing number reads as 0 and a missing direction as below, as RoRoRo reads them.</summary>
 public sealed record AlertRule(
-    int Index, string MetricId, AlertKind Kind, double Threshold, double WindowMinutes, bool AlertWhenBelow, RuleOwner Owner, string? Label);
+    int Index, string MetricId, AlertKind Kind, double Threshold, double WindowMinutes, bool AlertWhenBelow, RuleOwner Owner, string? Label,
+    bool TellMeWhenItRecovers = false);
 
 /// <summary>What one Ur Score rule says: its kind, number, minutes (Rate) or direction (Level), under the stat's label.</summary>
-public sealed record AlertSpec(AlertKind Kind, double Threshold, double WindowMinutes, bool AlertWhenBelow, string Label);
+public sealed record AlertSpec(AlertKind Kind, double Threshold, double WindowMinutes, bool AlertWhenBelow, string Label,
+    bool TellMeWhenItRecovers = false);
 
 /// <summary>The rules file as read: its problem, whether it exists, every rule RoRoRo can read, and the metric ids of rows it would skip (A2).</summary>
 public sealed record RulesRead(RulesProblem Problem, bool Exists, IReadOnlyList<AlertRule> Rules, IReadOnlyList<string> SkippedMetricIds)
@@ -255,7 +257,8 @@ public static class RulesFile
         var label = parsed.Label?.Trim();
 
         return new AlertRule(
-            index, metricId, kind, parsed.Threshold, parsed.WindowMinutes, parsed.AlertWhenBelow, whose, string.IsNullOrEmpty(label) ? null : label);
+            index, metricId, kind, parsed.Threshold, parsed.WindowMinutes, parsed.AlertWhenBelow, whose,
+            string.IsNullOrEmpty(label) ? null : label, parsed.TellMeWhenItRecovers);
     }
 
     /// <summary>
@@ -301,6 +304,12 @@ public static class RulesFile
         [JsonPropertyName("windowMinutes")] public double WindowMinutes { get; set; }
         [JsonPropertyName("alertWhenBelow")] public bool AlertWhenBelow { get; set; } = true;
         [JsonPropertyName("label")] public string? Label { get; set; }
+
+        /// <summary>
+        /// Whether RoRoRo also says when this rule comes right again. Off unless asked: it doubles
+        /// how often the rule speaks, and a rule written before this existed never asked.
+        /// </summary>
+        [JsonPropertyName("tellMeWhenItRecovers")] public bool TellMeWhenItRecovers { get; set; }
     }
 
     /// <summary>
@@ -401,6 +410,10 @@ public static class RulesFile
         rule["alertWhenBelow"] = spec.Kind == AlertKind.Rate || spec.AlertWhenBelow;
         rule["owner"] = Owner;
         if (!string.IsNullOrWhiteSpace(spec.Label)) rule["label"] = spec.Label.Trim();
+
+        // Written only when asked, so a rules file stays the shape it was before this existed and
+        // a reader that predates the key is unaffected by rules that do not use it.
+        if (spec.TellMeWhenItRecovers) rule["tellMeWhenItRecovers"] = true;
         return rule;
     }
 }

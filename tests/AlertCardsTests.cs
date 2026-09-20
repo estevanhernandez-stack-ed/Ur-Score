@@ -555,6 +555,37 @@ public class AlertCardsTests
         Assert.Equal(stat, AlertCards.Sentence(AlertKind.Level, "Diamonds", 10, 0, below: false));
     }
 
+    /// <summary>
+    /// The tick survives the round trip: draft to spec to the rules file and back into the draft a
+    /// Change opens on. Without the last leg, opening an existing recovery rule to edit its number
+    /// would quietly turn its recovery off.
+    /// </summary>
+    [Fact]
+    public void TheRecoveryTickSurvivesTheRoundTrip()
+    {
+        var draft = new AlertDraft { Number = "500", Direction = AlertCards.Below, TellMeWhenItRecovers = true };
+        var (spec, problem) = AlertCards.Check(AlertKind.Level, draft, "Clan points");
+
+        Assert.Equal("", problem);
+        Assert.NotNull(spec);
+        Assert.True(spec.TellMeWhenItRecovers);
+
+        var rule = new AlertRule(0, "clan.standing.points", AlertKind.Level, 500, 0, true, RuleOwner.UrScore, "Clan points", true);
+        Assert.True(AlertCards.DraftOf(rule).TellMeWhenItRecovers);
+
+        // And a rule that never asked stays off through the same path.
+        var quiet = rule with { TellMeWhenItRecovers = false };
+        Assert.False(AlertCards.DraftOf(quiet).TellMeWhenItRecovers);
+    }
+
+    /// <summary>A card whose rule asked says so, under the alert's own sentence.</summary>
+    [Fact]
+    public void ACardSaysWhenItWillAlsoTellYouItIsOver()
+    {
+        Assert.Contains("comes right again", AlertCards.AndTellsYou, StringComparison.Ordinal);
+        Assert.Contains("comes right again", AlertCards.AlsoTellMe, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ThePageSaysWhatToDoWhenThereIsNoCard()
     {
