@@ -28,8 +28,11 @@ public static class LineBuilder
         var recipe = context.Recipe;
         if (reading.Outcome != ReadingOutcome.Read) return null;
 
-        // A clans list keeps the field's shape, never its register: four numbers and a count, no clan named
-        // (the owner's ruling, 2026-09-19). No account is matched on a group list, so none can be written.
+        // A clans list keeps the field's shape and the part of its register a chart can use: the summary numbers,
+        // and the top clans by name with the places either side of yours (GroupRows). The 2026-09-19 ruling that
+        // named no clan at all was reversed by the owner on 2026-09-20 — "these are game stats ... it's just game
+        // stuff" — bounded by "I don't want it to store too much". No account is matched on a group list, so none
+        // can be written, and no player's id or value is in one to begin with.
         if (recipe.IsGroupList)
         {
             var valueKey = recipe.LastStep.Values.FirstOrDefault()?.Id ?? "";

@@ -75,6 +75,42 @@ public class ScoreBookModelTests
     }
 
     /// <summary>
+    /// A clans list is on this page from 0.5.3. It kept nothing when the page was written and was left out; it has
+    /// kept the field's numbers and the top clans by name since 0.3.10, so the thing growing fastest on disk was
+    /// the one thing the page neither measured nor offered to clear. No finals count: it closes no period, so the
+    /// row does not carry a number that could only ever be zero.
+    /// </summary>
+    [Fact]
+    public void AClansListIsMeasuredLikeAnythingElseYouKeep()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var list = new InstalledRecipe(clans, "", new RecipeState());
+        var field = new Source("s-00000009", clans.Slug, new Dictionary<string, string>(), SourceRole.Watch);
+        var reader = new ScoreBookReader(Path.Combine(Path.GetTempPath(), "urscore-empty-" + Guid.NewGuid().ToString("N")), TimeProvider.System);
+
+        var item = Assert.Single(ScoreBookModel.Recipes([list], [field], reader));
+
+        Assert.Equal(new BookRecipeItem("Pet Sim 99 top clans", "0 readings kept", "No reading yet", "", "0 bytes"), item);
+        Assert.Equal("0 readings kept · No reading yet · 0 bytes", item.Summary);
+    }
+
+    /// <summary>A clans list records, so it can fail to — and the page that explains a silence explains that one too.</summary>
+    [Fact]
+    public void AClansListThatKeptNothingSaysWhyLikeAnySource()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var list = new InstalledRecipe(clans, "", new RecipeState());
+        var field = new Source("s-00000009", clans.Slug, new Dictionary<string, string>(), SourceRole.Watch);
+        var latest = new Dictionary<string, RecipeSnapshot> { [field.Id] = Snapshot(false, "This read brought no clan with a number, so there was nothing to keep.") };
+
+        var items = ScoreBookModel.NotRecording([list], [field], latest, running: true, accountsEverListed: true);
+
+        Assert.Equal(
+            new NotRecordingItem("Pet Sim 99 top clans", "This read brought no clan with a number, so there was nothing to keep."),
+            Assert.Single(items));
+    }
+
+    /// <summary>
     /// Backlog S1-12.4. "Could not open the folder" was written onto the line the page's redraw owns for pending lines, so the
     /// next redraw (any read, any book line) wiped it. It has a line of its own now, and says what you can do instead in plain
     /// words; the exception's own message (a path, a Win32 code) goes to the trail as its type.

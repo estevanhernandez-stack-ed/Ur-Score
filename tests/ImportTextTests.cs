@@ -1,3 +1,4 @@
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.UI;
 
@@ -111,21 +112,39 @@ public class ImportTextTests
         Assert.Equal("", ImportText.SuggestedNote(clan));
     }
 
+    /// <summary>
+    /// A clans list says what it keeps. It used to say "nothing from this recipe is kept", which stopped being
+    /// true in 0.3.10 and stayed on the consent screen until 0.5.3 — the one screen whose job is telling you what
+    /// you are agreeing to. The owner's direction, 2026-09-20: we are holding it, so say so.
+    /// </summary>
     [Fact]
-    public void AGroupListKeepsNothing()
+    public void AGroupListSaysWhatItKeeps()
     {
         var parsed = RecipeParser.Parse(GroupList);
         Assert.True(parsed.Ok, string.Join(" ", parsed.Problems));
 
-        Assert.Empty(ImportText.Kept(parsed.Recipe!));
-        Assert.Equal("Nothing from this recipe is kept. Its rows are groups, shown live only.", ImportText.KeptNote(parsed.Recipe!));
+        var kept = ImportText.Kept(parsed.Recipe!);
+        Assert.Equal(
+            [
+                "Where yours stands in the list, and what the place above it holds",
+                "How the whole field is doing: the leader, the top ten, the average and the bottom ten",
+                $"The top {GroupRows.Top} by name, with the places either side of yours",
+            ],
+            kept);
 
+        var note = ImportText.KeptNote(parsed.Recipe!);
+        Assert.Equal("Every read keeps these. A list like this holds no players, so no player is kept.", note);
+        Assert.DoesNotContain("Nothing from this recipe is kept", note, StringComparison.Ordinal);
+
+        // A clans list's line carries its period and the source's own stamp too, so the screen names them.
         var withDetails = parsed.Recipe! with
         {
             Period = new RecipePeriod("season", "starts", "ends", "data.history"),
             Steps = [parsed.Recipe!.LastStep with { AsOf = new RecipeAsOf("data.updated", "data.stale") }],
         };
-        Assert.Empty(ImportText.Kept(withDetails));
-        Assert.Equal("Nothing from this recipe is kept. Its rows are groups, shown live only.", ImportText.KeptNote(withDetails));
+        var more = ImportText.Kept(withDetails);
+        Assert.Contains("Which season each read belongs to", more);
+        Assert.Contains("When the season starts and ends", more);
+        Assert.Contains("When the source last updated the numbers, and whether it calls them stale", more);
     }
 }

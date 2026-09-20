@@ -15,7 +15,15 @@ public sealed record BookRecipeItem(string Name, string Readings, string First, 
 
 public sealed record NotRecordingItem(string Source, string Reason);
 
-/// <summary>Setup › Score book (spec §7.6). Counts only; no line of the book is ever shown or copied.</summary>
+/// <summary>
+/// Setup › Score book (spec §7.6). Counts only; no line of the book is ever shown or copied.
+/// <para>
+/// A clans list is listed here from 0.5.3. It kept nothing when this page was written and was left out, then
+/// started keeping the field's numbers and the top clans by name in 0.3.10 without ever appearing — so the one
+/// thing growing fastest on disk was the one thing this page neither measured nor offered to clear. The owner's
+/// direction, 2026-09-20: we are holding it, and they should be in control of how it is held.
+/// </para>
+/// </summary>
 public static class ScoreBookModel
 {
     /// <summary>
@@ -39,7 +47,7 @@ public static class ScoreBookModel
         recipe.Inputs.Count == 0 ? recipe.Name : $"{ClansModel.NameOf(recipe, source)} · {recipe.Name}";
 
     public static IReadOnlyList<BookRecipeItem> Recipes(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, ScoreBookReader reader) =>
-        [.. installed.Where(i => !i.Recipe.IsGroupList).Select(i =>
+        [.. installed.Select(i =>
         {
             var recipe = i.Recipe;
             var slug = recipe.Slug;
@@ -55,13 +63,18 @@ public static class ScoreBookModel
                 recipe.Name,
                 readings == 1 ? "1 reading kept" : $"{readings.ToString("N0", CultureInfo.InvariantCulture)} readings kept",
                 first is { } at ? $"First reading {at.ToLocalTime().ToString("d MMM yyyy", CultureInfo.CurrentCulture)}" : "No reading yet",
-                recipe.Period is null ? ""
+                // A clans list keeps no finals — it has no account to close a period for — so the row doesn't
+                // offer a count that could only ever be zero.
+                recipe.Period is null || recipe.IsGroupList ? ""
                     : finals == 1 ? $"1 finished {RecipeWords.Period(recipe)} kept"
                     : $"{finals.ToString("N0", CultureInfo.InvariantCulture)} finished {RecipeWords.Periods(recipe)} kept",
                 Size(reader.Bytes(slug)));
         })];
 
-    /// <summary>Every source that isn't recording right now, and why (spec §7.6). Group lists never record and are not listed.</summary>
+    /// <summary>
+    /// Every source that isn't recording right now, and why (spec §7.6). A clans list is one of them from 0.5.3:
+    /// it records, so it can fail to, and the page that explains a silence should explain that one too.
+    /// </summary>
     public static IReadOnlyList<NotRecordingItem> NotRecording(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest,
         bool running, bool accountsEverListed)
@@ -76,8 +89,7 @@ public static class ScoreBookModel
 
         foreach (var source in sources)
         {
-            if (installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe
-                || recipe.IsGroupList)
+            if (installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe)
             {
                 continue;
             }

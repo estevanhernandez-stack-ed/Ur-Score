@@ -1,19 +1,32 @@
 using Labs626.UrScore.Board;
+using Labs626.UrScore.Book;
 using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-/// <summary>The import screen's words about the headline, period and freshness details kept in the score book.</summary>
+/// <summary>
+/// The import screen's words about what a recipe keeps in your score book.
+/// <para>
+/// It used to tell you a clans list kept nothing. That stopped being true in 0.3.10, when the field's numbers and
+/// the top clans by name started being written, and it stayed on screen until 0.5.3 — a false sentence on the one
+/// screen whose whole job is telling you what you are agreeing to. The owner's direction on 2026-09-20: we are
+/// holding the information, they know we are scoring, so say what is kept and stop promising what is not.
+/// </para>
+/// </summary>
 public static class ImportText
 {
     public const string ShowEveryStat = "Show every game statistic (reads once from the hosts above)";
 
-    /// <summary>The details a recipe can keep beside ticked stats. A group list writes nothing.</summary>
+    /// <summary>What a recipe keeps beside the stats you tick, named the way the screen says them.</summary>
     public static IReadOnlyList<string> Kept(Recipe recipe)
     {
-        if (recipe.IsGroupList) return [];
-
-        var kept = recipe.Headline.Select(headline => headline.Label).ToList();
+        var kept = recipe.IsGroupList
+            ? [
+                "Where yours stands in the list, and what the place above it holds",
+                "How the whole field is doing: the leader, the top ten, the average and the bottom ten",
+                $"The top {GroupRows.Top} by name, with the places either side of yours",
+            ]
+            : recipe.Headline.Select(headline => headline.Label).ToList();
         if (recipe.Period is { } period)
         {
             var word = RecipeWords.Period(recipe);
@@ -37,7 +50,7 @@ public static class ImportText
     }
 
     public static string KeptNote(Recipe recipe) =>
-        recipe.IsGroupList ? "Nothing from this recipe is kept. Its rows are groups, shown live only."
+        recipe.IsGroupList ? "Every read keeps these. A list like this holds no players, so no player is kept."
         : Kept(recipe).Count == 0 ? "Every read keeps the stats you tick, for your own accounts only."
         : "Every read keeps these details, and the stats you tick for your own accounts only.";
 
