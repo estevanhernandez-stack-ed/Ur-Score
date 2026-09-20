@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Labs626.UrScore.Core;
@@ -122,7 +123,7 @@ public static partial class AlertCards
     /// metrics a member could tick and then had nowhere to set an alert on — which was the entire point of them.
     /// </para>
     /// </summary>
-    public static AlertsView Build(IReadOnlyList<InstalledRecipe> installed, RulesRead rules)
+    public static AlertsView Build(IReadOnlyList<InstalledRecipe> installed, RulesRead rules, string? clan = null)
     {
         var recipes = installed.Where(i => !i.Recipe.IsGroupList).ToList();
         var sent = recipes
@@ -133,7 +134,7 @@ public static partial class AlertCards
                 .Where(i => i.Recipe.IsGroupList)
                 .SelectMany(i => FieldMetrics.Offered(i.State.FieldMetricKeys))
                 .GroupBy(m => m.MetricId, StringComparer.Ordinal)
-                .Select(g => new AlertStat(g.Key, g.First().Label, Sent: true)))
+                .Select(g => new AlertStat(g.Key, ClanLabel(g.First().Label, clan), Sent: true)))
             .ToList();
         var sentIds = sent.Select(s => s.MetricId).ToHashSet(StringComparer.Ordinal);
         var stale = rules.Rules
@@ -143,7 +144,9 @@ public static partial class AlertCards
             .Select(g => new AlertStat(
                 g.Key,
                 PinnedLabel(recipes, g.Key)
-                    ?? FieldMetrics.All.FirstOrDefault(m => string.Equals(m.MetricId, g.Key, StringComparison.Ordinal))?.Label
+                    ?? (FieldMetrics.All.FirstOrDefault(m => string.Equals(m.MetricId, g.Key, StringComparison.Ordinal)) is { } known
+                        ? ClanLabel(known.Label, clan)
+                        : null)
                     ?? g.Select(r => r.Label).FirstOrDefault(l => l is not null)
                     ?? g.Key,
                 Sent: false));
@@ -252,6 +255,19 @@ public static partial class AlertCards
             _ => $"{whose} {label} changes",
         };
     }
+
+    /// <summary>
+    /// A clan number's label, with your clan's name on the front when there is one: "K0i2 clan points".
+    /// <para>
+    /// This is not decoration. The label is what RoRoRo puts at the head of the alert's title
+    /// (<c>WebhookPayload.MetricTitle</c>), and a clan-and-field metric carries no account, so
+    /// without it the buzz says "Clan points went above ..." and never says whose. The ids stay
+    /// fixed and shared across the clan; only the label is local, which is exactly the split that
+    /// lets forty people set the same alert and each see their own clan named on their own phone.
+    /// </para>
+    /// </summary>
+    private static string ClanLabel(string label, string? clan) =>
+        string.IsNullOrWhiteSpace(clan) ? label : $"{clan.Trim()} {RecipeWords.Lower(label)}";
 
     /// <summary>Whose number this is. A clan-and-field id is nobody's account, and never was.</summary>
     private static string Whose(string? metricId) =>

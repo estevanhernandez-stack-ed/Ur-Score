@@ -3,6 +3,36 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.3 - 2026-09-20
+
+### Added
+
+- **Your clan's name rides on its alerts.** A clan number carries no account, so RoRoRo had nothing to put at
+  the head of the buzz: it said "Clan points went above 9,000,000,000" and never said whose. The alert's label
+  now starts with your clan — "K0i2 clan points" — while the metric id stays the same for everyone. That split
+  is what lets a leader name one id, have forty people set the same alert, and have each of them see their own
+  clan on their own phone.
+
+### Fixed
+
+- **`clan.standing.idle-members` had never sent once.** Contributors can exceed members, because it counts
+  everyone who has scored in this battle including people who have since left the clan — 72 members and 73
+  contributors on the owner's own board. The guard treated that as nonsense and returned nothing. Members on
+  zero is now floored at none.
+- **Setup › Clans said "Shown live, never kept"** on the screen where you switch the clans list on. It now says
+  what every read keeps.
+- **Every alert sentence said "an account's"**, including the six clan numbers that go out with no account. A
+  clan number now reads "your clan's Clan place goes above 10".
+- **The import screen said nothing from a clans list is kept.** It names what it keeps instead: where yours
+  stands, how the field is doing, the top 25 by name.
+
+### Changed
+
+- **Setup › Score book lists a clans list** like anything else you keep — readings, first reading, size, and its
+  reason when it is not recording — so "how much is this holding" has an answer on screen.
+- **No pace is projected from a window shorter than an hour**, and the chase row measures the clan above over
+  the same two-hour window the sent metric uses instead of averaging the whole battle.
+
 ## 0.5.2 - 2026-09-20
 
 Three things a multi-agent review found in 0.5.0 before the clan did.

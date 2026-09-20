@@ -58,6 +58,41 @@ public class AlertsModelTests
         Assert.Equal("", AlertCards.EmptyLine([new InstalledRecipe(clans, "", state)], view));
     }
 
+    /// <summary>
+    /// The clan's name rides on the label, and the label is what RoRoRo puts at the head of the alert's
+    /// title. A clan number carries no account, so without this the buzz says "Clan points went above
+    /// ..." and never says whose. The ids stay fixed and shared; only the label is local — which is the
+    /// split that lets forty people set the same alert and each see their own clan on their own phone.
+    /// </summary>
+    [Fact]
+    public void AClanNumbersLabelCarriesYourClansName()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var state = new RecipeState(SentFieldMetrics: [FieldMetrics.Points, FieldMetrics.IdleMembers]);
+
+        var view = AlertCards.Build([new InstalledRecipe(clans, "", state)], new RulesRead(RulesProblem.None, true, [], []), "K0i2");
+
+        Assert.Equal(["K0i2 clan points", "K0i2 members on zero"], view.Cards.Select(c => c.Stat.Label));
+
+        // The id is the same for everyone, whatever their clan is called.
+        Assert.Equal(["clan.standing.points", "clan.standing.idle-members"], view.Cards.Select(c => c.Stat.MetricId));
+    }
+
+    /// <summary>No clan set up yet is no prefix, rather than a stray space or the word "null".</summary>
+    [Fact]
+    public void WithNoClanTheLabelIsJustTheNumbersName()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var state = new RecipeState(SentFieldMetrics: [FieldMetrics.Points]);
+        var installed = new[] { new InstalledRecipe(clans, "", state) };
+
+        foreach (var clan in new[] { null, "", "   " })
+        {
+            var view = AlertCards.Build(installed, new RulesRead(RulesProblem.None, true, [], []), clan);
+            Assert.Equal("Clan points", Assert.Single(view.Cards).Stat.Label);
+        }
+    }
+
     /// <summary>With nothing ticked anywhere, the empty line points at both places a tick lives.</summary>
     [Fact]
     public void TheEmptyLineNamesTheClanAndFieldSectionToo()

@@ -48,7 +48,15 @@ public partial class AlertsPage : UserControl, ISetupPage
         Draw("");
     }
 
-    private AlertsView Read() => AlertCards.Build(_services.Installed, RulesFile.Read(_services.RulesPath));
+    /// <summary>
+    /// The clan whose name rides on a clan number's alert. The best-placed of yours is what the
+    /// numbers are about (<see cref="FieldMetricsModel"/>), and with more than one set up the first
+    /// is as good a guess as the page can make without a read in hand.
+    /// </summary>
+    private string? Clan() =>
+        FieldMetricsModel.MyClanNames(_services.Sources, _services.Installed).FirstOrDefault();
+
+    private AlertsView Read() => AlertCards.Build(_services.Installed, RulesFile.Read(_services.RulesPath), Clan());
 
     private void Draw(string focus)
     {
