@@ -19,6 +19,9 @@ public static class PaceText
 {
     public const string TooEarly = "too early to say";
 
+    /// <summary>Nothing recent enough to call current: the app was closed, or reads stopped.</summary>
+    public const string NoneRecent = "no reading in the last hour";
+
     /// <summary>A rate as the board says numbers: "184.6M/h".</summary>
     public static string PerHour(double value) => $"{PanelText.Short(value)}/h";
 
@@ -85,7 +88,7 @@ public static class PacePanel
         var now = live.Now;
         var zone = live.Time.LocalTimeZone;
 
-        var hour = Pace.Over(series, now - TimeSpan.FromHours(1));
+        var hour = Pace.Over(series, now - TimeSpan.FromHours(1), Pace.LongestCurrent);
         var average = Pace.Over(series, DateTimeOffset.MinValue);
         var best = Pace.BestHour(series);
         var latest = series.Count > 0 ? series[^1].Value : 0;
@@ -94,7 +97,9 @@ public static class PacePanel
         // clan's, and the owner's own accounts have their own lines below it (2026-09-20).
         var facts = new List<FactModel>
         {
-            new("Current", PaceText.Window(hour, now)),
+            new("Current", hour is null && series.Count > 0 && series[^1].T < now - TimeSpan.FromHours(1)
+                ? PaceText.NoneRecent
+                : PaceText.Window(hour, now)),
             new("Average", PaceText.Since(average, zone)),
             new("Best hour", best is null ? PaceText.TooEarly : PaceText.Since(best, zone)),
             new("On this pace", PaceText.OnThisPace(hour, latest, period?.Ends, now, zone)),
@@ -126,7 +131,7 @@ public static class PacePanel
 
             total += series[^1].Value;
             counted++;
-            if (Pace.Over(series, now - TimeSpan.FromHours(1)) is { } pace) perHour += pace.PerHour;
+            if (Pace.Over(series, now - TimeSpan.FromHours(1), Pace.LongestCurrent) is { } pace) perHour += pace.PerHour;
         }
 
         if (counted == 0) yield break;

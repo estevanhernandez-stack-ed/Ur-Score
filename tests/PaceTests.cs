@@ -126,4 +126,29 @@ public class PaceTests
         Assert.Null(chase.Needed);
         Assert.Equal(PaceVerdict.Ended, chase.Verdict);
     }
+
+    /// <summary>
+    /// What a closed app does to a chart, seen on the owner's board 2026-09-20: Ur Score was off for fourteen hours,
+    /// so the newest reading before "the last hour" was yesterday's and a fourteen-hour average was labelled
+    /// "Current". The window is still true; it is just not current, so it is not offered as one.
+    /// </summary>
+    [Fact]
+    public void AWindowThatReachesAcrossAGapIsNotCurrent()
+    {
+        var series = Series((14, 1_000), (0, 8_000));
+
+        Assert.Null(Pace.Over(series, Now.AddHours(-1), Pace.LongestCurrent));
+        Assert.NotNull(Pace.Over(series, Now.AddHours(-1)));   // the same window, asked for without a limit
+    }
+
+    /// <summary>A best hour that spans a gap was never an hour: fourteen hours of gains is not this clan's best hour.</summary>
+    [Fact]
+    public void TheBestHourNeverSpansAGap()
+    {
+        Assert.Null(Pace.BestHour(Series((14, 1_000), (0, 8_000))));
+
+        // One missed read still counts: a window a little past the hour is an hour.
+        var nearly = Series((1.2, 100), (0, 400));
+        Assert.NotNull(Pace.BestHour(nearly));
+    }
 }

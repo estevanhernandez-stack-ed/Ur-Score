@@ -3,6 +3,16 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.3.11 - 2026-09-20
+
+### Fixed
+
+- **A pace never reaches across a gap in recording.** With Ur Score closed for fourteen hours, "Current" was a
+  fourteen-hour average and "Best hour" was the same span called an hour. A current pace now comes from the last
+  two hours or says there has been no reading in the last hour, and a best hour must be about an hour.
+- **A hopeless chase is still called hopeless** when there is no best hour to measure against: the current pace
+  stands in as the ceiling, instead of the verdict softening to "needs a lift".
+
 ## 0.3.10 - 2026-09-20
 
 ### Added

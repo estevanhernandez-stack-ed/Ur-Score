@@ -43,12 +43,23 @@ public static class Pace
     /// <summary>The shortest window worth a rate. Reads land every few minutes, so this is several of them.</summary>
     public static readonly TimeSpan Shortest = TimeSpan.FromMinutes(15);
 
+    /// <summary>How far past an hour a window may stretch and still be called an hour: one missed read, not a gap.</summary>
+    public static readonly TimeSpan LongestHour = TimeSpan.FromMinutes(75);
+
+    /// <summary>How far a "current" window may reach back before it stops being current.</summary>
+    public static readonly TimeSpan LongestCurrent = TimeSpan.FromHours(2);
+
     /// <summary>
     /// The pace from <paramref name="since"/> to the last reading, or null when there is too little to say: fewer
-    /// than two readings, a window under <see cref="Shortest"/>, or a fall (a clan's points only rise, so a drop is
-    /// a reset or a bad read, never a negative pace).
+    /// than two readings, a window under <see cref="Shortest"/>, a fall (a clan's points only rise, so a drop is a
+    /// reset or a bad read, never a negative pace), or a window longer than <paramref name="longest"/>.
+    /// <para>
+    /// That last one is what a closed app does to a chart. Seen on the owner's board 2026-09-20: Ur Score was off for
+    /// fourteen hours, so the newest reading before "the last hour" was yesterday's, and a fourteen-hour average was
+    /// labelled "Current". A window that reaches across a gap is still arithmetically true, but it is not current.
+    /// </para>
     /// </summary>
-    public static PaceWindow? Over(IReadOnlyList<SeriesPoint> series, DateTimeOffset since)
+    public static PaceWindow? Over(IReadOnlyList<SeriesPoint> series, DateTimeOffset since, TimeSpan? longest = null)
     {
         if (series.Count < 2) return null;
 
@@ -59,7 +70,7 @@ public static class Pace
         if (first is null || first.T >= last.T) return null;
 
         var span = last.T - first.T;
-        if (span < Shortest) return null;
+        if (span < Shortest || (longest is { } limit && span > limit)) return null;
 
         var gain = last.Value - first.Value;
         return gain < 0 ? null : new PaceWindow(gain / span.TotalHours, span, first.T);
@@ -67,7 +78,8 @@ public static class Pace
 
     /// <summary>
     /// The best hour of the readings: every hour that ends on a reading is measured, and the fastest wins. Null with
-    /// less than an hour of history — a best hour that never was an hour is not one.
+    /// less than an hour of history — a best hour that never was an hour is not one, and neither is a window that
+    /// spans a gap in recording, so anything past <see cref="LongestHour"/> is skipped rather than counted.
     /// </summary>
     public static PaceWindow? BestHour(IReadOnlyList<SeriesPoint> series)
     {
@@ -82,6 +94,8 @@ public static class Pace
             if (gain < 0) continue;
 
             var span = end.T - start.T;
+            if (span > LongestHour) continue;
+
             var perHour = gain / span.TotalHours;
             if (best is null || perHour > best.PerHour) best = new PaceWindow(perHour, span, start.T);
         }
@@ -97,7 +111,10 @@ public static class Pace
     /// <param name="mine">Your pace, per hour.</param>
     /// <param name="theirs">Their pace, per hour.</param>
     /// <param name="left">How long the period has left.</param>
-    /// <param name="best">Your best hour of this period, which is the honest ceiling for "could we".</param>
+    /// <param name="best">
+    /// Your best hour of this period, the honest ceiling for "could we". With none yet — too little history, or a gap
+    /// where one would be — the current pace stands in, so a hopeless chase is still called hopeless.
+    /// </param>
     public static PaceChase Chase(double gap, double mine, double theirs, TimeSpan left, double? best)
     {
         var closing = mine - theirs;
@@ -108,9 +125,10 @@ public static class Pace
         TimeSpan? catchIn = closing > 0 && gap > 0 ? TimeSpan.FromHours(gap / closing) : null;
         if (catchIn > left) catchIn = null;
 
+        var ceiling = best ?? mine;
         var verdict =
             catchIn is not null || gap <= 0 ? PaceVerdict.OnTrack
-            : best is not { } ceiling ? PaceVerdict.NeedsALift
+            : ceiling <= 0 ? PaceVerdict.NeedsALift
             : ceiling * hours < gap ? PaceVerdict.OutOfReachEvenIfTheyStop
             : needed > ceiling ? PaceVerdict.OutOfReach
             : PaceVerdict.NeedsALift;
