@@ -152,6 +152,11 @@ public class RaceBoardTests
 
         var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
 
+        // The NOUN, not just the explanation. Caught by a screenshot on 2026-09-21: the note read "No sources
+        // are named here", because it took its word from the GROUP LIST, which by definition has no inputs, so
+        // RecipeWords.Groups fell through to its "Sources" default. The word belongs to the panel's own recipe,
+        // whose input declares "plural": "Clans". Asserting only the explanatory clause let that through.
+        Assert.Contains("No clans are named here", race.Head.Note, StringComparison.Ordinal);
         Assert.Contains("does not say its groups are clans", race.Head.Note, StringComparison.Ordinal);
         Assert.False(race.HasStandings);
     }

@@ -171,8 +171,14 @@ public static class PanelText
     /// Why a clans list has drawn no board. The recipe has to say its groups are clans before a name is kept
     /// (V3-S.25), and a chart that is simply empty gives nobody a way to find that out — least of all mid-battle.
     /// </summary>
-    public static string GroupNamesNotKept(Recipe list) =>
-        $"No {RecipeWords.GroupsLower(list)} are named here: {list.Name} does not say its groups are clans, so no names are kept.";
+    /// <param name="groups">
+    /// What the rows ARE, lower case, from the PANEL's recipe rather than the list's. A group list has no inputs of
+    /// its own by definition, so <see cref="RecipeWords.Groups"/> has nothing to read and falls through to its
+    /// "Sources" default: the note read "No sources are named here" on a real board until a screenshot caught it
+    /// on 2026-09-21. The panel's own recipe carries the input that names them ("plural": "Clans").
+    /// </param>
+    public static string GroupNamesNotKept(string groups, Recipe list) =>
+        $"No {groups} are named here: {list.Name} does not say its groups are clans, so no names are kept.";
 
     /// <summary>
     /// A live-only panel (Live leaderboard, Top, Promotion check) whose source was read this session and brought nothing back: no
