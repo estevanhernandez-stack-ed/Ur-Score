@@ -238,31 +238,29 @@ public class FieldMetricsTests
 
     /// <summary>
     /// A label Ur Score computes and a label a human typed are different kinds of thing, and the catalogue says
-    /// which. The six pre-threat metrics are named deliberately: later threat metrics will legitimately set
-    /// ManagedLabel: true, so scanning the whole catalogue would break this assertion once they land. Every metric
-    /// shipped before threats is a human's to word; nothing silently becomes managed.
+    /// which — asserted as a SET over the whole catalogue, in both directions at once.
+    /// <para>
+    /// This replaces two tests that named metrics one at a time: six asserted unmanaged, two asserted managed.
+    /// Between them they left the one thing worth pinning unpinned — that NOTHING ELSE is managed — so a metric
+    /// added later with <c>ManagedLabel: true</c>, by a copied line or a misread default, passed both. Ur Score
+    /// would then rewrite the owner's own wording for that number on every read, and refuse to send it at all
+    /// whenever the rules file could not be written (design §1's no-label-no-send rule), with no test saying
+    /// otherwise. That earlier shape was a knowing trade — it read as future-proof against the threat metrics
+    /// landing — and this one needs no such trade: a number added to or taken out of the managed set shows up
+    /// here either way. (Final review of this branch, 2026-09-20.)
+    /// </para>
     /// </summary>
     [Fact]
-    public void OnlyMetricsThatSaySoHaveALabelUrScoreMaintains()
+    public void ExactlyTheTwoThreatNumbersHaveALabelUrScoreMaintains()
     {
-        Assert.False(FieldMetrics.Find(FieldMetrics.Points)!.ManagedLabel);
-        Assert.False(FieldMetrics.Find(FieldMetrics.Place)!.ManagedLabel);
-        Assert.False(FieldMetrics.Find(FieldMetrics.GapAbove)!.ManagedLabel);
-        Assert.False(FieldMetrics.Find(FieldMetrics.PaceNeeded)!.ManagedLabel);
-        Assert.False(FieldMetrics.Find(FieldMetrics.FreeSlots)!.ManagedLabel);
-        Assert.False(FieldMetrics.Find(FieldMetrics.IdleMembers)!.ManagedLabel);
-    }
+        Assert.Equal(
+            new HashSet<string>([FieldMetrics.ThreatGap, FieldMetrics.ThreatHours], StringComparer.Ordinal),
+            FieldMetrics.All.Where(m => m.ManagedLabel).Select(m => m.Key).ToHashSet(StringComparer.Ordinal));
 
-    /// <summary>
-    /// Both threat numbers carry a label Ur Score maintains, because the name in them changes. Every other
-    /// clan number stays the owner's to word.
-    /// </summary>
-    [Fact]
-    public void BothThreatNumbersDeclareAManagedLabel()
-    {
-        Assert.True(FieldMetrics.Find(FieldMetrics.ThreatHours)!.ManagedLabel);
-        Assert.True(FieldMetrics.Find(FieldMetrics.ThreatGap)!.ManagedLabel);
+        // The id a rule is set on, kept here because it is fixed on every machine: a clan leader says "set an
+        // alert on that number" and forty phones set the same one (FieldMetrics' own note on fixed ids).
         Assert.Equal("clan.standing.threat-hours", FieldMetrics.Find(FieldMetrics.ThreatHours)!.MetricId);
+        Assert.Equal("clan.standing.threat-gap", FieldMetrics.Find(FieldMetrics.ThreatGap)!.MetricId);
     }
 
     /// <summary>
