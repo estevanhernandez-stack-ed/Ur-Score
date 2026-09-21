@@ -194,4 +194,37 @@ public class FieldSummaryTests
         Assert.False(summary.ContainsKey(FieldSummary.MineCapacity));
         Assert.False(summary.ContainsKey(FieldSummary.MineContributors));
     }
+
+    /// <summary>
+    /// The clans just below the best placed of yours, best first, with none of yours among them. Ranked by the
+    /// value itself, never by the rank the list handed over, as every other field number is.
+    /// </summary>
+    [Fact]
+    public void BehindTakesTheClansBelowTheBestPlacedOfYours()
+    {
+        var rows = new List<GroupRow>
+        {
+            Clan("Leader", 900), Clan("K0i2", 500), Clan("H8ER", 400), Clan("LXCC", 300), Clan("R0W", 200), Clan("Tail", 100),
+        };
+
+        var behind = FieldSummary.Behind(rows, "points", Mine("K0i2"), count: 3);
+
+        Assert.Equal(["H8ER", "LXCC", "R0W"], behind.Select(b => b.Name));
+        Assert.Equal(400, behind[0].Value);
+
+        // Gap is OUR points minus THEIRS: how far behind us that clan is. Pinned explicitly, not just implied by
+        // the ordering above, because a Gap with the sign flipped would still pass every other assertion here
+        // (owner's ruling, 2026-09-20).
+        Assert.Equal(100, behind[0].Gap);
+        Assert.Equal([100, 200, 300], behind.Select(b => b.Gap));
+    }
+
+    /// <summary>With none of yours in the read there is nobody to be behind, which is nothing rather than the tail.</summary>
+    [Fact]
+    public void BehindIsEmptyWhenNoneOfYoursIsInTheRead()
+    {
+        IReadOnlyList<GroupRow> rows = [Clan("Leader", 900), Clan("H8ER", 400)];
+
+        Assert.Empty(FieldSummary.Behind(rows, "points", Mine("K0i2"), count: 3));
+    }
 }
