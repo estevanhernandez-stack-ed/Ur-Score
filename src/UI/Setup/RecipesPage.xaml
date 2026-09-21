@@ -40,9 +40,20 @@
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding Hosts}" FontFamily="{StaticResource MonoFont}" Style="{StaticResource Muted}" Margin="0,2,0,0" />
                                 <TextBlock Text="{Binding Details}" Style="{StaticResource Muted}" Margin="0,2,0,0" />
+                                <!-- Says WHY an Update button appeared, on the row rather than left to the button alone. An installed
+                                     recipe is a snapshot of the text imported; without this pair there is no route at all from an old
+                                     copy to a newer one, because a built-in stops being offered the moment it is installed. -->
+                                <TextBlock Text="{Binding UpdateNote}" Style="{StaticResource Muted}" Margin="0,2,0,0"
+                                           Visibility="{Binding CanUpdate, Converter={StaticResource BoolToVisible}}" />
                             </StackPanel>
-                            <Button Grid.Column="2" Content="Remove" Tag="{Binding Slug}" Click="OnRemoveClick" VerticalAlignment="Center"
-                                    AutomationProperties.Name="{Binding RemoveName}" />
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="Update" Tag="{Binding Slug}" Click="OnUpdateClick" Margin="0,0,8,0"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Visibility="{Binding CanUpdate, Converter={StaticResource BoolToVisible}}"
+                                        AutomationProperties.Name="{Binding UpdateName}" />
+                                <Button Content="Remove" Tag="{Binding Slug}" Click="OnRemoveClick"
+                                        AutomationProperties.Name="{Binding RemoveName}" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </DataTemplate>
