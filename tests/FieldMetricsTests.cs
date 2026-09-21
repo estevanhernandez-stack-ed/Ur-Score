@@ -235,4 +235,19 @@ public class FieldMetricsTests
         Assert.Contains("clan.standing.place", described, StringComparison.Ordinal);
         Assert.Contains("with no account attached", described, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A label Ur Score computes and a label a human typed are different kinds of thing, and the catalogue says
+    /// which. Every metric shipped before threats is a human's to word; nothing silently becomes managed.
+    /// </summary>
+    [Fact]
+    public void OnlyMetricsThatSaySoHaveALabelUrScoreMaintains()
+    {
+        Assert.False(FieldMetrics.Find(FieldMetrics.Points)!.ManagedLabel);
+        Assert.False(FieldMetrics.Find(FieldMetrics.Place)!.ManagedLabel);
+        Assert.False(FieldMetrics.Find(FieldMetrics.GapAbove)!.ManagedLabel);
+        Assert.False(FieldMetrics.Find(FieldMetrics.PaceNeeded)!.ManagedLabel);
+        Assert.False(FieldMetrics.Find(FieldMetrics.FreeSlots)!.ManagedLabel);
+        Assert.False(FieldMetrics.Find(FieldMetrics.IdleMembers)!.ManagedLabel);
+    }
 }

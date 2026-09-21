@@ -6,7 +6,12 @@ namespace Labs626.UrScore.Core;
 /// <summary>One clan-and-field number a rule can be set on, under a fixed id every copy of Ur Score sends it as.</summary>
 /// <param name="Key">How the tick is stored in the clans list's state.</param>
 /// <param name="What">One line, shown beside the tick, and the same sentence a clan leader repeats to the clan.</param>
-public sealed record FieldMetric(string Key, string Label, string MetricId, string What);
+/// <param name="ManagedLabel">
+/// Ur Score writes this number's label and keeps it current; a human never types it. The marker lives here
+/// rather than in rules.json because it is nobody else's business: the host's RuleRow has no such field and
+/// never reads one.
+/// </param>
+public sealed record FieldMetric(string Key, string Label, string MetricId, string What, bool ManagedLabel = false);
 
 /// <summary>A metric and the number this read has for it. Only what a read could actually work out is here.</summary>
 public sealed record FieldMetricValue(FieldMetric Metric, double Value);
