@@ -34,7 +34,11 @@
                     Click="OnToolClick" AutomationProperties.Name="Remove panel" />
         </WrapPanel>
         <!-- The title line (the mock's .p-head): title, chip and tools centred on one line; the tools in the muted text colour. -->
-        <DockPanel LastChildFill="False">
+        <!-- Background, not the default null: a DockPanel with no brush is hit-test invisible over its empty space,
+             so without this a press between the title and the tools would fall through and the header would only
+             drag where there happens to be text. -->
+        <DockPanel x:Name="TitleRow" LastChildFill="False" Background="Transparent"
+                   MouseLeftButtonDown="OnTitleRowDown" MouseMove="OnTitleRowMove" MouseLeftButtonUp="OnTitleRowUp">
             <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                 <!-- Both are named in UpdateTools from the panel's own title ("Pop out Past battles"), so five panels
                      don't give a screen reader five identical buttons; no name here, which would go stale beside it. -->

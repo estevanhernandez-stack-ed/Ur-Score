@@ -64,4 +64,34 @@ public class DragHandleTests
         thread.Join();
         if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
+    /// <summary>
+    /// The whole title line drags the panel while editing, not the six-dot grip alone. Two things have to hold in
+    /// the XAML for that to work at all, and neither is visible by looking at the running app:
+    /// <list type="bullet">
+    /// <item>the three mouse handlers are wired, since a press with no move handler can never become a drag;</item>
+    /// <item>the row carries a Background. A DockPanel with no brush is hit-test INVISIBLE over its empty space, so
+    /// without one a press between the title and the tools falls straight through and the header would only drag
+    /// where there happens to be text — which reads as a header that works sometimes.</item>
+    /// </list>
+    /// </summary>
+    [Fact]
+    public void TheWholeTitleRowDragsAndIsHitTestableAcrossItsEmptySpace()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(System.IO.Path.Combine(directory.FullName, "Ur-Score.csproj"))) directory = directory.Parent;
+        Assert.NotNull(directory);
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        var panel = XDocument.Load(System.IO.Path.Combine(directory.FullName, "src", "UI", "Panels", "PanelFrame.xaml"));
+        var row = panel.Descendants().Single(element => (string?)element.Attribute(xaml + "Name") == "TitleRow");
+
+        Assert.Equal(presentation + "DockPanel", row.Name);
+        Assert.Equal("OnTitleRowDown", (string?)row.Attribute("MouseLeftButtonDown"));
+        Assert.Equal("OnTitleRowMove", (string?)row.Attribute("MouseMove"));
+        Assert.Equal("OnTitleRowUp", (string?)row.Attribute("MouseLeftButtonUp"));
+
+        var background = (string?)row.Attribute("Background");
+        Assert.False(string.IsNullOrWhiteSpace(background), "the title row needs a Background or its empty space is hit-test invisible");
+    }
 }
