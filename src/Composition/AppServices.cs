@@ -647,9 +647,16 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// The clans you set up, by name, asked for at each read rather than captured: a clans list uses them to say where
     /// you stand in the field and what the place above you holds (<see cref="FieldSummary"/>). Only your own sources'
     /// own inputs — a group list has none of its own.
+    /// <para>
+    /// Handed over IN THE ORDER <see cref="SourceRules.MyClanNames"/> returns, not folded into a set here: the watch
+    /// needs the first of yours for a threat label and <c>AlertsPage.Clan()</c> takes the first of this same call for
+    /// the same purpose, so the two can only be the same clan if both read the same ordered answer. This used to
+    /// hand over a <c>HashSet</c>, whose enumeration order is not contractual (final review of this branch,
+    /// 2026-09-20). The watch folds its own case-insensitive set for every membership question, exactly as this
+    /// line did.
+    /// </para>
     /// </summary>
-    private IReadOnlySet<string> MyGroupNames() =>
-        SourceRules.MyClanNames(Sources, Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<string> MyGroupNames() => SourceRules.MyClanNames(Sources, Installed);
 
     private int IntervalFor(Source source) =>
         FindInstalled(source.Recipe)?.Recipe.EffectiveEverySeconds ?? Recipe.MinimumEverySeconds;

@@ -31,7 +31,7 @@ public class RecipeWatchBookTests
         IRecipeEngine engine, StubHost host, IScoreBook book, Source source,
         SharedAccounts? shared = null, AccountClaims? claims = null, IReadOnlySet<string>? tracked = null,
         FinalsIndex? finals = null, TimeProvider? time = null, Recipe? recipe = null, string? text = null,
-        IReadOnlyList<FieldMetric>? field = null, IReadOnlySet<string>? myGroups = null,
+        IReadOnlyList<FieldMetric>? field = null, IReadOnlyList<string>? myGroups = null,
         Func<FieldMetric, string, bool>? writeLabel = null) =>
         new(engine, host, new NoKeys(), new ReportPolicy([Points], new HashSet<Guid> { Alt }, field), recipe ?? Clan, Inputs,
             tracked ?? new HashSet<string> { "value" },
@@ -327,7 +327,7 @@ public class RecipeWatchBookTests
             new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
             time: clock, recipe: recipe, text: text,
             field: FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.PaceNeeded, FieldMetrics.FreeSlots]),
-            myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" });
+            myGroups: ["K0i2"]);
 
         // First read: no pace yet, so what it would take is not guessed at.
         await watch.RunOnceAsync(CancellationToken.None);
@@ -368,7 +368,7 @@ public class RecipeWatchBookTests
 
         var snapshot = await Watch(engine, host, book,
             new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
-            recipe: recipe, text: text, myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" })
+            recipe: recipe, text: text, myGroups: ["K0i2"])
             .RunOnceAsync(CancellationToken.None);
 
         Assert.Empty(host.Reported);
@@ -408,7 +408,7 @@ public class RecipeWatchBookTests
             new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
             time: clock, recipe: recipe, text: text,
             field: FieldMetrics.Offered([FieldMetrics.PaceNeeded]),
-            myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" });
+            myGroups: ["K0i2"]);
 
         await watch.RunOnceAsync(CancellationToken.None);
         clock.Advance(TimeSpan.FromMinutes(30));
@@ -451,7 +451,9 @@ public class RecipeWatchBookTests
     {
         private readonly RecipeWatch _watch;
 
-        public ChaseFixture(string chaser, Func<FieldMetric, string, bool>? writeLabel, IReadOnlyList<FieldMetric> field)
+        public ChaseFixture(
+            string chaser, Func<FieldMetric, string, bool>? writeLabel, IReadOnlyList<FieldMetric> field,
+            IReadOnlyList<string>? mine = null)
         {
             var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
             var recipe = RecipeParser.Parse(text).Recipe!;
@@ -468,7 +470,7 @@ public class RecipeWatchBookTests
             _watch = Watch(engine, Host, new MemoryBook(),
                 new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
                 time: Clock, recipe: recipe, text: text, field: field,
-                myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" },
+                myGroups: mine ?? ["K0i2"],
                 // Wrapped rather than passed straight through, so the label write lands in the same list as the
                 // report and the two can be compared by position. The test's own allow-or-refuse is untouched.
                 writeLabel: writeLabel is null ? null : (metric, label) =>
@@ -523,9 +525,10 @@ public class RecipeWatchBookTests
     /// keeps the end-of-battle cap out of these tests.
     /// </summary>
     private static async Task<ChaseFixture> BattleWithChaser(
-        string chaser, Func<FieldMetric, string, bool>? writeLabel, IReadOnlyList<FieldMetric>? field = null)
+        string chaser, Func<FieldMetric, string, bool>? writeLabel, IReadOnlyList<FieldMetric>? field = null,
+        IReadOnlyList<string>? mine = null)
     {
-        var chase = new ChaseFixture(chaser, writeLabel, field ?? FieldMetrics.Offered([FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]));
+        var chase = new ChaseFixture(chaser, writeLabel, field ?? FieldMetrics.Offered([FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]), mine);
 
         // One reading is no pace, so no threat is invented from it and no label is written for one either.
         await chase.ReadAsync();
@@ -562,6 +565,28 @@ public class RecipeWatchBookTests
         // 8.05B against 7.80B is 250M behind, and 500M an hour of closing eats that in half an hour.
         Assert.Equal(250_000_000d, chase.ValueOf("clan.standing.threat-gap"), 1);
         Assert.Equal(0.5, chase.ValueOf("clan.standing.threat-hours"), 6);
+    }
+
+    /// <summary>
+    /// With several clans of your own the label names THE FIRST of them, in the order
+    /// <see cref="SourceRules.MyClanNames"/> returns — the same first <c>AlertsPage.Clan()</c> names on the Alerts
+    /// page, so a phone and the page agree. The order is the whole point: the watch used to be handed a
+    /// <c>HashSet</c> and take its <c>FirstOrDefault</c>, which agreed with the page by coincidence of runtime
+    /// behaviour rather than by contract (final review of this branch, 2026-09-20).
+    /// <para>
+    /// ZZZZ is first here and is NOT the clan in the read — K0i2 is, and the numbers are measured from K0i2. So
+    /// this also pins the known limitation that comes with the guess: the label may name a different clan of
+    /// yours than the numbers are about. The THREAT's name, which is what the label exists to carry, is right
+    /// either way.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task TheLabelNamesTheFirstOfYourClansInTheOrderTheyAreSetUp()
+    {
+        var chase = await BattleWithChaser("H8ER", (_, _) => true, mine: ["ZZZZ", "K0i2"]);
+
+        Assert.Equal(["label:H8ER catching ZZZZ", "label:H8ER catching ZZZZ"], chase.Labels);
+        Assert.Equal(250_000_000d, chase.ValueOf("clan.standing.threat-gap"), 1);
     }
 
     /// <summary>

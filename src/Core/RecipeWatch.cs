@@ -108,6 +108,16 @@ public sealed record RankInGroup(int Rank, int? Of);
 /// plan first gave, lives on that one mapping rather than repeated at every caller.
 /// </para>
 /// </param>
+/// <param name="myGroups">
+/// The clans you set up, by name, IN ORDER — the order <see cref="Labs626.UrScore.Core.SourceRules.MyClanNames"/>
+/// returns them in, which is the order the Setup pages read too. The order is part of the contract, not an
+/// accident: the label names the first of yours, and so does <c>AlertsPage.Clan()</c>, so the two agree only if
+/// both take the first of the SAME ordered answer. Until the final review of this branch, 2026-09-20, this seam
+/// handed over an <c>IReadOnlySet</c> and <see cref="SendFieldAsync"/> took its <c>FirstOrDefault</c>: a
+/// <c>HashSet</c>'s enumeration order is not contractual, so the two agreed by coincidence of runtime behaviour
+/// and the stated reason for the guess was false. Everything that asks "is this clan one of mine?" folds this
+/// list into a case-insensitive set of its own, as it always did.
+/// </param>
 public sealed class RecipeWatch(
     IRecipeEngine engine,
     IHostClient host,
@@ -123,7 +133,7 @@ public sealed class RecipeWatch(
     AccountClaims? claims = null,
     FinalsIndex? finals = null,
     TimeProvider? time = null,
-    Func<IReadOnlySet<string>>? myGroups = null,
+    Func<IReadOnlyList<string>>? myGroups = null,
     Func<FieldMetric, string, bool>? writeLabel = null)
 {
     internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
@@ -574,8 +584,10 @@ public sealed class RecipeWatch(
         var valueKey = readRecipe.LastStep.Values.FirstOrDefault()?.Id ?? "";
 
         // Asked once and shared, so the field's numbers, the band behind and the name on the label all come from
-        // one answer rather than three reads of a list that can change between them.
-        var ours = myGroups?.Invoke();
+        // one answer rather than three reads of a list that can change between them. The ordered list is what is
+        // asked for; the set below is folded from it, and the label's clan is taken from the list itself.
+        var mineInOrder = myGroups?.Invoke();
+        var ours = MineAsSet(mineInOrder);
         var summary = FieldSummary.Of(reading.Groups, valueKey, ours);
         if (summary.Count == 0) return 0;
 
@@ -599,7 +611,12 @@ public sealed class RecipeWatch(
         var values = FieldMetrics.Of(summary, mine, above, now, ends);
 
         // The soonest by TIME, not the nearest by place, and null when no chaser has a readable pace yet. Both
-        // threat numbers are halves of this one answer, so they name the same clan or neither of them goes.
+        // threat numbers are halves of this ONE answer, so neither can ever name a different clan than the other:
+        // there is one name in play per read. Whether both GO is a separate question the loop below answers one
+        // metric at a time — each writes its own rule's label and a refusal stops only its own number — so one
+        // may go out while the other is held back. That is safe (each number that goes is under a label written
+        // for it this cycle), which is why it is left alone; the earlier note here claimed a joint guarantee the
+        // loop does not provide (final review of this branch, 2026-09-20).
         var threat = FieldMetrics.SoonestThreat(
             behind, mine, name => chasers.TryGetValue(name, out var series) ? series : [], now, ends);
         if (threat is not null)
@@ -612,10 +629,19 @@ public sealed class RecipeWatch(
             ];
         }
 
-        // The best placed of your clans is what these numbers are about, and which one that is cannot be known
-        // here, so the first is the same guess AlertsPage.Clan() already makes for the same purpose (controller
-        // ruling, this task). No clan at all is fine: ThreatLabel then says "catching up" and names nobody.
-        var ourClanName = ours?.FirstOrDefault();
+        // Your own clan's name for the label: the FIRST of the ordered list SourceRules.MyClanNames returns, which
+        // is the same answer AlertsPage.Clan() takes for the same purpose (controller ruling, task 8). That
+        // sentence is only true because this seam now hands over the ordered list — it used to hand over a
+        // HashSet, whose enumeration order is not contractual, so the two agreed by coincidence and the ruling
+        // rested on a false reason (final review of this branch, 2026-09-20).
+        //
+        // It is a guess, but not because the answer is unknowable: FieldSummary.Behind picks the best placed of
+        // your clans and measures every Gap from it, so the read HAS decided which one these numbers are about —
+        // it just doesn't return the name, and pulling it out is a change to a shipped method the six older clan
+        // numbers also go through. So with several clans of yours the label may name a different one of yours
+        // than the numbers are about. The THREAT's name, which is the whole point of the label, is unaffected.
+        // No clan at all is fine: ThreatLabel then says "catching up" and names nobody.
+        var ourClanName = mineInOrder is { Count: > 0 } ? mineInOrder[0] : null;
         var sent = 0;
 
         foreach (var metric in wanted)
@@ -651,6 +677,15 @@ public sealed class RecipeWatch(
 
         return sent;
     }
+
+    /// <summary>
+    /// Your clans folded into the set every "is this one of mine?" question is asked through, matched however the
+    /// name was typed — Setup takes what you type and a clans list has its own casing. The seam hands over an
+    /// ordered list because the label needs the first of it (see <see cref="SendFieldAsync"/>); everything that
+    /// only asks about membership wants this, and gets exactly what the composition root used to build itself.
+    /// </summary>
+    private static IReadOnlySet<string>? MineAsSet(IReadOnlyList<string>? mine) =>
+        mine is null ? null : new HashSet<string>(mine, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// This read's band of chasers, each kept under its own name in <see cref="_fieldBehind"/>, and every name no
@@ -707,7 +742,8 @@ public sealed class RecipeWatch(
         if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
 
         var line = LineBuilder.Reading(
-            ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>(), myGroups?.Invoke());
+            ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>(),
+            MineAsSet(myGroups?.Invoke()));
         if (line is null) return (false, NotRecordingNoField);
 
         book.Append(line, readText);
