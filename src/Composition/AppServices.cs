@@ -590,8 +590,24 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// enum is Rate, Level, Event, and direction is the separate <see cref="AlertRule.AlertWhenBelow"/> bool.
     /// </para>
     /// </summary>
-    private bool WriteLabel(FieldMetric metric, string label) =>
-        LabelInPlace(RulesFile.ChangeLabel(RulesPath, metric.MetricId, AlertKind.Level, label));
+    private bool WriteLabel(FieldMetric metric, string label) => WriteLabel(RulesPath, metric, label);
+
+    /// <summary>
+    /// The composition above with the rules path passed in, so a test can reach it. The instance method is the
+    /// seam <see cref="CreateWatch"/> hands to <see cref="RecipeWatch"/>; this is the same single line with
+    /// nothing captured.
+    /// <para>
+    /// Split out by the final review of this branch, 2026-09-20: it was the one composition on the branch no
+    /// test could call. <see cref="LabelInPlace"/> is table-tested and <c>RecipeWatchBookTests</c> passes stub
+    /// lambdas, so the line binding <see cref="FieldMetric.MetricId"/> and <see cref="AlertKind.Level"/> to
+    /// <see cref="RulesFile.ChangeLabel"/> had no coverage at all. Bind <see cref="FieldMetric.Key"/> there
+    /// instead and nothing fails: <c>GuardId</c> only rejects blank, <c>OursFor</c> finds no rule under
+    /// "threat-gap", NotThere maps to true, and every threat number ships under whatever stale label is on disk,
+    /// for good, with the suite green.
+    /// </para>
+    /// </summary>
+    internal static bool WriteLabel(string rulesPath, FieldMetric metric, string label) =>
+        LabelInPlace(RulesFile.ChangeLabel(rulesPath, metric.MetricId, AlertKind.Level, label));
 
     /// <summary>
     /// Maps <see cref="RulesFile.ChangeLabel"/>'s outcome to whether <see cref="RecipeWatch"/> may report the
