@@ -238,7 +238,9 @@ public class FieldMetricsTests
 
     /// <summary>
     /// A label Ur Score computes and a label a human typed are different kinds of thing, and the catalogue says
-    /// which. Every metric shipped before threats is a human's to word; nothing silently becomes managed.
+    /// which. The six pre-threat metrics are named deliberately: later threat metrics will legitimately set
+    /// ManagedLabel: true, so scanning the whole catalogue would break this assertion once they land. Every metric
+    /// shipped before threats is a human's to word; nothing silently becomes managed.
     /// </summary>
     [Fact]
     public void OnlyMetricsThatSaySoHaveALabelUrScoreMaintains()
