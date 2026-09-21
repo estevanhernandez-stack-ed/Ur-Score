@@ -95,15 +95,17 @@ public sealed record RankInGroup(int Rank, int? Of);
 /// </summary>
 /// <param name="writeLabel">
 /// Puts a rival clan's name on the rule a managed-label number fires (<see cref="FieldMetric.ManagedLabel"/>),
-/// and answers whether the label is IN PLACE: written just now, or already saying exactly this. Null is a build
-/// with no writer wired, which is the same answer as a refusal — see <see cref="SendFieldAsync"/> for why a
-/// false answer stops the number going out.
+/// and answers whether the label is IN PLACE: written just now, already saying exactly this, or (Ur Score having
+/// no rule on the metric at all) not something any alert could fire under. Null is a build with no writer wired,
+/// which is the same answer as a refusal — see <see cref="SendFieldAsync"/> for why a false answer stops the
+/// number going out.
 /// <para>
-/// The caller owns the rules path and so owns the mapping from <see cref="RuleWrite"/> to that bool. Only
-/// <see cref="RuleWrite.Done"/> and <see cref="RuleWrite.NotThere"/> are true: Done is the label in place, and
-/// NotThere is Ur Score having no rule on the metric, so there is no label to keep current and no alert that can
-/// fire under a stale one. Every other answer — CantWrite above all — is false, because it leaves a rule whose
-/// label names somebody else.
+/// The caller owns the rules path and so owns the mapping from <see cref="RuleWrite"/> to that bool
+/// (<c>AppServices.LabelInPlace</c>, task 8's controller ruling). <see cref="RuleWrite.Done"/>,
+/// <see cref="RuleWrite.NotThere"/> and <see cref="RuleWrite.AlreadyThere"/> are true; every other answer —
+/// <see cref="RuleWrite.CantWrite"/> above all — is false, because it leaves a rule whose label names somebody
+/// else. The full reasoning for each case, including why NotThere is true for a different reason than this
+/// plan first gave, lives on that one mapping rather than repeated at every caller.
 /// </para>
 /// </param>
 public sealed class RecipeWatch(
