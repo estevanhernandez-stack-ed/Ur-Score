@@ -227,4 +227,44 @@ public class FieldSummaryTests
 
         Assert.Empty(FieldSummary.Behind(rows, "points", Mine("K0i2"), count: 3));
     }
+
+    /// <summary>
+    /// A clan name matches however it was typed, exactly as <see cref="FieldSummary.Of"/> already matches it
+    /// (FieldSummary.cs:92-94): Setup takes what you type, the list has its own casing, and a live-correct result
+    /// today must not depend on the caller happening to hand over an already case-insensitive set. Without the
+    /// fold, "k0i2" fails to find "K0i2" at all, and <see cref="FieldSummary.Behind"/> reports nobody behind you
+    /// instead of the clans that are actually there.
+    /// </summary>
+    [Fact]
+    public void BehindFindsYourRowHoweverItsCasingWasTyped()
+    {
+        var rows = new List<GroupRow>
+        {
+            Clan("Leader", 900), Clan("K0i2", 500), Clan("H8ER", 400), Clan("LXCC", 300), Clan("R0W", 200), Clan("Tail", 100),
+        };
+
+        var behind = FieldSummary.Behind(rows, "points", Mine("k0i2"), count: 3);
+
+        Assert.Equal(["H8ER", "LXCC", "R0W"], behind.Select(b => b.Name));
+        Assert.Equal(100, behind[0].Gap);
+    }
+
+    /// <summary>
+    /// With two of your clans in the read, the lower one is excluded from "behind" by the same fold, not only
+    /// when it is spelled exactly as Setup typed it. Anchor-finding alone would not catch this: skipping the
+    /// anchor's own index already keeps it out regardless of casing, so this needs a second clan of yours,
+    /// stored under different casing, sitting below the anchor.
+    /// </summary>
+    [Fact]
+    public void BehindExcludesEachOfYourClansHoweverItsCasingWasTyped()
+    {
+        var rows = new List<GroupRow>
+        {
+            Clan("Leader", 900), Clan("K0i2", 500), Clan("H8ER", 400), Clan("LXCC", 300), Clan("R0W", 200), Clan("Tail", 100),
+        };
+
+        var behind = FieldSummary.Behind(rows, "points", Mine("K0i2", "h8er"), count: 3);
+
+        Assert.Equal(["LXCC", "R0W", "Tail"], behind.Select(b => b.Name));
+    }
 }

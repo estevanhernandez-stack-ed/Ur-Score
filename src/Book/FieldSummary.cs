@@ -143,12 +143,17 @@ public static class FieldSummary
             .OrderByDescending(g => g.Value!.Value)
             .ToList();
 
-        var at = ranked.FindIndex(g => mine.Contains(g.Name));
+        // Matched however the name was typed, the same fold and for the same reason as Of's `yours` (line 94):
+        // Setup takes what you type, and the list has its own casing. A method must not be correct only by
+        // accident of what comparer the caller's set happens to use — both places below that ask "is this one of
+        // mine?" go through this same normalized set, so the two sibling methods answer that question identically.
+        var yours = new HashSet<string>(mine, StringComparer.OrdinalIgnoreCase);
+        var at = ranked.FindIndex(g => yours.Contains(g.Name));
         if (at < 0) return [];
 
         var ours = ranked[at].Value!.Value;
 
-        return [.. ranked.Skip(at + 1).Where(g => !mine.Contains(g.Name)).Take(count)
+        return [.. ranked.Skip(at + 1).Where(g => !yours.Contains(g.Name)).Take(count)
             .Select(g => new BehindClan(g.Name, g.Value!.Value, ours - g.Value!.Value))];
     }
 }
