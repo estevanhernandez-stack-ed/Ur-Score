@@ -126,4 +126,40 @@ public class BoardLayoutTests
     [Fact]
     public void AnEmptyBoardHasNoDropCaret() => Assert.Null(BoardLayout.CaretFor([], 0));
 
+    /// <summary>
+    /// Dragging a panel's edge picks the OFFERED span whose drawn width is nearest the width you dragged to, not an
+    /// arbitrary column count: a board only has Small, Half and Wide, and a drag that produced a 5-wide panel would
+    /// invent a size the rest of the app does not handle (<see cref="BoardLayout.EffectiveSpan"/> narrows by those
+    /// three). On a 1200-wide board with a 12 gap the three draw at 291, 594 and 1200, so the choices change at
+    /// 442 and 897 — the values below sit either side of both, which is what makes this test able to fail.
+    /// </summary>
+    [Theory]
+    [InlineData(0.0, PanelSize.Small)]
+    [InlineData(280.0, PanelSize.Small)]
+    [InlineData(440.0, PanelSize.Small)]   // just under the Small/Half midpoint of 442.5
+    [InlineData(445.0, PanelSize.Half)]    // just over it
+    [InlineData(890.0, PanelSize.Half)]    // just under the Half/Wide midpoint of 897
+    [InlineData(905.0, PanelSize.Wide)]    // just over it
+    [InlineData(99999.0, PanelSize.Wide)]
+    public void AnEdgeDragSnapsToTheNearestOfferedSpan(double wanted, int expected) =>
+        Assert.Equal(expected, BoardLayout.SpanFor(wanted, 1200, 12));
+
+    /// <summary>
+    /// A panel is one row or two, so dragging its bottom is a choice between them rather than a height. Two rows is
+    /// taken at half way, which is what "nearest" means when there are only two answers.
+    /// </summary>
+    [Theory]
+    [InlineData(0.0, 1)]
+    [InlineData(200.0, 1)]
+    [InlineData(299.0, 1)]
+    [InlineData(300.0, 2)]
+    [InlineData(900.0, 2)]
+    public void ABottomDragChoosesOneRowOrTwo(double wanted, int expected) =>
+        Assert.Equal(expected, BoardLayout.RowsFor(wanted, 200));
+
+    /// <summary>A row of no height cannot say which is nearer, so it stays one rather than dividing by nothing.</summary>
+    [Fact]
+    public void ARowWithNoHeightStaysOneRow() => Assert.Equal(1, BoardLayout.RowsFor(500, 0));
+
+
 }

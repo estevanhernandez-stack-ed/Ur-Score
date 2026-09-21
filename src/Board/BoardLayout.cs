@@ -146,6 +146,39 @@ public static class BoardLayout
     }
 
     /// <summary>
+    /// The span an edge drag lands on: the OFFERED size whose drawn width is nearest <paramref name="wanted"/>.
+    /// <para>
+    /// A board has three sizes, not twelve. A drag free to produce a 5-wide panel would invent one the rest of the
+    /// app does not handle — <see cref="EffectiveSpan"/> narrows a board by Small, Half and Wide — so the drag
+    /// chooses between them rather than between columns.
+    /// </para>
+    /// </summary>
+    public static int SpanFor(double wanted, double width, double gap)
+    {
+        int[] offered = [PanelSize.Small, PanelSize.Half, PanelSize.Wide];
+        var best = offered[0];
+        var closest = double.MaxValue;
+
+        foreach (var span in offered)
+        {
+            var apart = Math.Abs(CellWidth(width, span, gap) - wanted);
+            if (apart >= closest) continue;
+            closest = apart;
+            best = span;
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Whether a bottom drag to <paramref name="wanted"/> means one row or two. A panel is tall or it is not, so
+    /// this is a choice between two answers and not a height; two is taken at half way, which is what nearest means
+    /// with two. A row of no height cannot say which is nearer and stays one rather than dividing by nothing.
+    /// </summary>
+    public static int RowsFor(double wanted, double rowHeight) =>
+        rowHeight > 0 && wanted >= rowHeight * 1.5 ? 2 : 1;
+
+    /// <summary>
     /// The mark for a drop at <paramref name="index"/>, an insertion index as <see cref="DropIndex"/> returns:
     /// the left edge of the cell it would insert before, or the right edge of the last cell when it goes at the
     /// end. It takes its top and height from THAT cell, so a caret on a shorter second row is drawn the height of
