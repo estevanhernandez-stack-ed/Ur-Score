@@ -11,6 +11,24 @@ public class AlertsModelTests
 
     private static Recipe Profile => RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-profile.recipe.json")).Recipe!;
 
+    /// <summary>
+    /// A number held back names itself on the card, and only when there is one. It is not a drop: a drop is the
+    /// user's own ticks refusing a number, and a hold is Ur Score refusing to send under a name it could not
+    /// write. Same silence, different cause, different place to go and look (V3-S.35).
+    /// </summary>
+    [Fact]
+    public void ANumberHeldBackForItsLabelIsNamedOnTheCardAndOnlyThen()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var state = new RecipeState(SentFieldMetrics: [FieldMetrics.ThreatGap]);
+
+        var held = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main], [], resolveNames: false, _ => (4, 1, 2)));
+        Assert.Equal("Sent 4, dropped 1 this session. 2 held back: the alert name couldn't be written.", held.Counts);
+
+        var quiet = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main], [], resolveNames: false, _ => (4, 1, 0)));
+        Assert.Equal("Sent 4, dropped 1 this session.", quiet.Counts);
+    }
+
     [Fact]
     public void ThePolicyLineIsReportPolicysOwnSentence()
     {
@@ -18,7 +36,7 @@ public class AlertsModelTests
             ExcludedAccountIds: [Alt.AccountId.ToString()],
             Stats: new Dictionary<string, StatChoice> { ["diamonds"] = new(Send: true, MetricId: "ps99.diamonds") });
 
-        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(Profile, "", state)], [Main, Alt], [], resolveNames: false, _ => (3, 1)));
+        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(Profile, "", state)], [Main, Alt], [], resolveNames: false, _ => (3, 1, 0)));
 
         var expected = new ReportPolicy([new SentStat("diamonds", "Diamonds", "ps99.diamonds")], new HashSet<Guid> { Main.AccountId }).Describe(2, false);
         Assert.Equal(new PolicyItem("Pet Sim 99 profile", expected, "Sent 3, dropped 1 this session."), item);
@@ -31,7 +49,7 @@ public class AlertsModelTests
         var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Send: true, MetricId: "clan.battle.points") });
         var watched = new Source("s-00000001", clan.Slug, new Dictionary<string, string> { ["clan"] = "NovaForge" }, SourceRole.Watch);
 
-        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clan, "", state)], [Main, Alt], [watched], resolveNames: false, _ => (0, 0)));
+        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clan, "", state)], [Main, Alt], [watched], resolveNames: false, _ => (0, 0, 0)));
 
         Assert.Equal("Nothing is sent to RoRoRo: you only watch its clans.", item.Line);
     }
@@ -116,7 +134,7 @@ public class AlertsModelTests
         var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
         var state = new RecipeState(SentFieldMetrics: [FieldMetrics.Place, FieldMetrics.PaceNeeded]);
 
-        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main, Alt], [], resolveNames: false, _ => (7, 0)));
+        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main, Alt], [], resolveNames: false, _ => (7, 0, 0)));
 
         Assert.Equal("Pet Sim 99 top clans", item.RecipeName);
         Assert.Contains("clan.standing.place", item.Line, StringComparison.Ordinal);
@@ -131,7 +149,7 @@ public class AlertsModelTests
     {
         var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
 
-        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", new RecipeState())], [Main], [], resolveNames: false, _ => (0, 0)));
+        var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", new RecipeState())], [Main], [], resolveNames: false, _ => (0, 0, 0)));
 
         Assert.Equal(
             "Nothing is sent to RoRoRo from this list: no clan number is ticked. Tick one in Setup › Stats, under Clan and field.",

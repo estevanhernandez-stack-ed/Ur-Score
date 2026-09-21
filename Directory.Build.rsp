@@ -1,0 +1,15 @@
+# Read by every msbuild started from this repo — `dotnet build`, `dotnet test`, and a bare `dotnet run`
+# alike, for the root project and the one under tests/. This is the only place a build setting reaches
+# a person typing the command by hand, which is the population that actually hits the bug below.
+
+# Do not leave worker nodes running after a build.
+#
+# WPF compiles a XAML-bearing project twice, the second pass through a generated Ur-Score_<hash>_wpftmp.csproj.
+# A worker node kept alive from an earlier build can still hold that temp project when the next build wants to
+# rewrite it. The rewrite fails, the generated .g.cs never appears, and the compiler reports the entry point
+# missing: "error CS5001: Program does not contain a static 'Main' method". The message names neither XAML nor
+# a lock, so the failure reads as though the application source is broken when nothing in it changed (V3-S.39).
+#
+# A node that exits with its build cannot hold anything. The cost is real but small: a cold start on each
+# build, around a second here, paid to stop a failure that costs minutes and lies about its cause.
+-nodeReuse:false

@@ -154,7 +154,7 @@ public class ImportFlowTests : IDisposable
 
         public DateTimeOffset? LastReadAt(string sourceId) => throw new NotSupportedException();
 
-        public (int Sent, int Dropped) PolicyCounts(string recipeSlug) => throw new NotSupportedException();
+        public (int Sent, int Dropped, int Held) PolicyCounts(string recipeSlug) => throw new NotSupportedException();
 
         public string? IconFileFor(string recipeSlug) => throw new NotSupportedException();
 

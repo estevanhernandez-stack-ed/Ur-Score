@@ -32,7 +32,7 @@ public sealed record PolicyDecision(bool Allowed, string? Reason);
 /// </summary>
 public sealed class ReportPolicy(
     IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects,
-    IReadOnlyList<FieldMetric>? sentFieldMetrics = null, int sent = 0, int dropped = 0)
+    IReadOnlyList<FieldMetric>? sentFieldMetrics = null, int sent = 0, int dropped = 0, int held = 0)
 {
     /// <summary>The stats with Send on, each with the metric id the user pinned. A copy, like the allow list.</summary>
     public IReadOnlyList<SentStat> SentStats { get; } = [.. sentStats];
@@ -57,6 +57,20 @@ public sealed class ReportPolicy(
     public int Dropped { get; private set; } = dropped;
 
     /// <summary>
+    /// Numbers this plugin refused to send ITSELF, having first failed to write the name they would have gone out
+    /// under. Counted apart from <see cref="Dropped"/> because the cause and the cure are different: a drop means
+    /// the user's own ticks said no, and a hold means the rules file could not be edited safely, so the remedy is
+    /// in the file rather than in the settings.
+    /// <para>
+    /// It exists because the refusal used to be invisible. The send is skipped before this class is called at all,
+    /// so neither counter moved and the line the user reads said only what DID go out — a rules file with a
+    /// duplicate key would silence both threat numbers forever with nothing anywhere saying why (V3-S.35).
+    /// Silence over a wrong name is the right ruling; silence with no trace is not.
+    /// </para>
+    /// </summary>
+    public int Held { get; private set; } = held;
+
+    /// <summary>
     /// A policy for changed sent stats or allow list, carrying the running <see cref="Sent"/> and
     /// <see cref="Dropped"/> counts forward rather than resetting them to zero.
     /// <para>
@@ -69,7 +83,7 @@ public sealed class ReportPolicy(
     public ReportPolicy With(
         IReadOnlyList<SentStat> sentStats, IReadOnlySet<Guid> allowedSubjects,
         IReadOnlyList<FieldMetric>? sentFieldMetrics = null) =>
-        new(sentStats, allowedSubjects, sentFieldMetrics ?? SentFieldMetrics, Sent, Dropped);
+        new(sentStats, allowedSubjects, sentFieldMetrics ?? SentFieldMetrics, Sent, Dropped, Held);
 
     public PolicyDecision Evaluate(Guid subject, string candidateMetricId, double value)
     {
@@ -138,6 +152,14 @@ public sealed class ReportPolicy(
         Sent++;
         return true;
     }
+
+    /// <summary>
+    /// Record that a number was not sent because the name it would have carried could not be written first. The
+    /// caller decides — this class never sees the rules file — and this is where that decision leaves a mark.
+    /// Only for a write that was TRIED and refused: a read with no threat in it has nothing to hold back, and
+    /// counting that would put a number on every quiet read and teach everyone to ignore it.
+    /// </summary>
+    public void HeldForItsLabel() => Held++;
 
     /// <summary>
     /// The single call site of <see cref="IHostClient.ReportMetricAsync"/> in this program.

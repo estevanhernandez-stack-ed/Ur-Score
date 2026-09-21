@@ -89,6 +89,65 @@ public class DiagnosticsModelTests
         Assert.DoesNotContain("someone else's", misses);
     }
 
+    /// <summary>
+    /// Id 0 is RoRoRo's "no Roblox id known for this account", so it is not an account id at all — it is the
+    /// ABSENCE of one, and several accounts can carry it at once. Matching on it would take the first account
+    /// that happened to have no id and put ITS name against a miss belonging to another, which is a diagnostic
+    /// that names the wrong person. The filter that prevents it is one clause of one condition and nothing
+    /// pinned it (S1-12.11).
+    /// <para>
+    /// Two id-0 accounts in the fixture, deliberately: with one, dropping the filter names that one account and
+    /// the test would still look reasonable. With two, dropping it names whichever comes first and the
+    /// misattribution is what fails.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AMissAgainstAnAccountWithNoRobloxIdNamesNobody()
+    {
+        var noId = new HostAccount(Guid.Parse("33333333-3333-3333-3333-333333333333"), 0, "PendingOne");
+        var alsoNoId = new HostAccount(Guid.Parse("44444444-4444-4444-4444-444444444444"), 0, "PendingTwo");
+        var snapshot = new RecipeSnapshot(WatchState.Reporting, null, [], [], 2)
+        {
+            CellMisses = new Dictionary<(long UserId, string Stat), string> { [(0, "value")] = "no 'Points' here" },
+        };
+
+        var misses = DiagnosticsModel.Misses(Clan, snapshot, [noId, alsoNoId, Main]);
+
+        Assert.Equal("", misses);
+        Assert.DoesNotContain("PendingOne", misses, StringComparison.Ordinal);
+        Assert.DoesNotContain("PendingTwo", misses, StringComparison.Ordinal);
+
+        // And the account WITH an id is still named, so this is the id-0 clause doing the work and not the whole
+        // cell-miss line having gone quiet.
+        var named = new RecipeSnapshot(WatchState.Reporting, null, [], [], 2)
+        {
+            CellMisses = new Dictionary<(long UserId, string Stat), string> { [(101, "value")] = "no 'Points' here" },
+        };
+        Assert.Contains("estehernandez", DiagnosticsModel.Misses(Clan, named, [noId, alsoNoId, Main]), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A watch source's inputs go in the copy text like every other source's. It reads a clan it does not record
+    /// for, and that clan's name is exactly what someone reading a diagnostic needs in order to see WHICH clan a
+    /// watch is pointed at — a row saying role=Watch with no inputs describes nothing. Kept honest against the
+    /// privacy line rather than assumed: clan names may be written down (owner's ruling, 2026-09-20); player ids
+    /// and names still may not, which the redaction tests above cover and this does not weaken (S1-12.11).
+    /// </summary>
+    [Fact]
+    public void AWatchSourcesInputsAreInTheCopyTextLikeAnyOthers()
+    {
+        var watch = new Source("s-00000002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "H8ER" }, SourceRole.Watch);
+        var redactor = new Redactor(() => []);
+        var rows = DiagnosticsModel.Sources(
+            [Installed], [ForClan, watch], new Dictionary<string, RecipeSnapshot>(), _ => Now.AddMinutes(-10), true, [Main], Now, redactor);
+
+        var copy = DiagnosticsModel.CopyText(Now, [Installed], [ForClan, watch], rows, false, "host", "book", 0, 0, [], redactor);
+
+        var watchLine = copy.Split(Environment.NewLine).Single(l => l.StartsWith("source=s-00000002", StringComparison.Ordinal));
+        Assert.EndsWith("role=Watch enabled=True inputs=clan=H8ER", watchLine, StringComparison.Ordinal);
+        Assert.Contains("inputs=clan=CCGP", copy, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
