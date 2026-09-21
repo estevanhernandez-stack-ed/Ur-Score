@@ -20,6 +20,10 @@ public class AlertCardsTests
 
     private static RulesRead RulesOf(params AlertRule[] rules) => new(RulesProblem.None, Exists: true, rules, []);
 
+    /// <summary>The card for one metric id, built the way the page builds the whole view.</summary>
+    private static AlertCard CardFor(IReadOnlyList<InstalledRecipe> installed, RulesRead rules, string metricId, string? clan = null) =>
+        AlertCards.Build(installed, rules, clan).Cards.Single(c => string.Equals(c.Stat.MetricId, metricId, StringComparison.Ordinal));
+
     [Fact]
     public void AlertsReadAsSentencesInYourWords()
     {
@@ -146,6 +150,38 @@ public class AlertCardsTests
             AlertCards.Build([Sending("diamonds")], one).Cards[0].Note);
         Assert.Equal("2 rules for Diamonds are written in a way RoRoRo can't read, so they never alert. Ur Score leaves them as they are.",
             AlertCards.Build([Sending("diamonds")], two).Cards[0].Note);
+    }
+
+    /// <summary>
+    /// <see cref="AlertCards.Sentence"/> always draws the METRIC's own label (A4), so a threat number's card says
+    /// "Threat hours" while RoRoRo's own alert says "H8ER catching K0i2" (<see cref="FieldMetrics.ThreatLabel"/>) —
+    /// two different names, on purpose. Without this note, a member's first sign of that split is their phone
+    /// naming a clan this screen never showed them (controller ruling, Task 3, 2026-09-20).
+    /// </summary>
+    [Fact]
+    public void AThreatNumbersCardExplainsThatItsNameIsWrittenByUrScore()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var installed = new[] { new InstalledRecipe(clans, "", new RecipeState(SentFieldMetrics: [FieldMetrics.ThreatHours])) };
+
+        var card = CardFor(installed, RulesOf(), FieldMetrics.Find(FieldMetrics.ThreatHours)!.MetricId);
+
+        Assert.Equal(AlertCards.ManagedLabelNote, card.Note);
+    }
+
+    /// <summary>
+    /// The negative half of the check above. Asserting only the positive would let a bug that put the sentence on
+    /// EVERY card pass unnoticed — that failure mode has already bitten this branch more than once.
+    /// </summary>
+    [Fact]
+    public void AnOrdinaryClanNumbersCardCarriesNoManagedLabelNote()
+    {
+        var clans = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var installed = new[] { new InstalledRecipe(clans, "", new RecipeState(SentFieldMetrics: [FieldMetrics.Points])) };
+
+        var card = CardFor(installed, RulesOf(), FieldMetrics.Find(FieldMetrics.Points)!.MetricId);
+
+        Assert.Equal("", card.Note);
     }
 
     [Theory]

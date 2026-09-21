@@ -46,7 +46,9 @@ public sealed record RulesRead(RulesProblem Problem, bool Exists, IReadOnlyList<
 }
 
 /// <summary>
-/// Reads RoRoRo's <c>metric-rules.json</c>, and turns on, changes and removes Ur Score's own rules in it, on an explicit click only.
+/// Reads RoRoRo's <c>metric-rules.json</c>, and turns on, changes and removes Ur Score's own rules in it, on an explicit click
+/// only — except <see cref="ChangeLabel"/>, which rewrites the label of a rule Ur Score already owns, unattended, from a
+/// background read (see the carve-out below).
 /// <para>
 /// The metric id is a silent-failure seam: it must match a rule in that file or nothing can ever alert, and a mismatch is
 /// quiet on both sides. Leaving that to hand-editing JSON in another app's folder is a trap for a common Windows user, so
@@ -57,6 +59,18 @@ public sealed record RulesRead(RulesProblem Problem, bool Exists, IReadOnlyList<
 /// row it would skip costs only itself. Only rules owned by <see cref="Owner"/> are ever changed or removed, and every other
 /// rule keeps every field. The file is backed up before each write and replaced through a temporary file. A file that can't
 /// be opened, isn't valid JSON or isn't a list is never written.
+/// </para>
+/// <para>
+/// <see cref="ChangeLabel"/> IS THE ONE EXCEPTION TO TWO OF THOSE, and this class edits another application's configuration
+/// file, so the exception is written down rather than left to be found. (1) It is NOT behind a click: it runs unattended,
+/// from a background read, each time the rival clan a managed label names changes (design §1 — the label has to be written
+/// before the number that rides under it is reported, so nothing that waits for the owner could do it). (2) It does NOT
+/// back the file up, on purpose: the backup is the whole file's single undo point, and an explicit click spends it
+/// knowingly while an automatic rewrite nobody asked for must not, or two label rewrites in a row would push a hand-typed
+/// rule out of the backup with the owner never having touched Setup (the owner's ruling of 2026-09-20). Every other fence
+/// above still holds for it — it finds its row through <see cref="RulesRead.OursFor"/>, so only a rule owned by
+/// <see cref="Owner"/> is touched; it edits that row's label alone and leaves its other fields and every other row exactly
+/// as they were; and a file it cannot read, or a row it cannot edit safely, is refused rather than written.
 /// </para>
 /// </summary>
 public static class RulesFile
@@ -147,6 +161,62 @@ public static class RulesFile
             rules.RemoveAt(ours.Index);
             return (RuleWrite.Done, true);
         });
+    }
+
+    /// <summary>
+    /// Rewrites just the label of Ur Score's own rule, leaving every other field untouched and, unlike every other write in
+    /// this class, leaving the file's backup untouched too (see the note on <see cref="Write"/>'s <c>keepBackup</c>
+    /// parameter). NotThere when Ur Score has no rule of that kind for the metric. Done with no write when the label
+    /// already says this.
+    /// <para>
+    /// This is meant to be called automatically, from a background read, whenever the rival clan a rule names changes —
+    /// not from an explicit Setup click like every other write here. That is why it needs the backup carve-out: an
+    /// explicit click spends the owner's undo point on purpose, but an automatic rewrite the owner never asked for must
+    /// not spend an undo point they didn't know they had (the owner's ruling of 2026-09-20). This is the only place that
+    /// writes a label Ur Score maintains, so the ordering rule (design §1: label first, then the number) has one place
+    /// to hold rather than every future call site needing to remember it.
+    /// </para>
+    /// </summary>
+    public static RuleWrite ChangeLabel(string path, string metricId, AlertKind kind, string label)
+    {
+        GuardId(metricId);
+        return Write(path, (rules, read) =>
+        {
+            if (read.OursFor(metricId, kind) is not { } ours) return (RuleWrite.NotThere, false);
+            if (string.Equals(ours.Label, label, StringComparison.Ordinal)) return (RuleWrite.Done, false);
+
+            try
+            {
+                var row = rules[ours.Index]!.AsObject();
+
+                // RulesFile.LastText and RoRoRo's own parser both match field names ignoring case and take the LAST
+                // one written. JsonObject's own indexer is case-sensitive, so setting "label" on a row that also
+                // carries "Label" (or any other casing) would land on one key while the reader keeps reading the
+                // other — with no exception, unlike the duplicate-key crash below. That is worse than a crash: the
+                // write reports Done while naming the PREVIOUS chaser on someone's phone mid-battle, which is
+                // exactly the failure this whole feature exists to prevent. Refuse instead: no label written means
+                // no push at all (the no-label-no-send rule), silence rather than a wrong name (the owner's ruling
+                // of 2026-09-20).
+                if (row.Count(p => string.Equals(p.Key, "label", StringComparison.OrdinalIgnoreCase)) > 1)
+                    return (RuleWrite.CantWrite, false);
+
+                row["label"] = label;
+            }
+            catch (ArgumentException)
+            {
+                // Touching any property on a JsonObject (an indexer access, or — as above — just enumerating it)
+                // makes it build its lookup dictionary first, which throws on the first duplicate key it finds
+                // anywhere in the row, even one unrelated to "label". Change never triggers this because it
+                // replaces the whole row rather than editing one field of it; ChangeLabel edits in place on
+                // purpose, so it doesn't touch fields it doesn't own (design §2: "only the label is managed").
+                // That means it can't fall back to Change's whole-row replacement either, so a duplicate-keyed row
+                // is a case it must refuse rather than let crash the caller, since this is meant to run unattended
+                // from a background read with nobody watching for an unhandled exception.
+                return (RuleWrite.CantWrite, false);
+            }
+
+            return (RuleWrite.Done, true);
+        }, keepBackup: true);
     }
 
     private static readonly JsonDocumentOptions ReadOptions = new()
@@ -316,8 +386,14 @@ public static class RulesFile
     /// Loads the list, lets <paramref name="edit"/> change it, and writes it back only when the edit says Done and that it changed
     /// the list (A8): the text goes to a temporary file beside the rules file, which then replaces it in one swap that keeps the
     /// file as it was as the backup.
+    /// <para>
+    /// <paramref name="keepBackup"/> is the one opt-out from that: true leaves the existing backup exactly as it was, for a
+    /// write Ur Score made on its own rather than one the owner asked for through Setup (see <see cref="ChangeLabel"/>).
+    /// Every existing caller defaults to false and keeps today's behaviour unchanged.
+    /// </para>
     /// </summary>
-    private static RuleWrite Write(string path, Func<JsonArray, RulesRead, (RuleWrite Outcome, bool Changed)> edit)
+    private static RuleWrite Write(
+        string path, Func<JsonArray, RulesRead, (RuleWrite Outcome, bool Changed)> edit, bool keepBackup = false)
     {
         var exists = File.Exists(path);
         JsonArray rules = [];
@@ -364,7 +440,18 @@ public static class RulesFile
             // that fails (the file held open, the backup held open, read-only) leaves the rules file AND the previous backup as
             // they were, and the last undo point survives. A file that doesn't exist yet has nothing to back up; the move
             // doesn't overwrite, so a file that appeared since it was read is refused rather than replaced unread.
-            if (exists) File.Replace(temp, path, path + BackupSuffix);
+            //
+            // keepBackup passes destinationBackupFileName: null, which tells File.Replace to skip the backup step entirely
+            // rather than write it and discard it: the backup is the whole file's, not per rule, so a rewrite Ur Score made on
+            // its own must not spend the owner's undo point, or two automatic label rewrites in a row would push a hand-typed
+            // rule out of the backup with the owner never having touched Setup (the owner's ruling of 2026-09-20).
+            //
+            // This changes the failure surface, not just the destination: ABackupSomeoneHoldsOpenFailsTheWriteAndChangesNothing
+            // pins that holding the backup file open makes an ordinary write fail with CantWrite, because File.Replace still
+            // has to open it to write the new backup. With destinationBackupFileName: null, File.Replace never touches that
+            // file at all, so a managed write is NOT subject to that failure — a held-open backup does not block it.
+            if (exists && keepBackup) File.Replace(temp, path, destinationBackupFileName: null);
+            else if (exists) File.Replace(temp, path, path + BackupSuffix);
             else File.Move(temp, path, overwrite: false);
             return RuleWrite.Done;
         }

@@ -576,20 +576,87 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         return new RecipeWatch(
             _engine, _host, Keys, PolicyFor(installed, source), installed.Recipe, source.Inputs, tracked,
-            _book, source, Accounts, installed.Text, _claims, _finals, _time, MyGroupNames);
+            _book, source, Accounts, installed.Text, _claims, _finals, _time, MyGroupNames, WriteLabel);
     }
+
+    /// <summary>
+    /// The <see cref="RecipeWatch"/> <c>writeLabel</c> seam (task 8): puts the rival clan's name on Ur Score's own
+    /// Level rule for the metric, through the one place that write can happen, and answers whether the number
+    /// behind it may go out by <see cref="LabelInPlace"/>.
+    /// <para>
+    /// <see cref="AlertKind.Level"/>, not <see cref="AlertKind.Rate"/>: a threat number is a level (how far
+    /// behind, how many hours), and Ur Score's own Level rule for the metric is the one <c>ChangeLabel</c> edits
+    /// (see <see cref="RulesRead.OursFor"/>). The plan draft named a nonexistent <c>AlertKind.Below</c> — the
+    /// enum is Rate, Level, Event, and direction is the separate <see cref="AlertRule.AlertWhenBelow"/> bool.
+    /// </para>
+    /// </summary>
+    private bool WriteLabel(FieldMetric metric, string label) => WriteLabel(RulesPath, metric, label);
+
+    /// <summary>
+    /// The composition above with the rules path passed in, so a test can reach it. The instance method is the
+    /// seam <see cref="CreateWatch"/> hands to <see cref="RecipeWatch"/>; this is the same single line with
+    /// nothing captured.
+    /// <para>
+    /// Split out by the final review of this branch, 2026-09-20: it was the one composition on the branch no
+    /// test could call. <see cref="LabelInPlace"/> is table-tested and <c>RecipeWatchBookTests</c> passes stub
+    /// lambdas, so the line binding <see cref="FieldMetric.MetricId"/> and <see cref="AlertKind.Level"/> to
+    /// <see cref="RulesFile.ChangeLabel"/> had no coverage at all. Bind <see cref="FieldMetric.Key"/> there
+    /// instead and nothing fails: <c>GuardId</c> only rejects blank, <c>OursFor</c> finds no rule under
+    /// "threat-gap", NotThere maps to true, and every threat number ships under whatever stale label is on disk,
+    /// for good, with the suite green.
+    /// </para>
+    /// </summary>
+    internal static bool WriteLabel(string rulesPath, FieldMetric metric, string label) =>
+        LabelInPlace(RulesFile.ChangeLabel(rulesPath, metric.MetricId, AlertKind.Level, label));
+
+    /// <summary>
+    /// Maps <see cref="RulesFile.ChangeLabel"/>'s outcome to whether <see cref="RecipeWatch"/> may report the
+    /// number that label names (controller ruling, task 8). A named method rather than an inline lambda, because
+    /// this mapping is the entire remaining shape of the no-label-no-send half of the ordering invariant (design
+    /// §1): nothing else on the branch can test that a real refusal stops a send until this exists.
+    /// </summary>
+    internal static bool LabelInPlace(RuleWrite write) => write switch
+    {
+        // The label says exactly what it should, whether this call just wrote it or ChangeLabel found it
+        // already said so and made no write (also reported as Done — see RulesFile.ChangeLabel). Either way the
+        // rule on disk names the right clan, so the number behind it may go out.
+        RuleWrite.Done => true,
+
+        // True, but NOT because "the send is refused by the policy anyway" (the plan's stated reason for this
+        // case — FALSE: ReportPolicy.EvaluateField consults only the tick, SentFieldMetrics, and never reads
+        // rules.json, so a ticked metric with no rule sends perfectly well). The real reason: no rule means no
+        // alert can ever fire for this metric, so there is no stale name a phone could receive under. Nothing to
+        // keep current, and nothing to guard against.
+        RuleWrite.NotThere => true,
+
+        // ChangeLabel never returns this today: Done already covers "the label already says this" with no write
+        // (RulesFile.cs), and AlreadyThere is returned only by TurnOn's Add. Mapped true anyway, defensively —
+        // an already-correct label IS a correct label, a success by the same test Done is. If ChangeLabel is
+        // ever "tidied" to return the semantically obvious AlreadyThere for that case instead, a mapping that
+        // omitted it would turn every cycle after the first into a silent refusal: threat alerts going quiet
+        // forever, with nothing here to catch it.
+        RuleWrite.AlreadyThere => true,
+
+        // CantWrite, CantOpen, NotJson, NotAList: whatever the reason, the name on disk is not the name we
+        // intend to send under. A threat number under a stale or unconfirmed name is a confident false statement
+        // on somebody's phone mid-battle, which the owner's ruling of 2026-09-20 says is worse than silence.
+        _ => false,
+    };
 
     /// <summary>
     /// The clans you set up, by name, asked for at each read rather than captured: a clans list uses them to say where
     /// you stand in the field and what the place above you holds (<see cref="FieldSummary"/>). Only your own sources'
     /// own inputs — a group list has none of its own.
+    /// <para>
+    /// Handed over IN THE ORDER <see cref="SourceRules.MyClanNames"/> returns, not folded into a set here: the watch
+    /// needs the first of yours for a threat label and <c>AlertsPage.Clan()</c> takes the first of this same call for
+    /// the same purpose, so the two can only be the same clan if both read the same ordered answer. This used to
+    /// hand over a <c>HashSet</c>, whose enumeration order is not contractual (final review of this branch,
+    /// 2026-09-20). The watch folds its own case-insensitive set for every membership question, exactly as this
+    /// line did.
+    /// </para>
     /// </summary>
-    private IReadOnlySet<string> MyGroupNames() =>
-        Sources
-            .Where(s => s.Enabled && s.Role != SourceRole.Watch && FindInstalled(s.Recipe)?.Recipe.IsGroupList == false)
-            .SelectMany(s => s.Inputs.Values)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<string> MyGroupNames() => SourceRules.MyClanNames(Sources, Installed);
 
     private int IntervalFor(Source source) =>
         FindInstalled(source.Recipe)?.Recipe.EffectiveEverySeconds ?? Recipe.MinimumEverySeconds;

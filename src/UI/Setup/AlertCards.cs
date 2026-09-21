@@ -6,8 +6,15 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-/// <summary>A stat that gets a card: one you send, or one you no longer send that Ur Score still has an alert for (A11).</summary>
-public sealed record AlertStat(string MetricId, string Label, bool Sent);
+/// <summary>
+/// A stat that gets a card: one you send, or one you no longer send that Ur Score still has an alert for (A11).
+/// </summary>
+/// <param name="ManagedLabel">
+/// This stat's label is <see cref="FieldMetric.ManagedLabel"/>: RoRoRo's own alert names a rival clan Ur Score
+/// keeps rewriting, not the label this card shows (Task 3, threat-alerts plan, 2026-09-20). Trailing and
+/// optional so no existing call site changes.
+/// </param>
+public sealed record AlertStat(string MetricId, string Label, bool Sent, bool ManagedLabel = false);
 
 /// <summary>One alert on a card, as a sentence. <see cref="Managed"/> marks the one Ur Score's Change and Remove act on (A5).</summary>
 public sealed record AlertLine(AlertRule Rule, string Sentence, string Mark, bool Managed);
@@ -109,6 +116,17 @@ public static partial class AlertCards
 
     /// <summary>The second sentence on a card, under the alert's own, when the rule asked for it.</summary>
     public const string AndTellsYou = "And RoRoRo tells you when it comes right again.";
+
+    /// <summary>
+    /// The note on a managed-label number's card (Task 3, threat-alerts plan). <see cref="Sentence"/> always
+    /// draws the METRIC's own label, "whatever the rule's own label says" (A4, see <see cref="Note"/>) — so a
+    /// managed number's card and the alert RoRoRo actually sends say two different things ON PURPOSE: the card
+    /// says "Hours until the threat passes you", RoRoRo says "H8ER catching K0i2" (<see cref="FieldMetrics.ThreatLabel"/>). There is
+    /// no editor to show this label in and nothing to disable — a human never types it — so the only place left
+    /// to warn a member their phone will name a clan this screen never showed them is this line.
+    /// </summary>
+    public const string ManagedLabelNote = "Ur Score writes this number's alert name itself, always naming the "
+        + "clan closest behind you. Your phone may show a clan name this screen never did.";
     public const string UseADot = "Use a dot for decimals, like 1.5.";
     public const string TwoDecimals = "Use at most two decimal places, like 1.25.";
     public const string AboveZero = "Use a number above 0.";
@@ -149,7 +167,7 @@ public static partial class AlertCards
                 .Where(i => i.Recipe.IsGroupList)
                 .SelectMany(i => FieldMetrics.Offered(i.State.FieldMetricKeys))
                 .GroupBy(m => m.MetricId, StringComparer.Ordinal)
-                .Select(g => new AlertStat(g.Key, ClanLabel(g.First().Label, clan), Sent: true)))
+                .Select(g => new AlertStat(g.Key, ClanLabel(g.First().Label, clan), Sent: true, ManagedLabel: g.First().ManagedLabel)))
             .ToList();
         var sentIds = sent.Select(s => s.MetricId).ToHashSet(StringComparer.Ordinal);
         var stale = rules.Rules
@@ -226,6 +244,8 @@ public static partial class AlertCards
         var skipped = rules.SkippedFor(stat.MetricId);
         if (skipped == 1) parts.Add($"1 rule for {stat.Label} is written in a way RoRoRo can't read, so it never alerts. Ur Score leaves it as it is.");
         if (skipped > 1) parts.Add($"{skipped} rules for {stat.Label} are written in a way RoRoRo can't read, so they never alert. Ur Score leaves them as they are.");
+
+        if (stat.ManagedLabel) parts.Add(ManagedLabelNote);
 
         return string.Join(" ", parts);
     }

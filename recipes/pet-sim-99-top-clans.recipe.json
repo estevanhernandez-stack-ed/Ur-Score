@@ -2,6 +2,7 @@
   "recipe": 1,
   "name": "Pet Sim 99 top clans",
   "credit": "Data from Big Games' public Pet Simulator 99 API.",
+  "groupsAreClans": true,
   "everySeconds": 300,
   "steps": [
     {

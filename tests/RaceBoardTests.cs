@@ -23,6 +23,9 @@ public class RaceBoardTests
     private static readonly Source Other = SourceOf("s-00000002", Clan, "CCGP", SourceRole.Mine);
     private static Source Field => new("s-00000009", TopClans.Slug, new Dictionary<string, string>(), SourceRole.Watch);
 
+    /// <summary>A rival you WATCH: clan-level only, never one of yours, and placed above you on the board.</summary>
+    private static readonly Source Rival = SourceOf("s-00000003", Clan, "C3", SourceRole.Watch);
+
     private static BookLine FieldRead(Source field, DateTimeOffset t, IReadOnlyDictionary<string, double> groups) => new(
         BookLine.Version, BookLine.KindRead, t, 0, BookLine.TriggerTimer, new BookRecipeRef(field.Recipe, "0123456789abcdef"),
         field.Id, "watch", field.Inputs, new BookPeriod(Period),
@@ -114,6 +117,45 @@ public class RaceBoardTests
         Assert.Equal(["C2", "C3", "C4"], race.Series.Skip(1).Select(s => s.Label).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// A watched rival is not one of yours, and the band is drawn around YOU. Watching a clan placed above you moved
+    /// the window onto the rival: its neighbours were drawn and yours were not, on the one panel whose whole job is
+    /// to show whether you are about to move a place. The board's "your clans" set was the one of the three left
+    /// role-blind when 0.5.2 fixed the other two (V3-S.30, V3-S.31).
+    /// </summary>
+    [Fact]
+    public void AWatchedRivalAboveYouDoesNotAnchorTheBand()
+    {
+        var race = Race(10, Mine, Rival);
+
+        // Yours is 10th, so the band is C7-C9 above and C11-C13 below. The rival sits 3rd and anchors nothing.
+        Assert.Equal(["C11", "C12", "C13", "C7", "C8", "C9"], race.Series.Skip(2).Select(s => s.Label).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A clans list that does not say its groups are clans keeps no names (V3-S.25), so there is no band and no
+    /// standings — and the panel says why rather than coming up empty. An empty race chart mid-battle is the worst
+    /// possible way to discover that a recipe is missing one line of JSON. Owner's direction, 2026-09-20: say so on
+    /// the import screen AND where the names would have been.
+    /// </summary>
+    [Fact]
+    public void AClansListThatDoesNotSayItsGroupsAreClansSaysWhyTheBoardIsEmpty()
+    {
+        var field = Field;
+        var undeclared = TopClans with { GroupsAreClans = false };
+        Source[] all = [Mine, field];
+        var live = Live(all, [Installed(Clan, "value"), Installed(undeclared)],
+            all.ToDictionary(s => s.Id, s => Snapshot(s.Id, [], period: LivePeriod), StringComparer.Ordinal));
+        var reader = Reader(
+            Read(Mine, Now.AddHours(-1), Period, new Dictionary<string, double> { ["clan-points"] = 400 }, "value"),
+            Read(Mine, Now, Period, new Dictionary<string, double> { ["clan-points"] = 900 }, "value"));
+
+        var race = PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
+
+        Assert.Contains("does not say its groups are clans", race.Head.Note, StringComparison.Ordinal);
+        Assert.False(race.HasStandings);
+    }
+
     /// <summary>Two of your clans keep their own colours, and neither is drawn again as a rival.</summary>
     [Fact]
     public void YourOwnClansAreNeverDrawnAsRivals()
@@ -123,6 +165,27 @@ public class RaceBoardTests
         Assert.Equal("★ K0i2", race.Series[0].Label);
         Assert.Equal("CCGP", race.Series[1].Label);
         Assert.DoesNotContain(race.Series.Skip(2), s => s.Label is "K0i2" or "CCGP");
+    }
+
+    /// <summary>
+    /// The standings bold YOUR row and measure every other row against it. A watched rival placed above you took both
+    /// jobs: it was bolded as yours, its own gap was blanked — the one number you added it to watch — and every other
+    /// gap on the card was measured from the rival's points instead of yours. (V3-S.30, V3-S.31.)
+    /// </summary>
+    [Fact]
+    public void AWatchedRivalIsNotYoursInTheStandings()
+    {
+        var race = Race(10, Mine, Rival);
+
+        var yours = race.Standings.Single(s => s.Yours);
+        Assert.Equal("K0i2", yours.Name);
+
+        var rival = race.Standings.Single(s => s.Name == "C3");
+        Assert.False(rival.Yours);
+        Assert.NotEqual("", rival.Gap);
+
+        // C9 is one place above YOURS: 1,200 more at this read's scale, whoever else is being watched.
+        Assert.Equal("+1.2K", race.Standings[8].Gap);
     }
 
     /// <summary>

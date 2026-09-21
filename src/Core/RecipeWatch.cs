@@ -93,6 +93,31 @@ public sealed record RankInGroup(int Rank, int? Of);
 /// <c>ScoreWatch</c> earned: one cycle at a time, raw values in UTC, no backlog when RoRoRo returns, and a
 /// named capability when consent is declined.
 /// </summary>
+/// <param name="writeLabel">
+/// Puts a rival clan's name on the rule a managed-label number fires (<see cref="FieldMetric.ManagedLabel"/>),
+/// and answers whether the label is IN PLACE: written just now, already saying exactly this, or (Ur Score having
+/// no rule on the metric at all) not something any alert could fire under. Null is a build with no writer wired,
+/// which is the same answer as a refusal — see <see cref="SendFieldAsync"/> for why a false answer stops the
+/// number going out.
+/// <para>
+/// The caller owns the rules path and so owns the mapping from <see cref="RuleWrite"/> to that bool
+/// (<c>AppServices.LabelInPlace</c>, task 8's controller ruling). <see cref="RuleWrite.Done"/>,
+/// <see cref="RuleWrite.NotThere"/> and <see cref="RuleWrite.AlreadyThere"/> are true; every other answer —
+/// <see cref="RuleWrite.CantWrite"/> above all — is false, because it leaves a rule whose label names somebody
+/// else. The full reasoning for each case, including why NotThere is true for a different reason than this
+/// plan first gave, lives on that one mapping rather than repeated at every caller.
+/// </para>
+/// </param>
+/// <param name="myGroups">
+/// The clans you set up, by name, IN ORDER — the order <see cref="Labs626.UrScore.Core.SourceRules.MyClanNames"/>
+/// returns them in, which is the order the Setup pages read too. The order is part of the contract, not an
+/// accident: the label names the first of yours, and so does <c>AlertsPage.Clan()</c>, so the two agree only if
+/// both take the first of the SAME ordered answer. Until the final review of this branch, 2026-09-20, this seam
+/// handed over an <c>IReadOnlySet</c> and <see cref="SendFieldAsync"/> took its <c>FirstOrDefault</c>: a
+/// <c>HashSet</c>'s enumeration order is not contractual, so the two agreed by coincidence of runtime behaviour
+/// and the stated reason for the guess was false. Everything that asks "is this clan one of mine?" folds this
+/// list into a case-insensitive set of its own, as it always did.
+/// </param>
 public sealed class RecipeWatch(
     IRecipeEngine engine,
     IHostClient host,
@@ -108,7 +133,8 @@ public sealed class RecipeWatch(
     AccountClaims? claims = null,
     FinalsIndex? finals = null,
     TimeProvider? time = null,
-    Func<IReadOnlySet<string>>? myGroups = null)
+    Func<IReadOnlyList<string>>? myGroups = null,
+    Func<FieldMetric, string, bool>? writeLabel = null)
 {
     internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
 
@@ -169,6 +195,29 @@ public sealed class RecipeWatch(
     private readonly List<SeriesPoint> _fieldMine = [];
 
     private readonly List<SeriesPoint> _fieldAbove = [];
+
+    /// <summary>
+    /// Each tracked chaser's recent points, by clan name. Separate from <see cref="_fieldAbove"/> because that one
+    /// tracks a POSITION and clears itself on a fall, which is what a change of occupant looks like from a
+    /// position. A threat is tracked by name, where that rule is both wrong and unnecessary: the identity is the
+    /// key rather than something inferred, and a fall is a correction or a bad read, not a new clan (design §4).
+    /// A fall still costs a window of silence rather than a wrong pace, because <see cref="Pace.Over"/> refuses a
+    /// window that lost ground — which is the right answer for a bad read, and is the whole of what that rule was
+    /// buying here anyway.
+    /// <para>
+    /// Names that leave the band are dropped, so a clan that drops out and comes back does not pair up a reading
+    /// from before it left with one from after as though nothing had happened. Kept to
+    /// <see cref="Pace.LongestCurrent"/> like the two above, and gone at the end of the process like them too.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<string, List<SeriesPoint>> _fieldBehind = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// How many clans below us are watched for a threat. The one directly behind is not the answer: a clan three
+    /// places back going much faster passes us sooner, and naming the nearest by PLACE would be a confident false
+    /// statement on a phone (design §4). Five is the owner's ruling for how wide that band is.
+    /// </summary>
+    private const int ThreatBand = 5;
 
     public ReportPolicy Policy => policy;
 
@@ -533,21 +582,66 @@ public sealed class RecipeWatch(
         if (wanted.Count == 0 || !hostUp) return 0;
 
         var valueKey = readRecipe.LastStep.Values.FirstOrDefault()?.Id ?? "";
-        var summary = FieldSummary.Of(reading.Groups, valueKey, myGroups?.Invoke());
+
+        // Asked once and shared, so the field's numbers, the band behind and the name on the label all come from
+        // one answer rather than three reads of a list that can change between them. The ordered list is what is
+        // asked for; the set below is folded from it, and the label's clan is taken from the list itself.
+        var mineInOrder = myGroups?.Invoke();
+        var ours = MineAsSet(mineInOrder);
+        var summary = FieldSummary.Of(reading.Groups, valueKey, ours);
         if (summary.Count == 0) return 0;
 
         var now = (time ?? TimeProvider.System).GetUtcNow();
         Remember(_fieldMine, summary, FieldSummary.Mine, now);
         Remember(_fieldAbove, summary, FieldSummary.Above, now);
 
+        var behind = FieldSummary.Behind(reading.Groups, valueKey, ours, ThreatBand);
+        RememberBehind(behind, now);
+
         List<SeriesPoint> mine, above;
+        Dictionary<string, List<SeriesPoint>> chasers;
         lock (_gate)
         {
             mine = [.. _fieldMine];
             above = [.. _fieldAbove];
+            chasers = _fieldBehind.ToDictionary(kv => kv.Key, kv => new List<SeriesPoint>(kv.Value), StringComparer.OrdinalIgnoreCase);
         }
 
-        var values = FieldMetrics.Of(summary, mine, above, now, reading.Period?.Ends);
+        var ends = reading.Period?.Ends;
+        var values = FieldMetrics.Of(summary, mine, above, now, ends);
+
+        // The soonest by TIME, not the nearest by place, and null when no chaser has a readable pace yet. Both
+        // threat numbers are halves of this ONE answer, so neither can ever name a different clan than the other:
+        // there is one name in play per read. Whether both GO is a separate question the loop below answers one
+        // metric at a time — each writes its own rule's label and a refusal stops only its own number — so one
+        // may go out while the other is held back. That is safe (each number that goes is under a label written
+        // for it this cycle), which is why it is left alone; the earlier note here claimed a joint guarantee the
+        // loop does not provide (final review of this branch, 2026-09-20).
+        var threat = FieldMetrics.SoonestThreat(
+            behind, mine, name => chasers.TryGetValue(name, out var series) ? series : [], now, ends);
+        if (threat is not null)
+        {
+            values =
+            [
+                .. values,
+                new FieldMetricValue(FieldMetrics.Find(FieldMetrics.ThreatGap)!, threat.Gap),
+                new FieldMetricValue(FieldMetrics.Find(FieldMetrics.ThreatHours)!, threat.Hours),
+            ];
+        }
+
+        // Your own clan's name for the label: the FIRST of the ordered list SourceRules.MyClanNames returns, which
+        // is the same answer AlertsPage.Clan() takes for the same purpose (controller ruling, task 8). That
+        // sentence is only true because this seam now hands over the ordered list — it used to hand over a
+        // HashSet, whose enumeration order is not contractual, so the two agreed by coincidence and the ruling
+        // rested on a false reason (final review of this branch, 2026-09-20).
+        //
+        // It is a guess, but not because the answer is unknowable: FieldSummary.Behind picks the best placed of
+        // your clans and measures every Gap from it, so the read HAS decided which one these numbers are about —
+        // it just doesn't return the name, and pulling it out is a change to a shipped method the six older clan
+        // numbers also go through. So with several clans of yours the label may name a different one of yours
+        // than the numbers are about. The THREAT's name, which is the whole point of the label, is unaffected.
+        // No clan at all is fine: ThreatLabel then says "catching up" and names nobody.
+        var ourClanName = mineInOrder is { Count: > 0 } ? mineInOrder[0] : null;
         var sent = 0;
 
         foreach (var metric in wanted)
@@ -563,10 +657,118 @@ public sealed class RecipeWatch(
                 current = policy;
             }
 
+            // THE ORDERING RULE (design §1, read out of the host's source rather than assumed). RoRoRo captures
+            // the rule — label included — at the observation, and words the push from that captured object up to
+            // five seconds later. So the name goes on the rule BEFORE the number goes out, with nothing between
+            // the two: report first and the alert ships under the PREVIOUS chaser's name.
+            //
+            // And a write that refuses is a refusal to SEND. RulesFile.ChangeLabel answers CantWrite rather than
+            // guess on a row it cannot edit safely, precisely so a wrong name never ships; honouring that here is
+            // the other half of the same invariant. A threat number under a stale name is a confident false
+            // statement on a phone mid-battle, which is worse than silence (owner's ruling, 2026-09-20).
+            //
+            // "Nothing between the two" has to mean nothing from ANOTHER WATCH either, which is what
+            // <see cref="ManagedLabelGate"/> below is for.
+            if (metric.ManagedLabel)
+            {
+                if (threat is null || writeLabel is null) continue;
+
+                var label = FieldMetrics.ThreatLabel(threat.Name, ourClanName);
+                if (await SendUnderManagedLabelAsync(current, metric, value, label, now, cancellationToken).ConfigureAwait(false)) sent++;
+                continue;
+            }
+
             if (await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false)) sent++;
         }
 
         return sent;
+    }
+
+    /// <summary>
+    /// Held across a managed label's write and the send that rides on it, so two watches in ONE PROCESS cannot
+    /// interleave there.
+    /// <para>
+    /// WHY IT EXISTS. <c>AppServices.CreateWatch</c> builds one watch per source, and the two threat metric ids are
+    /// FIXED rather than per source (<see cref="FieldMetrics"/>: one id, so forty members can set the same alert).
+    /// With two enabled clans-list recipes both sending field metrics, two watches rewrite the SAME rule row on
+    /// their own timers, and watch B's <c>ChangeLabel</c> can land inside watch A's write-then-report pair. The
+    /// host then words A's number under B's rival's name — precisely the failure this feature exists to prevent.
+    /// Found by the final review of this branch, 2026-09-20.
+    /// </para>
+    /// <para>
+    /// WHAT IT PROTECTS. This process's label writes and the sends that follow them, for metrics that declare
+    /// <see cref="FieldMetric.ManagedLabel"/> and nothing else: the six older clan numbers and every account stat
+    /// go as they always did, and no watch waits on another to read, record or send those. Sends are on a
+    /// multi-minute poll, so serialising this pair costs nothing anybody can see.
+    /// </para>
+    /// <para>
+    /// WHAT IT CANNOT PROTECT. It does not and cannot control when RoRoRo READS the file: the host captures the
+    /// rule at the observation and words the push from that capture up to five seconds later, and no lock here
+    /// reaches that. Nor is it a lock on <c>metric-rules.json</c> — a second copy of Ur Score, another plugin, or
+    /// somebody editing the file by hand is outside it entirely (which is why <see cref="RulesFile"/> writes
+    /// through a temporary file and a single swap). It closes the window this program opens between its own
+    /// write and its own send, which is the only window this program owns.
+    /// </para>
+    /// </summary>
+    private static readonly SemaphoreSlim ManagedLabelGate = new(1, 1);
+
+    /// <summary>
+    /// The write-then-report pair for one managed-label number, run to itself: the label is written and the
+    /// number reported with no other watch's write in between (<see cref="ManagedLabelGate"/>). Returns whether
+    /// the number went — false for a label that could not be written, which is a refusal to send, not an error.
+    /// </summary>
+    private async Task<bool> SendUnderManagedLabelAsync(
+        ReportPolicy current, FieldMetric metric, FieldMetricValue value, string label, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await ManagedLabelGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return writeLabel is not null
+                && writeLabel(metric, label)
+                && await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ManagedLabelGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Your clans folded into the set every "is this one of mine?" question is asked through, matched however the
+    /// name was typed — Setup takes what you type and a clans list has its own casing. The seam hands over an
+    /// ordered list because the label needs the first of it (see <see cref="SendFieldAsync"/>); everything that
+    /// only asks about membership wants this, and gets exactly what the composition root used to build itself.
+    /// </summary>
+    private static IReadOnlySet<string>? MineAsSet(IReadOnlyList<string>? mine) =>
+        mine is null ? null : new HashSet<string>(mine, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// This read's band of chasers, each kept under its own name in <see cref="_fieldBehind"/>, and every name no
+    /// longer in the band dropped.
+    /// <para>
+    /// Deliberately NOT <see cref="Remember"/>: that one clears the series whenever the value falls, which is
+    /// right for a position whose points falling means somebody else holds it now, and wrong for a name, where a
+    /// fall is a correction or a bad read (design §4). A band with nothing in it therefore empties the store
+    /// rather than leaving names behind, which is the same answer <see cref="Remember"/> gives when this read
+    /// carries no number for its key: whatever is there is about something else now.
+    /// </para>
+    /// </summary>
+    private void RememberBehind(IReadOnlyList<FieldSummary.BehindClan> behind, DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            var inBand = new HashSet<string>(behind.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var name in _fieldBehind.Keys.Where(n => !inBand.Contains(n)).ToList()) _fieldBehind.Remove(name);
+
+            foreach (var clan in behind)
+            {
+                if (!_fieldBehind.TryGetValue(clan.Name, out var series)) _fieldBehind[clan.Name] = series = [];
+
+                series.Add(new SeriesPoint(now, clan.Value, null, false, 0));
+                series.RemoveAll(p => now - p.T > Pace.LongestCurrent);
+            }
+        }
     }
 
     /// <summary>One reading of a field number, dropping anything older than a current pace may reach back.</summary>
@@ -596,7 +798,8 @@ public sealed class RecipeWatch(
         if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
 
         var line = LineBuilder.Reading(
-            ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>(), myGroups?.Invoke());
+            ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>(),
+            MineAsSet(myGroups?.Invoke()));
         if (line is null) return (false, NotRecordingNoField);
 
         book.Append(line, readText);

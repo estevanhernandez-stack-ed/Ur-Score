@@ -45,7 +45,7 @@ public static class LineBuilder
                     Inputs(context.Source), Period(reading.Period), field, [],
                     new Dictionary<string, BookAccount>(StringComparer.Ordinal),
                     null, reading.ListAsOf?.Time, reading.ListAsOf?.Stale,
-                    GroupRows.Keep(reading.Groups, valueKey, myGroups));
+                    GroupRows.Keep(reading.Groups, valueKey, myGroups, recipe.GroupsAreClans));
         }
 
         var stats = tracked.Order(StringComparer.Ordinal).ToList();

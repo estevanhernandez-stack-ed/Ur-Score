@@ -235,4 +235,177 @@ public class FieldMetricsTests
         Assert.Contains("clan.standing.place", described, StringComparison.Ordinal);
         Assert.Contains("with no account attached", described, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A label Ur Score computes and a label a human typed are different kinds of thing, and the catalogue says
+    /// which — asserted as a SET over the whole catalogue, in both directions at once.
+    /// <para>
+    /// This replaces two tests that named metrics one at a time: six asserted unmanaged, two asserted managed.
+    /// Between them they left the one thing worth pinning unpinned — that NOTHING ELSE is managed — so a metric
+    /// added later with <c>ManagedLabel: true</c>, by a copied line or a misread default, passed both. Ur Score
+    /// would then rewrite the owner's own wording for that number on every read, and refuse to send it at all
+    /// whenever the rules file could not be written (design §1's no-label-no-send rule), with no test saying
+    /// otherwise. That earlier shape was a knowing trade — it read as future-proof against the threat metrics
+    /// landing — and this one needs no such trade: a number added to or taken out of the managed set shows up
+    /// here either way. (Final review of this branch, 2026-09-20.)
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ExactlyTheTwoThreatNumbersHaveALabelUrScoreMaintains()
+    {
+        Assert.Equal(
+            new HashSet<string>([FieldMetrics.ThreatGap, FieldMetrics.ThreatHours], StringComparer.Ordinal),
+            FieldMetrics.All.Where(m => m.ManagedLabel).Select(m => m.Key).ToHashSet(StringComparer.Ordinal));
+
+        // The id a rule is set on, kept here because it is fixed on every machine: a clan leader says "set an
+        // alert on that number" and forty phones set the same one (FieldMetrics' own note on fixed ids).
+        Assert.Equal("clan.standing.threat-hours", FieldMetrics.Find(FieldMetrics.ThreatHours)!.MetricId);
+        Assert.Equal("clan.standing.threat-gap", FieldMetrics.Find(FieldMetrics.ThreatGap)!.MetricId);
+    }
+
+    /// <summary>
+    /// The label names the threat and your clan, mirroring 0.5.3's "K0i2 clan points": the id stays shared so a
+    /// clan leader can say "set an alert on that number", and only the wording is local to each phone.
+    /// </summary>
+    [Fact]
+    public void TheLabelNamesTheThreatAndYourClan()
+    {
+        Assert.Equal("H8ER catching K0i2", FieldMetrics.ThreatLabel("H8ER", "K0i2"));
+        Assert.Equal("H8ER catching up", FieldMetrics.ThreatLabel("H8ER", null));
+    }
+
+    /// <summary>Two readings an hour apart ending at <paramref name="now"/> — clears Pace.Shortest (15 minutes)
+    /// and fits inside Pace.LongestCurrent (2 hours), so a pace is readable from just two points.</summary>
+    private static IReadOnlyList<SeriesPoint> Series(DateTimeOffset now, double first, double last) =>
+    [
+        new(now.AddHours(-1), first, null, false, 0),
+        new(now, last, null, false, 0),
+    ];
+
+    /// <summary>
+    /// The threat named is the soonest by TIME, not the nearest by place. H8ER is closer but barely moving; R0W is
+    /// further back and much faster, and R0W is the one that takes our place first. Naming H8ER here would be a
+    /// confident false statement on a phone mid-battle, which is worse than sending nothing at all.
+    /// <para>
+    /// R0W's Value (500) and Gap (550) are deliberately different numbers: an implementation that plumbed
+    /// <c>clan.Value</c> into <see cref="FieldMetrics.ThreatValue"/> instead of <c>clan.Gap</c> would pass this
+    /// test if the two happened to be equal, which review flagged against an earlier version of this fixture.
+    /// </para>
+    /// <para>
+    /// R0W is also deliberately not the last clan iterated — ZZZ follows it, slower and still a valid pace — so
+    /// a mutation that drops the "soonest so far" comparison and simply keeps overwriting with each valid
+    /// candidate returns ZZZ instead of R0W, and this test catches it instead of passing by iteration-order luck.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheThreatNamedIsTheSoonestByTimeNotTheNearestByPlace()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        IReadOnlyList<FieldSummary.BehindClan> behind =
+            [new("H8ER", 900, 100), new("R0W", 500, 550), new("ZZZ", 700, 300)];
+
+        var threat = FieldMetrics.SoonestThreat(
+            behind,
+            Series(now, 1_000, 1_000), // ours: flat
+            name => name switch
+            {
+                "H8ER" => Series(now, 890, 900), // 10/hr: a 100-point gap closes in 10 hours
+                "R0W" => Series(now, 300, 500),  // 200/hr: a 550-point gap closes in 2.75 hours — the soonest
+                _ => Series(now, 680, 700),       // 20/hr: a 300-point gap closes in 15 hours — slower, and last
+            },
+            now,
+            ends: null);
+
+        Assert.NotNull(threat);
+        Assert.Equal("R0W", threat!.Name);
+        Assert.Equal(550, threat.Gap);
+        Assert.InRange(threat.Hours, 2.7, 2.8);
+    }
+
+    /// <summary>
+    /// With no pace for a chaser there is no crossing to work out, and a guess is not an answer. This matches how
+    /// the place-above pace already refuses rather than inventing a number.
+    /// </summary>
+    [Fact]
+    public void AChaserWithNoPaceYetIsNoThreatRatherThanAGuess()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Null(FieldMetrics.SoonestThreat(
+            [new("H8ER", 500, 500)], Series(now, 1_000, 1_000), _ => [], now, ends: null));
+    }
+
+    /// <summary>
+    /// A chaser who would pass us in 2.5 hours is not a threat when the battle ends in two: the pass can never
+    /// happen before the clock runs out. Without this cap, SoonestThreat would trip a "tell me within N hours"
+    /// rule on a crossing that is fiction — mirroring why Pace.Chase nulls catchIn past the time left
+    /// (src/Board/Pace.cs) and why FieldMetrics.Needed refuses to answer at all without a battle end.
+    /// </summary>
+    [Fact]
+    public void AChaserThatWouldPassUsAfterTheBattleEndsIsNotNamed()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var ends = now.AddHours(2);
+
+        var threat = FieldMetrics.SoonestThreat(
+            [new("R0W", 500, 500)],
+            Series(now, 1_000, 1_000),  // ours: flat
+            _ => Series(now, 300, 500), // 200/hr: crosses in 2.5 hours, comfortably past the 2-hour end
+            now,
+            ends);
+
+        Assert.Null(threat);
+    }
+
+    /// <summary>
+    /// The `ends` cap excludes a LATE crossing; it must not disqualify every read that merely carries a battle
+    /// end. Task 7 passes a real, non-null `ends` on every live battle, so a bug that read "ends is not null" as
+    /// "no threat" — e.g. <c>if (ends is not null) continue;</c> in place of the real comparison — would pass
+    /// <see cref="AChaserThatWouldPassUsAfterTheBattleEndsIsNotNamed"/> (which expects null either way) and
+    /// silently disable every threat alert in production, forever. This is the test that would have caught it.
+    /// </summary>
+    [Fact]
+    public void AChaserThatWouldPassUsBeforeTheBattleEndsIsNamed()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var ends = now.AddHours(10);
+
+        var threat = FieldMetrics.SoonestThreat(
+            [new("R0W", 500, 550)],
+            Series(now, 1_000, 1_000),  // ours: flat
+            _ => Series(now, 300, 500), // 200/hr: crosses in 2.75 hours, comfortably inside the 10-hour end
+            now,
+            ends);
+
+        Assert.NotNull(threat);
+        Assert.Equal("R0W", threat!.Name);
+    }
+
+    /// <summary>
+    /// A near-zero but positive closing rate must not crash the `ends` cap. `hours = clan.Gap / closing` can land
+    /// in the billions when two clans' paces are almost, but not quite, identical — ordinary floating-point noise
+    /// between two large gain/span divisions, not a contrived input. The earlier implementation compared
+    /// <c>now.AddHours(hours)</c> against `ends`, and <see cref="DateTimeOffset.AddHours"/> throws
+    /// <see cref="ArgumentOutOfRangeException"/> once the result falls outside its representable range — turning
+    /// "no threat" into an unhandled exception inside the very cap this task added. The fix never builds the
+    /// instant: it compares `hours` against <c>(end - now).TotalHours</c>, which is double arithmetic all the way
+    /// and cannot throw. These numbers (a 1e-10/hr closing rate against a 500-point gap) push the naive crossing
+    /// to roughly 5e12 hours out, far past what any DateTimeOffset can represent, to prove this is not a
+    /// theoretical concern.
+    /// </summary>
+    [Fact]
+    public void ANearZeroClosingRateDoesNotThrowUnderTheEndsCap()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var ends = now.AddHours(10);
+
+        var threat = FieldMetrics.SoonestThreat(
+            [new("R0W", 500, 500)],
+            Series(now, 0, 0.0000000001),   // ours: 1e-10/hr
+            _ => Series(now, 0, 0.0000000002), // theirs: 2e-10/hr — closing is ~1e-10/hr, gap/closing ~5e12 hours
+            now,
+            ends);
+
+        Assert.Null(threat);
+    }
 }

@@ -108,7 +108,7 @@ public class FieldMetricsModelTests
             SourceFor(clan, "DarkLegion", "s-00000002") with { Role = SourceRole.Watch },
         };
 
-        Assert.Equal(["K0i2"], FieldMetricsModel.MyClanNames(sources, [clan, clans]));
+        Assert.Equal(["K0i2"], SourceRules.MyClanNames(sources, [clan, clans]));
         Assert.DoesNotContain("DarkLegion", FieldMetricsModel.Line(clans, sources, [clan, clans]), StringComparison.Ordinal);
     }
 
@@ -124,7 +124,7 @@ public class FieldMetricsModelTests
             SourceFor(clan, "Dormant", "s-00000002") with { Enabled = false },
         };
 
-        Assert.Equal(["K0i2"], FieldMetricsModel.MyClanNames(sources, [clan, clans]));
+        Assert.Equal(["K0i2"], SourceRules.MyClanNames(sources, [clan, clans]));
     }
 
     /// <summary>A clans list's own source carries no clan of yours, so it is never mistaken for one.</summary>
@@ -135,7 +135,7 @@ public class FieldMetricsModelTests
         var clan = Clan();
         var sources = new[] { SourceFor(clans, "not-mine", "s-00000009"), SourceFor(clan, "K0i2", "s-00000001") };
 
-        Assert.Equal(["K0i2"], FieldMetricsModel.MyClanNames(sources, [clan, clans]));
+        Assert.Equal(["K0i2"], SourceRules.MyClanNames(sources, [clan, clans]));
     }
 
     /// <summary>Two clans read "A and B": a comma-run reads as one long name ("about the best placed of K0i2, CCGP").</summary>

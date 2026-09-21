@@ -80,8 +80,23 @@ One JSON file, readable and diffable. Extension `.recipe.json`.
 | `keys` | no | Keys the source needs. §3.4. |
 | `steps` | yes | One or more requests, in order. §3.2. |
 | `headline` | no | Up to two `{ "label", "path" }` values shown at the top. Display only, never reported. |
+| `groupsAreClans` | no | For a list-form last step only: states that the rows are CLANS, not people. Defaults to `false`, and until it is `true` a read keeps **no group names at all**. See §3.2. |
 
 ### 3.2 Steps
+
+A list-form last step (`groupName`) reads groups rather than players, so no account is ever matched, sent or
+recorded from it. What the shape does NOT say is what the rows actually are: `groupName` points at whatever the
+recipe's author chose, so a list of PLAYERS parses identically to a list of clans.
+
+Names are therefore kept only when the recipe says `"groupsAreClans": true` at the top level. Without it the
+read still writes its field summary — the leader, the top ten, the average, the bottom ten, and where yours
+stands — so every band stays true, but not one name goes to disk. The import screen says which of the two is
+happening, and a race chart with no board says why.
+
+The claim cannot be inferred and is not set by default, because the cost of guessing wrong is strangers'
+usernames written to a file nobody asked to keep (V3-S.25).
+
+
 
 Every step has a `url`. Earlier steps can `take` values; the last step does the reading.
 

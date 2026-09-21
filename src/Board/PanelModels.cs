@@ -411,6 +411,14 @@ public static class PanelModels
             }
         }
 
+        // An empty board has two very different causes, and only one of them is worth a sentence: nothing read
+        // yet is ordinary, a recipe that never keeps names is a thing you have to be told (V3-S.25).
+        if (FieldOf(live) is { } fieldSource
+            && live.FindRecipe(fieldSource.Recipe)?.Recipe is { IsGroupList: true, GroupsAreClans: false } list)
+        {
+            notes.Add(PanelText.GroupNamesNotKept(list));
+        }
+
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
         var span = from is null
             ? $"since the {RecipeWords.Period(recipe)} started"
@@ -426,7 +434,7 @@ public static class PanelModels
 
         return new RaceModel(head, series, legend, $"{title}: {string.Join(", ", legend.Select(l => l.Text))}", board.Count == 0)
         {
-            Standings = Standings(live, reader, sources),
+            Standings = Standings(live, reader),
         };
     }
 
@@ -486,11 +494,12 @@ public static class PanelModels
         var board = reader.GroupsLatest(field.Id, period);
         if (board.Count == 0) return lines;
 
-        var mine = MineNames(drawn);
+        var alreadyDrawn = DrawnNames(drawn);
+        var yours = SourceRules.MyClanNames(live.Sources, live.Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var at = -1;
         for (var i = 0; i < board.Count; i++)
         {
-            if (!mine.Contains(board[i].Name)) continue;
+            if (!yours.Contains(board[i].Name)) continue;
             at = i;
             break;
         }
@@ -503,7 +512,7 @@ public static class PanelModels
         for (var i = from; i < to; i++)
         {
             var (name, points) = board[i];
-            if (mine.Contains(name)) continue;
+            if (alreadyDrawn.Contains(name)) continue;
 
             var series = reader.GroupSeries(field.Id, name, period).Select(p => new ChartPoint(p.T, p.Value)).ToList();
             if (series.Count < 2) continue;
@@ -519,14 +528,14 @@ public static class PanelModels
     /// The board as a list: place, clan, points, and how far each is from the best placed of yours. Names live here
     /// rather than on the chart, where seven lines is already as much as can be told apart.
     /// </summary>
-    private static IReadOnlyList<RaceStanding> Standings(LiveBoard live, ScoreBookReader reader, IReadOnlyList<Source> drawn)
+    private static IReadOnlyList<RaceStanding> Standings(LiveBoard live, ScoreBookReader reader)
     {
         if (FieldOf(live) is not { } field) return [];
 
         var board = reader.GroupsLatest(field.Id, live.SnapshotOf(field.Id)?.Period?.Value);
         if (board.Count == 0) return [];
 
-        var mine = MineNames(drawn);
+        var mine = SourceRules.MyClanNames(live.Sources, live.Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var yours = board.FirstOrDefault(g => mine.Contains(g.Name)).Value;
 
         return
@@ -544,8 +553,12 @@ public static class PanelModels
     private static Source? FieldOf(LiveBoard live) =>
         live.Sources.FirstOrDefault(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: true });
 
-    /// <summary>The clan names already drawn as yours, so the board never draws one of them twice.</summary>
-    private static HashSet<string> MineNames(IReadOnlyList<Source> drawn) =>
+    /// <summary>
+    /// The clan names this panel already draws, yours and watched alike, so the board never draws one of them twice.
+    /// This is not the same question as "which clans are mine" — it was one name for both until V3-S.31, which is
+    /// how a watched rival came to anchor the band and bold itself in the standings.
+    /// </summary>
+    private static HashSet<string> DrawnNames(IReadOnlyList<Source> drawn) =>
         drawn
             .SelectMany(s => s.Inputs.Values)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -947,16 +960,23 @@ public static class PanelModels
         }
 
         var ordered = OrderGroups(groups, key);
-        var yours = live.Sources.Where(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: false }).ToList();
-        var mainNames = yours.Where(s => s.Role == SourceRole.Main).Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var yourNames = yours.Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Why a row is on this list and whether the row is YOURS are two questions, and one name answered both
+        // until V3-S.33. A clan you watch earns its place past the cut, because seeing it is the point of watching
+        // it, and is not tinted, because the tint says "this is mine". Ruled by the owner, 2026-09-20.
+        var followed = live.Sources.Where(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: false }).ToList();
+        var mainNames = followed.Where(s => s.Role == SourceRole.Main).Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var shownNames = followed.Select(live.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // SourceName is the recipe's MAIN input; MyClanNames takes every input a source carries, so every name this
+        // list can show for one of yours is already in it. The derivations differ, the answer cannot disagree.
+        var yourNames = SourceRules.MyClanNames(live.Sources, live.Installed).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var rows = new List<(double Sort, TopRow Row)>();
         for (var i = 0; i < ordered.Count; i++)
         {
             var group = ordered[i];
             var isYours = yourNames.Contains(group.Row.Name);
-            if (i >= TopCount && !isYours) continue;
+            if (i >= TopCount && !shownNames.Contains(group.Row.Name)) continue;
 
             var name = mainNames.Contains(group.Row.Name) ? $"{group.Row.Name} ★" : group.Row.Name;
             rows.Add((group.Rank, new TopRow(group.Rank.ToString(CultureInfo.InvariantCulture), name, PanelText.Short(group.Value), isYours, false)));
@@ -966,7 +986,7 @@ public static class PanelModels
         double? lowest = values.Count == 0 ? null : values.Min();
         var placed = new HashSet<string>(ordered.Select(g => g.Row.Name), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var mineSource in yours)
+        foreach (var mineSource in followed)
         {
             var name = live.SourceName(mineSource);
             if (!placed.Add(name)) continue;
@@ -979,14 +999,14 @@ public static class PanelModels
             // Below every value the list itself shows, "~N+1" would claim a rank the list never proved.
             if (lowest is { } low && total < low)
             {
-                rows.Add((double.MaxValue, new TopRow("below the list", shown, StatText.Abbrev(total), true, true)));
+                rows.Add((double.MaxValue, new TopRow("below the list", shown, StatText.Abbrev(total), yourNames.Contains(name), true)));
                 continue;
             }
 
             if (Records.WouldPlace(total, values) is not { } place) continue;
 
             // Sits just before the group it would outrank, not after: "~2" among 990/980 lands between them.
-            rows.Add((place.Place - 0.5, new TopRow($"~{place.Place}", shown, StatText.Abbrev(total), true, true)));
+            rows.Add((place.Place - 0.5, new TopRow($"~{place.Place}", shown, StatText.Abbrev(total), yourNames.Contains(name), true)));
         }
 
         return new TopModel(head, nameColumn, valueColumn, [.. rows.OrderBy(r => r.Sort).Select(r => r.Row)]);

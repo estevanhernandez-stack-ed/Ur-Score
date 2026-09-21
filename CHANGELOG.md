@@ -3,6 +3,38 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.5 - 2026-09-20
+
+### Added
+
+- **The clans behind you, by name.** Ur Score modelled catching the clan above and nothing about being
+  caught, which is the direction that decides a battle. Two new numbers in Setup > Stats' "Clan and
+  field" section: **Points the threat is behind**, and **Hours until the threat passes you**. Set the
+  second to alert below six hours to hear about it while you can still answer.
+- The clan named is the one that takes your place **soonest**, not the one nearest you on the board. A
+  clan three places back going much faster passes you before the one directly behind.
+- Your phone names it. An Ur Score number carries no name of its own, so the name rides on the alert's
+  label and is rewritten as the threat changes: "H8ER catching K0i2". The number's id stays the same on
+  every machine, so a clan leader can still say "set an alert on that number" and every member sets the
+  same one. The Alerts card tells you this, because that screen deliberately shows the number's own name
+  rather than the one your phone will say.
+
+### Fixed
+
+- **A clan you only WATCH is no longer treated as one of yours.** "Your clans" was worked out separately
+  in three places and two had drifted apart. On the race chart a watched rival placed above you anchored
+  the whole band on itself, marked itself as yours in the standings, and every other clan's gap was
+  measured from its points instead of yours. The Top panel tinted it as yours too. A watched clan now
+  keeps its place on the Top list, because seeing it is the point of watching it, and loses the tint.
+- **A list of groups keeps names only when its recipe says those groups are clans.** "Group" is whatever
+  a recipe points at, so a list of PLAYERS has the same shape as a list of clans. Recipes now say
+  `"groupsAreClans": true` to keep names; without it a read still records how the whole field is doing
+  and writes no names at all. Both shipped lists say it. The import screen tells you which is happening,
+  and a race chart with no board says why rather than coming up empty.
+- The import consent screen no longer promises that a list like this holds no players. It could not know
+  that for a recipe we did not write, and it is the one screen whose job is telling you what you are
+  agreeing to.
+
 ## 0.5.4 - 2026-09-20
 
 ### Added

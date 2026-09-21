@@ -1060,7 +1060,39 @@ public class PanelModelsTests
 
         // Below every value the list itself shows (lowest is 880): an estimated "~13" would claim a rank
         // the list never proved, so this reads "below the list" instead (fix round 1, finding 2).
-        Assert.Equal(new TopRow("below the list", "Outsider", StatText.Abbrev(5), true, true), model.Rows[11]);
+        Assert.Equal(new TopRow("below the list", "Outsider", StatText.Abbrev(5), false, true), model.Rows[11]);
+    }
+
+    /// <summary>
+    /// A clan you WATCH keeps its place on this list and keeps its estimate row, and is not tinted as yours. Staying
+    /// visible is the whole point of watching a clan, so the cut at <see cref="PanelModels.TopCount"/> still lets it
+    /// through; the tint says "this is mine" and belongs to your own. The set behind the tint was role-blind until
+    /// V3-S.33, so a watched rival read as one of yours here exactly as it did on the race chart. Ruled by the owner
+    /// on 2026-09-20: keep the place, drop the tint.
+    /// </summary>
+    [Fact]
+    public void TopKeepsAWatchedClanOnTheListWithoutCallingItYours()
+    {
+        var top = SourceOf("s-0000000a", TopList, null, SourceRole.Watch);
+        var main = SourceOf("s-00000001", Clan, "G1", SourceRole.Main);
+        var rival = SourceOf("s-00000003", Clan, "G12", SourceRole.Watch);
+        var groups = Enumerable.Range(1, 14)
+            .Select(i => new GroupRow($"G{i}", new Dictionary<string, double> { ["value"] = 1_000 - i * 10 }, i))
+            .ToList();
+        var live = Live([top, main, rival], [Installed(Clan, "value"), Installed(TopList)],
+            Snaps(Snapshot(top.Id, null, groups: groups), Snapshot(main.Id, [], [Points(990)]), Snapshot(rival.Id, [], [Points(880)])));
+
+        var model = PanelModels.Top(live, new PanelSettings(TopList.Slug, SourceId: top.Id));
+
+        // G12 is 12th, past the cut of 10, and is here only because it is watched. G11 and G13 are neither
+        // yours nor watched, so they stay cut.
+        var names = model.Rows.Select(r => r.Name).ToList();
+        Assert.Contains("G12", names);
+        Assert.DoesNotContain("G11", names);
+        Assert.DoesNotContain("G13", names);
+
+        Assert.False(model.Rows.Single(r => r.Name == "G12").Yours);
+        Assert.True(model.Rows.Single(r => r.Name == "G1 ★").Yours);
     }
 
     [Fact]

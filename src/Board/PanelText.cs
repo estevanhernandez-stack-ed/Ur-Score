@@ -168,6 +168,13 @@ public static class PanelText
     public static string RaceTooFew(string groups) => $"A race needs at least 2 {groups}.";
 
     /// <summary>
+    /// Why a clans list has drawn no board. The recipe has to say its groups are clans before a name is kept
+    /// (V3-S.25), and a chart that is simply empty gives nobody a way to find that out — least of all mid-battle.
+    /// </summary>
+    public static string GroupNamesNotKept(Recipe list) =>
+        $"No {RecipeWords.GroupsLower(list)} are named here: {list.Name} does not say its groups are clans, so no names are kept.";
+
+    /// <summary>
     /// A live-only panel (Live leaderboard, Top, Promotion check) whose source was read this session and brought nothing back: no
     /// battle, or a read that failed (backlog S1-F.6). The score book never keeps other members, so there is nothing true to draw
     /// in its place, and the panel says why it is empty instead of "waiting" for a read that already happened. The state line

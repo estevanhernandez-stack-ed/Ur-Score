@@ -111,4 +111,49 @@ public static class FieldSummary
 
         return summary;
     }
+
+    /// <summary>
+    /// One clan below yours in a live read: its name, because a threat is tracked by name; its value; and how
+    /// far behind you it is.
+    /// </summary>
+    /// <param name="Name">The clan's name, because a threat is tracked by name.</param>
+    /// <param name="Value">The clan's points in this read.</param>
+    /// <param name="Gap">
+    /// Our points minus theirs, from the same read a threat needs — how far behind us this clan is. Computed
+    /// here rather than by the caller: <see cref="Behind"/> already has to find our row to know where "below"
+    /// starts, so it is the only place that knows both numbers (owner's ruling, 2026-09-20).
+    /// </param>
+    public sealed record BehindClan(string Name, double Value, double Gap);
+
+    /// <summary>
+    /// The <paramref name="count"/> clans placed just below the best placed of yours, best first.
+    /// <para>
+    /// By NAME, because a threat has to be. A position's points on the way up reveal nothing about a change of
+    /// occupant, so the clear-on-fall rule that makes <see cref="Above"/> safe has no equivalent below (design §4).
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<BehindClan> Behind(
+        IReadOnlyList<GroupRow> groups, string valueKey, IReadOnlySet<string>? mine, int count)
+    {
+        if (mine is null || count <= 0) return [];
+
+        var ranked = groups
+            .Select(g => (g.Name, Value: g.Values.TryGetValue(valueKey, out var v) ? v : (double?)null))
+            .Where(g => g.Value is not null)
+            .OrderByDescending(g => g.Value!.Value)
+            .ToList();
+
+        // Matched however the name was typed, the same fold and for the same reason as Of's `yours` (line 94):
+        // Setup takes what you type, and the list has its own casing. A method must not be correct only by
+        // accident of what comparer the caller's set happens to use — both places below that ask "is this one of
+        // mine?" go through this same normalized set, so the two sibling methods answer that question identically.
+        var yours = new HashSet<string>(mine, StringComparer.OrdinalIgnoreCase);
+        var at = ranked.FindIndex(g => yours.Contains(g.Name));
+        if (at < 0) return [];
+
+        var ours = ranked[at].Value!.Value;
+
+        return [.. ranked.Skip(at + 1).Where(g => !yours.Contains(g.Name)).Take(count)
+            .Select(g => new BehindClan(g.Name, g.Value!.Value, ours - g.Value!.Value))];
+    }
 }
