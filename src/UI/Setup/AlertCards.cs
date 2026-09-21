@@ -121,12 +121,12 @@ public static partial class AlertCards
     /// The note on a managed-label number's card (Task 3, threat-alerts plan). <see cref="Sentence"/> always
     /// draws the METRIC's own label, "whatever the rule's own label says" (A4, see <see cref="Note"/>) — so a
     /// managed number's card and the alert RoRoRo actually sends say two different things ON PURPOSE: the card
-    /// says "Threat hours", RoRoRo says "H8ER catching K0i2" (<see cref="FieldMetrics.ThreatLabel"/>). There is
+    /// says "Hours until the threat passes you", RoRoRo says "H8ER catching K0i2" (<see cref="FieldMetrics.ThreatLabel"/>). There is
     /// no editor to show this label in and nothing to disable — a human never types it — so the only place left
     /// to warn a member their phone will name a clan this screen never showed them is this line.
     /// </summary>
-    public const string ManagedLabelNote = "Ur Score keeps this alert's name current: it names the clan closest "
-        + "behind you, so your phone may say a clan name this screen never showed you.";
+    public const string ManagedLabelNote = "Ur Score writes this number's alert name itself, always naming the "
+        + "clan closest behind you. Your phone may show a clan name this screen never did.";
     public const string UseADot = "Use a dot for decimals, like 1.5.";
     public const string TwoDecimals = "Use at most two decimal places, like 1.25.";
     public const string AboveZero = "Use a number above 0.";
