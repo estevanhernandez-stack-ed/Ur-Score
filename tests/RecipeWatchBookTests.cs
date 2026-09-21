@@ -489,6 +489,9 @@ public class RecipeWatchBookTests
 
         public StubHost Host { get; }
 
+        /// <summary>What the last read said, for the tests that care what the user is shown rather than what went out.</summary>
+        public RecipeSnapshot? Last { get; set; }
+
         public ManualTime Clock { get; } = new(new DateTimeOffset(2026, 9, 20, 18, 0, 0, TimeSpan.Zero));
 
         /// <summary>Ten hours after the first read, so a crossing inside the fixture is never cut off by the clock.</summary>
@@ -508,10 +511,13 @@ public class RecipeWatchBookTests
         public double ValueOf(string metricId) =>
             Host.Reported.Last(r => string.Equals(r.MetricId, metricId, StringComparison.Ordinal)).Value;
 
-        public Task ReadAsync() => _watch.RunOnceAsync(CancellationToken.None);
+        /// <summary>The counters the Alerts page reads, so a suppression can be checked as a number and not only as a sentence.</summary>
+        public ReportPolicy Policy => _watch.Policy;
+
+        public Task<RecipeSnapshot> ReadAsync() => _watch.RunOnceAsync(CancellationToken.None);
 
         /// <summary>Half an hour on, with what each clan made in it, then another read.</summary>
-        public Task HalfAnHourOnAsync(double mineGain, double theirGain)
+        public Task<RecipeSnapshot> HalfAnHourOnAsync(double mineGain, double theirGain)
         {
             Clock.Advance(TimeSpan.FromMinutes(30));
             Mine += mineGain;
@@ -542,7 +548,7 @@ public class RecipeWatchBookTests
 
         // One reading is no pace, so no threat is invented from it and no label is written for one either.
         await chase.ReadAsync();
-        await chase.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 300_000_000);
+        chase.Last = await chase.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 300_000_000);
         return chase;
     }
 
@@ -617,6 +623,47 @@ public class RecipeWatchBookTests
         // name. A number nobody's name rides on is unaffected by a rules file that cannot be written.
         Assert.Equal(["label:H8ER catching K0i2", "label:H8ER catching K0i2"], chase.Labels);
         Assert.Contains("clan.standing.points", chase.ReportedIds);
+    }
+
+    /// <summary>
+    /// SILENCE IS RIGHT; SILENCE WITH NO TRACE IS THE BUG. Refusing to send a threat number whose label could not
+    /// be written is the owner's ruling and stays. What was wrong until 2026-09-21 is that the refusal was
+    /// invisible: the send is skipped before <see cref="ReportPolicy"/> is ever called, so neither Sent nor
+    /// Dropped moved, and the line the user reads said only what DID go. A rules file with a duplicate key means
+    /// both threat numbers never fire again, forever, with nothing on screen saying why (V3-S.35).
+    /// <para>
+    /// Two counted, not one: each threat number writes its own label and is held on its own refusal.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task AThreatNumberHeldBackForItsLabelIsCountedAndSaidOutLoud()
+    {
+        var chase = await BattleWithChaser("H8ER", (_, _) => false,
+            FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]));
+
+        Assert.Equal(2, chase.Policy.Held);
+        Assert.Contains("held back", chase.Last!.Detail ?? "");
+
+        // And the count is a count of the held, not of everything that did not go out: the number nobody's name
+        // rides on went out fine, and a read with no threat at all holds nothing back.
+        Assert.Contains("clan.standing.points", chase.ReportedIds);
+    }
+
+    /// <summary>
+    /// The trace is for a refusal, not for quiet. A watch whose chaser has no readable pace yet sends no threat
+    /// number and holds nothing back — a counter that also counted "there was nothing to say" would be noise on
+    /// every first read of every battle, and a number worth looking at has to stay worth looking at.
+    /// </summary>
+    [Fact]
+    public async Task NothingToSayIsNotSomethingHeldBack()
+    {
+        var chase = new ChaseFixture(
+            "H8ER", (_, _) => false, FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.ThreatGap]));
+
+        chase.Last = await chase.ReadAsync();
+
+        Assert.Equal(0, chase.Policy.Held);
+        Assert.DoesNotContain("held back", chase.Last.Detail ?? "");
     }
 
     /// <summary>

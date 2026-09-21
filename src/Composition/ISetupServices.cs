@@ -53,7 +53,7 @@ public interface ISetupServices
     DateTimeOffset? LastReadAt(string sourceId);
 
     /// <summary>Reports sent and dropped this session, summed over a recipe's sources.</summary>
-    (int Sent, int Dropped) PolicyCounts(string recipeSlug);
+    (int Sent, int Dropped, int Held) PolicyCounts(string recipeSlug);
 
     /// <summary>
     /// The picture for a recipe's row: its own main clan's, once a read has named one (or last session's is in the cache), else

@@ -159,6 +159,14 @@ public sealed class RecipeWatch(
 
     internal const string NotRecordingNoText = "The recipe text isn't known, so nothing is kept.";
 
+    /// <summary>
+    /// Said on the board whenever a threat number is held back. Names the cause, because the rules file is the
+    /// user's own to look at, and says what the alternative would have been, because "held back" on its own reads
+    /// like a fault rather than a decision taken on purpose (V3-S.35).
+    /// </summary>
+    internal static string HeldBackDetail(int held) =>
+        $" {held} clan number(s) held back: the alert name couldn't be written, and sending them would have named the wrong clan.";
+
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
     /// <summary>
@@ -428,8 +436,9 @@ public sealed class RecipeWatch(
             var field = $"Read {reading.Groups.Count} groups.";
             try
             {
-                var sentField = await SendFieldAsync(readRecipe, readInputs, reading, hostUp, cancellationToken).ConfigureAwait(false);
+                var (sentField, heldField) = await SendFieldAsync(readRecipe, readInputs, reading, hostUp, cancellationToken).ConfigureAwait(false);
                 if (sentField > 0) field += $" Sent {sentField} clan number(s) to RoRoRo.";
+                if (heldField > 0) field += HeldBackDetail(heldField);
             }
             catch (RpcException ex) when (ex.StatusCode == StatusCode.PermissionDenied)
             {
@@ -573,13 +582,13 @@ public sealed class RecipeWatch(
     /// than averaging two clans together.
     /// </para>
     /// </summary>
-    private async Task<int> SendFieldAsync(
+    private async Task<(int Sent, int Held)> SendFieldAsync(
         Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, RecipeReading reading, bool hostUp,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<FieldMetric> wanted;
         lock (_gate) wanted = policy.SentFieldMetrics;
-        if (wanted.Count == 0 || !hostUp) return 0;
+        if (wanted.Count == 0 || !hostUp) return (0, 0);
 
         var valueKey = readRecipe.LastStep.Values.FirstOrDefault()?.Id ?? "";
 
@@ -589,7 +598,7 @@ public sealed class RecipeWatch(
         var mineInOrder = myGroups?.Invoke();
         var ours = MineAsSet(mineInOrder);
         var summary = FieldSummary.Of(reading.Groups, valueKey, ours);
-        if (summary.Count == 0) return 0;
+        if (summary.Count == 0) return (0, 0);
 
         var now = (time ?? TimeProvider.System).GetUtcNow();
         Remember(_fieldMine, summary, FieldSummary.Mine, now);
@@ -643,6 +652,7 @@ public sealed class RecipeWatch(
         // No clan at all is fine: ThreatLabel then says "catching up" and names nobody.
         var ourClanName = mineInOrder is { Count: > 0 } ? mineInOrder[0] : null;
         var sent = 0;
+        var held = 0;
 
         foreach (var metric in wanted)
         {
@@ -675,13 +685,14 @@ public sealed class RecipeWatch(
 
                 var label = FieldMetrics.ThreatLabel(threat.Name, ourClanName);
                 if (await SendUnderManagedLabelAsync(current, metric, value, label, now, cancellationToken).ConfigureAwait(false)) sent++;
+                else held++;
                 continue;
             }
 
             if (await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false)) sent++;
         }
 
-        return sent;
+        return (sent, held);
     }
 
     /// <summary>
@@ -724,9 +735,18 @@ public sealed class RecipeWatch(
         await ManagedLabelGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return writeLabel is not null
-                && writeLabel(metric, label)
-                && await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false);
+            if (writeLabel is null) return false;
+
+            // Tried and refused is the case worth counting. The caller's own "no writer wired at all" guard means
+            // this is reached only when there IS one, so a false here is a rules file that could not be edited
+            // safely — something the user can go and look at — and not a build that never had the seam (V3-S.35).
+            if (!writeLabel(metric, label))
+            {
+                current.HeldForItsLabel();
+                return false;
+            }
+
+            return await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

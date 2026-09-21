@@ -210,17 +210,18 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public DateTimeOffset? LastReadAt(string sourceId) => _lastRead.TryGetValue(sourceId, out var at) ? at : null;
 
-    public (int Sent, int Dropped) PolicyCounts(string recipeSlug)
+    public (int Sent, int Dropped, int Held) PolicyCounts(string recipeSlug)
     {
-        int sent = 0, dropped = 0;
+        int sent = 0, dropped = 0, held = 0;
         foreach (var source in Sources.Where(s => string.Equals(s.Recipe, recipeSlug, StringComparison.Ordinal)))
         {
             if (Runner.WatchFor(source.Id) is not { } watch) continue;
             sent += watch.Policy.Sent;
             dropped += watch.Policy.Dropped;
+            held += watch.Policy.Held;
         }
 
-        return (sent, dropped);
+        return (sent, dropped, held);
     }
 
     public string? IconFileFor(string recipeSlug) => IconChoice.ForRecipe(recipeSlug, Sources, Installed, _sourceIcons.FileFor);

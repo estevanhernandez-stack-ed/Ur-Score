@@ -28,15 +28,20 @@ public static class AlertsModel
     /// </summary>
     public static IReadOnlyList<PolicyItem> Policies(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<HostAccount> accounts, IReadOnlyList<Source> sources, bool resolveNames,
-        Func<string, (int Sent, int Dropped)> counts) =>
+        Func<string, (int Sent, int Dropped, int Held)> counts) =>
         [.. installed.Select(i =>
         {
-            var (sent, dropped) = counts(i.Recipe.Slug);
+            var (sent, dropped, held) = counts(i.Recipe.Slug);
             var line = i.Recipe.IsGroupList
                 ? new ReportPolicy([], new HashSet<Guid>(), FieldMetrics.Offered(i.State.FieldMetricKeys)).DescribeField()
                 : ReportPolicies.SendsByRole(i, sources)
                     ? new ReportPolicy(i.State.SentStats(i.Recipe), ReportPolicies.Allowed(i, accounts, sources)).Describe(accounts.Count, resolveNames)
                     : WatchOnly(i.Recipe);
-            return new PolicyItem(i.Recipe.Name, line, $"Sent {sent}, dropped {dropped} this session.");
+            // The held clause appears only when there is something held, because it names a fault in the rules
+            // file and a permanent "held back 0" would be one more number nobody reads (V3-S.35).
+            var counted = $"Sent {sent}, dropped {dropped} this session.";
+            if (held > 0) counted += $" {held} held back: the alert name couldn't be written.";
+
+            return new PolicyItem(i.Recipe.Name, line, counted);
         })];
 }
