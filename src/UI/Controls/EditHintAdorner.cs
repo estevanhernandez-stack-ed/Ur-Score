@@ -25,6 +25,7 @@ public sealed class EditHintAdorner : Adorner
 
     private DropCaret? _caret;
     private Rect? _preview;
+    private IReadOnlyList<PanelHandles> _grips = [];
 
     public EditHintAdorner(UIElement adorned) : base(adorned) => IsHitTestVisible = false;
 
@@ -56,9 +57,37 @@ public sealed class EditHintAdorner : Adorner
         }
     }
 
+    /// <summary>
+    /// The resize grips to show, one pair per panel, or empty outside edit mode. Drawn for every panel rather than
+    /// only the one under the pointer: a grip that appears on hover is a grip nobody discovers.
+    /// </summary>
+    public IReadOnlyList<PanelHandles> Grips
+    {
+        get => _grips;
+        set
+        {
+            _grips = value;
+            InvalidateVisual();
+        }
+    }
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         if (TryFindResource("CyanBrush") is not Brush brush) return;
+
+        if (_grips.Count > 0 && TryFindResource("MutedTextBrush") is Brush idle)
+        {
+            foreach (var grips in _grips)
+            {
+                // The edge reads as a seam rather than a button: a thin bar down the middle of its catch area, so
+                // the target is ten pixels wide while the mark is two.
+                var seam = new Rect(grips.Edge.Left + (grips.Edge.Width / 2) - 1, grips.Edge.Top + (grips.Edge.Height / 4), 2, grips.Edge.Height / 2);
+                drawingContext.DrawRoundedRectangle(idle, null, seam, 1, 1);
+
+                var corner = new Rect(grips.Corner.Left + 3, grips.Corner.Top + 3, grips.Corner.Width - 6, grips.Corner.Height - 6);
+                drawingContext.DrawRoundedRectangle(null, new Pen(idle, 1.5), corner, 2, 2);
+            }
+        }
 
         if (_preview is { } preview)
         {

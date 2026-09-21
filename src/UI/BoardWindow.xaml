@@ -133,6 +133,8 @@
             <ScrollViewer x:Name="BoardScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
                 <!-- Transparent so a drop between panels still lands on the grid. -->
                 <ui:PanelGrid x:Name="BoardPanels" Background="Transparent" AllowDrop="True" DragOver="OnBoardDragOver" DragLeave="OnBoardDragLeave" Drop="OnBoardDrop"
+                              PreviewMouseLeftButtonDown="OnBoardMouseDown" PreviewMouseMove="OnBoardMouseMove"
+                              PreviewMouseLeftButtonUp="OnBoardMouseUp"
                               AutomationProperties.Name="Board" />
             </ScrollViewer>
             </AdornerDecorator>

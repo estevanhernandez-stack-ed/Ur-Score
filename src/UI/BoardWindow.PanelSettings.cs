@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Labs626.UrScore.Board;
 
 namespace Labs626.UrScore.UI;
@@ -71,6 +72,9 @@ public partial class BoardWindow
 
             _draft = edited;
             Render();
+
+            // Every panel's cell may have moved, so the grips drawn over them are stale until the grid re-arranges.
+            Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
             return;
         }
 

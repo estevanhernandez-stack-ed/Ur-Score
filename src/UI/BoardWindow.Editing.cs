@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
 
@@ -20,6 +21,9 @@ public partial class BoardWindow
     private BoardDef? _draftBase;
 
     private EditHintAdorner? _hints;
+
+    /// <summary>The panel being resized by its grip, which grip, and the cell it started from. Null when not.</summary>
+    private (int Index, bool Corner, CellRect From)? _resizing;
 
     private bool Editing => _draft is not null;
 
@@ -101,6 +105,10 @@ public partial class BoardWindow
         DoneButton.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
 
         ApplyButtons();
+
+        // After the grid has arranged, not now: a cell has no rectangle until it has been placed, and entering edit
+        // mode changes every panel's height by adding the tools row above it.
+        Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
     }
 
     private void OnEditTool(object? sender, PanelToolEventArgs e)
@@ -217,6 +225,71 @@ public partial class BoardWindow
         }
 
         _hints.Caret = caret;
+    }
+
+    /// <summary>
+    /// Shows a grip on every panel while editing and none otherwise. Called after each rebuild, because the cells
+    /// are only known once the grid has arranged and a rebuild replaces every one of them.
+    /// </summary>
+    private void ShowGrips()
+    {
+        ShowDropCaret(null);
+        if (_hints is not null) _hints.Grips = Editing ? [.. BoardPanels.Cells.Select(BoardLayout.HandlesFor)] : [];
+    }
+
+    private void OnBoardMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!Editing || BoardPanels.GripAt(e.GetPosition(BoardPanels)) is not { } grip) return;
+        if (grip.Index >= BoardPanels.Cells.Count) return;
+
+        _resizing = (grip.Index, grip.Corner, BoardPanels.Cells[grip.Index]);
+        BoardPanels.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnBoardMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_resizing is not { } resizing || _hints is null) return;
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            EndResize(commit: false);
+            return;
+        }
+
+        var at = e.GetPosition(BoardPanels);
+        var wide = Math.Max(0, at.X - resizing.From.Left);
+        var tall = resizing.Corner ? Math.Max(0, at.Y - resizing.From.Top) : resizing.From.Height;
+        _hints.Preview = new Rect(resizing.From.Left, resizing.From.Top, wide, tall);
+        e.Handled = true;
+    }
+
+    private void OnBoardMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_resizing is null) return;
+        EndResize(commit: true);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Finishes a grip drag. The size is worked out from the preview the person was actually looking at, not from
+    /// the pointer, so what lands is what the outline promised.
+    /// </summary>
+    private void EndResize(bool commit)
+    {
+        var resizing = _resizing;
+        var preview = _hints?.Preview;
+        _resizing = null;
+        if (_hints is not null) _hints.Preview = null;
+        BoardPanels.ReleaseMouseCapture();
+
+        if (!commit || resizing is not { } grip || preview is not { } shown) return;
+        if (_draft is not { } draft || grip.Index >= draft.Panels.Count) return;
+
+        var span = BoardLayout.SpanFor(shown.Width, BoardPanels.ActualWidth, BoardPanels.Gap);
+        var rows = grip.Corner ? BoardLayout.RowsFor(shown.Height, grip.From.Height) : (PanelGrid.GetTall(BoardPanels.Children[grip.Index]) ? 2 : 1);
+        var panelId = draft.Panels[grip.Index].Id;
+
+        ChangeBoard(board => BoardEdits.Resize(board, panelId, new PanelSize(span, rows > 1)));
     }
 
     private void OnBoardDragOver(object sender, DragEventArgs e)
