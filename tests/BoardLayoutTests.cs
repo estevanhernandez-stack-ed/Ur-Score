@@ -161,5 +161,40 @@ public class BoardLayoutTests
     [Fact]
     public void ARowWithNoHeightStaysOneRow() => Assert.Equal(1, BoardLayout.RowsFor(500, 0));
 
+    /// <summary>
+    /// Where a panel's resize grips sit: a strip straddling its right edge, and a square in its bottom-right
+    /// corner. Straddling rather than inside, so the grip is reachable from either side of the line the eye reads
+    /// as the panel's edge. The fixture is at 100,50 and 300x200, so a grip taken from the LEFT edge or the TOP
+    /// would land on 100 or 50 and these numbers would not match.
+    /// </summary>
+    [Fact]
+    public void APanelsGripsStraddleItsRightEdgeAndSitInItsCorner()
+    {
+        var grips = BoardLayout.HandlesFor(new CellRect(100, 50, 300, 200));
+
+        Assert.Equal(new CellRect(395, 50, 10, 200), grips.Edge);
+        Assert.Equal(new CellRect(386, 236, 14, 14), grips.Corner);
+    }
+
+    /// <summary>
+    /// A panel smaller than its own grips shrinks them rather than growing grips bigger than the thing they
+    /// resize. The corner stays wholly inside; the edge grip straddles, so it may reach HALF a grip into the gap
+    /// beside the panel and no further — past that it would be over the neighbour, taking presses meant for it.
+    /// </summary>
+    [Fact]
+    public void GripsShrinkWithASmallPanelAndNeverReachTheNeighbour()
+    {
+        var cell = new CellRect(0, 0, 8, 8);
+        var grips = BoardLayout.HandlesFor(cell);
+
+        Assert.Equal(new CellRect(0, 0, 8, 8), grips.Corner);
+
+        Assert.True(grips.Edge.Left >= cell.Left, $"{grips.Edge} starts left of {cell}");
+        Assert.True(
+            grips.Edge.Left + grips.Edge.Width <= cell.Left + cell.Width + (BoardLayout.EdgeGrip / 2),
+            $"{grips.Edge} reaches further than half a grip past {cell}");
+    }
+
+
 
 }

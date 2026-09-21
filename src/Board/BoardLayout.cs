@@ -6,6 +6,9 @@ public sealed record PanelPlacement(int Index, int Row, int Column, int Span, in
 /// <summary>Where a panel was arranged, in the grid's own coordinates.</summary>
 public sealed record CellRect(double Left, double Top, double Width, double Height);
 
+/// <summary>The two grips that resize a panel: a strip on its right edge, and a square in its bottom-right corner.</summary>
+public sealed record PanelHandles(CellRect Edge, CellRect Corner);
+
 /// <summary>
 /// Where to draw the mark that says where a dragged panel will land: a vertical line, in the grid's own
 /// coordinates.
@@ -143,6 +146,34 @@ public static class BoardLayout
         }
 
         return cells.Count(cell => cell.Top + cell.Height <= y || (cell.Top <= y && cell.Left + cell.Width <= x));
+    }
+
+    /// <summary>How wide the edge grip is, and how big the corner one is. Both comfortably bigger than a line.</summary>
+    public const double EdgeGrip = 10;
+
+    public const double CornerGrip = 14;
+
+    /// <summary>
+    /// The grips for a panel occupying <paramref name="cell"/>, in the grid's own coordinates.
+    /// <para>
+    /// The edge grip STRADDLES the right edge rather than sitting inside it, so it can be caught from either side
+    /// of the line the eye reads as the panel's boundary. It therefore reaches <see cref="EdgeGrip"/>/2 into the
+    /// GAP beside the panel, which is empty — the caller's gap must stay at least <see cref="EdgeGrip"/> wide or a
+    /// grip would reach its neighbour and take presses meant for it. The corner grip stays inside the cell, since
+    /// it has no edge to straddle that is not already the edge grip's.
+    /// </para>
+    /// </summary>
+    public static PanelHandles HandlesFor(CellRect cell)
+    {
+        var edgeWidth = Math.Min(EdgeGrip, cell.Width);
+        var edge = new CellRect(cell.Left + cell.Width - (edgeWidth / 2), cell.Top, edgeWidth, cell.Height);
+
+        var corner = Math.Min(CornerGrip, Math.Min(cell.Width, cell.Height));
+        return new PanelHandles(edge, new CellRect(
+            cell.Left + cell.Width - corner,
+            cell.Top + cell.Height - corner,
+            corner,
+            corner));
     }
 
     /// <summary>
