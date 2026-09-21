@@ -98,26 +98,33 @@ Below you that signal does not exist: a position's points on the way up reveal n
 occupant. So a threat is tracked by name. `ScoreBookReader.GroupSeries(sourceId, groupName, period)`
 already keeps a named clan's series, so the mechanism exists.
 
-**The trap, and the reason this section is here.** `GroupRows.Keep` keeps the top 25, your clans, and
-the place either side of each — `at - 1` to `at + 1`. So today only the clan IMMEDIATELY behind has a
-series. A clan three places back with a much higher pace can pass us sooner than the one directly
-behind. Naming the immediate follower and calling it "the soonest" would be a confident false statement
-on a phone mid-battle, which is worse than sending nothing.
+**The trap, and the reason this section is here.** A clan three places back with a much higher pace can
+pass us sooner than the one directly behind. Naming the immediate follower and calling it "the soonest"
+would be a confident false statement on a phone mid-battle, which is worse than sending nothing. So the
+computation considers a BAND of clans behind, works out a crossing time for each, and names the soonest
+by TIME, never the nearest by place.
 
-Two ways out, and the design takes the first:
+**Corrected 2026-09-20, while planning.** An earlier draft of this section said `GroupRows.Keep` had to
+be extended from `at ± 1` to a band below, because only the immediately following clan has a series in
+the score book. That is true of the book and irrelevant here: the alert path never reads the book.
+`RecipeWatch.SendFieldAsync` works from the LIVE `reading.Groups`, which carries the whole field, plus
+its own in-memory series kept for `Pace.LongestCurrent`. So every clan behind us is already visible at
+send time and no change to `Keep` is needed for this work.
 
-1. **Keep a band below.** Extend `Keep` from `at ± 1` to `at - 1` through `at + 3`. Two extra clans per
-   clan of yours is nothing against the 25 already kept and well inside the size ruling of 2026-09-20.
-   "Soonest of them" then means soonest of the clans we can actually see.
-2. Restrict the wording to "the clan right behind you" and never claim soonest. Rejected: it is not what
-   the bot says and not what the owner asked for.
+What IS needed is a per-name in-memory series, because the existing ones will not do. `_fieldAbove`
+tracks a POSITION and clears itself whenever the value falls, since a fall is what a change of occupant
+looks like from a position. A threat is tracked by name, where that rule is both wrong and unnecessary:
+a named clan's points do not fall, and its identity is the key rather than something inferred. So
+threats get their own store keyed by clan name, pruned of names that leave the band.
 
-Even with the band, the claim is bounded by what is kept, and the wording must not overclaim beyond it.
-The honest sentence is about the clans we track, not about every clan in the battle.
+The inherited limitation is the same one the place-above metrics already carry and accept: the series
+does not outlive the process, so after a restart the numbers that need a pace go quiet until there are
+`Pace.Shortest` of readings again.
 
-**This depends on V3-S.25.** Names are kept only when the recipe says `"groupsAreClans": true`. A
-threat has no series without kept names, so a list that makes no claim can compute no threat. That is
-correct behaviour, not a gap, and the panel already says why the board is empty.
+**This does NOT depend on V3-S.25.** That dependency was a consequence of reading the book, and the
+alert path does not. A list that makes no claim still yields live groups, so a threat is still
+computable. Kept names matter only if the named sentence later goes on the board, which is out of scope
+here (§7).
 
 ## 5. The label
 
