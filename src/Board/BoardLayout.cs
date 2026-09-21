@@ -7,6 +7,18 @@ public sealed record PanelPlacement(int Index, int Row, int Column, int Span, in
 public sealed record CellRect(double Left, double Top, double Width, double Height);
 
 /// <summary>
+/// Where to draw the mark that says where a dragged panel will land: a vertical line, in the grid's own
+/// coordinates.
+/// <para>
+/// A caret and not an outline of the target cell, deliberately. A panel's position is derived from its ORDER
+/// (<see cref="BoardLayout.Flow"/>), so a drop between two panels reflows everything after it and the dragged
+/// panel does not come to rest in the cell the cursor was over. An outline would promise a place this layout
+/// cannot keep. A caret promises only an order, which is all a drop decides.
+/// </para>
+/// </summary>
+public sealed record DropCaret(double X, double Top, double Height);
+
+/// <summary>
 /// Panels flow in order across a 12-column grid (spec §9.2), each at the first free spot at or after the
 /// previous one's, so a tall panel's second row pushes later panels along and order stays reading order (R6).
 /// Narrow windows widen panels the way the mock does: 3- and 4-wide become half, 5 and 7+ take the row.
@@ -131,6 +143,26 @@ public static class BoardLayout
         }
 
         return cells.Count(cell => cell.Top + cell.Height <= y || (cell.Top <= y && cell.Left + cell.Width <= x));
+    }
+
+    /// <summary>
+    /// The mark for a drop at <paramref name="index"/>, an insertion index as <see cref="DropIndex"/> returns:
+    /// the left edge of the cell it would insert before, or the right edge of the last cell when it goes at the
+    /// end. It takes its top and height from THAT cell, so a caret on a shorter second row is drawn the height of
+    /// that row rather than the first one's. Null for an empty board: nothing to insert between.
+    /// </summary>
+    public static DropCaret? CaretFor(IReadOnlyList<CellRect> cells, int index)
+    {
+        if (cells.Count == 0) return null;
+
+        if (index >= cells.Count)
+        {
+            var last = cells[^1];
+            return new DropCaret(last.Left + last.Width, last.Top, last.Height);
+        }
+
+        var cell = cells[Math.Max(0, index)];
+        return new DropCaret(cell.Left, cell.Top, cell.Height);
     }
 
     private static bool Free(HashSet<(int Row, int Column)> taken, int row, int column, int span, int rows)

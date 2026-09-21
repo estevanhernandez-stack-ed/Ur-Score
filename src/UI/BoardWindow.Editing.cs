@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
 
@@ -17,6 +18,8 @@ public partial class BoardWindow
     /// in edit mode writes nothing, even if the following starter changed underneath it meanwhile (R1).
     /// </summary>
     private BoardDef? _draftBase;
+
+    private DropCaretAdorner? _dropCaret;
 
     private bool Editing => _draft is not null;
 
@@ -188,18 +191,52 @@ public partial class BoardWindow
     {
         if (ViewOf(def.Id) is not { } view) return;
 
-        DragDrop.DoDragDrop(view, new DataObject(PanelDragFormat, def.Id), DragDropEffects.Move);
+        // DoDragDrop blocks until the drag ends, however it ends — dropped, cancelled, or escaped — so clearing the
+        // mark after it returns covers every one of those without a handler for each.
+        try
+        {
+            DragDrop.DoDragDrop(view, new DataObject(PanelDragFormat, def.Id), DragDropEffects.Move);
+        }
+        finally
+        {
+            ShowDropCaret(null);
+        }
+    }
+
+    /// <summary>
+    /// Draws the mark that says where the drop will land, or clears it with null. The adorner is made once and kept:
+    /// the board rebuilds its panels on every redraw, but the grid it adorns outlives them.
+    /// </summary>
+    private void ShowDropCaret(DropCaret? caret)
+    {
+        if (_dropCaret is null)
+        {
+            if (AdornerLayer.GetAdornerLayer(BoardPanels) is not { } layer) return;
+            _dropCaret = new DropCaretAdorner(BoardPanels);
+            layer.Add(_dropCaret);
+        }
+
+        _dropCaret.Caret = caret;
     }
 
     private void OnBoardDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = Editing && e.Data.GetDataPresent(PanelDragFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        var ours = Editing && e.Data.GetDataPresent(PanelDragFormat);
+        e.Effects = ours ? DragDropEffects.Move : DragDropEffects.None;
+        ShowDropCaret(ours ? BoardPanels.DropCaretAt(e.GetPosition(BoardPanels)) : null);
+        e.Handled = true;
+    }
+
+    private void OnBoardDragLeave(object sender, DragEventArgs e)
+    {
+        ShowDropCaret(null);
         e.Handled = true;
     }
 
     private void OnBoardDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
+        ShowDropCaret(null);
         if (!Editing || e.Data.GetData(PanelDragFormat) is not string panelId) return;
 
         var index = BoardPanels.DropIndexAt(e.GetPosition(BoardPanels));

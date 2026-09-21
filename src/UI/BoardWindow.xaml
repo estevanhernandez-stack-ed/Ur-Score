@@ -128,11 +128,14 @@
         <TextBlock x:Name="AttributionLine" DockPanel.Dock="Bottom" Style="{StaticResource Muted}" FontSize="11" Margin="16,4,16,8" />
 
         <Grid>
+            <!-- The drop caret is an adorner on the grid, so the scrolling area needs a layer to put it in. -->
+            <AdornerDecorator>
             <ScrollViewer x:Name="BoardScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14">
                 <!-- Transparent so a drop between panels still lands on the grid. -->
-                <ui:PanelGrid x:Name="BoardPanels" Background="Transparent" AllowDrop="True" DragOver="OnBoardDragOver" Drop="OnBoardDrop"
+                <ui:PanelGrid x:Name="BoardPanels" Background="Transparent" AllowDrop="True" DragOver="OnBoardDragOver" DragLeave="OnBoardDragLeave" Drop="OnBoardDrop"
                               AutomationProperties.Name="Board" />
             </ScrollViewer>
+            </AdornerDecorator>
             <StackPanel x:Name="EmptyState" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480">
                 <TextBlock x:Name="EmptyStateLine" Style="{StaticResource Heading}" TextAlignment="Center" />
                 <TextBlock x:Name="EmptyStateDetail" Style="{StaticResource Muted}" TextAlignment="Center" Margin="0,8,0,0" />

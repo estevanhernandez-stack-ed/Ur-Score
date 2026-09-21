@@ -34,6 +34,9 @@ public sealed class PanelGrid : Panel
     /// <summary>Where a panel dropped at <paramref name="point"/>, in this grid's coordinates, would go.</summary>
     public int DropIndexAt(Point point) => BoardLayout.DropIndex(_cells, point.X, point.Y);
 
+    /// <summary>Where to mark that drop, in this grid's coordinates, or null on an empty board.</summary>
+    public DropCaret? DropCaretAt(Point point) => BoardLayout.CaretFor(_cells, DropIndexAt(point));
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var width = double.IsInfinity(availableSize.Width) ? 1200 : availableSize.Width;

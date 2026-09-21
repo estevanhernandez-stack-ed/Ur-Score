@@ -100,4 +100,30 @@ public class BoardLayoutTests
     [InlineData(100.0, 900.0, 4)]
     public void ADropLandsBeforeOrAfterThePanelUnderIt(double x, double y, int expected) =>
         Assert.Equal(expected, BoardLayout.DropIndex(Cells, x, y));
+
+    /// <summary>
+    /// Where the insertion mark is drawn for a drop index. A CARET rather than a filled outline of the target cell,
+    /// because position is derived from order: dropping between two panels reflows everything after it, so the
+    /// dragged panel does not end up in the cell the cursor was over. A rectangle would promise a place this layout
+    /// cannot keep; a caret promises only an order, which is exactly what a drop decides.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0.0, 0.0, 200.0)]      // before the first: its left edge, its own height
+    [InlineData(1, 312.0, 0.0, 200.0)]    // before the second
+    [InlineData(3, 0.0, 212.0, 150.0)]    // before the fourth: a different ROW, so a different top and height
+    [InlineData(4, 600.0, 212.0, 150.0)]  // past the last: the right edge of it
+    public void TheDropCaretSitsAtTheEdgeOfTheCellItWouldInsertBefore(int index, double x, double top, double height)
+    {
+        var caret = BoardLayout.CaretFor(Cells, index);
+
+        Assert.NotNull(caret);
+        Assert.Equal(x, caret!.X);
+        Assert.Equal(top, caret.Top);
+        Assert.Equal(height, caret.Height);
+    }
+
+    /// <summary>An empty board has nothing to insert between, so it draws no mark rather than one at the origin.</summary>
+    [Fact]
+    public void AnEmptyBoardHasNoDropCaret() => Assert.Null(BoardLayout.CaretFor([], 0));
+
 }
