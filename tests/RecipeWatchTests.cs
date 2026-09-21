@@ -120,9 +120,9 @@ public class RecipeWatchTests
     private static readonly HashSet<string> ValueOnly = ["value"];
 
     private static RecipeWatch Watch(IRecipeEngine engine, FakeHost host, IEnumerable<Guid>? allowed = null, FakeKeys? keys = null,
-        IReadOnlyList<SentStat>? sent = null, IReadOnlySet<string>? tracked = null) =>
+        IReadOnlyList<SentStat>? sent = null, IReadOnlySet<string>? tracked = null, TimeProvider? time = null) =>
         new(engine, host, keys ?? new FakeKeys(), new ReportPolicy(sent ?? [PointsStat], new HashSet<Guid>(allowed ?? [Mine])),
-            PetSim, Clan, tracked ?? ValueOnly);
+            PetSim, Clan, tracked ?? ValueOnly, time: time);
 
     [Fact]
     public async Task NeedsInputIsItsOwnStateAndSendsNothing()
@@ -134,6 +134,31 @@ public class RecipeWatchTests
         Assert.Equal(WatchState.NeedsInput, snapshot.State);
         Assert.Equal("Set Your clan to start.", snapshot.Detail);
         Assert.Empty(host.Reported);
+    }
+
+    /// <summary>
+    /// An account stat's observation carries the watch's OWN clock, not the machine's. It used to read
+    /// <c>DateTimeOffset.UtcNow</c> directly while every other timestamp in the same class already took the
+    /// injected provider, so one read produced two kinds of time: fabricated for the field numbers and real for
+    /// the account stats (S1-6.7). That is worse than either on its own. RoRoRo keys a rate window on the
+    /// observation time, so two halves of one reading disagreeing about when it happened is not untidiness, it is
+    /// a reading that cannot be reasoned about afterwards.
+    /// <para>
+    /// The fixture's instant is deliberately nowhere near now, so a site still reading the machine clock cannot
+    /// pass by coincidence — which is exactly how the old test missed this, asserting only that the timestamp was
+    /// not in the past.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task AnObservationCarriesTheWatchsOwnClockAndNotTheMachines()
+    {
+        var host = new FakeHost(true, [MyAccount]);
+        var fixedInstant = new DateTimeOffset(2031, 3, 14, 9, 26, 53, TimeSpan.Zero);
+
+        await Watch(new FakeEngine(() => Reading("battle=A", Row(111, 4200))), host, time: new ManualTime(fixedInstant))
+            .RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(fixedInstant, Assert.Single(host.Reported).ObservedAt);
     }
 
     [Fact]
