@@ -173,18 +173,31 @@ public static class RulesFile
 
             try
             {
-                rules[ours.Index]!["label"] = label;
+                var row = rules[ours.Index]!.AsObject();
+
+                // RulesFile.LastText and RoRoRo's own parser both match field names ignoring case and take the LAST
+                // one written. JsonObject's own indexer is case-sensitive, so setting "label" on a row that also
+                // carries "Label" (or any other casing) would land on one key while the reader keeps reading the
+                // other — with no exception, unlike the duplicate-key crash below. That is worse than a crash: the
+                // write reports Done while naming the PREVIOUS chaser on someone's phone mid-battle, which is
+                // exactly the failure this whole feature exists to prevent. Refuse instead: no label written means
+                // no push at all (the no-label-no-send rule), silence rather than a wrong name (the owner's ruling
+                // of 2026-09-20).
+                if (row.Count(p => string.Equals(p.Key, "label", StringComparison.OrdinalIgnoreCase)) > 1)
+                    return (RuleWrite.CantWrite, false);
+
+                row["label"] = label;
             }
             catch (ArgumentException)
             {
-                // Touching any property on a JsonObject makes it build its lookup dictionary first, which throws on the
-                // first duplicate key it finds anywhere in the row — see Unchanged, which hits the identical wall from
-                // DeepEquals for the same reason. Change never triggers this because it replaces the whole row rather
-                // than editing one field of it; ChangeLabel edits in place on purpose, so it doesn't touch fields it
-                // doesn't own (design §2: "only the label is managed"). That means it can't fall back to Change's
-                // whole-row replacement either, so a duplicate-keyed row is a case it must refuse rather than let crash
-                // the caller, since this is meant to run unattended from a background read with nobody watching for an
-                // unhandled exception.
+                // Touching any property on a JsonObject (an indexer access, or — as above — just enumerating it)
+                // makes it build its lookup dictionary first, which throws on the first duplicate key it finds
+                // anywhere in the row, even one unrelated to "label". Change never triggers this because it
+                // replaces the whole row rather than editing one field of it; ChangeLabel edits in place on
+                // purpose, so it doesn't touch fields it doesn't own (design §2: "only the label is managed").
+                // That means it can't fall back to Change's whole-row replacement either, so a duplicate-keyed row
+                // is a case it must refuse rather than let crash the caller, since this is meant to run unattended
+                // from a background read with nobody watching for an unhandled exception.
                 return (RuleWrite.CantWrite, false);
             }
 

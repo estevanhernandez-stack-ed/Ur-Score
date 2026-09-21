@@ -437,6 +437,29 @@ public sealed class RulesFileTests : IDisposable
     }
 
     [Fact]
+    public void ChangeLabelOnARowWithACaseVariantLabelDuplicateRefusesRatherThanNamingTheWrongClan()
+    {
+        // RulesFile.LastText and RoRoRo's own parser both match field names ignoring case and keep the LAST one
+        // written. JsonObject's indexer is case-SENSITIVE, so writing "label" on a row that also carries "Label"
+        // lands on one key while the reader keeps reading the other — silently, with no exception, unlike the
+        // exact-duplicate case above. Nothing here throws, which is exactly why it needs its own guard: a rewrite
+        // that "succeeds" but doesn't take effect would leave RoRoRo naming the PREVIOUS chaser on someone's phone
+        // mid-battle. Refusing is the safe failure: no label written means no push at all (the no-label-no-send
+        // rule), silence rather than a wrong name (the owner's ruling of 2026-09-20).
+        var path = Rules($$"""
+            [ { "metricId": "{{Points}}", "kind": "Level", "threshold": 40, "alertWhenBelow": false, "owner": "626labs.ur-score", "label": "first", "Label": "first-dup" } ]
+            """);
+        var before = File.ReadAllBytes(path);
+        File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
+
+        Assert.Equal(RuleWrite.CantWrite, RulesFile.ChangeLabel(path, Points, AlertKind.Level, "second"));
+
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
+        Assert.False(File.Exists(path + ".ur-score-writing"));
+    }
+
+    [Fact]
     public void ABlankMetricIdOrAnEventKindIsRefusedBeforeAnyFileIsTouched()
     {
         var path = Rules();
