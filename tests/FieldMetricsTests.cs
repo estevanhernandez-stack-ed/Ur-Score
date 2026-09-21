@@ -253,6 +253,29 @@ public class FieldMetricsTests
         Assert.False(FieldMetrics.Find(FieldMetrics.IdleMembers)!.ManagedLabel);
     }
 
+    /// <summary>
+    /// Both threat numbers carry a label Ur Score maintains, because the name in them changes. Every other
+    /// clan number stays the owner's to word.
+    /// </summary>
+    [Fact]
+    public void BothThreatNumbersDeclareAManagedLabel()
+    {
+        Assert.True(FieldMetrics.Find(FieldMetrics.ThreatHours)!.ManagedLabel);
+        Assert.True(FieldMetrics.Find(FieldMetrics.ThreatGap)!.ManagedLabel);
+        Assert.Equal("clan.standing.threat-hours", FieldMetrics.Find(FieldMetrics.ThreatHours)!.MetricId);
+    }
+
+    /// <summary>
+    /// The label names the threat and your clan, mirroring 0.5.3's "K0i2 clan points": the id stays shared so a
+    /// clan leader can say "set an alert on that number", and only the wording is local to each phone.
+    /// </summary>
+    [Fact]
+    public void TheLabelNamesTheThreatAndYourClan()
+    {
+        Assert.Equal("H8ER catching K0i2", FieldMetrics.ThreatLabel("H8ER", "K0i2"));
+        Assert.Equal("H8ER catching up", FieldMetrics.ThreatLabel("H8ER", null));
+    }
+
     /// <summary>Two readings an hour apart ending at <paramref name="now"/> — clears Pace.Shortest (15 minutes)
     /// and fits inside Pace.LongestCurrent (2 hours), so a pace is readable from just two points.</summary>
     private static IReadOnlyList<SeriesPoint> Series(DateTimeOffset now, double first, double last) =>

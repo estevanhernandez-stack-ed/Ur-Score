@@ -48,6 +48,8 @@ public static class FieldMetrics
     public const string PaceNeeded = "pace-needed";
     public const string FreeSlots = "free-slots";
     public const string IdleMembers = "idle-members";
+    public const string ThreatGap = "threat-gap";
+    public const string ThreatHours = "threat-hours";
 
     /// <summary>Every number that can be ticked, in the order the section lists them.</summary>
     public static IReadOnlyList<FieldMetric> All { get; } =
@@ -64,6 +66,11 @@ public static class FieldMetrics
             "Room left in your clan: its capacity less its members."),
         new(IdleMembers, "Members on zero", "clan.standing.idle-members",
             "Members of your clan who have not scored in this battle."),
+        new(ThreatGap, "Threat gap", "clan.standing.threat-gap",
+            "How far behind the clan closest to taking your place is.", ManagedLabel: true),
+        new(ThreatHours, "Threat hours", "clan.standing.threat-hours",
+            "How long until the clan behind you takes your place, at both your current paces. Set it to alert "
+            + "below six hours to hear about it while you can still answer.", ManagedLabel: true),
     ];
 
     public static FieldMetric? Find(string key) =>
@@ -151,6 +158,25 @@ public static class FieldMetrics
     /// <param name="Gap">How far back it is, our latest points minus theirs.</param>
     /// <param name="Hours">How long until its pace, held against ours, closes that gap.</param>
     public sealed record ThreatValue(string Name, double Gap, double Hours);
+
+    /// <summary>
+    /// The label that carries a rival's name to the phone: "H8ER catching K0i2", or "H8ER catching up" with no
+    /// clan of your own to name.
+    /// <para>
+    /// Mirrors <c>AlertCards.ClanLabel</c> (src/UI/Setup/AlertCards.cs), which does the same job for YOUR
+    /// clan's name and lets forty members set one shared metric id while each phone shows its own clan. That
+    /// split works because a fixed id can carry a label that is rewritten locally. This is the same split for a
+    /// name that is not merely local but LIVE: the id (<c>clan.standing.threat-hours</c> /
+    /// <c>clan.standing.threat-gap</c>) never changes, but the clan closing on you this hour is not the clan that
+    /// was closing on you last hour, so the label is rewritten every time <see cref="SoonestThreat"/> names
+    /// someone new. A metric carries no name of its own — the label is the only channel a rival's name can ride
+    /// to RoRoRo at all, and it can only ride it because the label is ours to keep rewriting.
+    /// </para>
+    /// </summary>
+    /// <param name="threat">The chaser's name, from <see cref="ThreatValue.Name"/>.</param>
+    /// <param name="clan">Your own clan's name, or null when it is not known.</param>
+    public static string ThreatLabel(string threat, string? clan) =>
+        string.IsNullOrWhiteSpace(clan) ? $"{threat} catching up" : $"{threat} catching {clan.Trim()}";
 
     /// <summary>
     /// The clan behind us that takes our place SOONEST, by time rather than by place.
