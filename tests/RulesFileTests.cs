@@ -392,6 +392,51 @@ public sealed class RulesFileTests : IDisposable
     }
 
     [Fact]
+    public void ChangingAManagedLabelLeavesTheBackupAsItWas()
+    {
+        // The backup is per FILE, not per rule (see EveryWriteBacksUpTheFileAsItWasJustBefore). An automatic
+        // rewrite of a label Ur Score maintains must not spend the owner's undo point, or two background
+        // rewrites in a row would push a hand-typed rule out of the backup with the owner never having
+        // touched Setup themselves (the owner's ruling of 2026-09-20).
+        var path = Rules($$"""
+            [ { "metricId": "{{Points}}", "kind": "Level", "threshold": 40, "alertWhenBelow": false, "owner": "626labs.ur-score", "label": "first" } ]
+            """);
+
+        // Contrast first: an ordinary Change DOES replace the backup, exactly as every other write does.
+        File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
+        Assert.Equal(RuleWrite.Done, RulesFile.Change(path, Points, Crosses with { Label = "second" }));
+        Assert.NotEqual("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
+
+        // Now the managed path: it changes only the label, and the sentinel backup below survives untouched.
+        File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
+        Assert.Equal(RuleWrite.Done, RulesFile.ChangeLabel(path, Points, AlertKind.Level, "third"));
+
+        Assert.Equal("third", RulesFile.Read(path).OursFor(Points, AlertKind.Level)?.Label);
+        Assert.Equal("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
+    }
+
+    [Fact]
+    public void ChangeLabelOnARowWithADuplicateKeyRefusesRatherThanCrashing()
+    {
+        // System.Text.Json.Nodes.JsonObject builds its property lookup lazily, on first indexer access, and that
+        // build throws ArgumentException the instant it finds ANY duplicate key in the object — even one that has
+        // nothing to do with the field being touched. Change never hits this because it replaces the whole row
+        // (a JsonArray index assignment, not a JsonObject property access); ChangeLabel edits one field of the
+        // existing row on purpose, so it must not let that internal exception escape uncaught to a background
+        // caller nothing is watching.
+        var path = Rules($$"""
+            [ { "metricId": "{{Points}}", "kind": "Level", "threshold": 40, "threshold": 40, "owner": "626labs.ur-score", "label": "first" } ]
+            """);
+        var before = File.ReadAllBytes(path);
+
+        Assert.Equal(RuleWrite.CantWrite, RulesFile.ChangeLabel(path, Points, AlertKind.Level, "second"));
+
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.False(File.Exists(path + RulesFile.BackupSuffix));
+        Assert.False(File.Exists(path + ".ur-score-writing"));
+    }
+
+    [Fact]
     public void ABlankMetricIdOrAnEventKindIsRefusedBeforeAnyFileIsTouched()
     {
         var path = Rules();
