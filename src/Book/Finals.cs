@@ -4,6 +4,10 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Book;
 
+// `Source` alone binds to the Labs626.UrScore.Source NAMESPACE here, not the type, so an unqualified name does not
+// compile. The same alias the UI files use, rather than spelling the full name at each site (S1-7.1).
+using Source = Labs626.UrScore.Core.Source;
+
 /// <summary>Which finals the book already holds, by recipe, inputs, period and account. Built from the book, updated as lines are planned.</summary>
 public sealed class FinalsIndex
 {
@@ -15,7 +19,7 @@ public sealed class FinalsIndex
     {
         if (line.Kind != BookLine.KindFinal || line.Period is null) return;
 
-        var inputs = Labs626.UrScore.Core.Source.KeyOf(line.Inputs);
+        var inputs = Source.KeyOf(line.Inputs);
         lock (_gate)
         {
             _clans.Add((line.Recipe.Slug, inputs, line.Period.Value));
@@ -81,7 +85,7 @@ public static class FinalsPlanner
         var inputs = context.Source.InputsKey;
         var watch = context.Source.Role == SourceRole.Watch;
         var current = reading.Period?.Value;
-        var currentEnded = reading.Period?.Ends is { } ends && ends <= context.At;
+        var currentEnded = EndHasPassed(reading.Period, context.At);
 
         var lines = new List<BookLine>();
         foreach (var past in reading.Past)
@@ -117,6 +121,15 @@ public static class FinalsPlanner
     /// <summary>The current period's end has passed, or its final is already kept: no more reading lines for it.</summary>
     public static bool CurrentPeriodEnded(ReadContext context, RecipeReading reading, FinalsIndex index) =>
         reading.Period is { } period
-        && ((period.Ends is { } ends && ends <= context.At)
+        && (EndHasPassed(period, context.At)
             || index.HasClan(context.Recipe.Slug, context.Source.InputsKey, period.Value));
+
+    /// <summary>
+    /// A period's DECLARED end has passed. One definition, because both readers of it are deciding the same
+    /// thing — whether a period is still running — and two copies of a comparison are two chances to disagree
+    /// about the boundary. Inclusive: a period whose end is exactly now has ended, so a final is written on the
+    /// read that lands on the boundary rather than the one after it (S1-7.2).
+    /// </summary>
+    private static bool EndHasPassed(ReadingPeriod? period, DateTimeOffset at) =>
+        period?.Ends is { } ends && ends <= at;
 }

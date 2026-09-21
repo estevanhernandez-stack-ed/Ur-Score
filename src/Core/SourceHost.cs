@@ -45,7 +45,12 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
 
             foreach (var id in _entries.Keys.Where(id => !wanted.ContainsKey(id)).ToList())
             {
-                _entries[id].Stop.Cancel();
+                // Cancelled, then dropped. Its own loop disposes the linked source it is holding, so the only
+                // thing left to release here is this one (S1-8.1). Not disposed here: the loop may be between
+                // the cancel and its finally, and disposing a source another thread is still linked to is a
+                // race for no gain. It is handed to the loop instead, which owns the rest of its lifetime.
+                var going = _entries[id];
+                going.Stop.Cancel();
                 _entries.Remove(id);
                 _latest.TryRemove(id, out _);
             }
@@ -81,11 +86,24 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
 
     public void Stop()
     {
+        CancellationTokenSource? stopping;
         lock (_gate)
         {
-            _run?.Cancel();
+            stopping = _run;
             _run = null;
         }
+
+        if (stopping is null) return;
+
+        // Cancelled OUTSIDE the lock. Cancel runs every linked source's callbacks on this thread, and doing that
+        // while holding the gate means a callback that ever wanted the gate would deadlock against itself. None
+        // does today; this is the cheap way to keep that from being a question anybody has to re-answer.
+        stopping.Cancel();
+
+        // Each Start made one of these and each Stop dropped it on the floor, so a session that started and
+        // stopped reading repeatedly accumulated them along with one linked source per entry per start (S1-8.1).
+        // Safe to dispose now: the loops link to it, and a linked source outlives the parent it was built from.
+        stopping.Dispose();
     }
 
     public Task RunAllNowAsync(string trigger, CancellationToken cancellationToken)
@@ -108,7 +126,21 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
     private void StartLoop(Entry entry, CancellationToken runToken)
     {
         var linked = CancellationTokenSource.CreateLinkedTokenSource(runToken, entry.Stop.Token);
-        _ = Task.Run(() => LoopAsync(entry, linked.Token));
+
+        // The loop owns the linked source and releases it on the way out, whichever way it leaves — cancelled,
+        // faulted, or simply finished. Before this, a Start/Stop cycle left one per entry behind, and each one
+        // holds a registration on both of its parents (S1-8.1).
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await LoopAsync(entry, linked.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                linked.Dispose();
+            }
+        });
     }
 
     private async Task LoopAsync(Entry entry, CancellationToken cancellationToken)
@@ -119,16 +151,7 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
             await RunOneAsync(entry, trigger, cancellationToken).ConfigureAwait(false);
             trigger = BookLine.TriggerTimer;
 
-            int seconds;
-            try
-            {
-                seconds = Math.Max(Recipe.MinimumEverySeconds, intervalSeconds(entry.Source));
-            }
-            catch (Exception)
-            {
-                // A caller's interval lookup must never end this source's loop; fall back to the floor.
-                seconds = Recipe.MinimumEverySeconds;
-            }
+            var seconds = DelaySeconds(intervalSeconds, entry.Source);
 
             try
             {
@@ -138,6 +161,29 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// How long a source waits before its next read: what the caller's lookup says, never below
+    /// <see cref="Recipe.MinimumEverySeconds"/>, and the floor again if the lookup throws.
+    /// <para>
+    /// A method of its own so both rules can be tested without waiting out an interval. The floor is a minute, so
+    /// a test that drove the real loop would have to sit through one, and a rule nobody can afford to test is a
+    /// rule that quietly stops holding. The clamp protects the sources a recipe asks to be read too often; the
+    /// catch protects the LOOP — a caller's lookup throwing must never be the thing that ends a source's reading,
+    /// because the failure would be total, permanent and silent (S1-8.7).
+    /// </para>
+    /// </summary>
+    internal static int DelaySeconds(Func<Source, int> intervalSeconds, Source source)
+    {
+        try
+        {
+            return Math.Max(Recipe.MinimumEverySeconds, intervalSeconds(source));
+        }
+        catch (Exception)
+        {
+            return Recipe.MinimumEverySeconds;
         }
     }
 
@@ -187,7 +233,21 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
 
     private sealed class Entry(Source source, RecipeWatch watch)
     {
-        public Source Source { get; set; } = source;
+        private Source _source = source;
+
+        /// <summary>
+        /// The source this entry is reading, written by <see cref="Apply"/> under the lock and read by the loop
+        /// without it. Volatile rather than locked, and the distinction matters: a reference assignment is already
+        /// atomic, so the value was never going to tear — what was missing is the guarantee that a loop running on
+        /// another core SEES a new one rather than a cached old one, which without this the memory model does not
+        /// give (S1-8.6). The staleness that remains is one read long and harmless: a read already in flight
+        /// finishes against the source it started with, which is what it should do.
+        /// </summary>
+        public Source Source
+        {
+            get => Volatile.Read(ref _source);
+            set => Volatile.Write(ref _source, value);
+        }
 
         public RecipeWatch Watch { get; } = watch;
 

@@ -7,12 +7,17 @@ UI Automation walks of the real window: they start the Release build, click thro
 - Windows PowerShell 5.1 or PowerShell 7, from any folder. Paths come from the scripts' own location.
 - A Release build: `dotnet build Ur-Score.csproj -c Release` from the repo root. Close Ur Score first; a running copy locks `bin\Release`.
 - RoRoRo running is optional. Without it, steps that need your accounts are skipped or accept the "RoRoRo hasn't listed your accounts" wording.
+- **A walk CAN reach RoRoRo, and it reports as the real plugin.** The host resolves a plugin by the id the caller claims, never by the path it runs from, so a build out of `bin\Release` is indistinguishable from the installed one. Assume every walk connects (confirmed against the host's `Handshake`, 2026-09-21).
 - Leave the mouse alone while a walk runs; `shot.ps1` brings windows to the front.
 - To walk another copy (the one RoRoRo installed), set `UR_SCORE_EXE` to its `626labs.ur-score.exe` first.
 
 ## Your data is safe
 
 Every walk that needs a clean start moves `%LOCALAPPDATA%\626labs.ur-score` to `626labs.ur-score.smoke-backup-<time>` and puts it back in a `finally`, even when a step throws. If a run is killed mid-walk, rename the newest `.smoke-backup-*` folder back to `626labs.ur-score` yourself.
+
+**A walk that seeds a data folder must seed it through `Copy-UrControlData`, never a bare `Copy-Item`.** It forces `startOnOpen` false and every stat's `send` false, then re-reads the folder off disk and throws if anything could still report. Both matter: on 2026-09-21 a control walk copied a folder whose settings said `startOnOpen` true and whose clan recipe had `send` true on `clan.battle.points`, and launched it against a live host. Nobody pressed Start — that is what `startOnOpen` means — and the belief that a walk only reads when told to was simply wrong. A folder with nothing set to send cannot send, whichever version of the host is up, which is why the cure is here and not at the host.
+
+Quitting RoRoRo for the duration is a second layer and a good one, but it closes the owner's notification host, so it is a decision to take each time rather than something a script should do on its own.
 
 `walk-alerts.ps1` never writes RoRoRo's `metric-rules.json`. It points Ur Score at a scratch file under `%TEMP%` with `UR_SCORE_RULES_FILE`, deletes that file afterwards, and fails its last step if RoRoRo's own file changed. If a run is killed mid-walk, close Ur Score before starting it again from a shell where that variable isn't set.
 

@@ -47,6 +47,14 @@ public partial class RecipesPage : UserControl, ISetupPage
     /// A recipe that ships inside Ur Score, added without a download or a file picker. It runs the same import as a
     /// file does, review screen and all, so what it will contact is seen before it is added.
     /// </summary>
+    /// <summary>
+    /// Update an installed recipe to the copy this version of Ur Score carries. The SAME handler as adding one,
+    /// deliberately: <c>ImportFlow.RunTextAsync</c> already decides whether a text is a first install or an
+    /// update, compares the two, re-asks only when hosts or what is sent actually changed, and carries the user's
+    /// choices across. Nothing about updating needed writing — only a way to reach it, which is what the button is.
+    /// </summary>
+    private void OnUpdateClick(object sender, RoutedEventArgs e) => OnAddBuiltInClick(sender, e);
+
     private async void OnAddBuiltInClick(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not string slug || BuiltInRecipes.Find(slug) is not { } builtIn) return;
