@@ -252,4 +252,72 @@ public class FieldMetricsTests
         Assert.False(FieldMetrics.Find(FieldMetrics.FreeSlots)!.ManagedLabel);
         Assert.False(FieldMetrics.Find(FieldMetrics.IdleMembers)!.ManagedLabel);
     }
+
+    /// <summary>Two readings an hour apart ending at <paramref name="now"/> — clears Pace.Shortest (15 minutes)
+    /// and fits inside Pace.LongestCurrent (2 hours), so a pace is readable from just two points.</summary>
+    private static IReadOnlyList<SeriesPoint> Series(DateTimeOffset now, double first, double last) =>
+    [
+        new(now.AddHours(-1), first, null, false, 0),
+        new(now, last, null, false, 0),
+    ];
+
+    /// <summary>
+    /// The threat named is the soonest by TIME, not the nearest by place. H8ER is closer but barely moving; R0W is
+    /// further back and much faster, and R0W is the one that takes our place first. Naming H8ER here would be a
+    /// confident false statement on a phone mid-battle, which is worse than sending nothing at all.
+    /// </summary>
+    [Fact]
+    public void TheThreatNamedIsTheSoonestByTimeNotTheNearestByPlace()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        IReadOnlyList<FieldSummary.BehindClan> behind = [new("H8ER", 900, 100), new("R0W", 500, 500)];
+
+        var threat = FieldMetrics.SoonestThreat(
+            behind,
+            Series(now, 1_000, 1_000),                       // ours: flat
+            name => name == "H8ER" ? Series(now, 890, 900)   // 10/hr: a 100-point gap closes in 10 hours
+                                   : Series(now, 300, 500),   // 200/hr: a 500-point gap closes in 2.5 hours
+            now,
+            ends: null);
+
+        Assert.NotNull(threat);
+        Assert.Equal("R0W", threat!.Name);
+        Assert.Equal(500, threat.Gap);
+        Assert.InRange(threat.Hours, 2.4, 2.6);
+    }
+
+    /// <summary>
+    /// With no pace for a chaser there is no crossing to work out, and a guess is not an answer. This matches how
+    /// the place-above pace already refuses rather than inventing a number.
+    /// </summary>
+    [Fact]
+    public void AChaserWithNoPaceYetIsNoThreatRatherThanAGuess()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Null(FieldMetrics.SoonestThreat(
+            [new("H8ER", 500, 500)], Series(now, 1_000, 1_000), _ => [], now, ends: null));
+    }
+
+    /// <summary>
+    /// A chaser who would pass us in 2.5 hours is not a threat when the battle ends in two: the pass can never
+    /// happen before the clock runs out. Without this cap, SoonestThreat would trip a "tell me within N hours"
+    /// rule on a crossing that is fiction — mirroring why Pace.Chase nulls catchIn past the time left
+    /// (src/Board/Pace.cs) and why FieldMetrics.Needed refuses to answer at all without a battle end.
+    /// </summary>
+    [Fact]
+    public void AChaserThatWouldPassUsAfterTheBattleEndsIsNotNamed()
+    {
+        var now = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        var ends = now.AddHours(2);
+
+        var threat = FieldMetrics.SoonestThreat(
+            [new("R0W", 500, 500)],
+            Series(now, 1_000, 1_000),  // ours: flat
+            _ => Series(now, 300, 500), // 200/hr: crosses in 2.5 hours, comfortably past the 2-hour end
+            now,
+            ends);
+
+        Assert.Null(threat);
+    }
 }

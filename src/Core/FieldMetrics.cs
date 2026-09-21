@@ -146,4 +146,62 @@ public static class FieldMetrics
         return Pace.Chase(gap, ours.PerHour, theirs.PerHour, end - now, best: null).Needed;
     }
 
+    /// <summary>The clan behind us that takes our place SOONEST, by time rather than by place.</summary>
+    /// <param name="Name">The chaser's name.</param>
+    /// <param name="Gap">How far back it is, our latest points minus theirs.</param>
+    /// <param name="Hours">How long until its pace, held against ours, closes that gap.</param>
+    public sealed record ThreatValue(string Name, double Gap, double Hours);
+
+    /// <summary>
+    /// The clan behind us that takes our place SOONEST, by time rather than by place.
+    /// <para>
+    /// A clan three places back going much faster passes us before the one directly behind, so the nearest by
+    /// place is the wrong answer, and a confident wrong name is worse than silence on a phone mid-battle (design
+    /// §4). A chaser whose pace cannot be read yet is no threat rather than a guess, matching <see cref="Needed"/>.
+    /// </para>
+    /// <para>
+    /// <paramref name="ends"/> caps the answer: a crossing worked out to fall after the battle ends is not a
+    /// threat, because the pass can never happen — it is fiction produced by extrapolating a pace past the clock
+    /// running out. This mirrors <see cref="Pace.Chase"/>, which nulls its <c>catchIn</c> the same way once it
+    /// exceeds the time left (src/Board/Pace.cs), and <see cref="Needed"/>, which refuses to answer at all
+    /// without a battle end. With <paramref name="ends"/> null there is no cap.
+    /// </para>
+    /// </summary>
+    /// <param name="behind">The clans below us, best placed first, each with its own precomputed gap.</param>
+    /// <param name="mine">Our own points over time, for our pace.</param>
+    /// <param name="seriesOf">Looks up a chaser's points over time by name, for its pace.</param>
+    /// <param name="now">When this read happened.</param>
+    /// <param name="ends">When the battle ends, or null when there is no end to cap a crossing against.</param>
+    public static ThreatValue? SoonestThreat(
+        IReadOnlyList<FieldSummary.BehindClan> behind,
+        IReadOnlyList<SeriesPoint> mine,
+        Func<string, IReadOnlyList<SeriesPoint>> seriesOf,
+        DateTimeOffset now,
+        DateTimeOffset? ends)
+    {
+        var since = now - Pace.LongestCurrent;
+        if (Pace.Over(mine, since, Pace.LongestCurrent) is not { } ours) return null;
+
+        ThreatValue? soonest = null;
+        foreach (var clan in behind)
+        {
+            if (Pace.Over(seriesOf(clan.Name), since, Pace.LongestCurrent) is not { } theirs) continue;
+
+            // theirs - ours: the direction a clan behind us has to gain to become a clan ahead of us. This is the
+            // opposite of Pace.Chase's `closing` (mine - theirs, us catching them) — a threat is them catching us.
+            var closing = theirs.PerHour - ours.PerHour;
+            if (closing <= 0) continue;
+
+            var hours = clan.Gap / closing;
+            if (!double.IsFinite(hours) || hours < 0) continue;
+
+            // A crossing after the battle ends never happens; it is an artifact of extrapolating a pace past the
+            // clock, not a threat (controller ruling, this task).
+            if (ends is { } end && now.AddHours(hours) > end) continue;
+
+            if (soonest is null || hours < soonest.Hours) soonest = new ThreatValue(clan.Name, clan.Gap, hours);
+        }
+
+        return soonest;
+    }
 }
