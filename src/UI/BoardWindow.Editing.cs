@@ -19,7 +19,7 @@ public partial class BoardWindow
     /// </summary>
     private BoardDef? _draftBase;
 
-    private DropCaretAdorner? _dropCaret;
+    private EditHintAdorner? _hints;
 
     private bool Editing => _draft is not null;
 
@@ -209,14 +209,14 @@ public partial class BoardWindow
     /// </summary>
     private void ShowDropCaret(DropCaret? caret)
     {
-        if (_dropCaret is null)
+        if (_hints is null)
         {
             if (AdornerLayer.GetAdornerLayer(BoardPanels) is not { } layer) return;
-            _dropCaret = new DropCaretAdorner(BoardPanels);
-            layer.Add(_dropCaret);
+            _hints = new EditHintAdorner(BoardPanels);
+            layer.Add(_hints);
         }
 
-        _dropCaret.Caret = caret;
+        _hints.Caret = caret;
     }
 
     private void OnBoardDragOver(object sender, DragEventArgs e)
