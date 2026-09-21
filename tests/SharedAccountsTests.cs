@@ -48,6 +48,36 @@ public class SharedAccountsTests
         Assert.NotNull(list.ListedAt);
     }
 
+    /// <summary>
+    /// "When RoRoRo last listed these accounts" means exactly that, and the file's own timestamp is a different
+    /// fact wearing the same clothes: it says when WE wrote the cache, which is later, and reading it as a
+    /// listing time overstates how fresh the list is on a screen whose whole job is to say how stale it is. So
+    /// RoRoRo's own last listing wins whenever there has been one, and the file's timestamp is the fallback for
+    /// having never heard from RoRoRo at all. The fallback was covered; the preference was not (S1-12.11).
+    /// </summary>
+    [Fact]
+    public async Task ACachedListKeepsRoRoRosOwnListingTimeRatherThanTheFilesOwn()
+    {
+        using var dir = TempDir.Create("urscore-accounts");
+        var cache = new AccountsCache(Path.Combine(dir.Path, "accounts.json"));
+        var time = new ManualTime(Start);
+        var host = new StubHost(true, Alt);
+        var shared = new SharedAccounts(host, cache, time);
+
+        // Heard from once, so there IS a listing time, and it is nothing like the file's: the fixture clock reads
+        // 2026-09-19 while the cache file is written now, which is what makes the two distinguishable at all.
+        var live = await shared.GetAsync(CancellationToken.None);
+        Assert.Equal(Start, live.ListedAt);
+
+        host.AccountsFailure = new IOException("broken pipe");
+        time.Advance(SharedAccounts.Window + TimeSpan.FromSeconds(1));
+        var cached = await shared.GetAsync(CancellationToken.None);
+
+        Assert.True(cached.FromCache);
+        Assert.Equal(Start, cached.ListedAt);
+        Assert.NotEqual(cache.SavedAt(), cached.ListedAt);
+    }
+
     [Fact]
     public async Task ARefusedAccountListIsDeniedAndEmpty()
     {

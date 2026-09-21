@@ -264,6 +264,31 @@ public class ScoreBookTests
         Assert.Equal(new[] { T.AddMinutes(-3), T.AddMinutes(3) }, BookFiles.ReadAll(dir.Path, Slug).Select(l => l.T).ToArray());
     }
 
+    /// <summary>
+    /// The writer loop's last-resort backstop. It cannot be reached through <c>Append</c> — <c>Drain</c> already
+    /// contains every failure it knows about, so no input makes it throw — which is why it went untested from the
+    /// start (S1-5.4). What matters is not the trigger, by definition the one nobody thought of, but the promise:
+    /// the loop gets another turn. Losing the writer thread would stop every reading reaching disk with nothing
+    /// raising a hand, so this is the difference between a bad hour and a silently empty score book.
+    /// </summary>
+    [Fact]
+    public void AFailureNobodyForesawDoesNotTakeTheWriterDown()
+    {
+        var turns = 0;
+
+        // Thrown on the first turn only, so the second turn also proves the loop CARRIED ON rather than merely
+        // that one call was swallowed: a backstop that ate the exception and then stopped looping would pass a
+        // test that only ever took one turn.
+        ScoreBook.Turn(() =>
+        {
+            turns++;
+            throw new InvalidOperationException("something Drain has never heard of");
+        });
+        ScoreBook.Turn(() => turns++);
+
+        Assert.Equal(2, turns);
+    }
+
     [Fact]
     public void DisposingTwiceDoesNotThrow()
     {

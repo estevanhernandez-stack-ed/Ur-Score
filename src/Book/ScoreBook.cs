@@ -111,16 +111,34 @@ public sealed class ScoreBook : IScoreBook, IDisposable
         while (!_stopping)
         {
             _signal.WaitOne(RetryDelay);
-            try
-            {
-                Drain();
-            }
-            catch (Exception)
-            {
-                // The writer thread must never die from this loop; whatever happened, the next signal or
-                // timeout tries again. Drain() itself already contains every failure it knows how to handle;
-                // this is the last-resort backstop for one it doesn't.
-            }
+            Turn(Drain);
+        }
+    }
+
+    /// <summary>
+    /// One turn of the writer loop: drain, and survive whatever comes back. The writer thread must never die
+    /// from this loop — whatever happened, the next signal or timeout tries again — and losing it would stop
+    /// every reading reaching disk with nothing raising a hand.
+    /// <para>
+    /// A method of its own, and visible to the tests, because the backstop CANNOT be reached through
+    /// <see cref="Append"/>: <see cref="Drain"/> already contains every failure it knows how to handle — a
+    /// locked file, a denied handle, a line that can never serialize, a subscriber that throws — so there is no
+    /// input that makes it throw, which is exactly why this went untested for so long (S1-5.4). What is worth
+    /// pinning is not the trigger, which is by definition the one nobody thought of, but the promise: the loop
+    /// gets another turn.
+    /// </para>
+    /// </summary>
+    internal static void Turn(Action drain)
+    {
+        try
+        {
+            drain();
+        }
+        catch (Exception)
+        {
+            // The last-resort backstop for a failure Drain() does not know about. Deliberately silent and
+            // deliberately total: there is nowhere to report it from a background thread that is still running,
+            // and rethrowing would take the writer down, which is the outcome this exists to prevent.
         }
     }
 
