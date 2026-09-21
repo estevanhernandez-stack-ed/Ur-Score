@@ -240,6 +240,36 @@ public class SourceHostTests
         Assert.Equal(after, engine.Calls);
     }
 
+    /// <summary>
+    /// Start and Stop repeatedly, because each pair used to leave a cancellation source and one linked source per
+    /// entry behind and now disposes them (S1-8.1). Disposal is the part that can bite: a loop holds a source
+    /// LINKED to the one Stop disposes, and a linked source outliving its parent is the assumption the fix rests
+    /// on. If it were wrong this throws ObjectDisposedException rather than leaking quietly, which is why the
+    /// cycle is run ten times and the host is still asked to read afterwards.
+    /// </summary>
+    [Fact]
+    public async Task StartAndStopManyTimesReleasesItsCancellationSourcesAndStillReads()
+    {
+        var engine = new StubEngine(Reading);
+        using var host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 180);
+        host.Apply([SourceNamed("s-1", "CCGP"), SourceNamed("s-2", "K0i2")]);
+
+        for (var i = 0; i < 10; i++)
+        {
+            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void Ready(string id, RecipeSnapshot snapshot) => ready.TrySetResult();
+            host.SnapshotReady += Ready;
+            host.Start();
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            host.Stop();
+            host.SnapshotReady -= Ready;
+        }
+
+        Assert.False(host.Running);
+        await host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+        Assert.Equal(WatchState.Showing, host.Latest["s-1"].State);
+    }
+
     [Fact]
     public async Task AReadThatThrowsBecomesASnapshotThatNamesOnlyTheErrorsType()
     {
