@@ -121,6 +121,125 @@ public class SourceHostTests
         Assert.Equal("s-9", await ready.Task.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
+    /// <summary>
+    /// A recipe asking to be read more often than the floor allows is clamped to it. The floor exists to protect
+    /// somebody else's server, so a recipe cannot opt out of it by asking for five seconds — and an interval
+    /// ABOVE the floor has to survive untouched, or the clamp would quietly make every recipe poll every minute.
+    /// Both directions, because a clamp written as Min rather than Max passes a test that only checks the low
+    /// side (S1-8.7).
+    /// </summary>
+    [Theory]
+    [InlineData(5, Recipe.MinimumEverySeconds)]
+    [InlineData(0, Recipe.MinimumEverySeconds)]
+    [InlineData(-30, Recipe.MinimumEverySeconds)]
+    [InlineData(Recipe.MinimumEverySeconds, Recipe.MinimumEverySeconds)]
+    [InlineData(300, 300)]
+    public void AnIntervalIsClampedToTheFloorAndNoFurther(int asked, int expected) =>
+        Assert.Equal(expected, SourceHost.DelaySeconds(_ => asked, SourceNamed("s-1", "CCGP")));
+
+    /// <summary>
+    /// The caller's interval lookup throwing must never end a source's loop. That failure would be total (the
+    /// source stops reading), permanent (nothing restarts the loop) and silent (no snapshot, no state change, no
+    /// trail line) — the worst combination available, and reachable from an ordinary bug in whatever computes
+    /// an interval. The loop falls back to the floor and carries on (S1-8.7).
+    /// </summary>
+    [Fact]
+    public void AnIntervalLookupThatThrowsFallsBackToTheFloorRatherThanEndingTheLoop()
+    {
+        var asked = 0;
+
+        var seconds = SourceHost.DelaySeconds(
+            _ =>
+            {
+                asked++;
+                throw new InvalidOperationException("the interval lookup is broken");
+            },
+            SourceNamed("s-1", "CCGP"));
+
+        Assert.Equal(Recipe.MinimumEverySeconds, seconds);
+        Assert.Equal(1, asked);
+    }
+
+    /// <summary>
+    /// Stop then Start reads again. Stop cancels the run token and drops it; Start builds a NEW one and restarts
+    /// every entry's loop, so the question is whether an entry survives its loop being cancelled — nothing
+    /// pinned that it does, and a source that went quiet after a Stop/Start would look exactly like a source that
+    /// was never switched on (S1-8.7).
+    /// </summary>
+    [Fact]
+    public async Task StopThenStartReadsAgain()
+    {
+        var engine = new StubEngine(Reading);
+        using var host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 180);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => ready.TrySetResult();
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        host.Stop();
+        Assert.False(host.Running);
+
+        var again = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => again.TrySetResult();
+        host.Start();
+
+        Assert.True(host.Running);
+        await again.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(engine.Calls >= 2);
+    }
+
+    /// <summary>
+    /// A second Start while already running changes nothing. Without the guard each Start would add another loop
+    /// per entry, so a source read once a minute would be read twice, then three times — against somebody
+    /// else's server, and the floor that exists to protect it would be worth nothing (S1-8.7).
+    /// </summary>
+    [Fact]
+    public async Task StartingTwiceDoesNotDoubleTheReading()
+    {
+        var engine = new StubEngine(Reading);
+        using var host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 180);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => ready.TrySetResult();
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        host.Start();
+        host.Start();
+
+        // The interval is 180s, so with no second loop there can be no second read inside this window; another
+        // loop would read immediately on starting, which is what makes the count decisive rather than a guess.
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+        Assert.Equal(1, engine.Calls);
+    }
+
+    /// <summary>
+    /// Dispose stops the reading and can be called twice. It runs from the composition root on the way down, and
+    /// on that path a second Dispose or a Dispose after Stop is ordinary rather than exotic (S1-8.7).
+    /// </summary>
+    [Fact]
+    public async Task DisposeStopsTheReadingAndIsSafeTwice()
+    {
+        var engine = new StubEngine(Reading);
+        var host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 180);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => ready.TrySetResult();
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        host.Dispose();
+        Assert.False(host.Running);
+        host.Dispose();
+        host.Stop();
+
+        var after = engine.Calls;
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+        Assert.Equal(after, engine.Calls);
+    }
+
     [Fact]
     public async Task AReadThatThrowsBecomesASnapshotThatNamesOnlyTheErrorsType()
     {

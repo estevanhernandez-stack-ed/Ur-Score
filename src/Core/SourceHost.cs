@@ -119,16 +119,7 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
             await RunOneAsync(entry, trigger, cancellationToken).ConfigureAwait(false);
             trigger = BookLine.TriggerTimer;
 
-            int seconds;
-            try
-            {
-                seconds = Math.Max(Recipe.MinimumEverySeconds, intervalSeconds(entry.Source));
-            }
-            catch (Exception)
-            {
-                // A caller's interval lookup must never end this source's loop; fall back to the floor.
-                seconds = Recipe.MinimumEverySeconds;
-            }
+            var seconds = DelaySeconds(intervalSeconds, entry.Source);
 
             try
             {
@@ -138,6 +129,29 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// How long a source waits before its next read: what the caller's lookup says, never below
+    /// <see cref="Recipe.MinimumEverySeconds"/>, and the floor again if the lookup throws.
+    /// <para>
+    /// A method of its own so both rules can be tested without waiting out an interval. The floor is a minute, so
+    /// a test that drove the real loop would have to sit through one, and a rule nobody can afford to test is a
+    /// rule that quietly stops holding. The clamp protects the sources a recipe asks to be read too often; the
+    /// catch protects the LOOP — a caller's lookup throwing must never be the thing that ends a source's reading,
+    /// because the failure would be total, permanent and silent (S1-8.7).
+    /// </para>
+    /// </summary>
+    internal static int DelaySeconds(Func<Source, int> intervalSeconds, Source source)
+    {
+        try
+        {
+            return Math.Max(Recipe.MinimumEverySeconds, intervalSeconds(source));
+        }
+        catch (Exception)
+        {
+            return Recipe.MinimumEverySeconds;
         }
     }
 
