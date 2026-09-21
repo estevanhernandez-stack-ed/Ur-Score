@@ -113,7 +113,10 @@ public class BoardMenuTests
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        thread.Join();
+        // A Join with no timeout cannot fail, only wait. On 2026-09-17 six of the eight tests built this way
+        // were stuck on one at once and the whole run hung until a human noticed (V3-S.38). A bounded wait
+        // turns that into a named failing test, which is the difference between a diagnosis and a mystery.
+        Assert.True(thread.Join(UiThread.Longest), $"the UI thread did not finish within {UiThread.Longest}");
         failure?.Throw();
     }
 
