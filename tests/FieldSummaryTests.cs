@@ -253,7 +253,14 @@ public class FieldSummaryTests
     /// With two of your clans in the read, the lower one is excluded from "behind" by the same fold, not only
     /// when it is spelled exactly as Setup typed it. Anchor-finding alone would not catch this: skipping the
     /// anchor's own index already keeps it out regardless of casing, so this needs a second clan of yours,
-    /// stored under different casing, sitting below the anchor.
+    /// stored under different casing.
+    /// <para>
+    /// The second clan of yours (R0W) is deliberately NOT the one directly below the true anchor (K0i2): a
+    /// controller review on 2026-09-20 caught that with an adjacent second clan, anchoring on the wrong one of
+    /// your two clans produces the identical trailing Name list either way, so a wrong anchor would slip past
+    /// unnoticed. Kept apart, a wrong anchor changes which clans even appear here, and the Gap values below are
+    /// keyed off the true anchor's 500 regardless, so either mistake is caught even on its own.
+    /// </para>
     /// </summary>
     [Fact]
     public void BehindExcludesEachOfYourClansHoweverItsCasingWasTyped()
@@ -263,8 +270,26 @@ public class FieldSummaryTests
             Clan("Leader", 900), Clan("K0i2", 500), Clan("H8ER", 400), Clan("LXCC", 300), Clan("R0W", 200), Clan("Tail", 100),
         };
 
-        var behind = FieldSummary.Behind(rows, "points", Mine("K0i2", "h8er"), count: 3);
+        var behind = FieldSummary.Behind(rows, "points", Mine("K0i2", "r0w"), count: 3);
 
-        Assert.Equal(["LXCC", "R0W", "Tail"], behind.Select(b => b.Name));
+        Assert.Equal(["H8ER", "LXCC", "Tail"], behind.Select(b => b.Name));
+        Assert.Equal([100, 200, 400], behind.Select(b => b.Gap));
+    }
+
+    /// <summary>
+    /// Ranked by the value itself, never by the rank the list handed over — the same proof <see cref="FieldSummary.Of"/>
+    /// carries in <c>PointsDecideTheOrderNotTheRankTheListGave</c>, and for the same reason: measured on the live
+    /// board on 2026-09-19, the top-100 list's own rank disagreed with its own points. <see cref="FieldSummary.Behind"/>
+    /// never reads <see cref="GroupRow.Rank"/> at all; this fixture proves that rather than leaving it argued.
+    /// </summary>
+    [Fact]
+    public void BehindRanksByValueNotByTheRankTheListGave()
+    {
+        var rows = new List<GroupRow> { Clan("K0i2", 188_236_072, rank: 10), Clan("Rival", 181_549_159, rank: 9) };
+
+        var behind = FieldSummary.Behind(rows, "points", Mine("K0i2"), count: 5);
+
+        Assert.Equal(["Rival"], behind.Select(b => b.Name));
+        Assert.Equal(6_686_913, behind[0].Gap);
     }
 }
