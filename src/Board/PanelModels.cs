@@ -416,7 +416,7 @@ public static class PanelModels
         if (FieldOf(live) is { } fieldSource
             && live.FindRecipe(fieldSource.Recipe)?.Recipe is { IsGroupList: true, GroupsAreClans: false } list)
         {
-            notes.Add(PanelText.GroupNamesNotKept(list));
+            notes.Add(PanelText.GroupNamesNotKept(groupsWord, list));
         }
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
