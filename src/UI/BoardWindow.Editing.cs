@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
 
@@ -236,6 +237,80 @@ public partial class BoardWindow
         ShowDropCaret(null);
         if (_hints is not null) _hints.Grips = Editing ? [.. BoardPanels.Cells.Select(BoardLayout.HandlesFor)] : [];
     }
+
+    /// <summary>The sizes a keyboard walks through, narrowest first, so Ctrl+Left and Ctrl+Right step along them.</summary>
+    private static readonly int[] Sizes = [PanelSize.Small, PanelSize.Half, PanelSize.Wide];
+
+    /// <summary>
+    /// The board child holding keyboard focus, and its index — which is also its index in the draft's panel list,
+    /// because the grid's children are built from that list in order.
+    /// </summary>
+    private int FocusedPanelIndex()
+    {
+        if (Keyboard.FocusedElement is not DependencyObject focused) return -1;
+
+        for (var walk = focused; walk is not null; walk = VisualTreeHelper.GetParent(walk))
+        {
+            var at = BoardPanels.Children.IndexOf(walk as UIElement);
+            if (at >= 0) return at;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Moving and sizing from the keyboard, which is the whole of that capability now the arrows and the size box
+    /// have gone from the header. Not a convenience: dragging a panel and hauling its corner are mouse gestures,
+    /// and without these there would be no way to arrange a board without one — nor any way for the smoke walks,
+    /// which drive this app through UI Automation and keystrokes, to arrange one at all.
+    /// </summary>
+    private void OnBoardKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!Editing || _draft is not { } draft) return;
+
+        var index = FocusedPanelIndex();
+        if (index < 0 || index >= draft.Panels.Count) return;
+
+        var panel = draft.Panels[index];
+        var control = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        var step = e.Key switch { Key.Left => -1, Key.Right => 1, _ => 0 };
+
+        if (step != 0 && !control)
+        {
+            ChangeBoard(board => BoardEdits.MoveBy(board, panel.Id, step));
+            FocusPanelLater(index + step);
+            e.Handled = true;
+            return;
+        }
+
+        if (step != 0)
+        {
+            var at = Array.IndexOf(Sizes, panel.Size.Span);
+            var wanted = Sizes[Math.Clamp((at < 0 ? 1 : at) + step, 0, Sizes.Length - 1)];
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Span = wanted }));
+            FocusPanelLater(index);
+            e.Handled = true;
+            return;
+        }
+
+        if (control && e.Key is Key.Up or Key.Down)
+        {
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Tall = e.Key == Key.Down }));
+            FocusPanelLater(index);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Puts focus back on the panel after the change, because every edit rebuilds the grid and destroys the element
+    /// that had it — the same hand-off <see cref="OnEditTool"/> has always had to make, for the same reason.
+    /// </summary>
+    private void FocusPanelLater(int index) => Dispatcher.BeginInvoke(
+        () =>
+        {
+            if (index >= 0 && index < BoardPanels.Children.Count && BoardPanels.Children[index] is FrameworkElement panel) panel.Focus();
+        },
+        DispatcherPriority.Loaded);
 
     private void OnBoardMouseDown(object sender, MouseButtonEventArgs e)
     {

@@ -38,9 +38,6 @@ public partial class PanelFrame : UserControl
         "CurrentSize", typeof(PanelSize), typeof(PanelFrame),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits, OnToolsChanged));
 
-    /// <summary>True while the size box is being set from the panel's size, so that isn't read as a pick.</summary>
-    private bool _showingSize;
-
     public PanelFrame()
     {
         InitializeComponent();
@@ -85,9 +82,6 @@ public partial class PanelFrame : UserControl
     {
         Control? target = tool switch
         {
-            PanelTool.MoveEarlier => MoveEarlierButton,
-            PanelTool.MoveLater => MoveLaterButton,
-            PanelTool.Resize => tall ? TallBox : SizeBox,
             PanelTool.Remove => RemovePanelButton,
             PanelTool.Settings or PanelTool.ChooseAnother => PanelSettingsButton,
             PanelTool.PopOut => PopOutButton,
@@ -129,24 +123,6 @@ public partial class PanelFrame : UserControl
         PanelSettingsButton.Visibility = settings ? Visibility.Visible : Visibility.Collapsed;
         ChooseAnotherButton.Visibility = settings && DataContext is PanelHead { HasStale: true } ? Visibility.Visible : Visibility.Collapsed;
 
-        var size = GetCurrentSize(this);
-        _showingSize = true;
-        try
-        {
-            // R5: a starter's 4- or 5-wide panel shows no size picked until one is.
-            SizeBox.SelectedItem = size?.Span switch
-            {
-                PanelSize.Small => SmallItem,
-                PanelSize.Half => HalfItem,
-                PanelSize.Wide => WideItem,
-                _ => null,
-            };
-            TallBox.IsChecked = size?.Tall == true;
-        }
-        finally
-        {
-            _showingSize = false;
-        }
     }
 
     private void OnToolClick(object sender, RoutedEventArgs e)
@@ -157,22 +133,6 @@ public partial class PanelFrame : UserControl
         }
     }
 
-    private void OnSizeChanged(object sender, SelectionChangedEventArgs e)
-    {
-        e.Handled = true;
-        if (_showingSize || SizeBox.SelectedItem is not ComboBoxItem item) return;
-
-        var span = ReferenceEquals(item, SmallItem) ? PanelSize.Small : ReferenceEquals(item, HalfItem) ? PanelSize.Half : PanelSize.Wide;
-        RaiseEvent(new PanelToolEventArgs(ToolEvent, PanelTool.Resize, new PanelSize(span, TallBox.IsChecked == true)));
-    }
-
-    private void OnTallChanged(object sender, RoutedEventArgs e)
-    {
-        if (_showingSize) return;
-
-        var span = GetCurrentSize(this)?.Span ?? PanelSize.Half;
-        RaiseEvent(new PanelToolEventArgs(ToolEvent, PanelTool.Resize, new PanelSize(span, TallBox.IsChecked == true)));
-    }
 
     private void OnDragHandleDown(object sender, MouseButtonEventArgs e)
     {
