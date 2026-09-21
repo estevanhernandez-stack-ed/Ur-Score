@@ -46,7 +46,9 @@ public sealed record RulesRead(RulesProblem Problem, bool Exists, IReadOnlyList<
 }
 
 /// <summary>
-/// Reads RoRoRo's <c>metric-rules.json</c>, and turns on, changes and removes Ur Score's own rules in it, on an explicit click only.
+/// Reads RoRoRo's <c>metric-rules.json</c>, and turns on, changes and removes Ur Score's own rules in it, on an explicit click
+/// only — except <see cref="ChangeLabel"/>, which rewrites the label of a rule Ur Score already owns, unattended, from a
+/// background read (see the carve-out below).
 /// <para>
 /// The metric id is a silent-failure seam: it must match a rule in that file or nothing can ever alert, and a mismatch is
 /// quiet on both sides. Leaving that to hand-editing JSON in another app's folder is a trap for a common Windows user, so
@@ -57,6 +59,18 @@ public sealed record RulesRead(RulesProblem Problem, bool Exists, IReadOnlyList<
 /// row it would skip costs only itself. Only rules owned by <see cref="Owner"/> are ever changed or removed, and every other
 /// rule keeps every field. The file is backed up before each write and replaced through a temporary file. A file that can't
 /// be opened, isn't valid JSON or isn't a list is never written.
+/// </para>
+/// <para>
+/// <see cref="ChangeLabel"/> IS THE ONE EXCEPTION TO TWO OF THOSE, and this class edits another application's configuration
+/// file, so the exception is written down rather than left to be found. (1) It is NOT behind a click: it runs unattended,
+/// from a background read, each time the rival clan a managed label names changes (design §1 — the label has to be written
+/// before the number that rides under it is reported, so nothing that waits for the owner could do it). (2) It does NOT
+/// back the file up, on purpose: the backup is the whole file's single undo point, and an explicit click spends it
+/// knowingly while an automatic rewrite nobody asked for must not, or two label rewrites in a row would push a hand-typed
+/// rule out of the backup with the owner never having touched Setup (the owner's ruling of 2026-09-20). Every other fence
+/// above still holds for it — it finds its row through <see cref="RulesRead.OursFor"/>, so only a rule owned by
+/// <see cref="Owner"/> is touched; it edits that row's label alone and leaves its other fields and every other row exactly
+/// as they were; and a file it cannot read, or a row it cannot edit safely, is refused rather than written.
 /// </para>
 /// </summary>
 public static class RulesFile

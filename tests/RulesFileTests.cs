@@ -337,6 +337,12 @@ public sealed class RulesFileTests : IDisposable
         Assert.Equal(RuleWrite.NotThere, RulesFile.Change(path, Points, Stops));
         Assert.Equal(RuleWrite.NotThere, RulesFile.Remove(path, Points, AlertKind.Rate));
         Assert.Equal(RuleWrite.NotThere, RulesFile.Remove(path, Points, AlertKind.Level));
+
+        // ChangeLabel obeys the same ownership fence, and it matters more here than for its two siblings: they
+        // run on a click, this one runs unattended on a timer, every time the named rival changes (design §6
+        // asked for this case and the branch shipped without it). Renaming somebody else's rule would put our
+        // wording on an alert we do not own, over and over, with nobody watching.
+        Assert.Equal(RuleWrite.NotThere, RulesFile.ChangeLabel(path, Points, AlertKind.Level, "H8ER catching K0i2"));
         Assert.Equal(before, File.ReadAllText(path));
         Assert.False(File.Exists(path + RulesFile.BackupSuffix));
     }
@@ -402,16 +408,26 @@ public sealed class RulesFileTests : IDisposable
             [ { "metricId": "{{Points}}", "kind": "Level", "threshold": 40, "alertWhenBelow": false, "owner": "626labs.ur-score", "label": "first" } ]
             """);
 
-        // Contrast first: an ordinary Change DOES replace the backup, exactly as every other write does.
+        // Contrast first: an ordinary Change DOES replace the backup, exactly as every other write does. The rule
+        // it leaves behind carries a number, a direction and a recovery ask that are all the opposite of what a
+        // default spec would write, so the next assertion can tell an in-place edit from a replacement.
         File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
-        Assert.Equal(RuleWrite.Done, RulesFile.Change(path, Points, Crosses with { Label = "second" }));
+        Assert.Equal(RuleWrite.Done, RulesFile.Change(path, Points, Crosses with { Label = "second", TellMeWhenItRecovers = true }));
         Assert.NotEqual("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
 
         // Now the managed path: it changes only the label, and the sentinel backup below survives untouched.
         File.WriteAllText(path + RulesFile.BackupSuffix, "an older backup");
         Assert.Equal(RuleWrite.Done, RulesFile.ChangeLabel(path, Points, AlertKind.Level, "third"));
 
-        Assert.Equal("third", RulesFile.Read(path).OursFor(Points, AlertKind.Level)?.Label);
+        // The whole rule, not just its new label: ChangeLabel's core promise is that the OTHER fields survive an
+        // in-place edit (design §2, "only the label is managed"). An implementation that replaced the row with a
+        // default spec would return Done, read back "third" and leave the sentinel backup alone — passing a test
+        // that asserted only those — while the owner's threshold silently became 0, alertWhenBelow flipped back
+        // to the parser's default, and an alert-when-below rule stopped firing for good. Found by the final
+        // review of this branch, 2026-09-20.
+        Assert.Equal(
+            new AlertRule(0, Points, AlertKind.Level, 40, 0, AlertWhenBelow: false, RuleOwner.UrScore, "third", TellMeWhenItRecovers: true),
+            RulesFile.Read(path).OursFor(Points, AlertKind.Level));
         Assert.Equal("an older backup", File.ReadAllText(path + RulesFile.BackupSuffix));
     }
 
