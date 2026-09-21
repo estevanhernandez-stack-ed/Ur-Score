@@ -25,7 +25,7 @@ try {
 
     # 2. Edit mode with no change writes nothing (R8).
     Enter-EditMode $board
-    Check '2 Edit mode shows the panel tools' ([bool](Find-ByAutomationId (Find-ByAutomationId $board 'RacePanel1') 'MoveEarlierButton')) 'MoveEarlierButton'
+    Check '2 Edit mode shows the panel tools' ([bool](Find-ByAutomationId (Find-ByAutomationId $board 'RacePanel1') 'DragHandle')) 'DragHandle'
     Check '2b The tabs are off while editing' (-not (Find-ByAutomationId $board 'BoardTabs').Current.IsEnabled) 'BoardTabs disabled'
     Complete-EditMode $board
     Check '2c Done with no change writes nothing' (-not (Test-Path $boardsFile)) "exists=$(Test-Path $boardsFile)"
@@ -33,7 +33,7 @@ try {
     # 3. Move earlier; Done saves the order.
     $before = @(Get-PanelIds $board)
     Enter-EditMode $board
-    Invoke-PanelTool $board 'RacePanel1' 'MoveEarlierButton'
+    Move-PanelEarlier $board 'RacePanel1'
     Complete-EditMode $board
     $after = @(Get-PanelIds (Get-BoardWindow))
     $was = [array]::IndexOf($before, 'RacePanel1')
@@ -45,7 +45,7 @@ try {
     # 4. Wide and tall.
     Enter-EditMode (Get-BoardWindow)
     Set-PanelSize (Get-BoardWindow) 'RacePanel1' 'Wide'
-    Set-Tick (Find-ByAutomationId (Find-ByAutomationId (Get-BoardWindow) 'StandingPanel1') 'TallBox') $true
+    Set-PanelTall (Get-BoardWindow) 'StandingPanel1' $true
     Start-Sleep -Milliseconds 800
     Complete-EditMode (Get-BoardWindow)
     $race = Get-SavedPanels | Where-Object { $_.type -eq 'race' } | Select-Object -First 1

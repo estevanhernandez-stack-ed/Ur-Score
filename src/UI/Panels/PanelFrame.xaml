@@ -3,7 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:core="clr-namespace:Labs626.UrScore.Core">
     <StackPanel>
-        <!-- Edit mode (spec §9.2): drag, move, size, tall, remove. Its own row, so a small panel wraps it instead of hiding its title. -->
+        <!-- Edit mode. Moving is dragging the header and sizing is hauling an edge, so neither has a button any more;
+             what is left has no gesture of its own. Both are still reachable from the keyboard on the focused panel
+             (BoardWindow.Editing.OnBoardKeyDown), which is how a board is arranged without a mouse and how the smoke
+             walks arrange one at all. -->
         <WrapPanel x:Name="EditTools" Margin="0,0,0,8" Visibility="Collapsed">
             <Label x:Name="DragHandle" Background="Transparent" Cursor="SizeAll" Padding="6,3" VerticalAlignment="Center"
                    MinWidth="24" MinHeight="24" Focusable="False"
@@ -18,23 +21,15 @@
                     <Ellipse Width="2" Height="2" Fill="{DynamicResource MutedTextBrush}" />
                 </UniformGrid>
             </Label>
-            <Button x:Name="MoveEarlierButton" Content="←" Tag="MoveEarlier" Style="{StaticResource FlatButton}" Padding="6,2"
-                    Click="OnToolClick" AutomationProperties.Name="Move earlier" />
-            <Button x:Name="MoveLaterButton" Content="→" Tag="MoveLater" Style="{StaticResource FlatButton}" Padding="6,2"
-                    Click="OnToolClick" AutomationProperties.Name="Move later" />
-            <ComboBox x:Name="SizeBox" Width="96" MinHeight="26" Margin="4,0" SelectionChanged="OnSizeChanged" AutomationProperties.Name="Size">
-                <ComboBoxItem x:Name="SmallItem" Content="Small" AutomationProperties.Name="Small" />
-                <ComboBoxItem x:Name="HalfItem" Content="Half" AutomationProperties.Name="Half" />
-                <ComboBoxItem x:Name="WideItem" Content="Wide" AutomationProperties.Name="Wide" />
-            </ComboBox>
-            <!-- Checked and Unchecked, not Click: a UI Automation toggle changes IsChecked without a click. -->
-            <CheckBox x:Name="TallBox" Content="Tall" VerticalAlignment="Center" Margin="4,0" Checked="OnTallChanged" Unchecked="OnTallChanged"
-                      AutomationProperties.Name="Tall" />
             <Button x:Name="RemovePanelButton" Content="✕" Tag="Remove" Style="{StaticResource FlatButton}" Padding="6,2"
                     Click="OnToolClick" AutomationProperties.Name="Remove panel" />
         </WrapPanel>
         <!-- The title line (the mock's .p-head): title, chip and tools centred on one line; the tools in the muted text colour. -->
-        <DockPanel LastChildFill="False">
+        <!-- Background, not the default null: a DockPanel with no brush is hit-test invisible over its empty space,
+             so without this a press between the title and the tools would fall through and the header would only
+             drag where there happens to be text. -->
+        <DockPanel x:Name="TitleRow" LastChildFill="False" Background="Transparent"
+                   MouseLeftButtonDown="OnTitleRowDown" MouseMove="OnTitleRowMove" MouseLeftButtonUp="OnTitleRowUp">
             <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                 <!-- Both are named in UpdateTools from the panel's own title ("Pop out Past battles"), so five panels
                      don't give a screen reader five identical buttons; no name here, which would go stale beside it. -->

@@ -1,4 +1,7 @@
 using System.Windows;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
 
@@ -17,6 +20,11 @@ public partial class BoardWindow
     /// in edit mode writes nothing, even if the following starter changed underneath it meanwhile (R1).
     /// </summary>
     private BoardDef? _draftBase;
+
+    private EditHintAdorner? _hints;
+
+    /// <summary>The panel being resized by its grip, which grip, and the cell it started from. Null when not.</summary>
+    private (int Index, bool Corner, CellRect From)? _resizing;
 
     private bool Editing => _draft is not null;
 
@@ -98,6 +106,10 @@ public partial class BoardWindow
         DoneButton.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
 
         ApplyButtons();
+
+        // After the grid has arranged, not now: a cell has no rectangle until it has been placed, and entering edit
+        // mode changes every panel's height by adding the tools row above it.
+        Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
     }
 
     private void OnEditTool(object? sender, PanelToolEventArgs e)
@@ -188,18 +200,191 @@ public partial class BoardWindow
     {
         if (ViewOf(def.Id) is not { } view) return;
 
-        DragDrop.DoDragDrop(view, new DataObject(PanelDragFormat, def.Id), DragDropEffects.Move);
+        // DoDragDrop blocks until the drag ends, however it ends — dropped, cancelled, or escaped — so clearing the
+        // mark after it returns covers every one of those without a handler for each.
+        try
+        {
+            DragDrop.DoDragDrop(view, new DataObject(PanelDragFormat, def.Id), DragDropEffects.Move);
+        }
+        finally
+        {
+            ShowDropCaret(null);
+        }
+    }
+
+    /// <summary>
+    /// Draws the mark that says where the drop will land, or clears it with null. The adorner is made once and kept:
+    /// the board rebuilds its panels on every redraw, but the grid it adorns outlives them.
+    /// </summary>
+    private void ShowDropCaret(DropCaret? caret)
+    {
+        if (_hints is null)
+        {
+            if (AdornerLayer.GetAdornerLayer(BoardPanels) is not { } layer) return;
+            _hints = new EditHintAdorner(BoardPanels);
+            layer.Add(_hints);
+        }
+
+        _hints.Caret = caret;
+    }
+
+    /// <summary>
+    /// Shows a grip on every panel while editing and none otherwise. Called after each rebuild, because the cells
+    /// are only known once the grid has arranged and a rebuild replaces every one of them.
+    /// </summary>
+    private void ShowGrips()
+    {
+        ShowDropCaret(null);
+        if (_hints is not null) _hints.Grips = Editing ? [.. BoardPanels.Cells.Select(BoardLayout.HandlesFor)] : [];
+    }
+
+    /// <summary>The sizes a keyboard walks through, narrowest first, so Ctrl+Left and Ctrl+Right step along them.</summary>
+    private static readonly int[] Sizes = [PanelSize.Small, PanelSize.Half, PanelSize.Wide];
+
+    /// <summary>
+    /// The board child holding keyboard focus, and its index — which is also its index in the draft's panel list,
+    /// because the grid's children are built from that list in order.
+    /// </summary>
+    private int FocusedPanelIndex()
+    {
+        if (Keyboard.FocusedElement is not DependencyObject focused) return -1;
+
+        for (var walk = focused; walk is not null; walk = VisualTreeHelper.GetParent(walk))
+        {
+            var at = BoardPanels.Children.IndexOf(walk as UIElement);
+            if (at >= 0) return at;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Moving and sizing from the keyboard, which is the whole of that capability now the arrows and the size box
+    /// have gone from the header. Not a convenience: dragging a panel and hauling its corner are mouse gestures,
+    /// and without these there would be no way to arrange a board without one — nor any way for the smoke walks,
+    /// which drive this app through UI Automation and keystrokes, to arrange one at all.
+    /// </summary>
+    private void OnBoardKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!Editing || _draft is not { } draft) return;
+
+        var index = FocusedPanelIndex();
+        if (index < 0 || index >= draft.Panels.Count) return;
+
+        var panel = draft.Panels[index];
+        var control = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        var step = e.Key switch { Key.Left => -1, Key.Right => 1, _ => 0 };
+
+        if (step != 0 && !control)
+        {
+            ChangeBoard(board => BoardEdits.MoveBy(board, panel.Id, step));
+            FocusPanelLater(index + step);
+            e.Handled = true;
+            return;
+        }
+
+        if (step != 0)
+        {
+            var at = Array.IndexOf(Sizes, panel.Size.Span);
+            var wanted = Sizes[Math.Clamp((at < 0 ? 1 : at) + step, 0, Sizes.Length - 1)];
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Span = wanted }));
+            FocusPanelLater(index);
+            e.Handled = true;
+            return;
+        }
+
+        if (control && e.Key is Key.Up or Key.Down)
+        {
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Tall = e.Key == Key.Down }));
+            FocusPanelLater(index);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Puts focus back on the panel after the change, because every edit rebuilds the grid and destroys the element
+    /// that had it — the same hand-off <see cref="OnEditTool"/> has always had to make, for the same reason.
+    /// </summary>
+    private void FocusPanelLater(int index) => Dispatcher.BeginInvoke(
+        () =>
+        {
+            if (index >= 0 && index < BoardPanels.Children.Count && BoardPanels.Children[index] is FrameworkElement panel) panel.Focus();
+        },
+        DispatcherPriority.Loaded);
+
+    private void OnBoardMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!Editing || BoardPanels.GripAt(e.GetPosition(BoardPanels)) is not { } grip) return;
+        if (grip.Index >= BoardPanels.Cells.Count) return;
+
+        _resizing = (grip.Index, grip.Corner, BoardPanels.Cells[grip.Index]);
+        BoardPanels.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnBoardMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_resizing is not { } resizing || _hints is null) return;
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            EndResize(commit: false);
+            return;
+        }
+
+        var at = e.GetPosition(BoardPanels);
+        var wide = Math.Max(0, at.X - resizing.From.Left);
+        var tall = resizing.Corner ? Math.Max(0, at.Y - resizing.From.Top) : resizing.From.Height;
+        _hints.Preview = new Rect(resizing.From.Left, resizing.From.Top, wide, tall);
+        e.Handled = true;
+    }
+
+    private void OnBoardMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_resizing is null) return;
+        EndResize(commit: true);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Finishes a grip drag. The size is worked out from the preview the person was actually looking at, not from
+    /// the pointer, so what lands is what the outline promised.
+    /// </summary>
+    private void EndResize(bool commit)
+    {
+        var resizing = _resizing;
+        var preview = _hints?.Preview;
+        _resizing = null;
+        if (_hints is not null) _hints.Preview = null;
+        BoardPanels.ReleaseMouseCapture();
+
+        if (!commit || resizing is not { } grip || preview is not { } shown) return;
+        if (_draft is not { } draft || grip.Index >= draft.Panels.Count) return;
+
+        var span = BoardLayout.SpanFor(shown.Width, BoardPanels.ActualWidth, BoardPanels.Gap);
+        var rows = grip.Corner ? BoardLayout.RowsFor(shown.Height, grip.From.Height) : (PanelGrid.GetTall(BoardPanels.Children[grip.Index]) ? 2 : 1);
+        var panelId = draft.Panels[grip.Index].Id;
+
+        ChangeBoard(board => BoardEdits.Resize(board, panelId, new PanelSize(span, rows > 1)));
     }
 
     private void OnBoardDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = Editing && e.Data.GetDataPresent(PanelDragFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        var ours = Editing && e.Data.GetDataPresent(PanelDragFormat);
+        e.Effects = ours ? DragDropEffects.Move : DragDropEffects.None;
+        ShowDropCaret(ours ? BoardPanels.DropCaretAt(e.GetPosition(BoardPanels)) : null);
+        e.Handled = true;
+    }
+
+    private void OnBoardDragLeave(object sender, DragEventArgs e)
+    {
+        ShowDropCaret(null);
         e.Handled = true;
     }
 
     private void OnBoardDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
+        ShowDropCaret(null);
         if (!Editing || e.Data.GetData(PanelDragFormat) is not string panelId) return;
 
         var index = BoardPanels.DropIndexAt(e.GetPosition(BoardPanels));

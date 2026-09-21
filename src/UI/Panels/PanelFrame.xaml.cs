@@ -38,9 +38,6 @@ public partial class PanelFrame : UserControl
         "CurrentSize", typeof(PanelSize), typeof(PanelFrame),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits, OnToolsChanged));
 
-    /// <summary>True while the size box is being set from the panel's size, so that isn't read as a pick.</summary>
-    private bool _showingSize;
-
     public PanelFrame()
     {
         InitializeComponent();
@@ -85,9 +82,6 @@ public partial class PanelFrame : UserControl
     {
         Control? target = tool switch
         {
-            PanelTool.MoveEarlier => MoveEarlierButton,
-            PanelTool.MoveLater => MoveLaterButton,
-            PanelTool.Resize => tall ? TallBox : SizeBox,
             PanelTool.Remove => RemovePanelButton,
             PanelTool.Settings or PanelTool.ChooseAnother => PanelSettingsButton,
             PanelTool.PopOut => PopOutButton,
@@ -120,28 +114,15 @@ public partial class PanelFrame : UserControl
         AutomationProperties.SetName(ChooseAnotherButton, BoardText.ChooseAnotherName(title));
 
         EditTools.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+
+        // The header is the drag target while editing, so it says so under the pointer. Outside edit mode it is
+        // an ordinary title again and must not suggest it can be moved.
+        TitleRow.Cursor = editing ? Cursors.SizeAll : null;
+        if (!editing) _pressedAt = null;
         PopOutButton.Visibility = GetShowPopOut(this) && !editing ? Visibility.Visible : Visibility.Collapsed;
         PanelSettingsButton.Visibility = settings ? Visibility.Visible : Visibility.Collapsed;
         ChooseAnotherButton.Visibility = settings && DataContext is PanelHead { HasStale: true } ? Visibility.Visible : Visibility.Collapsed;
 
-        var size = GetCurrentSize(this);
-        _showingSize = true;
-        try
-        {
-            // R5: a starter's 4- or 5-wide panel shows no size picked until one is.
-            SizeBox.SelectedItem = size?.Span switch
-            {
-                PanelSize.Small => SmallItem,
-                PanelSize.Half => HalfItem,
-                PanelSize.Wide => WideItem,
-                _ => null,
-            };
-            TallBox.IsChecked = size?.Tall == true;
-        }
-        finally
-        {
-            _showingSize = false;
-        }
     }
 
     private void OnToolClick(object sender, RoutedEventArgs e)
@@ -152,26 +133,50 @@ public partial class PanelFrame : UserControl
         }
     }
 
-    private void OnSizeChanged(object sender, SelectionChangedEventArgs e)
-    {
-        e.Handled = true;
-        if (_showingSize || SizeBox.SelectedItem is not ComboBoxItem item) return;
-
-        var span = ReferenceEquals(item, SmallItem) ? PanelSize.Small : ReferenceEquals(item, HalfItem) ? PanelSize.Half : PanelSize.Wide;
-        RaiseEvent(new PanelToolEventArgs(ToolEvent, PanelTool.Resize, new PanelSize(span, TallBox.IsChecked == true)));
-    }
-
-    private void OnTallChanged(object sender, RoutedEventArgs e)
-    {
-        if (_showingSize) return;
-
-        var span = GetCurrentSize(this)?.Span ?? PanelSize.Half;
-        RaiseEvent(new PanelToolEventArgs(ToolEvent, PanelTool.Resize, new PanelSize(span, TallBox.IsChecked == true)));
-    }
 
     private void OnDragHandleDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
         RaiseEvent(new PanelToolEventArgs(ToolEvent, PanelTool.DragStart));
     }
+
+    /// <summary>
+    /// Where the pointer went down on the header, until it moves far enough to be a drag. Null when it is not down,
+    /// when the panel is not being edited, and after a drag has started.
+    /// </summary>
+    private Point? _pressedAt;
+
+    /// <summary>
+    /// The header drags the panel while editing, so the whole title line is the target rather than the six-dot grip
+    /// alone. A press is remembered and nothing happens until the pointer passes the SYSTEM's drag threshold, so a
+    /// click on the header is still a click and the buttons sitting in it keep working — they mark the press handled
+    /// before it bubbles here, so this never sees one.
+    /// </summary>
+    private void OnTitleRowDown(object sender, MouseButtonEventArgs e)
+    {
+        if (GetShowEditTools(this)) _pressedAt = e.GetPosition(this);
+    }
+
+    private void OnTitleRowMove(object sender, MouseEventArgs e)
+    {
+        if (_pressedAt is not { } from || e.LeftButton != MouseButtonState.Pressed)
+        {
+            _pressedAt = null;
+            return;
+        }
+
+        var to = e.GetPosition(this);
+        if (Math.Abs(to.X - from.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(to.Y - from.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        // Cleared before the drag, not after: DoDragDrop blocks until the drag ends, and a stale press left behind
+        // it would arm a second drag from the next move.
+        _pressedAt = null;
+        RaiseEvent(new PanelToolEventArgs(ToolEvent, PanelTool.DragStart));
+    }
+
+    private void OnTitleRowUp(object sender, MouseButtonEventArgs e) => _pressedAt = null;
 }

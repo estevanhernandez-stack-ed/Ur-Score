@@ -173,8 +173,46 @@ function Select-ComboItem($box, [string]$like) {
 }
 
 # Small, Half or Wide in one panel's size box.
+# Moving and sizing lost their buttons when the header became the drag target and the edges became the grips,
+# so a walk drives them the way a person without a mouse does: focus the panel, then the keys. Focus is taken
+# again before every press because each change rebuilds the grid and the element that had focus is destroyed.
+function Focus-Panel($board, [string]$panelId) {
+    $panel = Find-ByAutomationId $board $panelId
+    if (-not $panel) { throw "no panel '$panelId' to focus" }
+    $panel.SetFocus()
+    Start-Sleep -Milliseconds 250
+}
+
+function Move-PanelEarlier($board, [string]$panelId) {
+    Focus-Panel $board $panelId
+    [System.Windows.Forms.SendKeys]::SendWait('{LEFT}')
+    Start-Sleep -Milliseconds 500
+}
+
+function Set-PanelTall($board, [string]$panelId, [bool]$tall) {
+    Focus-Panel $board $panelId
+    [System.Windows.Forms.SendKeys]::SendWait($(if ($tall) { '^{DOWN}' } else { '^{UP}' }))
+    Start-Sleep -Milliseconds 500
+}
+
+# Ctrl+Left and Ctrl+Right step along Small, Half, Wide and stop at the ends, so walking to Small first makes
+# the number of steps from there exact whatever the panel started at.
 function Set-PanelSize($board, [string]$panelId, [string]$size) {
-    Select-ComboItem (Find-ByAutomationId (Find-ByAutomationId $board $panelId) 'SizeBox') $size
+    $steps = @{ 'Small' = 0; 'Half' = 1; 'Wide' = 2 }[$size]
+    if ($null -eq $steps) { throw "unknown size '$size'" }
+
+    foreach ($i in 1..2) {
+        Focus-Panel (Get-BoardWindow) $panelId
+        [System.Windows.Forms.SendKeys]::SendWait('^{LEFT}')
+        Start-Sleep -Milliseconds 400
+    }
+
+    if ($steps -eq 0) { return }
+    foreach ($i in 1..$steps) {
+        Focus-Panel (Get-BoardWindow) $panelId
+        [System.Windows.Forms.SendKeys]::SendWait('^{RIGHT}')
+        Start-Sleep -Milliseconds 400
+    }
 }
 
 # With the gallery about to open: picks a card by title, then saves its form with the defaults it offers.

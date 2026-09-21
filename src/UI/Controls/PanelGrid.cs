@@ -34,6 +34,36 @@ public sealed class PanelGrid : Panel
     /// <summary>Where a panel dropped at <paramref name="point"/>, in this grid's coordinates, would go.</summary>
     public int DropIndexAt(Point point) => BoardLayout.DropIndex(_cells, point.X, point.Y);
 
+    /// <summary>Where to mark that drop, in this grid's coordinates, or null on an empty board.</summary>
+    public DropCaret? DropCaretAt(Point point) => BoardLayout.CaretFor(_cells, DropIndexAt(point));
+
+    /// <summary>
+    /// Where each panel was arranged, in this grid's coordinates and in the order its children sit in — which is
+    /// the order the board's own panel list is in, so an index here indexes that list too.
+    /// </summary>
+    public IReadOnlyList<CellRect> Cells => _cells;
+
+    /// <summary>
+    /// The panel whose resize grip is under <paramref name="point"/>, and which grip, or null for neither. The
+    /// corner is tried before the edge because it sits inside the edge grip's span and would otherwise be
+    /// unreachable.
+    /// </summary>
+    public (int Index, bool Corner)? GripAt(Point point)
+    {
+        for (var i = 0; i < _cells.Count; i++)
+        {
+            var grips = BoardLayout.HandlesFor(_cells[i]);
+            if (Holds(grips.Corner, point)) return (i, true);
+            if (Holds(grips.Edge, point)) return (i, false);
+        }
+
+        return null;
+    }
+
+    private static bool Holds(CellRect rect, Point point) =>
+        point.X >= rect.Left && point.X <= rect.Left + rect.Width
+        && point.Y >= rect.Top && point.Y <= rect.Top + rect.Height;
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var width = double.IsInfinity(availableSize.Width) ? 1200 : availableSize.Width;
