@@ -473,11 +473,15 @@ public static class PanelModels
         return at;
     }
 
-    /// <summary>How many clans either side of yours are drawn: the ones that decide whether you move a place.</summary>
-    private const int Neighbours = 3;
+    /// <summary>
+    /// How many clans either side of yours are drawn: the ones that decide whether you move a place. Taken from
+    /// <see cref="GroupRows"/>, never named again here — the chart can only draw what the book kept, so the writer
+    /// sets the size and the reader follows it (V3-S.34).
+    /// </summary>
+    private const int Neighbours = GroupRows.Neighbours;
 
-    /// <summary>How much of the board the standings list offers, names and all.</summary>
-    private const int StandingsShown = 25;
+    /// <summary>How much of the board the standings list offers, names and all. Same rule, same reason.</summary>
+    private const int StandingsShown = GroupRows.Top;
 
     /// <summary>
     /// The clans you are racing, from the rows a clans list kept (<see cref="GroupRows"/>): three above and three

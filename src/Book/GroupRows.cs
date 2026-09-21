@@ -8,8 +8,9 @@ namespace Labs626.UrScore.Book;
 /// The owner's ruling of 2026-09-20 replaced the one of 2026-09-19: a battle board is public game standings, so
 /// keeping other clans by name is fine — "it's not as secure as financial information, it's just game stuff" — but
 /// not at any size. A hundred clans every five minutes is about 9 MB over a thirteen-day battle; this keeps what a
-/// chart can actually use, which is about 3 MB: the top of the board, your own clans, and the place either side of
-/// each of them, because those are the ones you are racing.
+/// chart can actually use: the top of the board, your own clans, and the <see cref="Neighbours"/> places either side
+/// of each of them, because those are the ones you are racing. Around 3 MB when the top 25 covers the band, a third
+/// more when it does not.
 /// </para>
 /// <para>
 /// <see cref="FieldSummary"/> still rides on the same line and still covers the whole field, so the bands (leader,
@@ -20,6 +21,17 @@ public static class GroupRows
 {
     /// <summary>How much of the board is kept by name. The chart shows ten or twenty; this leaves room to choose.</summary>
     public const int Top = 25;
+
+    /// <summary>
+    /// How many places either side of each of your clans are kept: the ones a change of place is decided against.
+    /// <para>
+    /// The race chart derives its band from this rather than naming a number of its own. It used to name one, and
+    /// the two disagreed — the chart drew three either side while the book kept one, so a clan placed below the top
+    /// 25 was charted with four of its six neighbours simply absent and nothing saying so (V3-S.34). The writer owns
+    /// the number because the reader cannot draw what was never written.
+    /// </para>
+    /// </summary>
+    public const int Neighbours = 3;
 
     /// <summary>
     /// The clans worth keeping from one read, by name, or nothing when the read brought none with that value —
@@ -49,12 +61,15 @@ public static class GroupRows
         var yours = mine is null ? null : new HashSet<string>(mine, StringComparer.OrdinalIgnoreCase);
         if (yours is null) return kept;
 
-        // Each of your clans, with the place above and the place below it: a chase needs both ends of itself.
+        // Each of your clans, with the places above and below it: a chase needs both ends of itself, and as many
+        // of them as the chart is going to draw.
         for (var at = 0; at < ranked.Count; at++)
         {
             if (!yours.Contains(ranked[at].Name)) continue;
 
-            for (var near = Math.Max(0, at - 1); near <= Math.Min(ranked.Count - 1, at + 1); near++)
+            var first = Math.Max(0, at - Neighbours);
+            var last = Math.Min(ranked.Count - 1, at + Neighbours);
+            for (var near = first; near <= last; near++)
             {
                 kept[ranked[near].Name] = ranked[near].Value!.Value;
             }

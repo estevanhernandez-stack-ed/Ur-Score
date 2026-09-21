@@ -42,17 +42,21 @@ public class GroupRowsTests
         Assert.False(kept.ContainsKey($"C{GroupRows.Top + 1}"));
     }
 
-    /// <summary>Your own clan and the places either side of it, wherever it sits: they are the chase.</summary>
+    /// <summary>
+    /// Your own clan and the places either side of it, wherever it sits: they are the chase. The count is stated
+    /// against <see cref="GroupRows.Neighbours"/> rather than against a number typed here, because a test that
+    /// names its own copy of the size is the very drift this pair of constants was joined to stop (V3-S.34).
+    /// </summary>
     [Fact]
     public void YourClanAndItsNeighboursAreKeptHoweverFarDownTheyAre()
     {
         var kept = GroupRows.Keep(Board(100), "points", Mine("C60"), groupsAreClans: true);
 
-        Assert.True(kept.ContainsKey("C59"));
         Assert.True(kept.ContainsKey("C60"));
-        Assert.True(kept.ContainsKey("C61"));
-        Assert.False(kept.ContainsKey("C62"));
-        Assert.Equal(GroupRows.Top + 3, kept.Count);
+        Assert.True(kept.ContainsKey($"C{60 - GroupRows.Neighbours}"));
+        Assert.True(kept.ContainsKey($"C{60 + GroupRows.Neighbours}"));
+        Assert.False(kept.ContainsKey($"C{60 + GroupRows.Neighbours + 1}"));
+        Assert.Equal(GroupRows.Top + (GroupRows.Neighbours * 2) + 1, kept.Count);
     }
 
     [Fact]
@@ -89,6 +93,48 @@ public class GroupRowsTests
         var kept = GroupRows.Keep(rows, "points", null, groupsAreClans: true);
 
         Assert.Equal(new[] { "A", "C" }, kept.Keys.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The band the race chart draws and the band the book keeps are the same band, or the chart quietly shows less
+    /// than it was asked for. The chart asks for <see cref="GroupRows.Neighbours"/> either side; until 2026-09-21
+    /// the book kept one either side, so a clan placed below the top 25 lost four of its six neighbours and the
+    /// chart gave no sign of it. Nobody saw it because the owner's clan has been placed high, where the top-25 rule
+    /// covers the band by accident (V3-S.34).
+    /// <para>
+    /// C40 is deliberately well below <see cref="GroupRows.Top"/>, so every neighbour here is kept for being a
+    /// neighbour and none of them for being near the top. A fixture with the clan at, say, 24th would pass under
+    /// the old one-either-side rule and prove nothing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AMidTableClanKeepsTheWholeBandTheChartDraws()
+    {
+        var kept = GroupRows.Keep(Board(100), "points", Mine("C40"), groupsAreClans: true);
+
+        for (var away = -GroupRows.Neighbours; away <= GroupRows.Neighbours; away++)
+        {
+            Assert.True(kept.ContainsKey($"C{40 + away}"), $"C{40 + away}, {away} from yours, was not kept");
+        }
+
+        // And not a place further, or the cap the ruling set stops meaning anything.
+        Assert.False(kept.ContainsKey($"C{40 - GroupRows.Neighbours - 1}"));
+        Assert.False(kept.ContainsKey($"C{40 + GroupRows.Neighbours + 1}"));
+    }
+
+    /// <summary>
+    /// The band the chart draws and the band the book keeps must be the same size, and this asserts the sizes
+    /// rather than how they are spelled — a literal that happens to agree is not a bug, a literal that drifts is.
+    /// The chart's copy is private, so this reaches it by reflection instead of pretending it is public.
+    /// </summary>
+    [Fact]
+    public void TheChartAsksForNoMoreThanTheBookKeeps()
+    {
+        var drawn = typeof(Labs626.UrScore.Board.PanelModels)
+            .GetField("Neighbours", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(drawn);
+        Assert.Equal(GroupRows.Neighbours, Assert.IsType<int>(drawn!.GetRawConstantValue()));
     }
 
     [Fact]
