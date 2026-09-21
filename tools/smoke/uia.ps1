@@ -298,6 +298,76 @@ function Select-FirstSearchMatch($root, [string]$searchLabel, [string]$query, [s
 }
 
 # Moves your data folder aside so a walk starts clean. Returns the backup path, or $null when you had none.
+# Seed a control data folder into the live path with every outbound path switched off, and PROVE it before the
+# app is allowed to start.
+#
+# Why this exists, 2026-09-21. A control walk seeded a folder whose settings said startOnOpen true and whose clan
+# recipe had send true on clan.battle.points, and launched against a live RoRoRo. Nobody pressed Start; the app
+# began reading on its own, which is what startOnOpen means. Two beliefs made that look safe and both were wrong:
+# that a walk only reads when told to, and that a dev build out of bin\Release cannot reach the host anyway. The
+# host resolves a plugin by the id the caller CLAIMS (Handshake -> _registry.FindById), never by path or
+# signature, so a dev build is indistinguishable from the installed plugin. Every walk must assume it connects.
+#
+# The cure is at the source rather than at the host: a folder with nothing set to send cannot send, whether the
+# host is up, down, 1.29 or 1.30. Quitting RoRoRo for the duration is the second layer and is the caller's call —
+# it is the owner's notification host, not a walk's to close on a whim.
+#
+# Scrubbed, not trusted: the rewrite is verified afterwards and throws rather than returning, because a scrub that
+# silently missed a file would leave exactly the situation it exists to prevent, and leave it looking handled.
+function Copy-UrControlData([string]$control) {
+    if (-not (Test-Path $control)) { throw "no control folder at $control" }
+    if (Test-Path $UrData) { Remove-Item $UrData -Recurse -Force }
+    Copy-Item $control $UrData -Recurse
+
+    $settingsPath = Join-Path $UrData 'settings.json'
+    if (Test-Path $settingsPath) {
+        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $settings | Add-Member -NotePropertyName 'startOnOpen' -NotePropertyValue $false -Force
+        $settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+    }
+
+    foreach ($file in Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue) {
+        $state = Get-Content $file.FullName -Raw | ConvertFrom-Json
+        if ($state.PSObject.Properties.Name -contains 'stats' -and $state.stats) {
+            foreach ($stat in $state.stats.PSObject.Properties) {
+                if ($stat.Value -and $stat.Value.PSObject.Properties.Name -contains 'send') { $stat.Value.send = $false }
+            }
+        }
+        if ($state.PSObject.Properties.Name -contains 'sentFieldMetrics') { $state.sentFieldMetrics = @() }
+        $state | ConvertTo-Json -Depth 20 | Set-Content $file.FullName -Encoding UTF8
+    }
+
+    Assert-UrDataSendsNothing
+}
+
+# Reads the seeded folder back off disk and refuses anything that could still reach RoRoRo. Separate from the
+# scrub on purpose: a check that re-reads is a check, and a check that trusts the variable it just wrote is not.
+function Assert-UrDataSendsNothing {
+    $problems = @()
+
+    $settingsPath = Join-Path $UrData 'settings.json'
+    if (Test-Path $settingsPath) {
+        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        if ($settings.startOnOpen) { $problems += 'settings.json still has startOnOpen true' }
+    }
+
+    foreach ($file in Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue) {
+        $state = Get-Content $file.FullName -Raw | ConvertFrom-Json
+        if ($state.stats) {
+            foreach ($stat in $state.stats.PSObject.Properties) {
+                if ($stat.Value.send) { $problems += "$($file.Name): $($stat.Name) is still set to send" }
+            }
+        }
+        if ($state.sentFieldMetrics -and @($state.sentFieldMetrics).Count -gt 0) {
+            $problems += "$($file.Name): sentFieldMetrics is not empty"
+        }
+    }
+
+    if ($problems.Count -gt 0) {
+        throw "the seeded data folder can still report to RoRoRo:`n  " + ($problems -join "`n  ")
+    }
+}
+
 function Move-UrDataAside {
     Stop-UrScore
     $backup = "$UrData.smoke-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
