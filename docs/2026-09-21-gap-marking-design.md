@@ -93,6 +93,13 @@ A filled series has no gaps left to see. `Pace.Over` would stop refusing, `BestH
 select an hour that never happened, and a calculated aggregate would have become per-moment detail
 without anyone deciding that it should.
 
+And it would not stop at this side. `rororoblox-77` checked the host against this design on 2026-09-21:
+RoRoRo's `MetricEvaluator` applies its crossing rule against `MetricHistory.Previous`, so a synthesized
+point sitting between two real readings would have manufactured a CROSSING — an alert on someone's
+phone announcing that a number passed a threshold during a power cut, when nothing happened and nobody
+was playing. Filling a chart would have reached all the way out to a push notification. It cannot,
+because nothing is created.
+
 ## 5. Where it lives
 
 A new pure helper in `Board/`: `ChartGaps`, taking points and a threshold and saying which spans were
