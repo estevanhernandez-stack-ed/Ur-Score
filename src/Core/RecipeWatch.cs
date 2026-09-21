@@ -666,9 +666,15 @@ public sealed class RecipeWatch(
             // guess on a row it cannot edit safely, precisely so a wrong name never ships; honouring that here is
             // the other half of the same invariant. A threat number under a stale name is a confident false
             // statement on a phone mid-battle, which is worse than silence (owner's ruling, 2026-09-20).
-            if (metric.ManagedLabel
-                && (threat is null || writeLabel is null || !writeLabel(metric, FieldMetrics.ThreatLabel(threat.Name, ourClanName))))
+            //
+            // "Nothing between the two" has to mean nothing from ANOTHER WATCH either, which is what
+            // <see cref="ManagedLabelGate"/> below is for.
+            if (metric.ManagedLabel)
             {
+                if (threat is null || writeLabel is null) continue;
+
+                var label = FieldMetrics.ThreatLabel(threat.Name, ourClanName);
+                if (await SendUnderManagedLabelAsync(current, metric, value, label, now, cancellationToken).ConfigureAwait(false)) sent++;
                 continue;
             }
 
@@ -676,6 +682,56 @@ public sealed class RecipeWatch(
         }
 
         return sent;
+    }
+
+    /// <summary>
+    /// Held across a managed label's write and the send that rides on it, so two watches in ONE PROCESS cannot
+    /// interleave there.
+    /// <para>
+    /// WHY IT EXISTS. <c>AppServices.CreateWatch</c> builds one watch per source, and the two threat metric ids are
+    /// FIXED rather than per source (<see cref="FieldMetrics"/>: one id, so forty members can set the same alert).
+    /// With two enabled clans-list recipes both sending field metrics, two watches rewrite the SAME rule row on
+    /// their own timers, and watch B's <c>ChangeLabel</c> can land inside watch A's write-then-report pair. The
+    /// host then words A's number under B's rival's name — precisely the failure this feature exists to prevent.
+    /// Found by the final review of this branch, 2026-09-20.
+    /// </para>
+    /// <para>
+    /// WHAT IT PROTECTS. This process's label writes and the sends that follow them, for metrics that declare
+    /// <see cref="FieldMetric.ManagedLabel"/> and nothing else: the six older clan numbers and every account stat
+    /// go as they always did, and no watch waits on another to read, record or send those. Sends are on a
+    /// multi-minute poll, so serialising this pair costs nothing anybody can see.
+    /// </para>
+    /// <para>
+    /// WHAT IT CANNOT PROTECT. It does not and cannot control when RoRoRo READS the file: the host captures the
+    /// rule at the observation and words the push from that capture up to five seconds later, and no lock here
+    /// reaches that. Nor is it a lock on <c>metric-rules.json</c> — a second copy of Ur Score, another plugin, or
+    /// somebody editing the file by hand is outside it entirely (which is why <see cref="RulesFile"/> writes
+    /// through a temporary file and a single swap). It closes the window this program opens between its own
+    /// write and its own send, which is the only window this program owns.
+    /// </para>
+    /// </summary>
+    private static readonly SemaphoreSlim ManagedLabelGate = new(1, 1);
+
+    /// <summary>
+    /// The write-then-report pair for one managed-label number, run to itself: the label is written and the
+    /// number reported with no other watch's write in between (<see cref="ManagedLabelGate"/>). Returns whether
+    /// the number went — false for a label that could not be written, which is a refusal to send, not an error.
+    /// </summary>
+    private async Task<bool> SendUnderManagedLabelAsync(
+        ReportPolicy current, FieldMetric metric, FieldMetricValue value, string label, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await ManagedLabelGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return writeLabel is not null
+                && writeLabel(metric, label)
+                && await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ManagedLabelGate.Release();
+        }
     }
 
     /// <summary>

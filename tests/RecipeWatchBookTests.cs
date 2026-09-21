@@ -453,11 +453,12 @@ public class RecipeWatchBookTests
 
         public ChaseFixture(
             string chaser, Func<FieldMetric, string, bool>? writeLabel, IReadOnlyList<FieldMetric> field,
-            IReadOnlyList<string>? mine = null)
+            IReadOnlyList<string>? mine = null, string tag = "", List<string>? order = null)
         {
+            Order = order ?? [];
             var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
             var recipe = RecipeParser.Parse(text).Recipe!;
-            Host = new StubHost(true, AltAccount) { OnReport = metricId => Order.Add("report:" + metricId) };
+            Host = new StubHost(true, AltAccount) { OnReport = metricId => Record(tag + "report:" + metricId) };
 
             var engine = new StubEngine(() => new RecipeReading(ReadingOutcome.Read, null, [], [], "battle=B", ChaserIsInTheList ? 3 : 2)
             {
@@ -475,12 +476,16 @@ public class RecipeWatchBookTests
                 // report and the two can be compared by position. The test's own allow-or-refuse is untouched.
                 writeLabel: writeLabel is null ? null : (metric, label) =>
                 {
-                    Order.Add("label:" + label);
+                    Record(tag + "label:" + label);
                     return writeLabel(metric, label);
                 });
         }
 
-        public List<string> Order { get; } = [];
+        /// <summary>
+        /// Shared with a second fixture when two watches are being run against each other, so the order below is
+        /// the order the two watches really interleaved in. Locked for that case; a single fixture never contends.
+        /// </summary>
+        public List<string> Order { get; }
 
         public StubHost Host { get; }
 
@@ -516,6 +521,11 @@ public class RecipeWatchBookTests
 
         private static GroupRow Group(string name, double value, int rank) =>
             new(name, new Dictionary<string, double> { ["value"] = value }, rank);
+
+        private void Record(string entry)
+        {
+            lock (Order) Order.Add(entry);
+        }
     }
 
     /// <summary>
@@ -668,6 +678,77 @@ public class RecipeWatchBookTests
             ],
             chase.ReportedIds);
         Assert.Empty(chase.Labels);
+    }
+
+    /// <summary>
+    /// WRITE-THEN-REPORT IS NOT ATOMIC ACROSS WATCHES, and this is the fence that makes it so within one process.
+    /// <para>
+    /// <c>AppServices.CreateWatch</c> builds one watch per source and the threat metric ids are fixed rather than
+    /// per source, so two enabled clans-list recipes rewrite the SAME rule row on their own timers. Watch B's
+    /// label write landing between watch A's write and A's report is the whole failure this feature exists to
+    /// prevent: the host words A's number under B's rival's name (design §1). Found by the final review of this
+    /// branch, 2026-09-20.
+    /// </para>
+    /// <para>
+    /// The interleave is FORCED rather than hoped for: A's own label write starts B's read and then waits for B
+    /// to reach its label write. Without the gate that wait returns as soon as B writes, and B's write is in the
+    /// list before A's report. With it, B is held out until A's pair is finished and the wait simply times out.
+    /// The assertion is the ORDER — every report immediately after its own watch's label — not that each thing
+    /// happened; and both watches are checked to have got all the way through, so a B that never ran cannot pass
+    /// this by being absent.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task OneWatchsLabelWriteCannotLandInsideAnothersWriteThenReport()
+    {
+        var order = new List<string>();
+        var field = FieldMetrics.Offered([FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]);
+        var secondWatchWrote = new TaskCompletionSource();
+        Func<FieldMetric, string, bool> firstWatchWrites = (_, _) => true;
+
+        var first = new ChaseFixture("H8ER", (m, l) => firstWatchWrites(m, l), field, tag: "A:", order: order);
+        var second = new ChaseFixture("R0W", (_, _) => { secondWatchWrote.TrySetResult(); return true; }, field, tag: "B:", order: order);
+
+        // One read each: no pace yet, so no threat, no label and no report from either.
+        await first.ReadAsync();
+        await second.ReadAsync();
+        Assert.Empty(order);
+
+        Task? secondRun = null;
+        firstWatchWrites = (_, _) =>
+        {
+            if (secondRun is null)
+            {
+                secondRun = Task.Run(() => second.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 300_000_000));
+
+                // Long enough for the other watch to be scheduled and reach its own label write many times over,
+                // which is what makes the unguarded case fail rather than race. Guarded, this always times out.
+                secondWatchWrote.Task.Wait(TimeSpan.FromSeconds(1));
+            }
+
+            return true;
+        };
+
+        await first.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 300_000_000);
+        await secondRun!;
+
+        List<string> happened;
+        lock (order) happened = [.. order];
+
+        // Both watches got all the way through, so neither passes this by having done nothing.
+        Assert.Contains("A:report:clan.standing.threat-hours", happened);
+        Assert.Contains("B:report:clan.standing.threat-hours", happened);
+        Assert.Contains("A:label:H8ER catching K0i2", happened);
+        Assert.Contains("B:label:R0W catching K0i2", happened);
+
+        for (var i = 0; i < happened.Count; i++)
+        {
+            if (happened[i].Split(':') is not [var watch, "report", _]) continue;
+
+            Assert.True(
+                i > 0 && happened[i - 1].StartsWith(watch + ":label:", StringComparison.Ordinal),
+                $"{happened[i]} was not reported immediately after its own watch's label write: {string.Join(" | ", happened)}");
+        }
     }
 
     /// <summary>
