@@ -93,6 +93,19 @@ public sealed record RankInGroup(int Rank, int? Of);
 /// <c>ScoreWatch</c> earned: one cycle at a time, raw values in UTC, no backlog when RoRoRo returns, and a
 /// named capability when consent is declined.
 /// </summary>
+/// <param name="writeLabel">
+/// Puts a rival clan's name on the rule a managed-label number fires (<see cref="FieldMetric.ManagedLabel"/>),
+/// and answers whether the label is IN PLACE: written just now, or already saying exactly this. Null is a build
+/// with no writer wired, which is the same answer as a refusal — see <see cref="SendFieldAsync"/> for why a
+/// false answer stops the number going out.
+/// <para>
+/// The caller owns the rules path and so owns the mapping from <see cref="RuleWrite"/> to that bool. Only
+/// <see cref="RuleWrite.Done"/> and <see cref="RuleWrite.NotThere"/> are true: Done is the label in place, and
+/// NotThere is Ur Score having no rule on the metric, so there is no label to keep current and no alert that can
+/// fire under a stale one. Every other answer — CantWrite above all — is false, because it leaves a rule whose
+/// label names somebody else.
+/// </para>
+/// </param>
 public sealed class RecipeWatch(
     IRecipeEngine engine,
     IHostClient host,
@@ -108,7 +121,8 @@ public sealed class RecipeWatch(
     AccountClaims? claims = null,
     FinalsIndex? finals = null,
     TimeProvider? time = null,
-    Func<IReadOnlySet<string>>? myGroups = null)
+    Func<IReadOnlySet<string>>? myGroups = null,
+    Func<FieldMetric, string, bool>? writeLabel = null)
 {
     internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
 
@@ -169,6 +183,29 @@ public sealed class RecipeWatch(
     private readonly List<SeriesPoint> _fieldMine = [];
 
     private readonly List<SeriesPoint> _fieldAbove = [];
+
+    /// <summary>
+    /// Each tracked chaser's recent points, by clan name. Separate from <see cref="_fieldAbove"/> because that one
+    /// tracks a POSITION and clears itself on a fall, which is what a change of occupant looks like from a
+    /// position. A threat is tracked by name, where that rule is both wrong and unnecessary: the identity is the
+    /// key rather than something inferred, and a fall is a correction or a bad read, not a new clan (design §4).
+    /// A fall still costs a window of silence rather than a wrong pace, because <see cref="Pace.Over"/> refuses a
+    /// window that lost ground — which is the right answer for a bad read, and is the whole of what that rule was
+    /// buying here anyway.
+    /// <para>
+    /// Names that leave the band are dropped, so a clan that drops out and comes back does not pair up a reading
+    /// from before it left with one from after as though nothing had happened. Kept to
+    /// <see cref="Pace.LongestCurrent"/> like the two above, and gone at the end of the process like them too.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<string, List<SeriesPoint>> _fieldBehind = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// How many clans below us are watched for a threat. The one directly behind is not the answer: a clan three
+    /// places back going much faster passes us sooner, and naming the nearest by PLACE would be a confident false
+    /// statement on a phone (design §4). Five is the owner's ruling for how wide that band is.
+    /// </summary>
+    private const int ThreatBand = 5;
 
     public ReportPolicy Policy => policy;
 
@@ -533,21 +570,50 @@ public sealed class RecipeWatch(
         if (wanted.Count == 0 || !hostUp) return 0;
 
         var valueKey = readRecipe.LastStep.Values.FirstOrDefault()?.Id ?? "";
-        var summary = FieldSummary.Of(reading.Groups, valueKey, myGroups?.Invoke());
+
+        // Asked once and shared, so the field's numbers, the band behind and the name on the label all come from
+        // one answer rather than three reads of a list that can change between them.
+        var ours = myGroups?.Invoke();
+        var summary = FieldSummary.Of(reading.Groups, valueKey, ours);
         if (summary.Count == 0) return 0;
 
         var now = (time ?? TimeProvider.System).GetUtcNow();
         Remember(_fieldMine, summary, FieldSummary.Mine, now);
         Remember(_fieldAbove, summary, FieldSummary.Above, now);
 
+        var behind = FieldSummary.Behind(reading.Groups, valueKey, ours, ThreatBand);
+        RememberBehind(behind, now);
+
         List<SeriesPoint> mine, above;
+        Dictionary<string, List<SeriesPoint>> chasers;
         lock (_gate)
         {
             mine = [.. _fieldMine];
             above = [.. _fieldAbove];
+            chasers = _fieldBehind.ToDictionary(kv => kv.Key, kv => new List<SeriesPoint>(kv.Value), StringComparer.OrdinalIgnoreCase);
         }
 
-        var values = FieldMetrics.Of(summary, mine, above, now, reading.Period?.Ends);
+        var ends = reading.Period?.Ends;
+        var values = FieldMetrics.Of(summary, mine, above, now, ends);
+
+        // The soonest by TIME, not the nearest by place, and null when no chaser has a readable pace yet. Both
+        // threat numbers are halves of this one answer, so they name the same clan or neither of them goes.
+        var threat = FieldMetrics.SoonestThreat(
+            behind, mine, name => chasers.TryGetValue(name, out var series) ? series : [], now, ends);
+        if (threat is not null)
+        {
+            values =
+            [
+                .. values,
+                new FieldMetricValue(FieldMetrics.Find(FieldMetrics.ThreatGap)!, threat.Gap),
+                new FieldMetricValue(FieldMetrics.Find(FieldMetrics.ThreatHours)!, threat.Hours),
+            ];
+        }
+
+        // The best placed of your clans is what these numbers are about, and which one that is cannot be known
+        // here, so the first is the same guess AlertsPage.Clan() already makes for the same purpose (controller
+        // ruling, this task). No clan at all is fine: ThreatLabel then says "catching up" and names nobody.
+        var ourClanName = ours?.FirstOrDefault();
         var sent = 0;
 
         foreach (var metric in wanted)
@@ -563,10 +629,53 @@ public sealed class RecipeWatch(
                 current = policy;
             }
 
+            // THE ORDERING RULE (design §1, read out of the host's source rather than assumed). RoRoRo captures
+            // the rule — label included — at the observation, and words the push from that captured object up to
+            // five seconds later. So the name goes on the rule BEFORE the number goes out, with nothing between
+            // the two: report first and the alert ships under the PREVIOUS chaser's name.
+            //
+            // And a write that refuses is a refusal to SEND. RulesFile.ChangeLabel answers CantWrite rather than
+            // guess on a row it cannot edit safely, precisely so a wrong name never ships; honouring that here is
+            // the other half of the same invariant. A threat number under a stale name is a confident false
+            // statement on a phone mid-battle, which is worse than silence (owner's ruling, 2026-09-20).
+            if (metric.ManagedLabel
+                && (threat is null || writeLabel is null || !writeLabel(metric, FieldMetrics.ThreatLabel(threat.Name, ourClanName))))
+            {
+                continue;
+            }
+
             if (await current.SendFieldAsync(host, value.Metric, value.Value, now, cancellationToken).ConfigureAwait(false)) sent++;
         }
 
         return sent;
+    }
+
+    /// <summary>
+    /// This read's band of chasers, each kept under its own name in <see cref="_fieldBehind"/>, and every name no
+    /// longer in the band dropped.
+    /// <para>
+    /// Deliberately NOT <see cref="Remember"/>: that one clears the series whenever the value falls, which is
+    /// right for a position whose points falling means somebody else holds it now, and wrong for a name, where a
+    /// fall is a correction or a bad read (design §4). A band with nothing in it therefore empties the store
+    /// rather than leaving names behind, which is the same answer <see cref="Remember"/> gives when this read
+    /// carries no number for its key: whatever is there is about something else now.
+    /// </para>
+    /// </summary>
+    private void RememberBehind(IReadOnlyList<FieldSummary.BehindClan> behind, DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            var inBand = new HashSet<string>(behind.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var name in _fieldBehind.Keys.Where(n => !inBand.Contains(n)).ToList()) _fieldBehind.Remove(name);
+
+            foreach (var clan in behind)
+            {
+                if (!_fieldBehind.TryGetValue(clan.Name, out var series)) _fieldBehind[clan.Name] = series = [];
+
+                series.Add(new SeriesPoint(now, clan.Value, null, false, 0));
+                series.RemoveAll(p => now - p.T > Pace.LongestCurrent);
+            }
+        }
     }
 
     /// <summary>One reading of a field number, dropping anything older than a current pace may reach back.</summary>

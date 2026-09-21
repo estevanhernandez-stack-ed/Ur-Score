@@ -31,11 +31,12 @@ public class RecipeWatchBookTests
         IRecipeEngine engine, StubHost host, IScoreBook book, Source source,
         SharedAccounts? shared = null, AccountClaims? claims = null, IReadOnlySet<string>? tracked = null,
         FinalsIndex? finals = null, TimeProvider? time = null, Recipe? recipe = null, string? text = null,
-        IReadOnlyList<FieldMetric>? field = null, IReadOnlySet<string>? myGroups = null) =>
+        IReadOnlyList<FieldMetric>? field = null, IReadOnlySet<string>? myGroups = null,
+        Func<FieldMetric, string, bool>? writeLabel = null) =>
         new(engine, host, new NoKeys(), new ReportPolicy([Points], new HashSet<Guid> { Alt }, field), recipe ?? Clan, Inputs,
             tracked ?? new HashSet<string> { "value" },
             book, source, shared, text ?? ClanText, claims, finals, time,
-            myGroups is null ? null : () => myGroups);
+            myGroups is null ? null : () => myGroups, writeLabel);
 
     [Fact]
     public async Task AReadIsKeptWithOnlyYourAccountsAndStillSent()
@@ -436,6 +437,238 @@ public class RecipeWatchBookTests
         await watch.RunOnceAsync(CancellationToken.None);
 
         Assert.Single(host.Reported);
+    }
+
+    /// <summary>
+    /// A battle with one clan behind us, and the two effects whose ORDER is the whole invariant recorded in one
+    /// list as they happen: <c>label:{text}</c> when Ur Score writes a managed rule's label, and
+    /// <c>report:{metric id}</c> when a number reaches RoRoRo. Asserting only that each happened would pass under
+    /// report-then-rename, which is exactly the bug: the host captures a rule — label included — at the
+    /// observation and words the push from that captured object up to five seconds later (design §1), so a number
+    /// reported before its label is written ships under the PREVIOUS chaser's name.
+    /// </summary>
+    private sealed class ChaseFixture
+    {
+        private readonly RecipeWatch _watch;
+
+        public ChaseFixture(string chaser, Func<FieldMetric, string, bool>? writeLabel, IReadOnlyList<FieldMetric> field)
+        {
+            var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
+            var recipe = RecipeParser.Parse(text).Recipe!;
+            Host = new StubHost(true, AltAccount) { OnReport = metricId => Order.Add("report:" + metricId) };
+
+            var engine = new StubEngine(() => new RecipeReading(ReadingOutcome.Read, null, [], [], "battle=B", ChaserIsInTheList ? 3 : 2)
+            {
+                Period = new ReadingPeriod("B", null, Ends),
+                Groups = ChaserIsInTheList
+                    ? [Group("UN0", 21e9, 1), Group("K0i2", Mine, 2), Group(chaser, Theirs, 3)]
+                    : [Group("UN0", 21e9, 1), Group("K0i2", Mine, 2)],
+            });
+
+            _watch = Watch(engine, Host, new MemoryBook(),
+                new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
+                time: Clock, recipe: recipe, text: text, field: field,
+                myGroups: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "K0i2" },
+                // Wrapped rather than passed straight through, so the label write lands in the same list as the
+                // report and the two can be compared by position. The test's own allow-or-refuse is untouched.
+                writeLabel: writeLabel is null ? null : (metric, label) =>
+                {
+                    Order.Add("label:" + label);
+                    return writeLabel(metric, label);
+                });
+        }
+
+        public List<string> Order { get; } = [];
+
+        public StubHost Host { get; }
+
+        public ManualTime Clock { get; } = new(new DateTimeOffset(2026, 9, 20, 18, 0, 0, TimeSpan.Zero));
+
+        /// <summary>Ten hours after the first read, so a crossing inside the fixture is never cut off by the clock.</summary>
+        public DateTimeOffset Ends { get; } = new(2026, 9, 21, 4, 0, 0, TimeSpan.Zero);
+
+        public double Mine { get; private set; } = 8_000_000_000;
+
+        public double Theirs { get; private set; } = 7_500_000_000;
+
+        /// <summary>Whether the chaser is in this read at all: a clan can drop out of the band between reads.</summary>
+        public bool ChaserIsInTheList { get; set; } = true;
+
+        public IEnumerable<string> ReportedIds => Host.Reported.Select(r => r.MetricId);
+
+        public IEnumerable<string> Labels => Order.Where(e => e.StartsWith("label:", StringComparison.Ordinal));
+
+        public double ValueOf(string metricId) =>
+            Host.Reported.Last(r => string.Equals(r.MetricId, metricId, StringComparison.Ordinal)).Value;
+
+        public Task ReadAsync() => _watch.RunOnceAsync(CancellationToken.None);
+
+        /// <summary>Half an hour on, with what each clan made in it, then another read.</summary>
+        public Task HalfAnHourOnAsync(double mineGain, double theirGain)
+        {
+            Clock.Advance(TimeSpan.FromMinutes(30));
+            Mine += mineGain;
+            Theirs += theirGain;
+            return ReadAsync();
+        }
+
+        private static GroupRow Group(string name, double value, int rank) =>
+            new(name, new Dictionary<string, double> { ["value"] = value }, rank);
+    }
+
+    /// <summary>
+    /// Two reads half an hour apart, so both clans have a pace: K0i2 (ours) goes 8.00B to 8.05B, 100M an hour, and
+    /// the chaser goes 7.50B to 7.80B, 600M an hour. By the second read it is 250M behind and closing at 500M an
+    /// hour, so it takes our place in half an hour — well inside the 9.5 hours the battle has left, which is what
+    /// keeps the end-of-battle cap out of these tests.
+    /// </summary>
+    private static async Task<ChaseFixture> BattleWithChaser(
+        string chaser, Func<FieldMetric, string, bool>? writeLabel, IReadOnlyList<FieldMetric>? field = null)
+    {
+        var chase = new ChaseFixture(chaser, writeLabel, field ?? FieldMetrics.Offered([FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]));
+
+        // One reading is no pace, so no threat is invented from it and no label is written for one either.
+        await chase.ReadAsync();
+        await chase.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 300_000_000);
+        return chase;
+    }
+
+    /// <summary>
+    /// THE ORDERING RULE (design §1, read out of the host's source rather than assumed). RoRoRo captures a rule —
+    /// label included — at the observation and words the push from that captured object up to five seconds later,
+    /// so a number reported before its label is written ships under the PREVIOUS chaser's name. The ORDER of the
+    /// two effects is what is asserted, not the fact of each: a pair of "did it happen" assertions passes under
+    /// exactly the bug this test exists to catch.
+    /// </summary>
+    [Fact]
+    public async Task TheLabelIsWrittenBeforeEachThreatNumberIsReported()
+    {
+        var chase = await BattleWithChaser("H8ER", (_, _) => true);
+
+        Assert.Equal(
+            [
+                "label:H8ER catching K0i2", "report:clan.standing.threat-gap",
+                "label:H8ER catching K0i2", "report:clan.standing.threat-hours",
+            ],
+            chase.Order);
+    }
+
+    /// <summary>Each threat number carries its own half of the same threat, so a swap of the two would show.</summary>
+    [Fact]
+    public async Task TheTwoThreatNumbersCarryTheGapAndTheHoursTheRightWayRound()
+    {
+        var chase = await BattleWithChaser("H8ER", (_, _) => true);
+
+        // 8.05B against 7.80B is 250M behind, and 500M an hour of closing eats that in half an hour.
+        Assert.Equal(250_000_000d, chase.ValueOf("clan.standing.threat-gap"), 1);
+        Assert.Equal(0.5, chase.ValueOf("clan.standing.threat-hours"), 6);
+    }
+
+    /// <summary>
+    /// NO LABEL, NO SEND — the other half of the ordering rule. <see cref="RulesFile.ChangeLabel"/> answers
+    /// CantWrite rather than guess when a row it cannot edit safely would leave the wrong name on the rule; that
+    /// refusal is only worth something if the call site honours it. A threat number under a stale name is a
+    /// confident false statement on a phone mid-battle, which is worse than silence (owner's ruling, 2026-09-20).
+    /// </summary>
+    [Fact]
+    public async Task AThreatNumberWhoseLabelCannotBeWrittenIsNotReportedAtAll()
+    {
+        var chase = await BattleWithChaser("H8ER", (_, _) => false,
+            FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]));
+
+        Assert.DoesNotContain(chase.ReportedIds, id => id.StartsWith("clan.standing.threat", StringComparison.Ordinal));
+
+        // The write was tried and refused, not skipped — and the refusal is scoped to the numbers that carry a
+        // name. A number nobody's name rides on is unaffected by a rules file that cannot be written.
+        Assert.Equal(["label:H8ER catching K0i2", "label:H8ER catching K0i2"], chase.Labels);
+        Assert.Contains("clan.standing.points", chase.ReportedIds);
+    }
+
+    /// <summary>
+    /// A build with no label writer wired at all is the same refusal, for the same reason: the name cannot be got
+    /// onto the rule, so the number does not go. Never a threat number under whatever name the rule happens to
+    /// carry — that is the failure this whole feature exists to prevent.
+    /// </summary>
+    [Fact]
+    public async Task WithNoLabelWriterAtAllTheThreatNumbersStayQuiet()
+    {
+        var chase = await BattleWithChaser("H8ER", null,
+            FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]));
+
+        Assert.DoesNotContain(chase.ReportedIds, id => id.StartsWith("clan.standing.threat", StringComparison.Ordinal));
+        Assert.Empty(chase.Labels);
+        Assert.Contains("clan.standing.points", chase.ReportedIds);
+    }
+
+    /// <summary>
+    /// NotThere is not a failed write. With no Ur Score rule on the metric there is no label to keep current and
+    /// no alert that can fire from it, so nothing can reach a phone under a stale name and the number goes as it
+    /// always did. Driven through the real <see cref="RulesFile.ChangeLabel"/> rather than a stand-in, because
+    /// what is being pinned is which of its answers mean "in place" — the mapping the composition root has to
+    /// make when it wires the rules path in.
+    /// </summary>
+    [Fact]
+    public async Task NoRuleOfOursToRenameIsNotAFailedWriteAndTheNumberStillGoes()
+    {
+        // A path with no file behind it: ChangeLabel finds no rules, none of them ours, and writes nothing at all.
+        var path = Path.Combine(Path.GetTempPath(), $"ur-score-no-rules-{Guid.NewGuid():n}.json");
+
+        var chase = await BattleWithChaser("H8ER", (metric, label) =>
+            RulesFile.ChangeLabel(path, metric.MetricId, AlertKind.Level, label) is RuleWrite.Done or RuleWrite.NotThere);
+
+        Assert.Contains("clan.standing.threat-hours", chase.ReportedIds);
+        Assert.False(File.Exists(path), "NotThere means there was nothing to rewrite, so nothing should have been written.");
+    }
+
+    /// <summary>
+    /// The six older clan numbers are shipped and correct, and nothing here may change them. A clan behind us that
+    /// is losing ground is no threat at all, so those numbers go exactly as before and no label is written, there
+    /// being no name to write.
+    /// </summary>
+    [Fact]
+    public async Task TheOlderClanNumbersStillSendWhenNoClanIsClosing()
+    {
+        var chase = new ChaseFixture("H8ER", (_, _) => true,
+            FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.GapAbove, FieldMetrics.PaceNeeded, FieldMetrics.ThreatHours]));
+
+        await chase.ReadAsync();
+
+        // 20M an hour against our 100M: it is falling further behind, not closing.
+        await chase.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 10_000_000);
+
+        Assert.Equal(
+            [
+                "clan.standing.points", "clan.standing.gap-above",
+                "clan.standing.points", "clan.standing.gap-above", "clan.standing.pace-needed",
+            ],
+            chase.ReportedIds);
+        Assert.Empty(chase.Labels);
+    }
+
+    /// <summary>
+    /// A chaser is tracked by NAME, and a name that leaves the band is dropped rather than left to pair up with a
+    /// reading half an hour later as though nothing had happened (controller ruling 3, design §4). The gap here is
+    /// well inside the two hours a current pace may reach back over, so it is the drop that has to silence the
+    /// number: with the old readings still in the store, the one either side of the gap makes a pace and a clan
+    /// that was out of the band comes back already a threat.
+    /// </summary>
+    [Fact]
+    public async Task AChaserThatLeavesTheBandIsForgottenRatherThanResumed()
+    {
+        // Points rides along as the control: the last read still sends it, so the threat's absence is the threat's
+        // and not a read that quietly stopped happening.
+        var chase = await BattleWithChaser("H8ER", (_, _) => true,
+            FieldMetrics.Offered([FieldMetrics.Points, FieldMetrics.ThreatGap, FieldMetrics.ThreatHours]));
+        Assert.Contains("clan.standing.threat-hours", chase.ReportedIds);
+
+        chase.ChaserIsInTheList = false;
+        await chase.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 60_000_000);
+
+        chase.ChaserIsInTheList = true;
+        chase.Host.Reported.Clear();
+        await chase.HalfAnHourOnAsync(mineGain: 50_000_000, theirGain: 60_000_000);
+
+        Assert.Equal(["clan.standing.points"], chase.ReportedIds);
     }
 
     [Fact]

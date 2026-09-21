@@ -40,9 +40,17 @@ internal sealed class StubHost(bool reachable, params HostAccount[] accounts) : 
             : Task.FromResult<IReadOnlyList<HostAccount>>(accounts);
     }
 
+    /// <summary>
+    /// Runs as each report is made, so a test can record WHEN it happened against another effect. The list alone
+    /// says only that a number went; it cannot say whether the rule's label was written first, which is the one
+    /// thing the ordering rule is about (design §1).
+    /// </summary>
+    public Action<string>? OnReport { get; set; }
+
     public Task ReportMetricAsync(Guid subject, string metricId, double value, DateTimeOffset observedAt, CancellationToken cancellationToken)
     {
         Reported.Add((subject, metricId, value, observedAt));
+        OnReport?.Invoke(metricId);
         return Task.CompletedTask;
     }
 }
