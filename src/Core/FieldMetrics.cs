@@ -196,8 +196,12 @@ public static class FieldMetrics
             if (!double.IsFinite(hours) || hours < 0) continue;
 
             // A crossing after the battle ends never happens; it is an artifact of extrapolating a pace past the
-            // clock, not a threat (controller ruling, this task).
-            if (ends is { } end && now.AddHours(hours) > end) continue;
+            // clock, not a threat (controller ruling, this task). Compared in hours, never by building the
+            // instant: two clans at near-identical paces differ only by floating-point noise, so `closing` can
+            // land near zero and drive `hours` past what DateTimeOffset can represent — `now.AddHours(hours)`
+            // throws ArgumentOutOfRangeException in that case. This comparison is the same decision in double
+            // arithmetic and cannot throw (review finding, this task).
+            if (ends is { } end && hours > (end - now).TotalHours) continue;
 
             if (soonest is null || hours < soonest.Hours) soonest = new ThreatValue(clan.Name, clan.Gap, hours);
         }
