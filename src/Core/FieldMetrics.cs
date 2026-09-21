@@ -66,9 +66,9 @@ public static class FieldMetrics
             "Room left in your clan: its capacity less its members."),
         new(IdleMembers, "Members on zero", "clan.standing.idle-members",
             "Members of your clan who have not scored in this battle."),
-        new(ThreatGap, "Threat gap", "clan.standing.threat-gap",
+        new(ThreatGap, "Points the threat is behind", "clan.standing.threat-gap",
             "How far behind the clan closest to taking your place is.", ManagedLabel: true),
-        new(ThreatHours, "Threat hours", "clan.standing.threat-hours",
+        new(ThreatHours, "Hours until the threat passes you", "clan.standing.threat-hours",
             "How long until the clan behind you takes your place, at both your current paces. Set it to alert "
             + "below six hours to hear about it while you can still answer.", ManagedLabel: true),
     ];
