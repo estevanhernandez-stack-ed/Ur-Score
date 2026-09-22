@@ -64,7 +64,7 @@ public class PanelFormsTests
     [Fact]
     public void ASavedPickNoLongerOfferedIsHeldAndCheckedNotBlanked()
     {
-        var choices = new[] { new FormChoice(PanelForms.TopAccountKey, "Your top account"), new FormChoice("101", "estehernandez") };
+        var choices = new[] { new FormChoice(PanelForms.TopAccountKey, "Your top account"), new FormChoice("101", "BirchMain") };
 
         Assert.Equal(new FormPick(choices[1], null), PanelForms.Pick(choices, "101", shown: true, saved: "201"));
         Assert.Equal(new FormPick(null, "201"), PanelForms.Pick(choices, "201", shown: true, saved: "201"));
@@ -165,7 +165,7 @@ public class PanelFormsTests
     [Fact]
     public void AccountsAreYoursByNameAfterYourTopAccount() =>
         Assert.Equal(
-            new[] { ("", "Your top account"), ("201", "CElCPapa"), ("101", "estehernandez"), ("301", "ItsJustEste"), ("202", "ItsJustEstePapa") },
+            new[] { ("", "Your top account"), ("201", "AshAlt"), ("101", "BirchMain"), ("301", "CedarLoose"), ("202", "DuneAlt") },
             PanelForms.AccountChoices(Everything()).Select(c => (c.Key, c.Label)).ToArray());
 
     [Fact]

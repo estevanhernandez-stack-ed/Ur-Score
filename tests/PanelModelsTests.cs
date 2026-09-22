@@ -502,7 +502,7 @@ public class PanelModelsTests
         var alts = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
         IReadOnlyList<RecipeRow> ccgpRows = [Row(101, 14_020_550), Row(5, 20_000_000), Row(6, 1_000)];
         IReadOnlyList<RecipeRow> altRows = [Row(202, null), Row(201, 12_418_220), Row(101, 9_000_000), Row(7, 50)];
-        var sentLine = new AccountLine("estehernandez", Main.AccountId, new Dictionary<string, double> { ["value"] = 14_020_550 }, Now);
+        var sentLine = new AccountLine("BirchMain", Main.AccountId, new Dictionary<string, double> { ["value"] = 14_020_550 }, Now);
         // Sent by this very read (S1-F.5): the remembered line alone no longer makes a dot.
         var mainRead = Snapshot(main.Id, ccgpRows, period: LivePeriod, sent: [sentLine])
             with { SentThisRead = new HashSet<(Guid AccountId, string Stat)> { (Main.AccountId, "value") } };
@@ -519,18 +519,18 @@ public class PanelModelsTests
         Assert.Equal(new[] { "★ CCGP", "K0i2", "Not in a watched clan" }, model.Groups.Select(g => g.Heading).ToArray());
 
         var ccgp = Assert.Single(model.Groups[0].Rows);
-        Assert.Equal("estehernandez", ccgp.Name);
+        Assert.Equal("BirchMain", ccgp.Name);
         Assert.Equal($"#{Ranking.Competition(ccgpRows, "value")[101]} of 3", ccgp.InGroup);
         Assert.True(ccgp.Sent);
 
-        Assert.Equal(new[] { "CElCPapa", "ItsJustEstePapa" }, model.Groups[1].Rows.Select(r => r.Name).ToArray());
+        Assert.Equal(new[] { "AshAlt", "DuneAlt" }, model.Groups[1].Rows.Select(r => r.Name).ToArray());
         var missing = model.Groups[1].Rows[1];
         Assert.True(missing.Missing);
         Assert.Equal(StatText.Dash, missing.Value);
         Assert.Equal(StatText.Dash, missing.InGroup);
         Assert.Equal(Records.Change(reader.Series(alts.Id, 201, "value", Period, DateTimeOffset.MinValue), Now), model.Groups[1].Rows[0].Change);
 
-        Assert.Equal("ItsJustEste", Assert.Single(model.Groups[2].Rows).Name);
+        Assert.Equal("CedarLoose", Assert.Single(model.Groups[2].Rows).Name);
     }
 
     /// <summary>
@@ -740,7 +740,7 @@ public class PanelModelsTests
         Assert.Equal("K0i2 → CCGP", model.Head.Subtitle);
         Assert.Equal("CCGP's lowest now", model.LowestLabel);
         Assert.Equal("8,240,900", model.Lowest);
-        Assert.Equal(new[] { "CElCPapa", "ItsJustEstePapa", "ItsJustEste" }, model.Rows.Select(r => r.Name).ToArray());
+        Assert.Equal(new[] { "AshAlt", "DuneAlt", "CedarLoose" }, model.Rows.Select(r => r.Name).ToArray());
 
         var place = Records.WouldPlace(12_418_220, [14_000_000, 20_000_000, 8_240_900])!.Value;
         Assert.Equal($"{PanelText.Ordinal(place.Place)} of {place.Of}", model.Rows[0].WouldPlace);
@@ -780,7 +780,7 @@ public class PanelModelsTests
         var records = Records.For(reader, Clan.Slug, alts.InputsKey, alts.Id, 201, "value", live.Time);
         var series = reader.Series(alts.Id, 201, "value", Period, DateTimeOffset.MinValue);
 
-        Assert.Equal("CElCPapa · K0i2", model.Head.Subtitle);
+        Assert.Equal("AshAlt · K0i2", model.Head.Subtitle);
         Assert.Equal("12,418,220", model.Big);
         Assert.Equal(new FactModel("In clan", "#1 of 2"), model.Facts[0]);
         Assert.Contains(new FactModel("Best battle",
@@ -918,8 +918,8 @@ public class PanelModelsTests
         Assert.Equal("Filled in from the clan's own record.", model.Head.Note);
         Assert.Equal(new[]
         {
-            new PastRow("Arcade2026", "16th", StatText.Abbrev(30_000_000), $"{StatText.Abbrev(14_100_000)} · estehernandez"),
-            new PastRow("Cannon", "435th", StatText.Abbrev(67_104), $"{StatText.Abbrev(40_210)} · CElCPapa"),
+            new PastRow("Arcade2026", "16th", StatText.Abbrev(30_000_000), $"{StatText.Abbrev(14_100_000)} · BirchMain"),
+            new PastRow("Cannon", "435th", StatText.Abbrev(67_104), $"{StatText.Abbrev(40_210)} · AshAlt"),
         }, model.Rows.ToArray());
     }
 
@@ -1201,7 +1201,7 @@ public class PanelModelsTests
         var model = PanelModels.ProfileStat(live, reader, new PanelSettings(Profile.Slug, SourceId: profile.Id, Stat: "diamonds"));
 
         // Highest first; the two with no value keep your account list's order, after every value.
-        Assert.Equal(new[] { "CElCPapa", "estehernandez", "ItsJustEstePapa", "ItsJustEste" }, model.Rows.Select(r => r.Name).ToArray());
+        Assert.Equal(new[] { "AshAlt", "BirchMain", "DuneAlt", "CedarLoose" }, model.Rows.Select(r => r.Name).ToArray());
         var mine = model.Rows[1];
         // Today measures from the reading before midnight — 6 days back, since none is closer — so no span is
         // stated. The 7-day window finds no reading that old, falls back to that same reading, and states the
@@ -1416,7 +1416,7 @@ public class PanelModelsTests
         var model = PanelModels.LiveLeaderboard(live, new PanelSettings(Clan.Slug, SourceId: main.Id), new Dictionary<long, string> { [5] = "Rival" });
 
         Assert.Equal(new[] { "Points" }, model.Columns.ToArray());
-        Assert.Equal(new[] { "Rival", "estehernandez", "Member 7" }, model.Rows.Select(r => r.Name).ToArray());
+        Assert.Equal(new[] { "Rival", "BirchMain", "Member 7" }, model.Rows.Select(r => r.Name).ToArray());
         Assert.Equal(new[] { false, true, false }, model.Rows.Select(r => r.Yours).ToArray());
         Assert.Equal("Live only. Never saved.", model.Head.Note);
     }

@@ -22,7 +22,7 @@ public class TryCommandTests
         { "status": "ok", "data": { "Battles": {
             "A": { "Place": 40, "Points": 500, "PointContributions": [ { "UserID": 7001001, "Points": 300 } ] },
             "B": { "Place": 3, "Points": 999, "PointContributions": [
-                { "UserID": 1647274201, "Points": 4200 }, { "UserID": 7002002, "Points": 3100 }, { "UserID": 7003003, "Points": 10 } ] }
+                { "UserID": 101, "Points": 4200 }, { "UserID": 7002002, "Points": 3100 }, { "UserID": 7003003, "Points": 10 } ] }
         } } }
         """;
 
@@ -48,13 +48,13 @@ public class TryCommandTests
     public async Task AReadPrintsCountsYourAccountAndNoOtherPlayer()
     {
         using var dir = TempDir.Create("urscore-try");
-        var (code, output) = await Run(Clan(), "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--account", "1647274201");
+        var (code, output) = await Run(Clan(), "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--account", "101");
 
         Assert.Equal(TryCommand.Ok, code);
         Assert.Contains("Outcome: Read", output);
         Assert.Contains("Rows seen: 3", output);
         Assert.Contains("value: found in 3, missed in 0, smallest 10, median 3100, largest 4200", output);
-        Assert.Contains("1647274201: value=4200, rank 1 of 3", output);
+        Assert.Contains("101: value=4200, rank 1 of 3", output);
         Assert.Contains("clan-place = 3", output);
         Assert.Contains("Past periods: 2 (A, B)", output);
         Assert.Contains("ps99.biggamesapi.io", output);
@@ -75,14 +75,14 @@ public class TryCommandTests
             ("https://ps99.biggamesapi.io/api/activeClanBattle", Battle),
             ("https://ps99.biggamesapi.io/api/clan/", """
                 { "status": "ok", "data": { "Battles": { "B": { "Place": 3, "Points": 999, "PointContributions": [
-                    { "UserID": 1647274201, "Points": 4200 }, { "UserID": 7002002, "Points": 3100 }, { "UserID": 7003003 } ] } } } }
+                    { "UserID": 101, "Points": 4200 }, { "UserID": 7002002, "Points": 3100 }, { "UserID": 7003003 } ] } } } }
                 """));
 
-        var (_, output) = await Run(clan, "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--account", "1647274201");
+        var (_, output) = await Run(clan, "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--account", "101");
 
         Assert.Contains("Rows seen: 3", output);
         Assert.Contains("value: found in 2, missed in 1", output);
-        Assert.Contains("1647274201: value=4200, rank 1 of 2", output);
+        Assert.Contains("101: value=4200, rank 1 of 2", output);
         Assert.DoesNotContain("7003003", output);
     }
 
@@ -93,7 +93,7 @@ public class TryCommandTests
     {
         using var dir = TempDir.Create("urscore-try");
         var args = new List<string> { "--try", RecipeFile(dir, "petsim99-clan-battle.recipe.json"), "--input", "clan=K0i2", "--json" };
-        if (includeAccount) args.AddRange(["--account", "1647274201"]);
+        if (includeAccount) args.AddRange(["--account", "101"]);
         var (code, output) = await Run(Clan(), [.. args]);
 
         Assert.Equal(TryCommand.Ok, code);
@@ -109,7 +109,7 @@ public class TryCommandTests
         if (includeAccount)
         {
             var account = Assert.Single(accounts);
-            Assert.Equal(1647274201L, account.GetProperty("userId").GetInt64());
+            Assert.Equal(101L, account.GetProperty("userId").GetInt64());
             Assert.Equal(4200, account.GetProperty("values").GetProperty("value").GetDouble());
             Assert.Equal(1, account.GetProperty("rank").GetProperty("value").GetInt32());
             Assert.Equal(3, account.GetProperty("of").GetInt32());
@@ -117,7 +117,7 @@ public class TryCommandTests
         else
         {
             Assert.Empty(accounts);
-            Assert.DoesNotContain("1647274201", output);
+            Assert.DoesNotContain("101", output);
         }
     }
 

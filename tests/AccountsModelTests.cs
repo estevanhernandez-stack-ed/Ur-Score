@@ -9,8 +9,8 @@ public class AccountsModelTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 19, 18, 0, 0, TimeSpan.Zero);
 
-    private static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "estehernandez");
-    private static readonly HostAccount Alt = new(Guid.Parse("22222222-2222-2222-2222-222222222222"), 201, "CElCPapa");
+    private static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "BirchMain");
+    private static readonly HostAccount Alt = new(Guid.Parse("22222222-2222-2222-2222-222222222222"), 201, "AshAlt");
 
     private static Recipe Clan => RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
 
@@ -101,7 +101,7 @@ public class AccountsModelTests
         };
 
         Assert.Equal("★ CCGP, K0i2", AccountsModel.FoundIn(Main, [clan], sources, latest));
-        // Backlog S1-12.7: CElCPapa is in NovaForge's rows, a clan you watch. "Not in a watched clan" was the opposite of true.
+        // Backlog S1-12.7: AshAlt is in NovaForge's rows, a clan you watch. "Not in a watched clan" was the opposite of true.
         Assert.Equal("Only in clans you're watching", AccountsModel.FoundIn(Alt, [clan], sources, latest));
         Assert.Equal("", AccountsModel.FoundIn(Main, [Sending(Profile)], sources, latest));
     }
@@ -180,7 +180,7 @@ public class AccountsModelTests
 
         var rows = AccountsModel.Rows([Main, Alt], [profile], [], new Dictionary<string, RecipeSnapshot>());
 
-        Assert.Equal("Send estehernandez for Pet Sim 99 profile", rows[0].Sends.Single().Name);
+        Assert.Equal("Send BirchMain for Pet Sim 99 profile", rows[0].Sends.Single().Name);
         Assert.True(rows[0].Sends.Single().On);
         Assert.False(rows[1].Sends.Single().On);
 

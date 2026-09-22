@@ -14,8 +14,8 @@ public class ClansModelTests
         }
         """;
 
-    private static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "estehernandez");
-    private static readonly HostAccount Alt = new(Guid.Parse("22222222-2222-2222-2222-222222222222"), 201, "CElCPapa");
+    private static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "BirchMain");
+    private static readonly HostAccount Alt = new(Guid.Parse("22222222-2222-2222-2222-222222222222"), 201, "AshAlt");
     private static readonly HostAccount Waiting = new(Guid.Parse("33333333-3333-3333-3333-333333333333"), 0, "New Alt");
 
     private static Recipe Clan => RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
@@ -41,7 +41,7 @@ public class ClansModelTests
 
         Assert.Equal("CCGP", lists.Main!.Name);
         Assert.Equal(new[] { "CCGP", "K0i2" }, lists.Mine.Select(r => r.Name).ToArray());
-        Assert.Equal("estehernandez", lists.Mine[0].Who);
+        Assert.Equal("BirchMain", lists.Mine[0].Who);
         Assert.Equal("None of your accounts found in the last read", lists.Mine[1].Who);
         Assert.Equal("★ main", lists.Mine[0].Chip);
         Assert.False(lists.Mine[0].CanMakeMain);
@@ -63,7 +63,7 @@ public class ClansModelTests
     {
         var probe = ClansModel.Probe("CCGP", Read(101, 201, 5), [Main, Alt, Waiting]);
 
-        Assert.Equal(new ClanProbe("Found estehernandez and CElCPapa in CCGP.", false), probe);
+        Assert.Equal(new ClanProbe("Found BirchMain and AshAlt in CCGP.", false), probe);
     }
 
     [Fact]
