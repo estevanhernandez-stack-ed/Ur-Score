@@ -43,6 +43,19 @@ public sealed class FieldMetricItem(FieldMetric metric, bool send) : INotifyProp
 /// </summary>
 public static class FieldMetricsModel
 {
+    /// <summary>
+    /// Stats design §5.3 for a list: the history slots these clan numbers would use, across installed recipes.
+    /// Each is one series with no account behind it. The field save ran no check at all until 2026-09-21, so
+    /// this screen could take a setup past RoRoRo's ceiling without a word (V3-S.28).
+    /// </summary>
+    public static BudgetCheck Budget(
+        Recipe list, RecipeState existing, IReadOnlyList<InstalledRecipe> installed, IReadOnlyCollection<Guid> accountIds,
+        IReadOnlyList<string> ticked)
+    {
+        var others = HistoryBudget.Installed(installed, accountIds, exceptSlug: list.Slug);
+        return HistoryBudget.Check(others, (0, 0, existing.FieldMetricKeys.Count), (0, 0, ticked.Count), accountsKnown: accountIds.Count > 0);
+    }
+
     internal const string NoClanSet =
         "Set your clan's name on a clan source in Setup › Clans first. Without it a read cannot tell which row is yours, "
         + "so there is no standing to send.";

@@ -68,6 +68,17 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     /// <summary><c>boards.json</c> was there at start and couldn't be read, for any reason: the first save keeps a copy whatever it holds by then (R3).</summary>
     private bool _boardsUnread;
+
+    /// <summary>
+    /// Held while a refresh reads what is installed and hands each watch its policy, and while a save replaces
+    /// what is installed. Two refreshes race otherwise: RoRoRo lists accounts on a fetching thread and refreshes
+    /// every policy from there (F8, before that read sends), while the user unticks a stat on the UI thread and
+    /// refreshes from a newer state. The background one could read the OLD state, be overtaken, and then land
+    /// its old policy on top of the new — and a stat the user had just excluded went out once more before the
+    /// next refresh put it right (S1-14.13). Under one gate the two cannot interleave, so the last policy
+    /// applied is always from the last state saved.
+    /// </summary>
+    private readonly object _refreshGate = new();
     private readonly List<string> _trail = [];
     private readonly Dictionary<string, RecipeSnapshot> _latest = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _lastRead = new(StringComparer.Ordinal);
@@ -718,31 +729,37 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     private void RefreshWatches()
     {
-        foreach (var source in Sources)
+        lock (_refreshGate)
         {
-            if (Runner.WatchFor(source.Id) is not { } watch || FindInstalled(source.Recipe) is not { } installed) continue;
-
-            watch.UpdateSource(source);
-
-            var tracked = TrackedFor(installed);
-            var given = WatchInputs.Of(installed, source, tracked);
-            if (_given.GetValueOrDefault(source.Id) != given)
+            foreach (var source in Sources)
             {
-                watch.UpdateRecipe(installed.Recipe, source.Inputs, tracked, installed.Text);
-                _given[source.Id] = given;
-            }
+                if (Runner.WatchFor(source.Id) is not { } watch || FindInstalled(source.Recipe) is not { } installed) continue;
 
-            UpdatePolicy(watch, PolicyFor(installed, source));
+                watch.UpdateSource(source);
+
+                var tracked = TrackedFor(installed);
+                var given = WatchInputs.Of(installed, source, tracked);
+                if (_given.GetValueOrDefault(source.Id) != given)
+                {
+                    watch.UpdateRecipe(installed.Recipe, source.Inputs, tracked, installed.Text);
+                    _given[source.Id] = given;
+                }
+
+                UpdatePolicy(watch, PolicyFor(installed, source));
+            }
         }
     }
 
     /// <summary>After RoRoRo lists accounts: only the allow lists change, so a held stop stays held.</summary>
     private void RefreshPolicies()
     {
-        foreach (var source in Sources)
+        lock (_refreshGate)
         {
-            if (Runner.WatchFor(source.Id) is not { } watch || FindInstalled(source.Recipe) is not { } installed) continue;
-            UpdatePolicy(watch, PolicyFor(installed, source));
+            foreach (var source in Sources)
+            {
+                if (Runner.WatchFor(source.Id) is not { } watch || FindInstalled(source.Recipe) is not { } installed) continue;
+                UpdatePolicy(watch, PolicyFor(installed, source));
+            }
         }
     }
 
@@ -867,7 +884,8 @@ public sealed class AppServices : ISetupServices, IDisposable
         try
         {
             var ids = KnownAccounts.Select(a => a.AccountId).ToList();
-            var over = ids.Count == 0 ? null : HistoryBudget.AfterSeed(Installed.Where(i => !i.Recipe.IsGroupList), ids);
+            // Lists included: their clan numbers count now (V3-S.28). They were left out when they counted as nothing.
+            var over = ids.Count == 0 ? null : HistoryBudget.AfterSeed(Installed, ids);
             BudgetWarning = over?.Line;
             if (over is null || _budgetWarnedCount == over.Count) return;
 
@@ -1041,7 +1059,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     private void LoadInstalled()
     {
         var load = Store.LoadAll();
-        Installed = load.Recipes;
+        // Under the refresh gate, so a refresh already reading the old list finishes applying it before the
+        // new one is seen, and the refresh that follows this load is the one that lands last (S1-14.13).
+        lock (_refreshGate) Installed = load.Recipes;
         RecipeProblems = [.. load.Problems.Select(p => Redactor.Redact(p))];
         foreach (var problem in RecipeProblems) AddTrail($"RECIPE FILE SKIPPED: {problem}");
     }

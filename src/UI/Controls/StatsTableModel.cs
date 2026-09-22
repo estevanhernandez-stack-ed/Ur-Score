@@ -182,8 +182,8 @@ public static class StatsTableModel
     {
         var sending = accountIds.Count(id => !existing.Excluded.Contains(id));
         var others = HistoryBudget.Installed(installed, accountIds, exceptSlug: recipe.Slug);
-        var before = (sending, existing.SentStats(recipe).Count);
-        var after = (sending, new RecipeState(Stats: Choices(existing.StatChoices, rows)).SentStats(recipe).Count);
+        var before = (sending, existing.SentStats(recipe).Count, 0);
+        var after = (sending, new RecipeState(Stats: Choices(existing.StatChoices, rows)).SentStats(recipe).Count, 0);
         return HistoryBudget.Check(others, before, after, accountsKnown: accountIds.Count > 0);
     }
 

@@ -370,6 +370,29 @@ public class RecipeWatchTests
         Assert.Equal(2, engine.Calls);
     }
 
+    /// <summary>
+    /// Changing only which stats are tracked is not a reason to try a rejecting site again. The hold exists so
+    /// a "sign in" or "key rejected" answer is not hammered; UpdateRecipe used to clear it on ANY call, so
+    /// ticking a stat cost one more rejected request every time (S1-14.8). Same recipe, same inputs, same
+    /// text: the site has no reason to answer differently, so the hold stays. A real change still releases it,
+    /// which the test above pins.
+    /// </summary>
+    [Fact]
+    public async Task ChangingOnlyTheTrackedStatsDoesNotReleaseAHeldStop()
+    {
+        var engine = new FakeEngine(() => RecipeReading.Stop(ReadingOutcome.SignInRequired, "requires signing in"));
+        var watch = Watch(engine, new FakeHost(true, [MyAccount]));
+
+        await watch.RunOnceAsync(CancellationToken.None);
+        Assert.Equal(1, engine.Calls);
+
+        watch.UpdateRecipe(PetSim, Clan, new HashSet<string> { "value", "rank" });
+        var still = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal(WatchState.SignInRequired, still.State);
+        Assert.Equal(1, engine.Calls);
+    }
+
     [Fact]
     public async Task SignInRequiredIsNotReleasedByAKeyChange()
     {

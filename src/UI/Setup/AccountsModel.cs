@@ -141,7 +141,7 @@ public static class AccountsModel
         {
             var budget = HistoryBudget.Check(
                 HistoryBudget.Installed(installed, accountIds, exceptSlug: recipe.Recipe.Slug),
-                (before, sentStats), (after, sentStats), accountsKnown: true);
+                (before, sentStats, 0), (after, sentStats, 0), accountsKnown: true);
             if (!budget.Allowed) return new SendChange(recipe.State, budget.Line);
         }
 
