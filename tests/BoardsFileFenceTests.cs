@@ -34,9 +34,11 @@ public class BoardsFileFenceTests
             files.Where(f => f.Text.Contains("BoardsFile", StringComparison.Ordinal))
                 .Select(f => f.Relative).Order(StringComparer.Ordinal).ToArray());
 
-        // And the rule itself: where it is declared, and the single place it is applied.
+        // And the rule itself: where it is declared, and the places it is applied — boards.json's one writer,
+        // and SetupPack, which applies it again on the way into a setup folder rather than trust that the
+        // boards it was handed are already clean (setup-transfer design 2026-09-22, §1).
         Assert.Equal(
-            new[] { Path.Combine("Board", "BoardDefs.cs"), Path.Combine("Composition", "AppServices.cs") },
+            new[] { Path.Combine("Board", "BoardDefs.cs"), Path.Combine("Composition", "AppServices.cs"), Path.Combine("Core", "SetupPack.cs") },
             files.Where(f => f.Text.Contains("Sanitize", StringComparison.Ordinal))
                 .Select(f => f.Relative).Order(StringComparer.Ordinal).ToArray());
 
