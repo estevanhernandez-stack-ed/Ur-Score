@@ -3,10 +3,24 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
-## 0.5.5 - 2026-09-20
+## 0.5.5 - 2026-09-22
 
 ### Added
 
+- **Export stats and Import stats.** Setup > Score book writes your score book to one dated file, and
+  reads such a file in on another PC — the month files and the recipe texts the book keeps, with a
+  one-line manifest, and nothing else. No keys (they are bound to you on the machine that made them),
+  no clans, boards or settings. The other PC matches the readings to its own clans by recipe and clan
+  name, skips what it already has, and names any clan it does not follow rather than guessing. A month
+  file inside a folder you copied by hand still imports, so the old way keeps working.
+- **Edit a board the way 2026 does.** Drag a panel by its header, haul its edge or corner to resize, and
+  a caret shows where it will land. Push and reflow: the other panels move out of the way and back.
+- **Update a recipe when a newer one ships.** Setup > Recipes shows an Update button on an installed
+  recipe when the built-in copy is newer (same name and author, different text), and says what changed
+  before you take it. You are no longer pinned to whatever you first imported.
+- **If installing or updating Ur Score has failed for you before, try again on RoRoRo 1.30.** The download
+  used to give up after 100 seconds, so on a slow connection it could never finish; RoRoRo 1.30 gives it
+  ten minutes. (Ur Score itself still runs on RoRoRo 1.28 or later.)
 - **The clans behind you, by name.** Ur Score modelled catching the clan above and nothing about being
   caught, which is the direction that decides a battle. Two new numbers in Setup > Stats' "Clan and
   field" section: **Points the threat is behind**, and **Hours until the threat passes you**. Set the
@@ -34,6 +48,19 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 - The import consent screen no longer promises that a list like this holds no players. It could not know
   that for a recipe we did not write, and it is the one screen whose job is telling you what you are
   agreeing to.
+- **Setting up a clan number no longer lets you past RoRoRo's history limit.** The count of what you send
+  now includes each clan number a list sends, and the Clan and field save refuses a tick that would go
+  over, the way a stat tick already did. The start-up warning counts lists too.
+- **A screen reader names what it reads.** Rows in the Stats table, the pages in Setup's list and the
+  clan-search matches are read by their names ("Points", "Diagnostics", the clan) instead of the name of
+  the thing behind them.
+- The score book opens faster and charts draw faster: a five-week book loads in one pass instead of two,
+  and a board's charts read their own clan's lines rather than every clan's.
+- A stat tick the limit refuses is undone with one redraw instead of three; the race note says "clans";
+  a stopped read on a list recipe still names the battle on the board's top line; a locked boards.json
+  is copied once, not once per retry; a line in the score book is filed under the clan that was actually
+  read even when the clan's settings changed mid-read; a picture fetch that failed is asked again on the
+  next read; the trail names an error's type and never its text.
 
 ## 0.5.4 - 2026-09-20
 
