@@ -175,4 +175,109 @@ public class SetupMergeTests
         Assert.Equal([AltOne.AccountId], arriving.Excluded);
         Assert.Equal(0, dropped);
     }
+
+    private sealed class FakeSetupWriter(string root, SetupHere here) : ISetupWriter
+    {
+        public string DataRoot => root;
+        public SetupHere Here => here;
+        public List<(string Slug, RecipeState State)> Recipes { get; } = [];
+        public IReadOnlyList<Source>? Sources { get; private set; }
+        public IReadOnlyList<BoardDef>? Boards { get; private set; }
+        public Settings? Settings { get; private set; }
+        public int Reloads { get; private set; }
+        public string? ThrowAt { get; init; }
+        public void SaveRecipe(Recipe recipe, string text, RecipeState state) { if (ThrowAt == "recipes") throw new IOException("disk"); Recipes.Add((recipe.Slug, state)); }
+        public void SaveSources(IReadOnlyList<Source> sources) { if (ThrowAt == "clans") throw new IOException("disk"); Sources = sources; }
+        public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) { if (ThrowAt == "boards") throw new UnauthorizedAccessException("denied"); Boards = saved; }
+        public void SaveSettings(Settings settings) => Settings = settings;
+        public void ReloadRecipes() => Reloads++;
+    }
+
+    private static (SetupMergePlan Plan, FakeSetupWriter Writer, TempDir.Scope Dir) Scenario(string? throwAt = null)
+    {
+        var dir = TempDir.Create("urscore-apply");
+        var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
+        File.WriteAllText(Path.Combine(data, "sources.json"), "[]");
+        Directory.CreateDirectory(Path.Combine(data, "recipes"));
+        File.WriteAllText(Path.Combine(data, "recipes", "old.recipe.json"), "{}");
+        var local = new Source("s-local001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Watch);
+        var here = new SetupHere([], [local, Rival], [new BoardDef("b-1", "Battle", [])], [Main, AltOne]);
+        var fileMain = new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main);
+        var fileNew = new Source("s-file0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Mine);
+        var fileBoard = new BoardDef("b-9", "Battle", [
+            new PanelDef("p-1", PanelType.Standing, new PanelSize(6), new PanelSettings(Clan.Slug, SourceId: "s-file0001")),
+            new PanelDef("p-2", PanelType.Standing, new PanelSize(6), new PanelSettings(Clan.Slug, SourceId: "s-file0002")),
+            new PanelDef("p-3", PanelType.Race, new PanelSize(6), new PanelSettings(Clan.Slug, SourceIds: ["s-file0001", "s-file0002"])),
+        ]);
+        var file = new SetupPack([FileRecipe(Clan, ClanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(true, true, "clan.battle.points") }), 201, 999)],
+            [fileMain, fileNew], [fileBoard], new Settings(ResolveNames: false, ActiveRecipe: Clan.Slug), []);
+        var plan = SetupMerge.Plan(file, here, 0, 0);
+        return (plan, new FakeSetupWriter(data, here) { ThrowAt = throwAt }, dir);
+    }
+
+    [Fact]
+    public void ApplyWritesInOrderMintsIdsForNewClansAndRewritesBoardsThroughThem()
+    {
+        var (plan, writer, dir) = Scenario();
+        using (dir)
+        {
+            var all = plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
+
+            var applied = SetupMerge.Apply(plan, all, writer, new DateTimeOffset(2026, 9, 22, 14, 31, 0, TimeSpan.Zero));
+
+            Assert.Null(applied.FailedStep);
+            Assert.Equal((1, 2, 1, 1, 1), (applied.Recipes, applied.Clans, applied.Boards, applied.KeptClans, applied.DroppedExclusions));
+            Assert.False(writer.Recipes.Single().State.StatChoices["value"].Send);
+            Assert.Equal(3, writer.Sources!.Count);
+            var k0i2 = Assert.Single(writer.Sources, s => s.InputsKey == "clan=k0i2");
+            Assert.Equal(("s-local001", SourceRole.Main), (k0i2.Id, k0i2.Role));                 // replaced under the LOCAL id
+            var ccgp = Assert.Single(writer.Sources, s => s.InputsKey == "clan=ccgp");
+            Assert.StartsWith("s-", ccgp.Id, StringComparison.Ordinal);
+            Assert.NotEqual("s-file0002", ccgp.Id);                                               // minted, never the file's
+            Assert.Contains(writer.Sources, s => s.Id == Rival.Id);                                  // kept
+            var board = Assert.Single(writer.Boards!, b => b.Name == "Battle");
+            Assert.Equal("s-local001", board.Panels[0].Settings.SourceId);
+            Assert.Equal(ccgp.Id, board.Panels[1].Settings.SourceId);
+            Assert.Equal(["s-local001", ccgp.Id], board.Panels[2].Settings.SourceIds);
+            Assert.Equal(1, writer.Reloads);
+            Assert.Equal((false, Clan.Slug), (writer.Settings!.ResolveNames, writer.Settings.ActiveRecipe));
+            var aside = Directory.GetDirectories(dir.Path, "626labs.ur-score.before-import-*").Single();
+            Assert.Equal(aside, applied.AsideFolder);
+            Assert.True(File.Exists(Path.Combine(aside, "sources.json")));
+            Assert.True(File.Exists(Path.Combine(aside, "recipes", "old.recipe.json")));
+        }
+    }
+
+    [Fact]
+    public void AnUntickedClanIsNotWrittenAndABoardPanelPointingAtItIsLeftPointingAtNothingHere()
+    {
+        var (plan, writer, dir) = Scenario();
+        using (dir)
+        {
+            var ticks = plan.Items.Select(i => i.Key).Where(k => k != "clan:" + Clan.Slug + "|clan=ccgp").ToHashSet(StringComparer.Ordinal);
+
+            SetupMerge.Apply(plan, ticks, writer, DateTimeOffset.UtcNow);
+
+            Assert.DoesNotContain(writer.Sources!, s => s.InputsKey == "clan=ccgp");
+            var board = Assert.Single(writer.Boards!, b => b.Name == "Battle");
+            Assert.Equal("s-file0002", board.Panels[1].Settings.SourceId);   // nothing here has that id: the panel shows stale
+        }
+    }
+
+    [Fact]
+    public void AFailureNamesItsStepAndTheStepsBeforeItStand()
+    {
+        var (plan, writer, dir) = Scenario(throwAt: "boards");
+        using (dir)
+        {
+            var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+
+            Assert.Equal(("boards", nameof(UnauthorizedAccessException)), (applied.FailedStep, applied.FailureType));
+            Assert.Single(writer.Recipes);
+            Assert.NotNull(writer.Sources);
+            Assert.Null(writer.Boards);
+            Assert.Null(writer.Settings);
+            Assert.NotNull(applied.AsideFolder);
+        }
+    }
 }

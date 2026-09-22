@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
@@ -35,6 +36,30 @@ public sealed record SetupMergePlan(IReadOnlyList<SetupItem> Items, SetupPack Fi
     /// <summary>Set by <see cref="SetupMerge.Plan"/>: the slugs installed here, for <see cref="CanTick"/>.</summary>
     internal IReadOnlySet<string> RecipeInstalled { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 }
+
+/// <summary>The stores <see cref="SetupMerge.Apply"/> writes through, so the apply is testable against a fake and the app's own writers stay the only writers.</summary>
+public interface ISetupWriter
+{
+    /// <summary>The data folder, for the aside copy beside it.</summary>
+    string DataRoot { get; }
+
+    SetupHere Here { get; }
+
+    void SaveRecipe(Recipe recipe, string text, RecipeState state);
+
+    void SaveSources(IReadOnlyList<Source> sources);
+
+    /// <summary>The whole saved boards list, replaced: sanitized and written once, then redrawn.</summary>
+    void SaveImportedBoards(IReadOnlyList<BoardDef> saved);
+
+    void SaveSettings(Settings settings);
+
+    void ReloadRecipes();
+}
+
+/// <summary>What Apply did, for the line the page says. <see cref="FailedStep"/> names the step that threw, or null.</summary>
+public sealed record SetupApplied(
+    int Recipes, int Clans, int Boards, int KeptClans, int Keys, int DroppedExclusions, string? AsideFolder, string? FailedStep, string? FailureType);
 
 /// <summary>
 /// Importing a setup: the plan, pure (spec §2), and the apply (spec §4, Task 6). Identity: a recipe by slug, a clan by
@@ -139,6 +164,134 @@ public static class SetupMerge
         items.Add(new SetupItem(SetupKind.Stats, "stats", StatsName(readings, finals), SetupOutcome.Add, "what is already here is skipped", Ticked: true));
 
         return new SetupMergePlan(items, file) { RecipeInstalled = installedHere.Keys.ToHashSet(StringComparer.Ordinal) };
+    }
+
+    /// <summary>
+    /// Applies the ticked items in dependency order (spec §4): the aside copy first, then recipes, clans, a reload,
+    /// boards, settings. Each step is atomic on its own file; a step that throws ends the apply with its name and
+    /// the exception's TYPE, and the steps before it stand. No roll-back: the aside folder is the recovery.
+    /// </summary>
+    public static SetupApplied Apply(SetupMergePlan plan, IReadOnlySet<string> tickedKeys, ISetupWriter writer, DateTimeOffset now)
+    {
+        var here = writer.Here;
+        var ticked = plan.Ticked(tickedKeys).ToList();
+        var recipes = 0;
+        var clans = 0;
+        var boards = 0;
+        var dropped = 0;
+        string? aside = null;
+        var step = "aside";
+        try
+        {
+            aside = Aside(writer.DataRoot, now);
+
+            step = "recipes";
+            var fileRecipes = plan.File.Recipes.ToDictionary(r => r.Slug, StringComparer.Ordinal);
+            foreach (var item in ticked.Where(i => i.Kind == SetupKind.Recipe))
+            {
+                var recipe = fileRecipes[item.Key["recipe:".Length..]];
+                var parsed = RecipeParser.Parse(recipe.Text);
+                if (parsed.Recipe is null) continue;   // parsed there, not here: a version gap, counted by not counting it
+                var state = Arriving(recipe.State, recipe.ExcludedUserIds, here.Accounts, out var droppedHere);
+                dropped += droppedHere;
+                writer.SaveRecipe(parsed.Recipe, recipe.Text, state);
+                recipes++;
+            }
+
+            step = "clans";
+            var idMap = new Dictionary<string, string>(StringComparer.Ordinal);
+            var sources = here.Sources.ToList();
+            foreach (var item in plan.Items.Where(i => i.Kind == SetupKind.Clan && i.FileId is not null && i.LocalId is not null))
+            {
+                idMap[item.FileId!] = item.LocalId!;   // Same and Replace: the file's id means the local clan
+            }
+
+            foreach (var item in ticked.Where(i => i.Kind == SetupKind.Clan))
+            {
+                var fromFile = plan.File.Sources.First(s => s.Id == item.FileId);
+                if (item.Outcome == SetupOutcome.Replace)
+                {
+                    var at = sources.FindIndex(s => s.Id == item.LocalId);
+                    sources[at] = fromFile with { Id = item.LocalId! };
+                }
+                else
+                {
+                    var minted = SourceRules.NewId();
+                    idMap[fromFile.Id] = minted;
+                    sources.Add(fromFile with { Id = minted });
+                }
+
+                clans++;
+            }
+
+            if (clans > 0) writer.SaveSources(sources);
+            writer.ReloadRecipes();
+
+            step = "boards";
+            var tickedBoards = ticked.Where(i => i.Kind == SetupKind.Board).Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
+            if (tickedBoards.Count > 0)
+            {
+                static string BoardKey(BoardDef b) => "board:" + b.Name.Trim().ToLowerInvariant();
+                var saved = here.SavedBoards.ToList();
+                foreach (var board in plan.File.Boards.Where(b => b.Follows is null && tickedBoards.Contains(BoardKey(b))))
+                {
+                    var rewritten = Rewrite(board, idMap);
+                    var at = saved.FindIndex(b => b.Follows is null && BoardKey(b) == BoardKey(board));
+                    if (at >= 0) saved[at] = rewritten with { Id = saved[at].Id };
+                    else saved.Add(rewritten);
+                    boards++;
+                }
+
+                writer.SaveImportedBoards(saved);
+            }
+
+            step = "settings";
+            writer.SaveSettings(plan.File.Settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException)
+        {
+            return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, step, ex.GetType().Name);
+        }
+
+        return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, null, null);
+    }
+
+    private static int KeptClans(SetupMergePlan plan) => plan.Items.Count(i => i.Kind == SetupKind.Clan && i.Outcome == SetupOutcome.Kept);
+
+    /// <summary>A board from the file with every clan id it points at mapped to this machine's; an unmapped id is left as it is, which points at nothing here.</summary>
+    private static BoardDef Rewrite(BoardDef board, IReadOnlyDictionary<string, string> idMap) =>
+        board with
+        {
+            Panels = [.. board.Panels.Select(p => p with
+            {
+                Settings = p.Settings with
+                {
+                    SourceId = p.Settings.SourceId is { } one ? idMap.GetValueOrDefault(one, one) : null,
+                    SourceIds = p.Settings.SourceIds?.Select(id => idMap.GetValueOrDefault(id, id)).ToList(),
+                    ToSourceId = p.Settings.ToSourceId is { } to ? idMap.GetValueOrDefault(to, to) : null,
+                },
+            })],
+        };
+
+    /// <summary>The setup's files copied beside the data folder, dated, so a person can put them back by hand.</summary>
+    private static string Aside(string dataRoot, DateTimeOffset now)
+    {
+        var folder = $"{dataRoot.TrimEnd(Path.DirectorySeparatorChar)}.before-import-{now:yyyyMMdd-HHmm}";
+        Directory.CreateDirectory(folder);
+        foreach (var name in new[] { "sources.json", "boards.json", "settings.json" })
+        {
+            var file = Path.Combine(dataRoot, name);
+            if (File.Exists(file)) File.Copy(file, Path.Combine(folder, name), overwrite: true);
+        }
+
+        var recipes = Path.Combine(dataRoot, "recipes");
+        if (Directory.Exists(recipes))
+        {
+            Directory.CreateDirectory(Path.Combine(folder, "recipes"));
+            foreach (var file in Directory.EnumerateFiles(recipes)) File.Copy(file, Path.Combine(folder, "recipes", Path.GetFileName(file)), overwrite: true);
+        }
+
+        return folder;
     }
 
     /// <summary>The state as it arrives (spec §2): every send off, exclusions mapped to this PC's accounts by Roblox id, the unmatched counted.</summary>
