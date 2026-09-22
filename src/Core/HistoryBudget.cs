@@ -8,8 +8,10 @@ public sealed record BudgetCheck(bool Allowed, int Count, string Line);
 /// <summary>
 /// RoRoRo keeps at most <see cref="Limit"/> metric series and silently refuses a new one past that
 /// (stats design §0, verified live). Every account with Send on, times every stat with Send on, is one
-/// series, summed across installed recipes (§5.3). Other plugins share the same slots and Ur Score
-/// cannot see theirs, so the warning starts well before the limit.
+/// series, summed across installed recipes (§5.3) — plus one series per clan-and-field number a list
+/// sends, because those have no account behind them and each is a series of its own. Until 2026-09-21 the
+/// count had no term for that, so six ticked clan numbers were six slots counted as zero (V3-S.28). Other
+/// plugins share the same slots and Ur Score cannot see theirs, so the warning starts well before the limit.
 /// </summary>
 public static class HistoryBudget
 {
@@ -17,15 +19,20 @@ public static class HistoryBudget
 
     public const int Limit = 256;
 
-    public static int Count(IEnumerable<(int SendingAccounts, int SentStats)> recipes) =>
-        recipes.Sum(r => r.SendingAccounts * r.SentStats);
+    public static int Count(IEnumerable<(int SendingAccounts, int SentStats, int FieldMetrics)> recipes) =>
+        recipes.Sum(r => r.SendingAccounts * r.SentStats + r.FieldMetrics);
 
-    /// <summary>Each installed recipe's share, from the accounts the window knows and each recipe's own Send ticks.</summary>
-    public static IReadOnlyList<(int SendingAccounts, int SentStats)> Installed(
+    /// <summary>
+    /// Each installed recipe's share, from the accounts the window knows and each recipe's own Send ticks: the
+    /// accounts and stats for a recipe that reads accounts, the clan numbers ticked for a list.
+    /// </summary>
+    public static IReadOnlyList<(int SendingAccounts, int SentStats, int FieldMetrics)> Installed(
         IEnumerable<InstalledRecipe> recipes, IReadOnlyCollection<Guid> accountIds, string? exceptSlug = null) =>
         [.. recipes
             .Where(r => !string.Equals(r.Recipe.Slug, exceptSlug, StringComparison.Ordinal))
-            .Select(r => (accountIds.Count(id => !r.State.Excluded.Contains(id)), r.State.SentStats(r.Recipe).Count))];
+            .Select(r => r.Recipe.IsGroupList
+                ? (0, 0, r.State.FieldMetricKeys.Count)
+                : (accountIds.Count(id => !r.State.Excluded.Contains(id)), r.State.SentStats(r.Recipe).Count, 0))];
 
     /// <summary>
     /// The count once RoRoRo's accounts are known, which no tick was checked against: accounts that
@@ -45,14 +52,14 @@ public static class HistoryBudget
     /// an already-too-high count is always allowed, so the way back under is never blocked.
     /// </summary>
     public static BudgetCheck Check(
-        IEnumerable<(int SendingAccounts, int SentStats)> otherRecipes,
-        (int SendingAccounts, int SentStats) before,
-        (int SendingAccounts, int SentStats) after,
+        IEnumerable<(int SendingAccounts, int SentStats, int FieldMetrics)> otherRecipes,
+        (int SendingAccounts, int SentStats, int FieldMetrics) before,
+        (int SendingAccounts, int SentStats, int FieldMetrics) after,
         bool accountsKnown)
     {
         var others = Count(otherRecipes);
-        var beforeCount = others + before.SendingAccounts * before.SentStats;
-        var afterCount = others + after.SendingAccounts * after.SentStats;
+        var beforeCount = others + Count([before]);
+        var afterCount = others + Count([after]);
 
         if (afterCount > Limit && afterCount > beforeCount)
         {
@@ -62,7 +69,7 @@ public static class HistoryBudget
         }
 
         var line = accountsKnown
-            ? $"{afterCount} of RoRoRo's {Limit} history slots: accounts with Send on times stats with Send on, across your installed recipes."
+            ? $"{afterCount} of RoRoRo's {Limit} history slots: accounts with Send on times stats with Send on, plus each clan number sent, across your installed recipes."
             : $"{afterCount} of RoRoRo's {Limit} history slots so far. RoRoRo hasn't been reached yet, so your accounts count as 0 until it is.";
 
         if (afterCount >= Warn)

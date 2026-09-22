@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net.Http;
 using Labs626.UrScore.Fetch;
 
 namespace UrScore.Tests;
@@ -106,6 +107,33 @@ public sealed class SourceIconsTests : IDisposable
 
         Assert.Null(icons.FileFor(K0i2));
         Assert.Equal(FakePictures.FileOf(CcgpIcon), icons.FileFor(Ccgp));
+    }
+
+    /// <summary>
+    /// A fetch that THROWS is asked again on the next read; a fetch that ANSWERS "no picture" is not. The two
+    /// were treated alike, so a network blip on the first read of a session cost the source its picture until
+    /// its icon text changed — which for a clan is never (S1-14.7). "No picture" is an answer and retrying it
+    /// every read would be a burst for nothing; an exception is not an answer, and the text is still unknown.
+    /// Same rule the cancellation branch already applied, now applied to the failure it was written next to.
+    /// </summary>
+    [Fact]
+    public async Task AFetchThatThrowsIsAskedAgainNextReadWhereOneThatAnswersNoIsNot()
+    {
+        var pictures = new FakePictures();
+        var icons = Icons(pictures);
+
+        pictures.Answer = _ => throw new HttpRequestException("blip");
+        Assert.False(await icons.ApplyAsync(Ccgp, CcgpIcon, Hosts, CancellationToken.None));
+        pictures.Answer = FakePictures.FileOf;
+        Assert.True(await icons.ApplyAsync(Ccgp, CcgpIcon, Hosts, CancellationToken.None));
+        Assert.Equal(2, pictures.Asked.Count);
+        Assert.Equal(FakePictures.FileOf(CcgpIcon), icons.FileFor(Ccgp));
+
+        // The control: an answer of "no picture" is remembered, and the same text is not asked about again.
+        pictures.Answer = _ => null;
+        Assert.False(await icons.ApplyAsync(K0i2, K0i2Icon, Hosts, CancellationToken.None));
+        Assert.False(await icons.ApplyAsync(K0i2, K0i2Icon, Hosts, CancellationToken.None));
+        Assert.Equal(3, pictures.Asked.Count);
     }
 
     [Fact]

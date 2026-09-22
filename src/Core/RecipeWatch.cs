@@ -287,8 +287,14 @@ public sealed class RecipeWatch(
             // new slug (fix round 1, finding 2): Record hashes and writes whatever recipeText holds,
             // so an unset text for a changed recipe reads as "unknown" here, never as the previous
             // recipe's text.
+            var textChanged = newRecipeText is not null && !string.Equals(newRecipeText, recipeText, StringComparison.Ordinal);
             recipeText = newRecipeText ?? (slugChanged ? "" : recipeText);
-            _held = null;
+
+            // A held "sign in" or "key rejected" stop is released by a change the site could answer differently
+            // to — another recipe, other inputs, new recipe text — and not by a change to which stats are
+            // tracked, which the site never sees. Releasing it on every update cost one more rejected request
+            // per tick (S1-14.8).
+            if (!same || textChanged) _held = null;
 
             if (!same)
             {

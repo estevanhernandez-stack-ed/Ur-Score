@@ -124,6 +124,16 @@ public partial class StatsPage : UserControl, ISetupPage
         try
         {
             var ticked = FieldMetricsModel.Ticked(FieldNumbers.ItemsSource.Cast<FieldMetricItem>());
+
+            // The same refusal a stat tick meets, so a clan number cannot take the setup past RoRoRo's ceiling
+            // from the one screen that exists to warn about that (V3-S.28).
+            var budget = FieldMetricsModel.Budget(list.Recipe, list.State, _services.Installed, [.. _services.KnownAccounts.Select(a => a.AccountId)], ticked);
+            if (!budget.Allowed)
+            {
+                Show(FieldSavedLine, budget.Line);
+                return;
+            }
+
             _services.SaveRecipeState(list.Recipe, list.State with { SentFieldMetrics = ticked });
             LoadField();
             Show(FieldSavedLine, ticked.Count == 0

@@ -138,8 +138,18 @@ public sealed class BoardsFile(string path, TimeProvider time)
         var text = File.ReadAllText(path);
         if (!keepExisting && Parses(text)) return null;
 
+        // Once is enough. Save copies the old file and THEN writes, so a write that throws leaves the old file
+        // where it was, still unreadable, and the retry arrived here again and made a second copy of the same
+        // bytes under a new stamp (S2-5.10). A copy whose contents already sit beside the file is not made
+        // twice; the existing one is the answer.
+        var folder = Path.GetDirectoryName(path)!;
+        foreach (var existing in Directory.EnumerateFiles(folder, "boards.unreadable-*.json").Order(StringComparer.Ordinal).Reverse())
+        {
+            if (string.Equals(File.ReadAllText(existing), text, StringComparison.Ordinal)) return existing;
+        }
+
         var stamp = time.GetUtcNow().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-        var copy = Path.Combine(Path.GetDirectoryName(path)!, $"boards.unreadable-{stamp}.json");
+        var copy = Path.Combine(folder, $"boards.unreadable-{stamp}.json");
         File.WriteAllText(copy, text);
         return copy;
     }

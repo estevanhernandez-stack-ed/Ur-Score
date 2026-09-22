@@ -91,6 +91,36 @@ public class BoardsFileTests
         Assert.Null(file.Save([Battle()]));
     }
 
+    /// <summary>
+    /// A save that fails AFTER keeping the unreadable copy, then a retry, keeps one copy and not two. Save copies
+    /// the old file and then writes, so a write that throws leaves the old file where it was, still unreadable,
+    /// and the retry used to arrive at the copy step again and make a second copy of the same bytes under a new
+    /// stamp (S2-5.10). The write is made to fail by putting a folder where the temp file goes; the clock moves
+    /// between attempts so a second copy WOULD get a distinct name if one were made, which is what makes the
+    /// count of one decisive.
+    /// </summary>
+    [Fact]
+    public void ARetryAfterAFailedSaveKeepsOneCopyOfTheUnreadableFileNotTwo()
+    {
+        using var dir = TempDir.Create("urscore-boards");
+        var path = Path.Combine(dir.Path, "boards.json");
+        File.WriteAllText(path, "[{ \"id\": \"b-1\", \"panels\": [ ");
+        var clock = new ManualTime(Now);
+        var file = new BoardsFile(path, clock);
+
+        Directory.CreateDirectory(path + ".tmp");
+        Assert.ThrowsAny<Exception>(() => file.Save([Battle()]));
+        Assert.Single(Directory.GetFiles(dir.Path, "boards.unreadable-*.json"));
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Directory.Delete(path + ".tmp");
+        var kept = file.Save([Battle()]);
+
+        Assert.Single(Directory.GetFiles(dir.Path, "boards.unreadable-*.json"));
+        Assert.Equal(Path.Combine(dir.Path, "boards.unreadable-20260919-180000.json"), kept);
+        Assert.True(file.Load().Readable);
+    }
+
     [Fact]
     public void AFileThatCouldntBeReadAtStartIsKeptEvenWhenItReadsByTheFirstSave()
     {

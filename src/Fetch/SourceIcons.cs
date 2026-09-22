@@ -103,6 +103,7 @@ public sealed class SourceIcons(IIconSource pictures, string savedFile)
         }
 
         string? file;
+        var failed = false;
         try
         {
             file = await pictures.ResolveAsync(text, recipeHosts, cancellationToken).ConfigureAwait(false);
@@ -119,7 +120,12 @@ public sealed class SourceIcons(IIconSource pictures, string savedFile)
         }
         catch (Exception)
         {
+            // Not an answer either. "No picture for this text" is an answer and is remembered so the same text
+            // is not asked about every read; a fetch that THREW has said nothing about the text, and remembering
+            // it as asked cost a source its picture for the whole session on one network blip (S1-14.7). The ask
+            // is forgotten at the end, once this attempt has fallen back to whatever the cache holds.
             file = null;
+            failed = true;
         }
 
         // Offline, or older than the cache counts as fresh: the picture this very text already has is still this source's.
@@ -146,6 +152,10 @@ public sealed class SourceIcons(IIconSource pictures, string savedFile)
 
             changed = !string.Equals(before, file, StringComparison.Ordinal);
             textChanged = !string.Equals(textBefore, _texts.GetValueOrDefault(sourceId), StringComparison.Ordinal);
+
+            // A fetch that threw leaves the text unknown, so the next read asks again — after this attempt has
+            // applied whatever the cache held, which is why the forget is here and not in the catch (S1-14.7).
+            if (failed) _asked.Remove(sourceId);
         }
 
         if (textChanged) Save();
