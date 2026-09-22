@@ -25,7 +25,7 @@
              its recipe and the clan it follows, never by an id this PC has never seen. -->
         <TextBlock Text="EXPORT AND IMPORT STATS" Style="{StaticResource SectionLabel}" Margin="0,20,0,6" />
         <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
-                   Text="Ran Ur Score on another PC? Export its stats there to one file, then import that file here, and the two become one history. The file holds the score book alone — your own accounts' numbers and each source's headline — and never a key." />
+                   Text="Ran Ur Score on another PC? Export its stats there to one file, then import that file here. The file carries the score book and your setup — recipes with their ticks, clans, boards — and never a key; you see what will change before anything does." />
         <StackPanel Orientation="Horizontal">
             <Button x:Name="ExportStatsButton" Content="Export stats…" Click="OnExportStatsClick"
                     AutomationProperties.Name="Export stats to a file for another PC" />

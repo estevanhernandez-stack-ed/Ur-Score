@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Core;
 using Microsoft.Win32;
 using static Labs626.UrScore.UI.TextLines;
 
@@ -63,16 +64,18 @@ public partial class ScoreBookPage : UserControl, ISetupPage
         await TransferAsync("Writing the file…", "That file could not be written", async () =>
         {
             var manifest = await Task.Run(() => _services.ExportStats(dialog.FileName));
-            // Task 8 passes the pack ExportStats built, once the preview window can show it; for now the export
-            // still writes the setup (ExportStats), the line just doesn't count it yet.
-            return (ScoreBookModel.ExportedLine(manifest, Path.GetFileName(dialog.FileName), null), "", false);
+            // The same pack ExportStats just wrote alongside the book, built again here for the line's counts —
+            // recipes, clans and boards — so it matches what the other PC's preview will offer.
+            var setup = SetupPack.FromHere(_services.Installed, _services.Sources, _services.SavedBoards, _services.Settings, _services.KnownAccounts);
+            return (ScoreBookModel.ExportedLine(manifest, Path.GetFileName(dialog.FileName), setup), "", false);
         });
     }
 
     /// <summary>
     /// Imports another PC's stats: the file Export stats made there, or, for a folder somebody copied by hand, a month
-    /// file inside it. Readings are matched to this PC's sources by recipe and clan, rewritten to this PC's ids, and
-    /// appended; anything already here is skipped, and a clan this PC doesn't follow is named rather than guessed at.
+    /// file inside it. A stats file from 0.5.5, or one with no setup, merges its readings as before. One with a setup
+    /// (0.5.6 on) opens a preview first (<see cref="ImportPreviewWindow"/>): nothing is written until it is ticked and
+    /// confirmed, then <see cref="SetupMerge.Apply"/> writes the setup and the stats merge follows, in that order.
     /// </summary>
     private async void OnImportStatsClick(object sender, RoutedEventArgs e)
     {
@@ -89,8 +92,40 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
         await TransferAsync("Reading that file…", "That file could not be imported", async () =>
         {
-            var outcome = await Task.Run(() => BookImport.RunFile(dialog.FileName, _services));
-            return (outcome.Message, outcome.Problem, outcome.Added > 0);
+            if (!dialog.FileName.EndsWith(BookPack.Extension, StringComparison.OrdinalIgnoreCase))
+            {
+                var outcome = await Task.Run(() => BookImport.RunFile(dialog.FileName, _services));
+                return (outcome.Message, outcome.Problem, outcome.Added > 0);
+            }
+
+            var opened = await Task.Run(() => BookPack.Open(dialog.FileName));
+            try
+            {
+                if (opened.Folder is null) return ("", opened.Problem, false);
+
+                var fileName = Path.GetFileName(dialog.FileName);
+                if (opened.Setup is null)
+                {
+                    // A 0.5.5 file, or a stats-only export: the stats merge as before, no preview needed.
+                    var statsOnly = await Task.Run(() => BookImport.Run(opened.Folder, _services));
+                    return (statsOnly.Message, statsOnly.Problem, statsOnly.Added > 0);
+                }
+
+                var plan = SetupMerge.Plan(opened.Setup, _services.SetupWriter.Here, opened.Manifest!.Readings, opened.Manifest.Finals);
+                var preview = new ImportPreviewWindow(plan, opened.Manifest, fileName) { Owner = Window.GetWindow(this) };
+                if (preview.ShowDialog() != true || preview.TickedKeys is not { } ticked) return ("Nothing imported.", "", false);
+
+                var applied = SetupMerge.Apply(plan, ticked, _services.SetupWriter, DateTimeOffset.Now);
+                if (applied.FailedStep is not null) _services.AddTrail($"SETUP NOT IMPORTED AT {applied.FailedStep.ToUpperInvariant()}: {applied.FailureType}");
+                var stats = ticked.Contains("stats") && applied.FailedStep is null
+                    ? await Task.Run(() => BookImport.Run(opened.Folder, _services))
+                    : new BookImportOutcome(0, "");
+                return (ImportPreviewModel.AfterLine(applied, stats), stats.Problem, stats.Added > 0);
+            }
+            finally
+            {
+                BookPack.Discard(opened);
+            }
         });
     }
 
