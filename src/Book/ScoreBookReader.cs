@@ -35,8 +35,14 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
     /// the book — and COUNTED, so the caller can say so. Returns how many were skipped. A silent skip was the
     /// wrong kind of quiet: a book with a hundred unreadable lines loaded exactly like a book with none, and the
     /// numbers were simply lower with nothing anywhere explaining why (S1-F.10).
+    /// <para>
+    /// The same pass feeds <paramref name="finals"/> when one is given. Startup used to walk the whole book twice,
+    /// once for the finals index and once for this — the same files, the same JSON parsed line by line — and on a
+    /// season's book that was 2.2 s of the window opening where 1.1 s would do (S1-F.2). A line neither can take
+    /// in is counted once here and once on the index, which is the same line, so the caller reports one count.
+    /// </para>
     /// </summary>
-    public int Load(IEnumerable<string> slugs)
+    public int Load(IEnumerable<string> slugs, FinalsIndex? finals = null)
     {
         var cutoff = time.GetUtcNow() - KeepReadings;
         var skipped = 0;
@@ -53,6 +59,8 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
                 {
                     skipped++;
                 }
+
+                finals?.TryAdd(line);
             }
 
             lock (_gate) _slugs[slug] = data;
@@ -160,28 +168,36 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
     /// </summary>
     public BookLine? LastReading(string sourceId)
     {
-        lock (_gate)
-        {
-            return _slugs.Values
-                .SelectMany(d => d.Readings)
-                .Where(l => string.Equals(l.Source, sourceId, StringComparison.Ordinal))
-                .OrderBy(l => l.T)
-                .LastOrDefault();
-        }
+        lock (_gate) return Kept(sourceId).Select(list => list[^1]).MaxBy(l => l.T);
     }
 
     public long Bytes(string slug) => BookFiles.Bytes(root, slug);
 
+    /// <summary>
+    /// The source's readings in time order, from the list kept for it. Every chart query used to scan every
+    /// reading of every source and then sort what matched — thirty queries a redraw, a hundred thousand lines each
+    /// on a season's book, 68 ms a board (S1-F.3). Now it reads its own source's list, already in order.
+    /// </summary>
     private List<BookLine> Readings(string sourceId, string? period, DateTimeOffset since)
     {
         lock (_gate)
         {
-            return [.. _slugs.Values
-                .SelectMany(d => d.Readings)
-                .Where(l => l.Source == sourceId && (period is null ? l.T >= since : l.Period?.Value == period))
-                .OrderBy(l => l.T)];
+            var lists = Kept(sourceId).ToList();
+            IEnumerable<BookLine> lines = lists.Count switch
+            {
+                0 => [],
+                1 => lists[0],
+                // A source id kept under two slugs is nobody's normal book; the old scan merged them by time and so does this.
+                _ => lists.SelectMany(l => l).OrderBy(l => l.T),
+            };
+
+            return [.. lines.Where(l => period is null ? l.T >= since : l.Period?.Value == period)];
         }
     }
+
+    /// <summary>The non-empty lists kept for a source, one per slug that has it. Call under <see cref="_gate"/>.</summary>
+    private IEnumerable<List<BookLine>> Kept(string sourceId) =>
+        _slugs.Values.Select(d => d.BySource.GetValueOrDefault(sourceId)).Where(l => l is { Count: > 0 })!;
 
     /// <summary>Ruling R4.</summary>
     private static List<SeriesPoint> Collapse(IEnumerable<SeriesPoint> points)
@@ -207,10 +223,13 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
 
     private sealed class SlugData
     {
-        /// <summary>The oldest reading in <see cref="Readings"/>, so <see cref="Prune"/> knows without scanning.</summary>
+        private static readonly Comparer<BookLine> ByTime = Comparer<BookLine>.Create((a, b) => a.T.CompareTo(b.T));
+
+        /// <summary>The oldest reading kept, so <see cref="Prune"/> knows without scanning.</summary>
         private DateTimeOffset? _oldestKept;
 
-        public List<BookLine> Readings { get; } = [];
+        /// <summary>The kept readings by source id, each list in time order (S1-F.3).</summary>
+        public Dictionary<string, List<BookLine>> BySource { get; } = new(StringComparer.Ordinal);
 
         public List<BookLine> Finals { get; } = [];
 
@@ -233,8 +252,29 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
             if (First is null || line.T < First) First = line.T;
             if (line.T < cutoff) return;
 
-            Readings.Add(line);
+            if (!BySource.TryGetValue(line.Source, out var list)) BySource[line.Source] = list = [];
+            Insert(list, line);
             if (_oldestKept is null || line.T < _oldestKept) _oldestKept = line.T;
+        }
+
+        /// <summary>
+        /// Almost always an append: a watch writes in time order and the files are read oldest first. A line that
+        /// is not — a "Bring in stats" merge appends another machine's lines after this one's whatever their times,
+        /// and Apply promises no order either — is placed by search, after any line with the same time, which is
+        /// the order the old per-query sort gave (a stable one).
+        /// </summary>
+        private static void Insert(List<BookLine> list, BookLine line)
+        {
+            if (list.Count == 0 || list[^1].T <= line.T)
+            {
+                list.Add(line);
+                return;
+            }
+
+            var at = list.BinarySearch(line, ByTime);
+            if (at < 0) at = ~at;
+            while (at < list.Count && list[at].T == line.T) at++;
+            list.Insert(at, line);
         }
 
         /// <summary>
@@ -246,8 +286,16 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
         {
             if (_oldestKept is not { } oldest || oldest >= cutoff) return;
 
-            Readings.RemoveAll(l => l.T < cutoff);
-            _oldestKept = Readings.Count == 0 ? null : Readings.Min(l => l.T);
+            // Each list is in time order, so what ages out is a run at the front; the empty lists go too.
+            foreach (var (source, list) in BySource.ToList())
+            {
+                var gone = 0;
+                while (gone < list.Count && list[gone].T < cutoff) gone++;
+                list.RemoveRange(0, gone);
+                if (list.Count == 0) BySource.Remove(source);
+            }
+
+            _oldestKept = BySource.Count == 0 ? null : BySource.Values.Min(l => l[0].T);
         }
     }
 }

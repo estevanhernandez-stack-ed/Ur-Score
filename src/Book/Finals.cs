@@ -42,23 +42,30 @@ public sealed class FinalsIndex
     /// <summary>How many lines the load could not index and skipped, so the caller can say so (S1-F.10).</summary>
     public int Skipped { get; private set; }
 
-    /// <summary>A line that can't be indexed (a corrupt one that slipped past <see cref="BookJson.TryParse"/>) is skipped and counted, never the book.</summary>
+    /// <summary>
+    /// <see cref="Add"/> for a line read from the book: one that can't be indexed (a corrupt one that slipped past
+    /// <see cref="BookJson.TryParse"/>) is skipped and counted, never the book. The reader's own load calls this
+    /// for every line it reads, so startup walks the files once for both (S1-F.2).
+    /// </summary>
+    public void TryAdd(BookLine line)
+    {
+        try
+        {
+            Add(line);
+        }
+        catch (Exception)
+        {
+            Skipped++;
+        }
+    }
+
+    /// <summary>A whole book on its own, for a caller with no reader to share the pass with.</summary>
     public static FinalsIndex Load(string root)
     {
         var index = new FinalsIndex();
         foreach (var slug in BookFiles.Slugs(root))
         {
-            foreach (var line in BookFiles.ReadAll(root, slug))
-            {
-                try
-                {
-                    index.Add(line);
-                }
-                catch (Exception)
-                {
-                    index.Skipped++;
-                }
-            }
+            foreach (var line in BookFiles.ReadAll(root, slug)) index.TryAdd(line);
         }
 
         return index;

@@ -313,10 +313,11 @@ public sealed class AppServices : ISetupServices, IDisposable
         var root = _book.Root;
         var reader = Reader;
         int skipped;
+        // One walk of the files for both (S1-F.2). The index counts the same unreadable lines the reader does.
         (_finals, skipped) = await Task.Run(() =>
         {
-            var index = FinalsIndex.Load(root);
-            var unread = reader.Load(BookFiles.Slugs(root));
+            var index = new FinalsIndex();
+            var unread = reader.Load(BookFiles.Slugs(root), index);
             return (index, Math.Max(index.Skipped, unread));
         });
 
@@ -324,7 +325,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         _book.Written += OnWritten;
         Runner.Apply(Sources);
         AddTrail($"BOOK: loaded from {root}.");
-        // The two loaders walk the same files, so the same bad line is skipped by both; one count, the larger.
+        // The reader and the index count the same bad lines from the same pass; one count, the larger.
         if (skipped > 0) AddTrail(SkippedLines(skipped));
         AskForAvatars();
         RaiseChanged();
