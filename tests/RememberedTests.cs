@@ -14,8 +14,6 @@ namespace UrScore.Tests;
 /// </summary>
 public class RememberedTests
 {
-    private static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
-
     private static readonly IReadOnlySet<long> Yours = LiveBoard.UserIdsOf(Accounts);
 
     private static BookLine Kept(DateTimeOffset at, params (long UserId, double Value)[] rows) =>

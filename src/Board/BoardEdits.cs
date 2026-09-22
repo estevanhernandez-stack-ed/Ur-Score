@@ -219,10 +219,25 @@ public static class BoardEdits
     }
 
     /// <summary>Settings equal to the panel's own, as a settings form closed with nothing changed builds, change nothing.</summary>
-    public static BoardDef SetSettings(BoardDef board, string panelId, PanelSettings settings)
+    /// <summary>
+    /// The panel's settings replaced by ones built for its type. Settings are shaped by the type their form was
+    /// built for, and a panel was found by id alone, so settings built for a Race could land on a Standing without
+    /// a word; nothing reaches that today (the form is modal and a panel's type never changes), and the throw is
+    /// how a future caller finds out that it has (S2-6.7). A panel that is gone, or settings that change nothing,
+    /// leave the board as it is.
+    /// </summary>
+    public static BoardDef SetSettings(BoardDef board, string panelId, PanelType type, PanelSettings settings)
     {
         var index = PanelIndex(board, panelId);
-        return index < 0 || SameSettings(board.Panels[index].Settings, settings)
+        if (index < 0) return board;
+
+        var panel = board.Panels[index];
+        if (panel.Type != type)
+        {
+            throw new InvalidOperationException($"Settings built for a {type} panel cannot be applied to {panelId}, which is a {panel.Type}.");
+        }
+
+        return SameSettings(panel.Settings, settings)
             ? board
             : Update(board, panelId, p => p with { Settings = settings });
     }

@@ -7,10 +7,6 @@ namespace UrScore.Tests;
 
 public class StarterBoardsTests
 {
-    private static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
-    private static readonly Source AltClan = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
-    private static readonly Source Rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
-    private static readonly Source SecondAltClan = SourceOf("s-00000004", Clan, "Z9", SourceRole.Mine);
     private static readonly Source TopSource = SourceOf("s-0000000a", TopList, null, SourceRole.Watch);
 
     [Fact]

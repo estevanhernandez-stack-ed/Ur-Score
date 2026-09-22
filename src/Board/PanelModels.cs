@@ -53,7 +53,26 @@ public sealed record LiveBoard(
 {
     public DateTimeOffset Now => Time.GetUtcNow();
 
-    public IReadOnlySet<long> MyUserIds => UserIdsOf(Accounts);
+    /// <summary>
+    /// Your own Roblox user ids, one set per board. It was built on every access, and two of the accesses sit in
+    /// per-row lambdas — "is this row one of mine?" — so a fifty-row leaderboard built fifty sets to draw itself
+    /// (S1-13.10). Cached against the account list it was built from rather than in a plain field, because a
+    /// record's <c>with</c> copies every field: a copy given other accounts must answer for those, not for the
+    /// list the original was asked about. The race is benign — two threads build the same set and one wins.
+    /// </summary>
+    public IReadOnlySet<long> MyUserIds
+    {
+        get
+        {
+            if (_mine is { } cached && ReferenceEquals(cached.Of, Accounts)) return cached.Ids;
+
+            var ids = UserIdsOf(Accounts);
+            _mine = (Accounts, ids);
+            return ids;
+        }
+    }
+
+    private (IReadOnlyList<HostAccount> Of, IReadOnlySet<long> Ids)? _mine;
 
     /// <summary>Your own Roblox user ids from a list of your accounts; an account with no id (0) has none.</summary>
     public static IReadOnlySet<long> UserIdsOf(IReadOnlyList<HostAccount> accounts) =>

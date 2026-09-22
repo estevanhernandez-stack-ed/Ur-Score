@@ -46,6 +46,19 @@ internal static class BoardFixtures
     public static Source SourceOf(string id, Recipe recipe, string? clan, SourceRole role) =>
         new(id, recipe.Slug, clan is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["clan"] = clan }, role);
 
+    /// <summary>
+    /// The worked clans, once: your main, one you are also in, one you watch, and a second of yours. Eight test
+    /// classes each carried their own identical copies of the first three (S2-P.13); a class that needs a clan
+    /// with a different name or role still declares its own beside these.
+    /// </summary>
+    public static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
+
+    public static readonly Source AltClan = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
+
+    public static readonly Source Rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
+
+    public static readonly Source SecondAltClan = SourceOf("s-00000004", Clan, "Z9", SourceRole.Mine);
+
     public static RecipeRow Row(long userId, double? value, string stat = "value") =>
         new(userId, value is { } v ? new Dictionary<string, double> { [stat] = v } : new Dictionary<string, double>());
 

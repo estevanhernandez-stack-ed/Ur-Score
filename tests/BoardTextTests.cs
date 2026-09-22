@@ -8,9 +8,6 @@ namespace UrScore.Tests;
 
 public class BoardTextTests
 {
-    private static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
-    private static readonly Source AltClan = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
-
     [Fact]
     public void TheTopLineGivesThePeriodAndTheNextRead()
     {

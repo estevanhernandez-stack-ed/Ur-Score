@@ -40,7 +40,7 @@ public partial class BoardWindow
         var form = new PanelSettingsWindow(def.Type, PanelGallery.TitleOf(def, live), live, def.Settings, adding: false) { Owner = this };
         if (form.ShowDialog() != true || form.Result is not { } settings) return;
 
-        ChangeBoard(board => BoardEdits.SetSettings(board, def.Id, settings));
+        ChangeBoard(board => BoardEdits.SetSettings(board, def.Id, def.Type, settings));
     }
 
     /// <summary>+ Add panel: the gallery, then the form asking only for what that panel needs (R14).</summary>
