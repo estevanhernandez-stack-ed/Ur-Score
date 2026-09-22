@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
@@ -94,6 +95,14 @@ public class ImportFlowTests : IDisposable
         public int Reloads { get; private set; }
 
         public List<string> TrailLines { get; } = [];
+
+        public AppPaths Paths => throw new NotSupportedException();
+
+        public IReadOnlyList<BoardDef> SavedBoards => throw new NotSupportedException();
+
+        public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) => throw new NotSupportedException();
+
+        public ISetupWriter SetupWriter => throw new NotSupportedException();
 
         public IReadOnlyList<InstalledRecipe> Installed { get; private set; } = [];
 

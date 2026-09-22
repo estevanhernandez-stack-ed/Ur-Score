@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
@@ -19,12 +20,25 @@ public class ScoreBookModelTests
 
     /// <summary>What Export stats says beside the button, from the file's own manifest, with the file's name and where to go next.</summary>
     [Theory]
-    [InlineData(1, 1, "Exported 1 reading and 1 finished battle to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
-    [InlineData(16_800, 0, "Exported 16,800 readings and 0 finished battles to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
-    public void TheExportedLineCountsWhatWentIntoTheFile(int readings, int finals, string expected) =>
+    [InlineData(1, 1, null, "Exported 1 reading and 1 finished battle to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
+    [InlineData(16_800, 0, "3|5|2", "Exported 16,800 readings and 0 finished battles, with 3 recipes, 5 clans and 2 boards, to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
+    public void TheExportedLineCountsWhatWentIntoTheFile(int readings, int finals, string? setup, string expected)
+    {
+        SetupPack? pack = null;
+        if (setup is not null)
+        {
+            var n = setup.Split('|').Select(int.Parse).ToArray();
+            pack = new SetupPack(
+                [.. Enumerable.Range(0, n[0]).Select(i => new SetupRecipe($"r{i}", $"R{i}", "", new RecipeState(), []))],
+                [.. Enumerable.Range(0, n[1]).Select(i => new Source($"s-{i:x8}", "r0", new Dictionary<string, string>(), SourceRole.Mine))],
+                [.. Enumerable.Range(0, n[2]).Select(i => new BoardDef($"b-{i}", $"B{i}", []))],
+                Settings.Defaults, []);
+        }
+
         Assert.Equal(expected, ScoreBookModel.ExportedLine(
-            new BookPackManifest(BookPack.Version, new DateTimeOffset(2026, 9, 22, 12, 0, 0, TimeSpan.Zero), "0.5.4", readings, finals),
-            "ur-score-stats-2026-09-22.zip"));
+            new BookPackManifest(BookPack.Version, new DateTimeOffset(2026, 9, 22, 12, 0, 0, TimeSpan.Zero), "0.5.6", readings, finals, pack is not null),
+            "ur-score-stats-2026-09-22.zip", pack));
+    }
 
     [Theory]
     [InlineData(512L, "512 bytes")]

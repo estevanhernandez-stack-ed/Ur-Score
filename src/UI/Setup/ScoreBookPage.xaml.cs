@@ -63,7 +63,9 @@ public partial class ScoreBookPage : UserControl, ISetupPage
         await TransferAsync("Writing the file…", "That file could not be written", async () =>
         {
             var manifest = await Task.Run(() => _services.ExportStats(dialog.FileName));
-            return (ScoreBookModel.ExportedLine(manifest, Path.GetFileName(dialog.FileName)), "", false);
+            // Task 8 passes the pack ExportStats built, once the preview window can show it; for now the export
+            // still writes the setup (ExportStats), the line just doesn't count it yet.
+            return (ScoreBookModel.ExportedLine(manifest, Path.GetFileName(dialog.FileName), null), "", false);
         });
     }
 

@@ -43,6 +43,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     private readonly Dispatcher _ui;
     private readonly TimeProvider _time;
+    private readonly AppPaths _paths;
     private readonly HttpClient _recipeHttp = new(HttpRecipeTransport.CreateHandler());
     private readonly HttpClient _namesHttp = new();
 
@@ -130,9 +131,11 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         _ui = ui;
         _time = time;
+        _paths = paths;
         _pipe = host is null ? new HostClient(PluginId) : null;
         _host = host ?? _pipe!;
         RulesPath = rulesPath;
+        SetupWriter = new SetupImportWriter(this);
         _sourceStore = new SourceStore(paths.Sources);
         _boardsFile = new BoardsFile(paths.Boards, time);
         Keys = new KeyStore(paths.Keys);
@@ -183,6 +186,8 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     // ---- ISetupServices ----
 
+    public AppPaths Paths => _paths;
+
     public IReadOnlyList<InstalledRecipe> Installed { get; private set; } = [];
 
     public IReadOnlyList<string> RecipeProblems { get; private set; } = [];
@@ -205,11 +210,22 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public IScoreBook Book => _book;
 
+    /// <summary>What boards.json holds, or the starter boards' sanitized reflection while there is no file: never null and never dirty.</summary>
+    public IReadOnlyList<BoardDef> SavedBoards => _savedBoards ?? [];
+
+    /// <summary>The stores a setup import writes through, built once over this instance.</summary>
+    public Core.ISetupWriter SetupWriter { get; }
+
+    /// <summary>
+    /// Writes the book, with this machine's setup alongside it (<see cref="Core.SetupPack.FromHere"/>) so the other PC's
+    /// import has recipes, clans, boards and the two settings to offer, not stats alone.
+    /// </summary>
     public BookPackManifest ExportStats(string path)
     {
         _book.Flush();
         var version = typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        return BookPack.Write(_book.Root, path, version, _time.GetUtcNow());
+        var setup = SetupPack.FromHere(Installed, Sources, SavedBoards, Settings, KnownAccounts);
+        return BookPack.Write(_book.Root, path, version, _time.GetUtcNow(), setup);
     }
 
     public ScoreBookReader Reader { get; }
@@ -319,6 +335,16 @@ public sealed class AppServices : ISetupServices, IDisposable
         BoardsProblem = null;
         if (kept is not null) AddTrail($"BOARDS: the unreadable boards file was kept as {Path.GetFileName(kept)}.");
 
+        RaiseChanged();
+    }
+
+    /// <summary>Replaces the saved boards wholesale: sanitized to your own ids, written once, redrawn. The setup import's step 4.</summary>
+    public void SaveImportedBoards(IReadOnlyList<BoardDef> saved)
+    {
+        var clean = BoardDefs.Sanitize(saved, LiveBoard.UserIdsOf(KnownAccounts));
+        _boardsFile.Save(clean, keepExisting: _boardsUnread);
+        _savedBoards = clean.Count > 0 ? clean : null;
+        _boardsUnread = false;
         RaiseChanged();
     }
 
@@ -623,6 +649,32 @@ public sealed class AppServices : ISetupServices, IDisposable
         // _closing is cancelled above and deliberately NOT disposed: its token has been handed to work that may
         // still be unwinding, and a disposed source throws from .Token, so a cancelled-but-undisposed source is
         // the safer end for a token that lives as long as the process (S1-14.12).
+    }
+
+    // ---- setup import ----
+
+    /// <summary>
+    /// <see cref="Core.SetupMerge.Apply"/>'s seam onto this instance: the same stores every other page writes
+    /// through, named once so the apply is testable against a fake elsewhere and never grows a second writer of its
+    /// own (setup-transfer design 2026-09-22, §4). Named <c>SetupImportWriter</c> rather than <c>SetupWriter</c> —
+    /// the obvious name — because <see cref="ISetupServices.SetupWriter"/> already claims it for the property beside
+    /// it, and a nested type cannot share a name with a member of its enclosing class (CS0102).
+    /// </summary>
+    private sealed class SetupImportWriter(AppServices owner) : Core.ISetupWriter
+    {
+        public string DataRoot => owner._paths.Root;
+
+        public Core.SetupHere Here => new(owner.Installed, owner.Sources, owner.SavedBoards, owner.KnownAccounts);
+
+        public void SaveRecipe(Recipe recipe, string text, RecipeState state) => owner.Store.Save(recipe, text, state);
+
+        public void SaveSources(IReadOnlyList<Source> sources) => owner.SaveSources(sources);
+
+        public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) => owner.SaveImportedBoards(saved);
+
+        public void SaveSettings(Settings settings) => owner.SaveSettings(settings);
+
+        public void ReloadRecipes() => owner.ReloadRecipes();
     }
 
     // ---- watches ----

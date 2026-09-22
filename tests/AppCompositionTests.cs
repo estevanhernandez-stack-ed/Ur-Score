@@ -150,7 +150,13 @@ public class AppCompositionTests
     /// Export stats on one PC, Import stats on another, through the real composition on both sides: the first PC's
     /// book (a generated one, under the clan-battle recipe) goes into one file; the second PC, with the same recipe
     /// and a source for one of the clans, imports it and keeps that clan's readings under its OWN source id while the
-    /// other clan is named as not set up. Nothing but the score book is in the file — no key, no source, no board.
+    /// other clan is named as not set up.
+    /// <para>
+    /// Since 2026-09-22 the file also carries this PC's setup (empty here: <c>first</c> installs no recipe and saves
+    /// no source before exporting), so the zip legitimately holds a <c>setup/</c> folder now — what a setup pack may
+    /// and may never carry is <c>SetupPackTests</c>' job. What still must never happen, from any PC in any state, is
+    /// the real key store reaching the file at all.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task StatsExportedOnOnePcImportOnAnotherUnderItsOwnSourceIds()
@@ -168,8 +174,12 @@ public class AppCompositionTests
         }
 
         using var zip = System.IO.Compression.ZipFile.OpenRead(file);
-        Assert.All(zip.Entries, entry => Assert.True(entry.FullName == BookPack.ManifestName || entry.FullName.StartsWith("scorebook/", StringComparison.Ordinal), entry.FullName));
-        Assert.DoesNotContain(zip.Entries, entry => entry.FullName.Contains("keys", StringComparison.OrdinalIgnoreCase) || entry.FullName.EndsWith("sources.json", StringComparison.Ordinal));
+        Assert.All(zip.Entries, entry => Assert.True(
+            entry.FullName == BookPack.ManifestName
+            || entry.FullName.StartsWith("scorebook/", StringComparison.Ordinal)
+            || entry.FullName.StartsWith("setup/", StringComparison.Ordinal),
+            entry.FullName));
+        Assert.DoesNotContain(zip.Entries, entry => entry.FullName.EndsWith("keys.dat", StringComparison.Ordinal));
 
         // The second PC follows Clan0 under an id of its own; Clan1 it does not follow.
         var paths = new AppPaths(second.Path);
@@ -189,6 +199,78 @@ public class AppCompositionTests
         Assert.Equal(outcome.Added, lines.Count);
         Assert.All(lines, line => Assert.Equal("s-0000beef", line.Source));
         Assert.All(lines, line => Assert.Equal("Clan0", line.Inputs["clan"]));
+    }
+
+    /// <summary>
+    /// The whole setup, PC to PC, through the real composition on both sides (spec §6). A has two recipes, three clans
+    /// and an edited board; B is pristine. After the import with everything ticked, B's clans have B's own ids, B's
+    /// board points at them, every send is off, and the stats landed. Then into a B that already WATCHES one of
+    /// the clans: the plan says Replace, and afterward B has one such clan, not two.
+    /// </summary>
+    [Fact]
+    public async Task TheWholeSetupTravelsAndArrivesUnderTheOtherPcsOwnIds()
+    {
+        using var a = TempDir.Create("urscore-app-a");
+        using var b = TempDir.Create("urscore-app-b");
+        var clanText = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
+        var clan = RecipeParser.Parse(clanText).Recipe!;
+        var topText = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
+        var top = RecipeParser.Parse(topText).Recipe!;
+        var pathsA = new AppPaths(a.Path);
+        new RecipeStore(pathsA.Recipes).Save(clan, clanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") }));
+        new RecipeStore(pathsA.Recipes).Save(top, topText, new RecipeState());
+        var sourcesA = new List<Source>
+        {
+            new("s-000000a1", clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main),
+            new("s-000000a2", clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Mine),
+            new("s-000000a3", top.Slug, new Dictionary<string, string>(), SourceRole.Watch),
+        };
+        new SourceStore(pathsA.Sources).Save(sourcesA);
+        var file = Path.Combine(a.Path, "everything.zip");
+        using (var exporter = Compose(a, new StubHost(reachable: false), new FakeTransport()))
+        {
+            exporter.SaveImportedBoards([new BoardDef("b-a1", "Rivals", [new PanelDef("p-1", PanelType.Standing, new PanelSize(6), new PanelSettings(clan.Slug, SourceId: "s-000000a1"))])]);
+            var manifest = exporter.ExportStats(file);
+            Assert.True(manifest.Setup);
+        }
+
+        using var importer = Compose(b, new StubHost(reachable: false), new FakeTransport());
+        await importer.LoadBookAsync();
+        var opened = BookPack.Open(file);
+        Assert.NotNull(opened.Setup);
+        var plan = SetupMerge.Plan(opened.Setup!, importer.SetupWriter.Here, opened.Manifest!.Readings, opened.Manifest.Finals);
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), importer.SetupWriter, Start);
+        BookPack.Discard(opened);
+
+        Assert.Null(applied.FailedStep);
+        Assert.Equal((2, 3, 1), (applied.Recipes, applied.Clans, applied.Boards));
+        Assert.Equal(2, importer.Installed.Count);
+        Assert.All(importer.Installed.SelectMany(i => i.State.StatChoices.Values), choice => Assert.False(choice.Send));
+        Assert.Equal(3, importer.Sources.Count);
+        Assert.All(importer.Sources, s => Assert.DoesNotContain(s.Id, sourcesA.Select(x => x.Id)));
+        var k0i2 = Assert.Single(importer.Sources, s => s.InputsKey == "clan=k0i2");
+        Assert.NotNull(importer.Runner.WatchFor(k0i2.Id));
+        var rivals = Assert.Single(importer.SavedBoards, bd => bd.Name == "Rivals");
+        Assert.Equal(k0i2.Id, rivals.Panels[0].Settings.SourceId);
+        Assert.True(Directory.GetDirectories(b.Path, "626labs.ur-score.before-import-*").Length == 1 || Directory.GetDirectories(Path.GetDirectoryName(b.Path)!, Path.GetFileName(b.Path) + ".before-import-*").Length == 1);
+
+        // A B that already watches K0i2: Replace, not a second clan.
+        using var c = TempDir.Create("urscore-app-c");
+        var pathsC = new AppPaths(c.Path);
+        new RecipeStore(pathsC.Recipes).Save(clan, clanText, new RecipeState());
+        new SourceStore(pathsC.Sources).Save([new Source("s-000000c1", clan.Slug, new Dictionary<string, string> { ["clan"] = "k0i2" }, SourceRole.Watch)]);
+        using var watcher = Compose(c, new StubHost(reachable: false), new FakeTransport());
+        await watcher.LoadBookAsync();
+        var openedAgain = BookPack.Open(file);
+        var planC = SetupMerge.Plan(openedAgain.Setup!, watcher.SetupWriter.Here, 0, 0);
+        Assert.Equal(SetupOutcome.Replace, Assert.Single(planC.Items, i => i.Kind == SetupKind.Clan && i.Name == "K0i2").Outcome);
+        SetupMerge.Apply(planC, planC.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), watcher.SetupWriter, Start);
+        BookPack.Discard(openedAgain);
+
+        var k0i2C = Assert.Single(watcher.Sources, s => s.InputsKey == "clan=k0i2");
+        Assert.Equal(("s-000000c1", SourceRole.Main), (k0i2C.Id, k0i2C.Role));
+
+        foreach (var aside in Directory.GetDirectories(Path.GetTempPath(), "urscore-app-*.before-import-*")) Directory.Delete(aside, true);
     }
 
     private sealed class FakeTransport : IRecipeTransport
