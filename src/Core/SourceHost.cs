@@ -47,15 +47,37 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
         lock (_gate) return _entries.TryGetValue(sourceId, out var entry) ? entry.Watch : null;
     }
 
+    /// <summary>
+    /// The enabled sources become the set of watches: one built for each new id, the existing ones handed their
+    /// source, the rest cancelled and dropped. Called from one thread, the UI's, as it always was.
+    /// <para>
+    /// Built first, applied after. The factory used to run inside the lock, in the same pass as the removals and
+    /// the adds, so a factory that took its time held up every other caller of the host for that long — a loop
+    /// filing its snapshot, the window asking for a watch — and a factory that threw left the host half-applied:
+    /// the removals done, the watches before the throw added, the rest not, and the exception the only sign
+    /// (S1-8.5). Now the factory runs with no lock held and before anything changes, so an Apply that throws has
+    /// applied nothing and the caller's exception means exactly that.
+    /// </para>
+    /// </summary>
     public void Apply(IReadOnlyList<Source> sources)
     {
+        var wanted = sources
+            .Where(s => s.Enabled)
+            .GroupBy(s => s.Id, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        HashSet<string> have;
+        lock (_gate) have = [.. _entries.Keys];
+
+        var built = new List<Entry>();
+        foreach (var source in wanted.Values)
+        {
+            if (have.Contains(source.Id)) continue;
+            if (createWatch(source) is { } watch) built.Add(new Entry(source, watch));
+        }
+
         lock (_gate)
         {
-            var wanted = sources
-                .Where(s => s.Enabled)
-                .GroupBy(s => s.Id, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-
             foreach (var id in _entries.Keys.Where(id => !wanted.ContainsKey(id)).ToList())
             {
                 // Cancelled, then dropped. Its own loop disposes the linked source it is holding, so the only
@@ -70,17 +92,20 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
 
             foreach (var source in wanted.Values)
             {
-                if (_entries.TryGetValue(source.Id, out var existing))
-                {
-                    existing.Source = source;
-                    existing.Watch.UpdateSource(source);
-                    continue;
-                }
+                if (!_entries.TryGetValue(source.Id, out var existing)) continue;
 
-                if (createWatch(source) is not { } watch) continue;
+                existing.Source = source;
+                existing.Watch.UpdateSource(source);
+            }
 
-                var entry = new Entry(source, watch);
-                _entries[source.Id] = entry;
+            foreach (var entry in built)
+            {
+                // An entry that appeared under this id between the two locks belongs to a concurrent Apply, which
+                // this class does not promise to serve; the one already there stays and this watch, never
+                // started, is dropped. Cheap to be right about even so.
+                if (_entries.ContainsKey(entry.Source.Id)) continue;
+
+                _entries[entry.Source.Id] = entry;
                 if (_run is not null) StartLoop(entry, _run.Token);
             }
         }

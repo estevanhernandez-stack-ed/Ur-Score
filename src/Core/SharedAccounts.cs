@@ -89,11 +89,16 @@ public sealed class SharedAccounts(IHostClient host, AccountsCache cache, TimePr
                 {
                     list = new AccountList([], HostUp: true, FromCache: false, Denied: true, ListedAt: Last?.ListedAt);
                 }
-                catch (Exception) when (!cancellationToken.IsCancellationRequested)
+                catch (Exception ex) when (ex is RpcException or IOException && !cancellationToken.IsCancellationRequested)
                 {
                     // RoRoRo answered the probe, then the list failed (unavailable, a deadline, a broken pipe): to a
                     // read that is RoRoRo not answering, so the saved list stands in and reading and recording go on
                     // (score book spec §5.4, §5.5). Only the caller's own cancellation ends the fetch.
+                    //
+                    // The transport's failures and no other: the gRPC call's RpcException and the pipe's IOException.
+                    // This caught everything, so a bug in the client was answered with the saved accounts and looked
+                    // exactly like RoRoRo being closed (S1-F.9). Anything else leaves as what it is, reaches the
+                    // read's own "last read failed" line, and is named there by type.
                     list = FromSaved();
                 }
             }

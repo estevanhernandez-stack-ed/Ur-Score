@@ -837,6 +837,27 @@ public class RecipeWatchBookTests
         Assert.Empty(Assert.Single(book.Lines).Accounts);
     }
 
+    /// <summary>
+    /// A line is filed under the inputs the READ used, not the inputs its source carries. The two are separate
+    /// fields updated by separate calls — <c>UpdateSource</c> swaps the source, <c>UpdateRecipe</c> swaps the
+    /// inputs — and the composition root makes them one after the other, so a cycle starting between them reads
+    /// with the old inputs and, until now, wrote the source's new ones on its line (S1-6.4). That is the state
+    /// set up here: the source now names another clan and the inputs do not yet, so the read is of K0i2 and the
+    /// line has to say so. (A source swapped MID-read does not reach the line at all — a cycle takes its source
+    /// and inputs together at the top — which is why the first draft of this test passed before the fix.)
+    /// </summary>
+    [Fact]
+    public async Task ALineIsFiledUnderTheInputsTheReadUsedNotTheOnesItsSourceCarries()
+    {
+        var book = new MemoryBook();
+        var watch = Watch(new StubEngine(() => Reading(EngineRow(111, 4200))), new StubHost(true, AltAccount), book, SourceOf(SourceRole.Mine));
+
+        watch.UpdateSource(SourceOf(SourceRole.Mine) with { Inputs = new Dictionary<string, string> { ["clan"] = "Other Clan" } });
+        await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("K0i2", Assert.Single(book.Lines).Inputs["clan"]);
+    }
+
     // Fix round 1, finding 1: RecipeWatch.Record wrote _previousPeriod without checking whether the
     // recipe or inputs it read with had since been replaced, so a mid-cycle UpdateRecipe could
     // resurrect the old recipe's period as "previous" for the new one. The fix guards that write the

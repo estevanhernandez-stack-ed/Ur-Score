@@ -183,11 +183,13 @@ public sealed class RecipeWatch(
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
     /// <summary>
-    /// <see cref="UpdateRecipe"/> and <see cref="UpdateSource"/> run on the UI thread while a cycle runs on
-    /// the pool. Every access from both sides to these goes through this one lock: the recipe, its text,
-    /// inputs, tracked stats, source, <see cref="_lines"/>, <see cref="_context"/>,
-    /// <see cref="_previousPeriod"/> and <see cref="_held"/>. So does every read of the policy that must
-    /// match a recipe check. Never held across an await.
+    /// <see cref="UpdateRecipe"/>, <see cref="UpdateSource"/> and <see cref="UpdatePolicy"/> run on the UI
+    /// thread (or RoRoRo's listing thread) while a cycle runs on the pool. Every access from both sides to these
+    /// goes through this one lock: the recipe, its text, inputs, tracked stats, source, policy,
+    /// <see cref="_lines"/>, <see cref="_context"/>, <see cref="_previousPeriod"/> and <see cref="_held"/>.
+    /// Every access — this sentence used to be untrue of the <c>Recipe</c> property (dropped: nothing read it)
+    /// and of one read of the policy in the cycle, and a lock rule with exceptions nobody wrote down is not a
+    /// rule (S1-6.6). Never held across an await.
     /// </summary>
     private readonly object _gate = new();
 
@@ -240,9 +242,13 @@ public sealed class RecipeWatch(
     /// </summary>
     private const int ThreatBand = 5;
 
-    public ReportPolicy Policy => policy;
-
-    public Recipe Recipe => recipe;
+    public ReportPolicy Policy
+    {
+        get
+        {
+            lock (_gate) return policy;
+        }
+    }
 
     public Source? Source
     {
@@ -457,7 +463,7 @@ public sealed class RecipeWatch(
         {
             // The field's own numbers are kept (FieldSummary): no clan is named and no account is matched. What
             // goes out is the clan-and-field numbers the user ticked, each with no subject at all (FieldMetrics).
-            var (fieldRecorded, fieldReason) = RecordField(readRecipe, readText, readSource, trigger, reading);
+            var (fieldRecorded, fieldReason) = RecordField(readRecipe, readInputs, readText, readSource, trigger, reading);
 
             var field = $"Read {reading.Groups.Count} groups.";
             try
@@ -515,17 +521,17 @@ public sealed class RecipeWatch(
             return Kept(Snapshot(readRecipe, readSource, WatchState.NoMatches, none, seen, unresolved, reading, map));
         }
 
-        if (policy.SentStats.Count == 0)
+        // One fixed list for the whole loop. A stat unticked mid-loop is refused by the policy each send
+        // captures, which checks its own metric ids.
+        IReadOnlyList<SentStat> stats;
+        lock (_gate) stats = policy.SentStats;
+
+        if (stats.Count == 0)
         {
             var showing = $"Read {mine.Count} of {seen} row(s). No stat is set to send, so nothing went to RoRoRo.";
             if (reading.Detail is not null) showing += " " + reading.Detail;
             return Kept(Snapshot(readRecipe, readSource, WatchState.Showing, showing, seen, unresolved, reading, map));
         }
-
-        // One fixed list for the whole loop. A stat unticked mid-loop is refused by the policy each send
-        // captures, which checks its own metric ids.
-        IReadOnlyList<SentStat> stats;
-        lock (_gate) stats = policy.SentStats;
 
         var observedAt = Now;
 
@@ -838,13 +844,13 @@ public sealed class RecipeWatch(
     }
 
     private (bool Recorded, string? Reason) RecordField(
-        Recipe readRecipe, string readText, Source? readSource, string trigger, RecipeReading reading)
+        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, Source? readSource, string trigger, RecipeReading reading)
     {
         if (book is null || readSource is null) return (false, null);
         if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
 
         var line = LineBuilder.Reading(
-            ContextFor(readRecipe, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>(),
+            ContextFor(readRecipe, readInputs, readText, readSource, trigger), reading, new Dictionary<long, Guid>(), new HashSet<string>(),
             MineAsSet(myGroups?.Invoke()));
         if (line is null) return (false, NotRecordingNoField);
 
@@ -862,7 +868,7 @@ public sealed class RecipeWatch(
         // by UpdateRecipe) must not be hashed and written under a recipe it doesn't belong to.
         if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
 
-        var context = ContextFor(readRecipe, readText, readSource, trigger);
+        var context = ContextFor(readRecipe, readInputs, readText, readSource, trigger);
 
         KeepFinals(context, reading, readTracked, owned, readText);
 
@@ -906,13 +912,19 @@ public sealed class RecipeWatch(
             if (RecipeChanged(readRecipe, readInputs)) return;
         }
 
-        KeepFinals(ContextFor(readRecipe, readText, readSource, trigger), reading, readTracked, owned, readText);
+        KeepFinals(ContextFor(readRecipe, readInputs, readText, readSource, trigger), reading, readTracked, owned, readText);
     }
 
-    private ReadContext ContextFor(Recipe readRecipe, string readText, Source readSource, string trigger)
+    /// <summary>
+    /// What this cycle read with, for the line: the inputs are the READ's, taken at the top of the cycle with the
+    /// recipe, and not the source's, which can already be a newer set by now (S1-6.4). The hash is computed here
+    /// each time on purpose — it is SHA-256 of about a kilobyte, six microseconds, once per read, and a cache
+    /// would be one more thing to keep in step with the text (S1-6.11).
+    /// </summary>
+    private ReadContext ContextFor(Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, Source readSource, string trigger)
     {
         var at = Now;
-        return new ReadContext(readSource, readRecipe, BookFiles.Hash(readText), trigger, at, (int)TimeZoneInfo.Local.GetUtcOffset(at).TotalMinutes);
+        return new ReadContext(readSource, readRecipe, readInputs, BookFiles.Hash(readText), trigger, at, (int)TimeZoneInfo.Local.GetUtcOffset(at).TotalMinutes);
     }
 
     /// <summary>Score book spec §6: every final this read makes due, written once and remembered in the index.</summary>

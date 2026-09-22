@@ -16,8 +16,13 @@ public partial class App : Application
     private bool _owns;
     private Composition.AppServices? _services;
 
-    /// <summary>The board is shown; only from then on is an unhandled UI-thread failure kept from ending the app.</summary>
-    private bool _started;
+    /// <summary>
+    /// The services of a board that is SHOWN, and null until then: only from then on is an unhandled UI-thread
+    /// failure kept from ending the app. One field rather than a flag beside <see cref="_services"/>, because the
+    /// guard then read <c>!_started || _services is null</c>, and the second half could never be true once the
+    /// first was false — a check that reads as a case and is not one (S1-14.16).
+    /// </summary>
+    private Composition.AppServices? _shown;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -62,7 +67,7 @@ public partial class App : Application
         board.Show();
 
         // Last, after Show: until here a failure must end the process, which releases the single-instance mutex.
-        _started = true;
+        _shown = _services;
     }
 
     /// <summary>
@@ -73,9 +78,9 @@ public partial class App : Application
     /// </summary>
     private void OnUnhandled(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
-        if (!_started || _services is null) return;
+        if (_shown is not { } services) return;
 
-        _services.AddTrail($"UNHANDLED: {e.Exception.GetType().Name}");
+        services.AddTrail($"UNHANDLED: {e.Exception.GetType().Name}");
         e.Handled = true;
     }
 

@@ -5,7 +5,14 @@ using Labs626.UrScore.Recipes;
 namespace Labs626.UrScore.Book;
 
 /// <summary>Everything a line needs about the read that isn't in the reading.</summary>
-public sealed record ReadContext(Source Source, Recipe Recipe, string RecipeHash, string Trigger, DateTimeOffset At, int OffsetMinutes);
+/// <param name="Inputs">
+/// The inputs the read was made with, which are the ones the line is filed under. Not <c>Source.Inputs</c>: a
+/// watch's source and its inputs are separate fields updated by separate calls, and a cycle starting between
+/// the two reads with the old inputs while its source already carries the new — so a line taking the source's
+/// was filed under a clan the read never asked for (S1-6.4).
+/// </param>
+public sealed record ReadContext(
+    Source Source, Recipe Recipe, IReadOnlyDictionary<string, string> Inputs, string RecipeHash, string Trigger, DateTimeOffset At, int OffsetMinutes);
 
 /// <summary>
 /// Score book spec §5.2, §5.3 and §5.6. The only place a reading becomes a line, and so the only place the
@@ -42,7 +49,7 @@ public static class LineBuilder
                 : new BookLine(
                     BookLine.Version, BookLine.KindRead, context.At, context.OffsetMinutes, context.Trigger,
                     new BookRecipeRef(recipe.Slug, context.RecipeHash), context.Source.Id, RoleText(context.Source.Role),
-                    Inputs(context.Source), Period(reading.Period), field, [],
+                    Inputs(context), Period(reading.Period), field, [],
                     new Dictionary<string, BookAccount>(StringComparer.Ordinal),
                     null, reading.ListAsOf?.Time, reading.ListAsOf?.Stale,
                     GroupRows.Keep(reading.Groups, valueKey, myGroups, recipe.GroupsAreClans));
@@ -71,7 +78,7 @@ public static class LineBuilder
         return new BookLine(
             BookLine.Version, BookLine.KindRead, context.At, context.OffsetMinutes, context.Trigger,
             new BookRecipeRef(recipe.Slug, context.RecipeHash), context.Source.Id, RoleText(context.Source.Role),
-            Inputs(context.Source), Period(reading.Period), headline, stats, accounts,
+            Inputs(context), Period(reading.Period), headline, stats, accounts,
             unavail.Count == 0 ? null : unavail, reading.ListAsOf?.Time, reading.ListAsOf?.Stale);
     }
 
@@ -87,7 +94,7 @@ public static class LineBuilder
         return new BookLine(
             BookLine.Version, BookLine.KindFinal, context.At, context.OffsetMinutes, trigger,
             new BookRecipeRef(context.Recipe.Slug, context.RecipeHash), context.Source.Id, RoleText(context.Source.Role),
-            Inputs(context.Source), new BookPeriod(past.Value), Headline(past.Headline, OtherIds(past.Rows, map)), stats, accounts);
+            Inputs(context), new BookPeriod(past.Value), Headline(past.Headline, OtherIds(past.Rows, map)), stats, accounts);
     }
 
     /// <summary>
@@ -163,7 +170,7 @@ public static class LineBuilder
             .GroupBy(h => h.Id, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Number!.Value, StringComparer.Ordinal);
 
-    private static Dictionary<string, string> Inputs(Source source) => new(source.Inputs, StringComparer.Ordinal);
+    private static Dictionary<string, string> Inputs(ReadContext context) => new(context.Inputs, StringComparer.Ordinal);
 
     private static BookPeriod? Period(ReadingPeriod? period) => period is null ? null : new BookPeriod(period.Value, period.Starts, period.Ends);
 
