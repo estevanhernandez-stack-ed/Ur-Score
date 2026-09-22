@@ -103,7 +103,14 @@ try {
                   "Only in clans you're watching", 'Not matched by RoRoRo yet',
                   'No clan is in a battle right now', 'No clan read so far is in a battle')
     $grouped = @($accounts | Where-Object { $_ -like "*$Main" -or $_ -eq $Alt -or $headings -contains $_ }).Count -gt 0
-    Check '3 My accounts groups your accounts by clan' $grouped ($accounts -join ' | ')
+    # With RoRoRo quit - the rule for an owner-watched launch since 2026-09-22 - there are no accounts to group and the
+    # panel rightly shows none, so this step can only be judged with RoRoRo up. Seen first on that day's launch.
+    if (-not $script:RoRoRoUpBefore -and -not $grouped) {
+        Skip '3 My accounts groups your accounts by clan' 'needs RoRoRo running' "no accounts listed: $($accounts -join ' | ')"
+    }
+    else {
+        Check '3 My accounts groups your accounts by clan' $grouped ($accounts -join ' | ')
+    }
 
     & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'starter-board.png') | Out-Null
 

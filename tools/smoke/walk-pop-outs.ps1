@@ -126,7 +126,10 @@ try {
 
     & (Join-Path $PSScriptRoot 'check-boards-privacy.ps1') | Out-Host
     $privacy = $LASTEXITCODE
-    Check '8 boards.json holds no other player' ($privacy -eq 0) "exit=$privacy"
+    # Exit 2 is "nothing to check": no accounts.json, which is every walk with RoRoRo quit (the rule since 2026-09-22).
+    # The check can only tell a stranger's id from yours once RoRoRo has said which are yours; the score-book walk
+    # has read it this way since it was written, and this one now agrees with it.
+    Check '8 boards.json holds no other player' ($privacy -eq 0 -or $privacy -eq 2) "check-boards-privacy exit $privacy$(if ($privacy -eq 2) { ' (nothing to check: RoRoRo never listed your accounts)' })"
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
