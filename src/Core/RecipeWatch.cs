@@ -373,6 +373,13 @@ public sealed class RecipeWatch(
 
         var reading = await engine.ReadAsync(readRecipe, readInputs, [.. map.Keys], readTracked, cancellationToken).ConfigureAwait(false);
 
+        // The fetch honours the token; nothing after it used to. So a source removed while its fetch was in
+        // flight had that fetch cancelled cleanly, but one removed a moment AFTER the fetch returned went on to
+        // record to the book and send to RoRoRo as though it were still wanted (S1-8.3). This is the last point
+        // at which a read can be stopped before it has any effect, and a removal is the caller's way of saying
+        // stop, so it is honoured here as well.
+        cancellationToken.ThrowIfCancellationRequested();
+
         WatchState? stopped = reading.Outcome switch
         {
             ReadingOutcome.NeedsInput => WatchState.NeedsInput,
