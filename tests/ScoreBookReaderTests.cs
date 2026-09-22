@@ -142,7 +142,47 @@ public class ScoreBookReaderTests
 
         Assert.Equal(new[] { "B", "A" }, finals.Select(f => f.Period).ToArray());
         Assert.Equal(new long[] { 111, 333 }, finals[1].Accounts.Keys.Order().ToArray());
-        Assert.Equal(20, finals[1].Headline["clan-place"]);
+        // The supplementary line is the LATEST final for A, so its headline is the one kept: a later final is a
+        // correction (S1-9.2). This asserted 20, the first line's, until 2026-09-21 — describing what the code
+        // did rather than what it should. A's place in the list is still its earliest final, hence B before A.
+        Assert.Equal(30, finals[1].Headline["clan-place"]);
+    }
+
+    /// <summary>
+    /// Two final lines for one account in one battle: the LATER one wins, because a later final is a correction
+    /// and the whole point of a correction is to replace what it corrects. The reader used to keep the first
+    /// and ignore the rest (S1-9.2). Later by T, not by file order — a "Bring in stats" merge appends another
+    /// machine's lines after this one's whatever their times, so file order says nothing about which is newer.
+    /// <para>
+    /// The headline follows the same rule for the same reason, and the entry's TIME does not — it stays the
+    /// earliest final, because it places the battle in the Past battles list. A correction five days on must
+    /// not make a battle jump to the top as though it had just ended (which is why S1-9.4 is not a defect).
+    /// </para>
+    /// <para>
+    /// THREE lines for A, not two, and the reason is V3-S.37: with two, whichever order they are in, one of the
+    /// two wrong rules gives the right answer by coincidence. "First in the file" picks a correction written
+    /// first; "last in the file" picks one written last. With the original first, the correction in the middle
+    /// and a stale merged copy last, each of the three rules gives a DIFFERENT number — 100, 175, 250 —
+    /// and only latest-by-time gives 250. The first draft of this test had two lines and passed before the fix.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ALaterFinalForTheSameAccountCorrectsTheEarlierOneWithoutMovingTheBattle()
+    {
+        var reader = Reader(
+            Final("A", Now.AddDays(-20), 100, 2),     // the original
+            Final("A", Now.AddDays(-1), 250, 1),      // the correction: latest in time, middle of the file
+            Final("A", Now.AddDays(-10), 175, 3),     // an older copy merged in from another machine, LAST in the file
+            Final("B", Now.AddDays(-5), 4200, 1));
+
+        var finals = reader.Finals(Slug, Source.KeyOf(K0i2));
+        var a = Assert.Single(finals, f => f.Period == "A");
+
+        Assert.Equal(250, a.Accounts[111].V["value"]);
+        Assert.Equal(1, a.Accounts[111].Rank!["value"]);
+        Assert.Equal(10, a.Headline["clan-place"]);
+        Assert.Equal(Now.AddDays(-20), a.T);
+        Assert.Equal(new[] { "B", "A" }, finals.Select(f => f.Period).ToArray());
     }
 
     [Fact]

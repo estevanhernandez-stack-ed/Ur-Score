@@ -920,6 +920,35 @@ public class RecipeEngineTests
         Assert.Equal(3, reading.RowsSeen);
     }
 
+    /// <summary>
+    /// A rank that is not a whole number is no rank. Real ranks are whole, so a fractional one is the source
+    /// saying something this recipe did not expect — and cutting 2.7 to 2 would file that as second place
+    /// with nothing anywhere saying the number was made up (S1-2.2). The group is still read; only its rank is
+    /// left out, the way an unreadable stat is. Zero and negative are no rank for the same reason.
+    /// </summary>
+    [Fact]
+    public async Task AFractionalOrImpossibleRankIsNoRankRatherThanACutDownOne()
+    {
+        const string top = """
+            { "status": "ok", "data": { "topClans": [
+                { "rank": 1, "name": "Whole", "points": 400 },
+                { "rank": 2.7, "name": "Fraction", "points": 300 },
+                { "rank": 0, "name": "Zero", "points": 200 },
+                { "rank": -3, "name": "Negative", "points": 100 }
+            ] } }
+            """;
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/v1/clans/battles/B", 200, top);
+        var recipe = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+
+        var reading = await Read(transport, recipe, NoInputs, tracked: new HashSet<string>());
+
+        Assert.Equal(
+            new[] { ("Whole", (int?)1), ("Fraction", (int?)null), ("Zero", (int?)null), ("Negative", (int?)null) },
+            reading.Groups.Select(g => (g.Name, g.Rank)).ToArray());
+    }
+
     [Fact]
     public async Task ACountingStatReadsHowManyEntriesItsObjectOrListHolds()
     {

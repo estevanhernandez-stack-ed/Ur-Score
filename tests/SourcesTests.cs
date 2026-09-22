@@ -152,6 +152,51 @@ public class SourcesTests
         Assert.Equal((0, true, false), Shape(store.LoadResult()));
     }
 
+    /// <summary>
+    /// A file this account is DENIED is there-but-unreadable, never missing. Missing is the one answer that does
+    /// damage, because start reads it as "migrate and save" and would write over the user's clans (S1-14.15).
+    /// <para>
+    /// The row feared <c>File.Exists</c> answers false for a denied file. It does not, on this platform —
+    /// checked here with a real deny rule, first Read and then FullControl, and it answered true both times, so
+    /// the row's scenario could not happen and the old code already held. The store now learns existence from the
+    /// open itself regardless, and this pins the answer that matters whichever way any platform's
+    /// <c>File.Exists</c> goes. The deny is put back in a finally so a failing assertion cannot leave a temp file
+    /// nobody can delete. Windows-only, like the rest of this project.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AFileYouAreDeniedIsThereButUnreadableNotMissing()
+    {
+        using var dir = TempDir.Create("urscore-sources");
+        var path = Path.Combine(dir.Path, "sources.json");
+        var store = new SourceStore(path);
+        store.Save(SourceRules.Add([], "clan-recipe", Clan("CCGP"), SourceRole.Main));
+
+        var me = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
+        // FullControl, not Read: a plain Read deny still lets File.Exists answer true (it queries attributes, which
+        // Read does not cover), so the old code already handled that one. The deny that fooled it is one that
+        // covers attributes too — which is what a file left owned by another account actually looks like.
+        var deny = new System.Security.AccessControl.FileSystemAccessRule(
+            me, System.Security.AccessControl.FileSystemRights.FullControl, System.Security.AccessControl.AccessControlType.Deny);
+        var info = new FileInfo(path);
+        var security = info.GetAccessControl();
+        security.AddAccessRule(deny);
+        info.SetAccessControl(security);
+        try
+        {
+            var load = store.LoadResult();
+
+            Assert.True(load.Exists, "a denied file was read as missing, which is how the user's clans got saved over");
+            Assert.False(load.Readable);
+            Assert.Empty(load.Sources);
+        }
+        finally
+        {
+            security.RemoveAccessRule(deny);
+            info.SetAccessControl(security);
+        }
+    }
+
     [Fact]
     public void OnlyANewlyInstalledRecipeWithNoInputsGetsASource()
     {

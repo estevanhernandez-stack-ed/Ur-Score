@@ -686,8 +686,13 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             total++;
             if (TextAt(row, step.GroupName!, values) is not { Length: > 0 } name) continue;
 
+            // A rank is a whole number from 1 up, or it is no rank. Real ranks are whole, so a fractional one is
+            // the source saying something this recipe did not expect, and cutting 2.7 to 2 would file that as
+            // second place with nothing anywhere saying the number was invented (S1-2.2). Left out rather than
+            // guessed, the way an unreadable stat is; the group itself is still read.
             int? rank = step.Rank is not null
                         && NumberAt(RecipePath.Resolve(row, step.Rank, values, "this row"), step.Rank, "in this row", out var r) is null
+                        && r >= 1 && r <= int.MaxValue && r == Math.Floor(r)
                 ? (int)r
                 : null;
 
