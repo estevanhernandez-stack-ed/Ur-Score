@@ -101,7 +101,7 @@ public class BoardTextTests
     [Fact]
     public void ASentenceTwoRecipesShareIsCreditedOnce()
     {
-        var profile = SourceOf("s-00000003", Profile, "estehernandez", SourceRole.Mine);
+        var profile = SourceOf("s-00000003", Profile, "BirchMain", SourceRole.Mine);
         var live = Live([MainClan, profile], [Installed(Clan, "value"), Installed(Profile, "diamonds")], new Dictionary<string, RecipeSnapshot>());
 
         var said = BoardText.Attribution(live);

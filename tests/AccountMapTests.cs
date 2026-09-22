@@ -10,7 +10,7 @@ public class AccountMapTests
     [Fact]
     public void JoinsOnRobloxUserId()
     {
-        var map = AccountMap.Build([new(A, 111, "estehernandez"), new(B, 222, "CElCPapa")]);
+        var map = AccountMap.Build([new(A, 111, "BirchMain"), new(B, 222, "AshAlt")]);
 
         Assert.Equal(A, map[111]);
         Assert.Equal(B, map[222]);
@@ -21,7 +21,7 @@ public class AccountMapTests
     {
         // The contract documents roblox_user_id as 0 when not yet resolved. Zero is not an id, and
         // mapping it would put every unresolved account on one key.
-        var map = AccountMap.Build([new(A, 0, "Unresolved"), new(B, 222, "CElCPapa")]);
+        var map = AccountMap.Build([new(A, 0, "Unresolved"), new(B, 222, "AshAlt")]);
 
         Assert.False(map.ContainsKey(0));
         Assert.Single(map);
@@ -31,7 +31,7 @@ public class AccountMapTests
     public void NamesTheUnresolvedSoTheyCanBeShown()
     {
         // A silently unwatched account is the failure a user would never diagnose.
-        var unresolved = AccountMap.Unresolved([new(A, 0, "Unresolved"), new(B, 222, "CElCPapa")]);
+        var unresolved = AccountMap.Unresolved([new(A, 0, "Unresolved"), new(B, 222, "AshAlt")]);
 
         Assert.Single(unresolved);
         Assert.Equal("Unresolved", unresolved[0].DisplayName);

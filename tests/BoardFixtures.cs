@@ -19,10 +19,10 @@ internal static class BoardFixtures
 {
     public static readonly DateTimeOffset Now = new(2026, 9, 19, 18, 0, 0, TimeSpan.Zero);
 
-    public static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "estehernandez");
-    public static readonly HostAccount AltOne = new(Guid.Parse("22222222-2222-2222-2222-222222222222"), 201, "CElCPapa");
-    public static readonly HostAccount AltTwo = new(Guid.Parse("33333333-3333-3333-3333-333333333333"), 202, "ItsJustEstePapa");
-    public static readonly HostAccount Loose = new(Guid.Parse("44444444-4444-4444-4444-444444444444"), 301, "ItsJustEste");
+    public static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "BirchMain");
+    public static readonly HostAccount AltOne = new(Guid.Parse("22222222-2222-2222-2222-222222222222"), 201, "AshAlt");
+    public static readonly HostAccount AltTwo = new(Guid.Parse("33333333-3333-3333-3333-333333333333"), 202, "DuneAlt");
+    public static readonly HostAccount Loose = new(Guid.Parse("44444444-4444-4444-4444-444444444444"), 301, "CedarLoose");
 
     public const string TopListJson = """
         {

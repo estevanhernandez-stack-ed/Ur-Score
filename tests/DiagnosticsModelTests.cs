@@ -10,7 +10,7 @@ public class DiagnosticsModelTests
 
     private static readonly DateTimeOffset Now = new(2026, 9, 19, 18, 0, 0, TimeSpan.Zero);
 
-    private static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "estehernandez");
+    private static readonly HostAccount Main = new(Guid.Parse("11111111-1111-1111-1111-111111111111"), 101, "BirchMain");
 
     private static Recipe Clan => RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
 
@@ -84,7 +84,7 @@ public class DiagnosticsModelTests
         var misses = DiagnosticsModel.Misses(Clan, snapshot, [Main]);
 
         Assert.Contains("Points: no 'Points' in any row", misses);
-        Assert.Contains("estehernandez · Points: no 'Points' here", misses);
+        Assert.Contains("BirchMain · Points: no 'Points' here", misses);
         Assert.DoesNotContain("999", misses);
         Assert.DoesNotContain("someone else's", misses);
     }
@@ -123,7 +123,7 @@ public class DiagnosticsModelTests
         {
             CellMisses = new Dictionary<(long UserId, string Stat), string> { [(101, "value")] = "no 'Points' here" },
         };
-        Assert.Contains("estehernandez", DiagnosticsModel.Misses(Clan, named, [noId, alsoNoId, Main]), StringComparison.Ordinal);
+        Assert.Contains("BirchMain", DiagnosticsModel.Misses(Clan, named, [noId, alsoNoId, Main]), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -167,7 +167,7 @@ public class DiagnosticsModelTests
 
         Assert.True(row.HasClaimConflicts);
         Assert.Contains("were claimed by another source", row.State);
-        Assert.Equal("Last read: estehernandez was skipped for recording and sending here because Other · Pet Sim 99 clan battle points held the account's claim. This does not confirm a successful send or current membership.", row.ClaimConflicts);
+        Assert.Equal("Last read: BirchMain was skipped for recording and sending here because Other · Pet Sim 99 clan battle points held the account's claim. This does not confirm a successful send or current membership.", row.ClaimConflicts);
         Assert.False(rows[1].HasClaimConflicts);
         var copy = DiagnosticsModel.CopyText(Now, [Installed], [source, owner], rows, false, "host", "book", 0, 0, [], redactor);
         Assert.Contains(row.ClaimConflicts, copy);

@@ -18,7 +18,7 @@ public class ScoreBookTests
         ["value"],
         new Dictionary<string, BookAccount>
         {
-            ["1647274201"] = new(new Dictionary<string, double> { ["value"] = points }, new Dictionary<string, int> { ["value"] = 1 }, 48),
+            ["101"] = new(new Dictionary<string, double> { ["value"] = points }, new Dictionary<string, int> { ["value"] = 1 }, 48),
         });
 
     private static readonly DateTimeOffset T = new(2026, 9, 19, 18, 3, 0, 412, TimeSpan.Zero);
@@ -31,14 +31,14 @@ public class ScoreBookTests
         Assert.StartsWith("""{"v":1,"kind":"read","t":"2026-09-19T18:03:00.412Z","off":-300,"trigger":"timer",""", json);
         Assert.Contains("\"recipe\":{\"slug\":\"pet-sim-99-clan-battle-points\",\"hash\":\"", json);
         Assert.Contains("\"period\":{\"value\":\"ArcadeBattle2026\",\"starts\":\"2026-08-29T18:00:00.000Z\"}", json);
-        Assert.Contains("\"accounts\":{\"1647274201\":{\"v\":{\"value\":12418220},\"rank\":{\"value\":1},\"of\":48}}", json);
+        Assert.Contains("\"accounts\":{\"101\":{\"v\":{\"value\":12418220},\"rank\":{\"value\":1},\"of\":48}}", json);
         Assert.DoesNotContain("unavail", json);
         Assert.DoesNotContain("\n", json);
 
         var back = BookJson.TryParse(json)!;
-        Assert.Equal((T, "K0i2", 12418220d, 48), (back.T, back.Inputs["clan"], back.Accounts["1647274201"].V["value"], back.Accounts["1647274201"].Of!.Value));
+        Assert.Equal((T, "K0i2", 12418220d, 48), (back.T, back.Inputs["clan"], back.Accounts["101"].V["value"], back.Accounts["101"].Of!.Value));
         // A line written before a rank kept its own field (backlog S1-6.9) has none, and reads as having none.
-        Assert.Null(back.Accounts["1647274201"].Ranked);
+        Assert.Null(back.Accounts["101"].Ranked);
     }
 
     [Theory]
