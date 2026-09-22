@@ -35,16 +35,16 @@ public class BookImportTests
     [Fact]
     public void TheLineSaysWhatHappenedToEveryPart()
     {
-        Assert.Equal("Brought in 1,204 readings. 310 were already here.", BookImport.Said(1204, 310, [], []));
-        Assert.Equal("Brought in 1 reading.", BookImport.Said(1, 0, [], []));
-        Assert.Equal("Nothing new to bring in. 12 were already here.", BookImport.Said(0, 12, [], []));
+        Assert.Equal("Imported 1,204 readings. 310 were already here.", BookImport.Said(1204, 310, [], []));
+        Assert.Equal("Imported 1 reading.", BookImport.Said(1, 0, [], []));
+        Assert.Equal("Nothing new to import. 12 were already here.", BookImport.Said(0, 12, [], []));
 
         Assert.Equal(
-            "Brought in 40 readings. Not set up on this PC, so left alone: CCGP, K0i2.",
+            "Imported 40 readings. Not set up on this PC, so left alone: CCGP, K0i2.",
             BookImport.Said(40, 0, ["CCGP", "K0i2"], []));
 
         Assert.Equal(
-            "Nothing new to bring in. No recipe here for: pet-sim-99-profile.",
+            "Nothing new to import. No recipe here for: pet-sim-99-profile.",
             BookImport.Said(0, 0, [], ["pet-sim-99-profile"]));
     }
 }

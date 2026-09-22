@@ -20,17 +20,20 @@
         <TextBlock x:Name="BookFolderProblemLine" Style="{StaticResource Refusal}" Margin="0,6,0,0" Visibility="Collapsed" />
         <TextBlock x:Name="BookPendingLine" Style="{StaticResource Muted}" Margin="0,6,0,0" Visibility="Collapsed" />
 
-        <!-- Another PC's book joins this one: every machine mints its own source ids, so readings are matched to a
-             source by its recipe and the clan it follows, never by an id this PC has never seen. -->
-        <TextBlock Text="BRING IN STATS" Style="{StaticResource SectionLabel}" Margin="0,20,0,6" />
+        <!-- The stats travel as one file (BookPack): the score book and a manifest, never a key. Another PC's book
+             joins this one on import: every machine mints its own source ids, so readings are matched to a source by
+             its recipe and the clan it follows, never by an id this PC has never seen. -->
+        <TextBlock Text="EXPORT AND IMPORT STATS" Style="{StaticResource SectionLabel}" Margin="0,20,0,6" />
         <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
-                   Text="Ran Ur Score on another PC? Bring its stats in and the two become one history. Copy that PC's 626labs.ur-score folder here first, on a stick or a share." />
+                   Text="Ran Ur Score on another PC? Export its stats there to one file, then import that file here, and the two become one history. The file holds the score book alone — your own accounts' numbers and each source's headline — and never a key." />
         <StackPanel Orientation="Horizontal">
-            <Button x:Name="BringBookButton" Content="Bring in stats…" Click="OnBringBookClick"
-                    AutomationProperties.Name="Bring in stats from another PC" />
-            <TextBlock x:Name="BringBookLine" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <Button x:Name="ExportStatsButton" Content="Export stats…" Click="OnExportStatsClick"
+                    AutomationProperties.Name="Export stats to a file for another PC" />
+            <Button x:Name="ImportStatsButton" Content="Import stats…" Margin="8,0,0,0" Click="OnImportStatsClick"
+                    AutomationProperties.Name="Import stats from another PC's file" />
+            <TextBlock x:Name="StatsTransferLine" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap" MaxWidth="480" />
         </StackPanel>
-        <TextBlock x:Name="BringBookProblemLine" Style="{StaticResource Refusal}" Margin="0,6,0,0" Visibility="Collapsed" />
+        <TextBlock x:Name="StatsTransferProblemLine" Style="{StaticResource Refusal}" Margin="0,6,0,0" Visibility="Collapsed" />
 
         <TextBlock Text="PER RECIPE" Style="{StaticResource SectionLabel}" Margin="0,20,0,6" />
         <TextBlock x:Name="BookLoadingLine" Style="{StaticResource Muted}" Visibility="Collapsed" Text="Reading your score book…" />

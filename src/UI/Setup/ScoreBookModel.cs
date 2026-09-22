@@ -36,6 +36,14 @@ public static class ScoreBookModel
             ? ""
             : $"{pending} lines are waiting to be written, and {dropped} readings were dropped because the file couldn't be written.";
 
+    /// <summary>What Export stats did, said beside the button: the counts from the file's own manifest, and the file's name.</summary>
+    public static string ExportedLine(BookPackManifest manifest, string fileName)
+    {
+        var readings = manifest.Readings == 1 ? "1 reading" : $"{manifest.Readings:N0} readings";
+        var finals = manifest.Finals == 1 ? "1 finished battle" : $"{manifest.Finals:N0} finished battles";
+        return $"Exported {readings} and {finals} to {fileName}. Import it on the other PC from Setup › Score book.";
+    }
+
     public static string Size(long bytes) =>
         bytes < 1024 ? $"{bytes} bytes"
         : bytes < 1024 * 1024 ? (bytes / 1024.0).ToString("0.#", CultureInfo.InvariantCulture) + " KB"

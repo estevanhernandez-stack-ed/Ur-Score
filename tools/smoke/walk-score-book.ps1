@@ -48,6 +48,29 @@ try {
         ($months.Count -ge 1) -and ($months[0].Name -match '^\d{4}-\d{2}\.jsonl$') -and ($recipeTexts.Count -eq 1) -and
         ($lines.Count -ge 1) -and (@($lines | Where-Object { $_.v -ne 1 }).Count -eq 0)) "months=$($months.Name -join ',') recipes=$($recipeTexts.Count) lines=$($lines.Count)"
 
+    # Export stats, then import the same file: one file made where asked, the line counting what went into it, and
+    # an import of it adding nothing because every reading is already here (2026-09-22, the owner's second machine).
+    $exportDir = Join-Path $env:TEMP "urscore-smoke-export-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    New-Item -ItemType Directory -Force $exportDir | Out-Null
+    $exportFile = Join-Path $exportDir 'ur-score-stats-smoke.zip'
+    try {
+        $setup = Open-SetupPage 'Score book'
+        Invoke-Element (Get-Button $setup 'Export stats to a file for another PC')
+        Complete-FileDialog '^Export stats to a file$' $exportFile
+        $exported = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^Exported ' 30
+        Check '4b Export stats writes one file and says what went into it' ((Test-Path $exportFile) -and $exported -match '^Exported \d[\d,]* readings? and \d[\d,]* finished battles? to ur-score-stats-smoke\.zip') "exists=$(Test-Path $exportFile); '$exported'"
+
+        $setup = Get-SetupWindow
+        Invoke-Element (Get-Button $setup 'Import stats from another PC''s file')
+        Complete-FileDialog '^Import stats from another PC$' $exportFile
+        $imported = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^(Nothing new to import|Imported )' 30
+        Check '4c Importing it back adds nothing: every reading is already here' ($imported -match '^Nothing new to import\. \d[\d,]* were already here\.') "'$imported'"
+        & (Join-Path $PSScriptRoot 'shot.ps1') -Title 'Setup' -OutPath (Join-Path $UrShots 'score-book-export-import.png') | Out-Null
+    }
+    finally {
+        if (Test-Path $exportDir) { Remove-Item $exportDir -Recurse -Force }
+    }
+
     $setup = Open-SetupPage 'Diagnostics'
     $saved = Get-Clipboard -Raw
     Invoke-Element (Find-ByAutomationId $setup 'CopyDiagnosticsButton')

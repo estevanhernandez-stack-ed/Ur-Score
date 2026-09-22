@@ -40,8 +40,15 @@ public interface ISetupServices
 
     bool ReaderLoaded { get; }
 
-    /// <summary>Reads the score book again, after something outside a read has added to it (bringing in another PC's book).</summary>
+    /// <summary>Reads the score book again, after something outside a read has added to it (importing another PC's stats).</summary>
     Task ReloadBookAsync();
+
+    /// <summary>
+    /// Writes the score book to a stats file at <paramref name="path"/> for another PC to import (<see cref="Book.BookPack"/>),
+    /// pending lines flushed first so the file holds every reading taken. Returns what the file's manifest says. Off the UI
+    /// thread: it reads the whole book.
+    /// </summary>
+    Book.BookPackManifest ExportStats(string path);
 
     bool Running { get; }
 

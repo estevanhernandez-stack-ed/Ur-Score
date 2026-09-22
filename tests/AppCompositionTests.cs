@@ -146,6 +146,51 @@ public class AppCompositionTests
         Assert.Contains(services.Boards, board => board.Panels.Any(p => p.Settings.SourceId == "s-00000001"));
     }
 
+    /// <summary>
+    /// Export stats on one PC, Import stats on another, through the real composition on both sides: the first PC's
+    /// book (a generated one, under the clan-battle recipe) goes into one file; the second PC, with the same recipe
+    /// and a source for one of the clans, imports it and keeps that clan's readings under its OWN source id while the
+    /// other clan is named as not set up. Nothing but the score book is in the file — no key, no source, no board.
+    /// </summary>
+    [Fact]
+    public async Task StatsExportedOnOnePcImportOnAnotherUnderItsOwnSourceIds()
+    {
+        using var first = TempDir.Create("urscore-app-a");
+        using var second = TempDir.Create("urscore-app-b");
+        var text = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
+        var recipe = RecipeParser.Parse(text).Recipe!;
+        var written = BookGenerator.Write(new AppPaths(first.Path).Book, clanSources: 2, days: 1);
+        var file = Path.Combine(first.Path, BookPack.FileName(Start));
+        using (var exporter = Compose(first, new StubHost(reachable: false), new FakeTransport()))
+        {
+            var manifest = exporter.ExportStats(file);
+            Assert.Equal((written.Lines - written.Finals, written.Finals), (manifest.Readings, manifest.Finals));
+        }
+
+        using var zip = System.IO.Compression.ZipFile.OpenRead(file);
+        Assert.All(zip.Entries, entry => Assert.True(entry.FullName == BookPack.ManifestName || entry.FullName.StartsWith("scorebook/", StringComparison.Ordinal), entry.FullName));
+        Assert.DoesNotContain(zip.Entries, entry => entry.FullName.Contains("keys", StringComparison.OrdinalIgnoreCase) || entry.FullName.EndsWith("sources.json", StringComparison.Ordinal));
+
+        // The second PC follows Clan0 under an id of its own; Clan1 it does not follow.
+        var paths = new AppPaths(second.Path);
+        new RecipeStore(paths.Recipes).Save(recipe, text, new RecipeState());
+        new SourceStore(paths.Sources).Save([new Source("s-0000beef", recipe.Slug, new Dictionary<string, string> { ["clan"] = "Clan0" }, SourceRole.Mine)]);
+        using var importer = Compose(second, new StubHost(reachable: false), new FakeTransport());
+        await importer.LoadBookAsync();
+
+        var outcome = BookImport.RunFile(file, importer);
+
+        Assert.Equal("", outcome.Problem);
+        // The generator writes two clan sources and a clans list, a reading each per tick: a third of the readings are Clan0's.
+        Assert.Equal((written.Lines - written.Finals) / 3, outcome.Added);
+        Assert.Contains("Clan1", outcome.Message, StringComparison.Ordinal);
+        Assert.Contains($"No recipe here for: {BookGenerator.ListSlug}", outcome.Message, StringComparison.Ordinal);
+        var lines = BookFiles.ReadAll(paths.Book, recipe.Slug).ToList();
+        Assert.Equal(outcome.Added, lines.Count);
+        Assert.All(lines, line => Assert.Equal("s-0000beef", line.Source));
+        Assert.All(lines, line => Assert.Equal("Clan0", line.Inputs["clan"]));
+    }
+
     private sealed class FakeTransport : IRecipeTransport
     {
         private readonly List<(string UrlStart, FetchResult Result)> _routes = [];

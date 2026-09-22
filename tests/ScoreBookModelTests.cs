@@ -17,6 +17,15 @@ public class ScoreBookModelTests
     private static RecipeSnapshot Snapshot(bool recorded, string? reason) =>
         new(WatchState.Reporting, null, [], [], 1) { Recorded = recorded, NotRecordingReason = reason, SourceId = "s-00000001" };
 
+    /// <summary>What Export stats says beside the button, from the file's own manifest, with the file's name and where to go next.</summary>
+    [Theory]
+    [InlineData(1, 1, "Exported 1 reading and 1 finished battle to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
+    [InlineData(16_800, 0, "Exported 16,800 readings and 0 finished battles to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
+    public void TheExportedLineCountsWhatWentIntoTheFile(int readings, int finals, string expected) =>
+        Assert.Equal(expected, ScoreBookModel.ExportedLine(
+            new BookPackManifest(BookPack.Version, new DateTimeOffset(2026, 9, 22, 12, 0, 0, TimeSpan.Zero), "0.5.4", readings, finals),
+            "ur-score-stats-2026-09-22.zip"));
+
     [Theory]
     [InlineData(512L, "512 bytes")]
     [InlineData(1536L, "1.5 KB")]
