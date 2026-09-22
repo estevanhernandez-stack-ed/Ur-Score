@@ -163,6 +163,14 @@ public static class SourceRules
     }
 
     /// <summary>The same recipe and inputs update the existing source's role; a new pair becomes a new source.</summary>
+    /// <summary>
+    /// A source for these inputs, added or updated. Adding one that is already there takes the new role and
+    /// SWITCHES IT ON — on purpose, and the purpose is worth stating because it went unstated and untested for
+    /// a year (S1-3.2). Adding is an affirmative act: somebody who switched a clan off and then adds it again
+    /// has said, in the clearest way the app offers, that they want it read. Leaving it off would make the Add
+    /// button look broken for that clan and nothing else. The id is kept, so the score book's lines for it still
+    /// belong to it.
+    /// </summary>
     public static IReadOnlyList<Source> Add(IReadOnlyList<Source> sources, string recipe, IReadOnlyDictionary<string, string> inputs, SourceRole role)
     {
         var key = Source.KeyOf(inputs);

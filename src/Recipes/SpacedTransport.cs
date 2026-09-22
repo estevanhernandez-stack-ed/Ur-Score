@@ -16,16 +16,22 @@ public sealed class SpacedTransport(IRecipeTransport inner, TimeProvider time, T
     {
         var lane = _lanes.GetOrAdd(url.Host, _ => new Lane());
         await lane.One.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var sent = false;
         try
         {
             var wait = lane.LastFinished + spacing - time.GetUtcNow();
             if (wait > TimeSpan.Zero) await Task.Delay(wait, time, cancellationToken).ConfigureAwait(false);
 
+            sent = true;
             return await inner.GetAsync(url, headers, label, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            lane.LastFinished = time.GetUtcNow();
+            // Only a request that actually LEFT touches the host's clock. One cancelled while still waiting its
+            // turn never reached anybody's server, and counting it made the next caller wait a full spacing for
+            // nothing (S1-4.2). A request that left and then failed still counts: it did reach the server, and
+            // the spacing exists to protect the server, not to reward us for a good answer.
+            if (sent) lane.LastFinished = time.GetUtcNow();
             lane.One.Release();
         }
     }

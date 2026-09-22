@@ -202,8 +202,13 @@ public sealed class ScoreBook : IScoreBook, IDisposable
         var recipeFile = BookFiles.RecipeFile(Root, slug, line.Recipe.Hash);
         if (!File.Exists(recipeFile))
         {
+            // Through a temp file and one move, like sources.json and boards.json: a crash mid-write used to
+            // leave a torn recipe file, and because the name carries the hash it was then never rewritten, so a
+            // half-file sat beside a whole book forever (S1-F.4). The move is atomic on the same volume.
             Directory.CreateDirectory(Path.GetDirectoryName(recipeFile)!);
-            File.WriteAllText(recipeFile, recipeText, Utf8);
+            var temp = recipeFile + ".tmp";
+            File.WriteAllText(temp, recipeText, Utf8);
+            File.Move(temp, recipeFile, overwrite: true);
         }
 
         var file = BookFiles.MonthFile(Root, slug, line.T);
