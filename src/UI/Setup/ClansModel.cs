@@ -143,9 +143,15 @@ public static class ClansModel
     public static IReadOnlyList<Source> SetEnabled(IReadOnlyList<Source> sources, string sourceId, bool enabled) =>
         [.. sources.Select(s => s.Id == sourceId ? s with { Enabled = enabled } : s)];
 
-    /// <summary>The source of an installed group-list recipe, which the Top switch turns on and off.</summary>
-    public static Source? GroupListSource(IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed) =>
-        sources.FirstOrDefault(s => installed.Any(i => string.Equals(i.Recipe.Slug, s.Recipe, StringComparison.Ordinal) && i.Recipe.IsGroupList));
+    /// <summary>
+    /// The source of THIS page's recipe when it is a group list, which the Top switch turns on and off. It used to
+    /// be the first installed group list's source whichever page asked, which is the same thing with one list
+    /// installed and the wrong list the moment there are two (S1-11.2).
+    /// </summary>
+    public static Source? GroupListSource(IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, string recipeSlug) =>
+        installed.Any(i => string.Equals(i.Recipe.Slug, recipeSlug, StringComparison.Ordinal) && i.Recipe.IsGroupList)
+            ? sources.FirstOrDefault(s => string.Equals(s.Recipe, recipeSlug, StringComparison.Ordinal))
+            : null;
 
     public static bool NeedsConfirmation(IReadOnlyList<Source> sources, string recipeSlug) =>
         sources.Count(s => s.Enabled && string.Equals(s.Recipe, recipeSlug, StringComparison.Ordinal)) >= ConfirmAbove;

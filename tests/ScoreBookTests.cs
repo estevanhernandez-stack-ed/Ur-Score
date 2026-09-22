@@ -293,6 +293,37 @@ public class ScoreBookTests
         Assert.Equal(2, turns);
     }
 
+    /// <summary>
+    /// An unwritable line found by the drain is one dropped line. This pins the ordinary case; the race S1-5.1
+    /// names cannot be reached from a test, and this says so rather than implying it can. The double count
+    /// needed the drain to be holding a node mid-write when an append's overflow on another thread removed
+    /// it, so the drain's own "can never be written" branch then counted a line it had nothing left to remove.
+    /// That needs the writer thread paused between taking the node and its catch, and the book has no seam
+    /// for that. The fix is by inspection — count only what this branch removed — and the mutation that
+    /// counts regardless passes this test, which is the honest limit of what it checks. Sweep E's timer and
+    /// gate work is where a seam would come from, if one is ever worth the code it adds to a writer loop.
+    /// </summary>
+    [Fact]
+    public void AnUnwritableLineFoundByTheDrainIsOneDroppedLine()
+    {
+        using var dir = TempDir.Create("urscore-book");
+        using var book = new ScoreBook(dir.Path, background: false);
+        var unwritable = Line(T) with { Headline = new Dictionary<string, double> { ["clan-place"] = double.NaN } };
+
+        // Held: the first append cannot drain while the month file is locked, so the line stays pending.
+        var file = BookFiles.MonthFile(dir.Path, Slug, T);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        using (File.Open(file, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+        {
+            book.Append(unwritable, "recipe text");
+        }
+
+        // Now the drain runs and finds it unwritable: dropped once, by that branch.
+        book.Flush();
+        Assert.Equal(1, book.Dropped);
+        Assert.Equal(0, book.Pending);
+    }
+
     [Fact]
     public void DisposingTwiceDoesNotThrow()
     {

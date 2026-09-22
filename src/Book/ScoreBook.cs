@@ -173,12 +173,17 @@ public sealed class ScoreBook : IScoreBook, IDisposable
                     // non-finite headline value JSON can't serialize). It can't sit in the queue forever
                     // either, so it's dropped like an overflowed reading, and the rest of the queue still
                     // gets a turn.
+                    // Counted only if THIS branch removed it. An append's overflow can take the same node out
+                    // while the write is failing, and then the line was already counted there; counting it here
+                    // too made one dropped line two on the Score book page (S1-5.1).
+                    bool removedHere;
                     lock (_gate)
                     {
-                        if (node.List is not null) _pending.Remove(node);
+                        removedHere = node.List is not null;
+                        if (removedHere) _pending.Remove(node);
                     }
 
-                    Interlocked.Increment(ref _dropped);
+                    if (removedHere) Interlocked.Increment(ref _dropped);
                     continue;
                 }
 

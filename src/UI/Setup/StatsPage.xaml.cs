@@ -95,13 +95,22 @@ public partial class StatsPage : UserControl, ISetupPage
         Show(StatsSavedLine, "");
         SaveStatsButton.IsEnabled = StatsTable.AnyTicked;
 
-        // Spec §7.3: no saved names and a recipe with counters means one read when the page opens.
-        if (recipe.LastStep.Counters is not null && !StatsTable.HasSavedNames) _ = StatsTable.ReadNamesAsync(_closing.Token);
+        // Spec §7.3: no saved names and a recipe with counters means ONE read when the page opens. Once per recipe
+        // per session, and not again on every switch back or save while the names are still unsaved — a source
+        // that answered with none the first time was asked again on each, for the same answer (S1-12.6). The
+        // button reads again on purpose; this is only the read nobody pressed for.
+        if (recipe.LastStep.Counters is not null && !StatsTable.HasSavedNames && _namesAskedFor.Add(recipe.Slug))
+        {
+            _ = StatsTable.ReadNamesAsync(_closing.Token);
+        }
     }
 
     /// <summary>The clans list this section is about, or null when none is installed and the section stays hidden.</summary>
     private InstalledRecipe? ClansList =>
         FieldMetricsModel.ListFor(_services.Installed);
+
+    /// <summary>The recipes whose counter names this page has already asked for unprompted this session (S1-12.6).</summary>
+    private readonly HashSet<string> _namesAskedFor = new(StringComparer.Ordinal);
 
     private void LoadField()
     {

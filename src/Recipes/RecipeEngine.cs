@@ -172,7 +172,12 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             }
 
             var (document, stop, _) = await FetchJsonAsync(recipe, step, values, label, cancellationToken).ConfigureAwait(false);
-            if (stop is not null) return stop;
+
+            // A stop on the last step keeps the period the earlier steps established, as the per-account path
+            // always did. Nothing records a stop, so this is information for the board's top line and not a
+            // decision: "which battle" is known by then, and saying so beside "couldn't be reached" is more use
+            // than dropping it (S1-2.1).
+            if (stop is not null) return isLast ? stop with { Period = PeriodOf(recipe, values) } : stop;
 
             using (document!)
             {
