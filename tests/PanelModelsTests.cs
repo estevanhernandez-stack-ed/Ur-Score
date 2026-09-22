@@ -17,6 +17,26 @@ public class PanelModelsTests
     private static Dictionary<string, RecipeSnapshot> Snaps(params RecipeSnapshot[] snapshots) =>
         snapshots.ToDictionary(s => s.SourceId, s => s, StringComparer.Ordinal);
 
+    /// <summary>
+    /// Your own user ids are one set per <see cref="LiveBoard"/>, not a set built on every read. It was rebuilt on
+    /// every access, and two of the accesses sit inside per-row lambdas — "is this row one of mine?" for every row
+    /// of every leaderboard on every redraw — so a fifty-row panel built fifty hash sets to draw itself (S1-13.10).
+    /// The identity check is what pins the cache. The <c>with</c> half pins the hazard a cache on a record carries:
+    /// a copy with other accounts must answer for THOSE accounts, not the ones the original was asked about.
+    /// </summary>
+    [Fact]
+    public void YourIdsAreOneSetPerBoardAndACopyWithOtherAccountsAnswersForThose()
+    {
+        var live = Live([MainClan], [Installed(Clan, "value")], new Dictionary<string, RecipeSnapshot>());
+
+        Assert.Same(live.MyUserIds, live.MyUserIds);
+        Assert.Equal(new long[] { 101, 201, 202, 301 }, live.MyUserIds.Order());
+
+        var copy = live with { Accounts = [Main] };
+        Assert.Equal(new long[] { 101 }, copy.MyUserIds);
+        Assert.Equal(new long[] { 101, 201, 202, 301 }, live.MyUserIds.Order());
+    }
+
     [Fact]
     public void YourUserIdsAreYourAccountsIdsLessAnyWithout()
     {

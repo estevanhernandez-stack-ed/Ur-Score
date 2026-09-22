@@ -7,8 +7,6 @@ namespace UrScore.Tests;
 
 public class PanelGalleryTests
 {
-    private static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
-    private static readonly Source AltClan = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
     private static readonly Source TopSource = SourceOf("s-0000000a", TopList, null, SourceRole.Watch);
     private static readonly Source ProfileSource = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
 

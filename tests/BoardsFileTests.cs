@@ -7,9 +7,6 @@ namespace UrScore.Tests;
 
 public class BoardsFileTests
 {
-    private static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
-    private static readonly Source AltClan = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
-
     private static BoardDef Battle() => new("b-0000aaaa", "Battle",
     [
         new PanelDef("p-00000001", PanelType.Standing, new PanelSize(3), new PanelSettings(Clan.Slug, SourceId: MainClan.Id)),

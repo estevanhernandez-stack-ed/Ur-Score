@@ -19,7 +19,11 @@ public static class PanelGallery
         PanelType.PastPeriods, PanelType.Records, PanelType.Pace, PanelType.Top, PanelType.ProfileStat, PanelType.AccountsTable, PanelType.LiveLeaderboard,
     ];
 
-    /// <summary>The title <see cref="PanelModels"/> gives a panel of this type on the card's recipe (<see cref="CardRecipe"/>), for a panel not yet added.</summary>
+    /// <summary>
+    /// The title <see cref="PanelModels"/> gives a panel of this type on the card's recipe (<see cref="CardRecipe"/>), for a panel
+    /// not yet added. Works the card's recipe out each time, defaults included, and that is fine where it is called: once when
+    /// Add panel opens its form, and once per card when the gallery opens — never on a render or a tick (S2-4.7).
+    /// </summary>
     public static string Title(PanelType type, LiveBoard live) => PanelText.Title(type, CardRecipe(type, live), live.Installed);
 
     /// <summary>The title a saved panel shows itself, on its own recipe: its pop-out's title, its popped-out slot and its ⋯ form say the same.</summary>

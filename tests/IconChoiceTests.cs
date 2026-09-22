@@ -13,9 +13,6 @@ namespace UrScore.Tests;
 /// </summary>
 public class IconChoiceTests
 {
-    private static readonly Source MainClan = SourceOf("s-00000001", Clan, "CCGP", SourceRole.Main);
-    private static readonly Source AltClan = SourceOf("s-00000002", Clan, "K0i2", SourceRole.Mine);
-    private static readonly Source Rival = SourceOf("s-00000003", Clan, "NovaForge", SourceRole.Watch);
     private static readonly Source ProfileSource = SourceOf("s-00000004", Profile, null, SourceRole.Mine);
 
     private static IReadOnlyList<InstalledRecipe> Recipes => [Installed(Clan, "value"), Installed(Profile, "diamonds")];

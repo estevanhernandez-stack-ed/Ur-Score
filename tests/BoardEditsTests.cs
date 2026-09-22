@@ -192,13 +192,31 @@ public class BoardEditsTests
         Assert.Equal(new[] { "p-b-2" }, Ids(BoardEdits.RemovePanel(board, "p-b-1")));
         Assert.Equal(new PanelSize(12, Tall: true), BoardEdits.Resize(board, "p-b-2", new PanelSize(40, Tall: true)).Panels[1].Size);
         Assert.Equal(new PanelSize(1), BoardEdits.Resize(board, "p-b-2", new PanelSize(0)).Panels[1].Size);
-        Assert.Equal("s-9", BoardEdits.SetSettings(board, "p-b-1", new PanelSettings(Clan.Slug, SourceId: "s-9")).Panels[0].Settings.SourceId);
+        Assert.Equal("s-9", BoardEdits.SetSettings(board, "p-b-1", PanelType.Standing, new PanelSettings(Clan.Slug, SourceId: "s-9")).Panels[0].Settings.SourceId);
 
         var popped = BoardEdits.PopOut(board, "p-b-2", rect);
         Assert.Equal(rect, popped.Panels[1].PopOut);
         Assert.Null(popped.Panels[0].PopOut);
         Assert.Null(BoardEdits.Return(popped, "p-b-2").Panels[1].PopOut);
         Assert.Same(board, BoardEdits.RemovePanel(board, "p-gone"));
+    }
+
+    /// <summary>
+    /// Settings are applied to the panel they were built for, and a panel's form is built from its TYPE: settings
+    /// meant for a Race landing on a Standing by id alone would be a Standing reading a Race's fields. Nothing
+    /// reaches that today — the ⋯ form is modal and a panel's type never changes under it — so this is the
+    /// invariant stated where it is relied on, and a throw is how a future caller finds out (S2-6.7).
+    /// </summary>
+    [Fact]
+    public void SettingsAreRefusedForAPanelOfAnotherType()
+    {
+        var board = BoardOf("b", PanelType.Standing, PanelType.Race);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            BoardEdits.SetSettings(board, "p-b-1", PanelType.Race, new PanelSettings(Clan.Slug, SourceIds: ["s-1", "s-2"])));
+
+        Assert.Contains("Standing", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Race", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -211,11 +229,11 @@ public class BoardEditsTests
         };
 
         // A settings form closed with nothing changed builds equal settings in a new list; nothing is written.
-        Assert.Same(board, BoardEdits.SetSettings(board, "p-b-1", new PanelSettings(Clan.Slug, SourceIds: ["s-1", "s-2"])));
-        Assert.Same(board, BoardEdits.SetSettings(board, "p-gone", new PanelSettings(Clan.Slug, SourceIds: ["s-2", "s-1"])));
+        Assert.Same(board, BoardEdits.SetSettings(board, "p-b-1", PanelType.Race, new PanelSettings(Clan.Slug, SourceIds: ["s-1", "s-2"])));
+        Assert.Same(board, BoardEdits.SetSettings(board, "p-gone", PanelType.Race, new PanelSettings(Clan.Slug, SourceIds: ["s-2", "s-1"])));
         Assert.Equal(new[] { "s-2", "s-1" },
-            BoardEdits.SetSettings(board, "p-b-1", new PanelSettings(Clan.Slug, SourceIds: ["s-2", "s-1"])).Panels[0].Settings.SourceIds);
-        Assert.NotSame(board, BoardEdits.SetSettings(board, "p-b-1", race with { Stat = "value" }));
+            BoardEdits.SetSettings(board, "p-b-1", PanelType.Race, new PanelSettings(Clan.Slug, SourceIds: ["s-2", "s-1"])).Panels[0].Settings.SourceIds);
+        Assert.NotSame(board, BoardEdits.SetSettings(board, "p-b-1", PanelType.Race, race with { Stat = "value" }));
     }
 
     [Fact]
@@ -244,7 +262,7 @@ public class BoardEditsTests
             Panels = [new PanelDef("p-b-1", PanelType.Race, new PanelSize(), saved)],
         };
 
-        var unchanged = BoardEdits.SetSettings(board, "p-b-1", replacement);
+        var unchanged = BoardEdits.SetSettings(board, "p-b-1", PanelType.Race, replacement);
 
         Assert.Same(board, unchanged);
         Assert.Same(saved, unchanged.Panels[0].Settings);
@@ -252,7 +270,7 @@ public class BoardEditsTests
         {
             Panels = [board.Panels[0] with { Settings = replacement }],
         }));
-        var changed = BoardEdits.SetSettings(board, "p-b-1", replacement with { Recipe = "another-recipe" });
+        var changed = BoardEdits.SetSettings(board, "p-b-1", PanelType.Race, replacement with { Recipe = "another-recipe" });
         Assert.NotSame(board, changed);
         Assert.Equal("another-recipe", changed.Panels[0].Settings.Recipe);
         Assert.Equal(Clan.Slug, board.Panels[0].Settings.Recipe);
