@@ -264,6 +264,16 @@ public static class BoardEdits
     public static string? AutomationIdOf(IReadOnlyList<BoardDef> boards, string panelId) =>
         Find(boards, panelId) is { } found ? AutomationIds(found.Board)[PanelIndex(found.Board, panelId)] : null;
 
+    /// <summary>
+    /// The id a panel carries inside its own pop-out window: its board's id and its slot id, "b-starter-battle/StandingPanel1".
+    /// The slot id alone is the first Standing panel of WHICHEVER board holds it, so two boards each with one, both popped
+    /// out, gave two live windows whose panels carried the same id — which breaks any automation that looks a pop-out up by
+    /// it, and is wrong for a screen reader besides (S2-P.16). The slot's id on the board itself is unchanged, since a board
+    /// shows one board at a time. Null when no board holds the panel. Owner's scheme, 2026-09-21.
+    /// </summary>
+    public static string? PopOutAutomationId(IReadOnlyList<BoardDef> boards, string panelId) =>
+        Find(boards, panelId) is { } found ? $"{found.Board.Id}/{AutomationIds(found.Board)[PanelIndex(found.Board, panelId)]}" : null;
+
     /// <summary>The period line follows an enabled panel source, then a panel recipe's source, then the main, then a panel's group list.</summary>
     public static string? AnchorSourceId(BoardDef board, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)
     {

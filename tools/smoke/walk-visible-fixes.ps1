@@ -142,10 +142,6 @@ function Get-TabMenuItemEnabled($board, [string]$itemId) {
     return $enabled
 }
 
-function Get-PopOutFor([string]$panelId) {
-    Get-PopOutWindows | Where-Object { Find-ByAutomationId $_ $panelId } | Select-Object -First 1
-}
-
 function Get-SavedPanel([string]$type) {
     foreach ($b in @(Read-Boards)) {
         foreach ($p in @($b.panels)) { if ($p -and $p.type -eq $type) { return $p } }
