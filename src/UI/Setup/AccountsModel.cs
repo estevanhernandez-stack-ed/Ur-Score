@@ -5,8 +5,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>One account's Send for one recipe. Raises a change so the page can check the budget and save.</summary>
 public sealed class SendTick : INotifyPropertyChanged
 {

@@ -6,8 +6,6 @@ using Labs626.UrScore.UI;
 
 namespace UrScore.Tests;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>What an import leaves on the page that started it, and what it says when saving worked and loading didn't.</summary>
 public class ImportFlowTests : IDisposable
 {

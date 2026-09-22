@@ -5,8 +5,6 @@ using Labs626.UrScore.UI;
 
 namespace Labs626.UrScore.Composition;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>
 /// Everything a Setup page may use. <c>AppServices</c> (Task 14) implements it. Every member is used from
 /// the UI thread, and <see cref="Changed"/> is raised on it.

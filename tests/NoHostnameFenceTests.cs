@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Labs626.UrScore.Source;
+using Labs626.UrScore.Fetch;
 
 namespace UrScore.Tests;
 
@@ -20,9 +20,9 @@ public partial class NoHostnameFenceTests
     [GeneratedRegex(@"xmlns(?::[A-Za-z0-9_.-]+)?\s*=\s*""[^""]*""")]
     private static partial Regex XamlNamespace();
 
-    private static readonly string NameClientFile = Path.Combine("Source", "NameClient.cs");
+    private static readonly string NameClientFile = Path.Combine("Fetch", "NameClient.cs");
 
-    private static readonly string IconClientFile = Path.Combine("Source", "IconClient.cs");
+    private static readonly string IconClientFile = Path.Combine("Fetch", "IconClient.cs");
 
     /// <summary>
     /// Code and windows both. A window's own copy is where a host could be written in prose — the standing line on

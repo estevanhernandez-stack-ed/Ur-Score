@@ -2,8 +2,6 @@ using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Book;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>
 /// What bringing in another PC's book would do: the lines to append, under this PC's own source ids, and what was
 /// left alone. <paramref name="NotSetUp"/> names the clans the other machine read that this one does not follow, so

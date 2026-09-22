@@ -4,8 +4,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>One clan-and-field number in the Stats page's own section: its tick, and the id an alert is set on.</summary>
 public sealed class FieldMetricItem(FieldMetric metric, bool send) : INotifyPropertyChanged
 {

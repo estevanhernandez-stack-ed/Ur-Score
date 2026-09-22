@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace Labs626.UrScore.Source;
+namespace Labs626.UrScore.Fetch;
 
 /// <summary>How Ur Score introduces itself to every service it calls. Polling anonymously is rude.</summary>
 public static class UrScoreIdentity

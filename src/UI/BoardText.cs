@@ -5,8 +5,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>
 /// What the board window is in the middle of, or last asked for, which the state line says over what reading is doing. The line
 /// is worked out from this on every redraw, never written once, so a redraw in the middle of a wait can't wipe what it said

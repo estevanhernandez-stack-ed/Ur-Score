@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text.Json;
 
-namespace Labs626.UrScore.Source;
+namespace Labs626.UrScore.Fetch;
 
 /// <summary>The seam the app and the tests use for a source's icon, so neither needs the network. <see cref="IconClient"/> implements it.</summary>
 public interface IIconSource

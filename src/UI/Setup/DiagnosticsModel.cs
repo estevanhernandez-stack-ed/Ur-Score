@@ -1,10 +1,9 @@
 using System.Text;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
+using Labs626.UrScore.Fetch;
 
 namespace Labs626.UrScore.UI;
-
-using Source = Labs626.UrScore.Core.Source;
 
 public sealed record SourceDiagnostic(string SourceId, string Name, string State, string Detail, string LastRead, string NextRead, string Misses)
 {
@@ -149,9 +148,8 @@ public static class DiagnosticsModel
         bool resolveNames, string hostText, string bookRoot, int bookPending, int bookDropped,
         IReadOnlyList<string> trail, Redactor redactor)
     {
-        // global:: because this namespace's Source alias hides the Labs626.UrScore.Source namespace; outside the
-        // interpolation, since a colon inside a hole starts a format.
-        var userAgent = global::Labs626.UrScore.Source.UrScoreIdentity.UserAgent;
+        // Outside the interpolation, since a colon inside a hole starts a format.
+        var userAgent = UrScoreIdentity.UserAgent;
         var text = new StringBuilder()
             .AppendLine($"Ur Score diagnostics {now:O}")
             .AppendLine($"user-agent={userAgent} resolveNames={resolveNames}")

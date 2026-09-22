@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace Labs626.UrScore.Source;
+namespace Labs626.UrScore.Fetch;
 
 /// <summary>
 /// Case-insensitive property lookup and forgiving number reading, shared by the recipe reader and

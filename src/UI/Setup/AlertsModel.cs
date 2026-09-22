@@ -4,8 +4,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-using Source = Labs626.UrScore.Core.Source;
-
 public sealed record PolicyItem(string RecipeName, string Line, string Counts);
 
 /// <summary>

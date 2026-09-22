@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Labs626.UrScore.Source;
+using Labs626.UrScore.Fetch;
 
 namespace UrScore.Tests;
 

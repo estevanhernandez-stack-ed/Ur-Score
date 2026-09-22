@@ -1,6 +1,6 @@
 using System.IO;
 using System.Net.Http;
-using Labs626.UrScore.Source;
+using Labs626.UrScore.Fetch;
 
 namespace Labs626.UrScore.Recipes;
 

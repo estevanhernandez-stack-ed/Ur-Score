@@ -4,10 +4,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Book;
 
-// `Source` alone binds to the Labs626.UrScore.Source NAMESPACE here, not the type, so an unqualified name does not
-// compile. The same alias the UI files use, rather than spelling the full name at each site (S1-7.1).
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>Which finals the book already holds, by recipe, inputs, period and account. Built from the book, updated as lines are planned.</summary>
 public sealed class FinalsIndex
 {

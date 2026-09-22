@@ -4,10 +4,9 @@ using System.Windows.Controls;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.Theming;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.UI;
-
-using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>+ Board (spec §9.2): an empty board, or a starter built from your sources now.</summary>
 public partial class AddBoardWindow : Window

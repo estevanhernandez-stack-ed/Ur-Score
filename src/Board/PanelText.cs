@@ -4,9 +4,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
-// The bare name Source would find the Labs626.UrScore.Source namespace from in here, so the type is aliased where the
-// namespace's own members can't reach: after the namespace line, which is consulted first.
-using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>How panels write numbers, places and times (spec §9.6: change states its span; a missing value is a dash).</summary>
 public static class PanelText
