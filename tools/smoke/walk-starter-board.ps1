@@ -18,6 +18,7 @@ $backup = $null
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
     $board = Get-BoardWindow
@@ -85,10 +86,13 @@ try {
     Invoke-Element (Find-ByAutomationId $board 'TestNowButton')
     # Test now is disabled for exactly as long as its read runs (several sources, 2 s apart per host), so wait on
     # the button rather than a fixed sleep. The press lands on the dispatcher after Invoke returns, so first let
-    # it go disabled; a read that finished between polls just skips ahead.
-    Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10 | Out-Null
+    # it go disabled. Whether it DID is its own step: the walk used to throw that away, so a button that never
+    # started a read at all still passed the next line (S1-L.1). Two sources on one host are two seconds of read
+    # at least, and the poll is every 400 ms, so the disabled moment is there to be seen.
+    $wentDisabled = Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10
+    Check '2c Test now goes disabled while its read runs' $wentDisabled "TestNowButton went disabled=$wentDisabled"
     $tested = Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240
-    Check '2c Test now finishes and takes a press again' $tested "TestNowButton enabled=$tested"
+    Check '2d Test now finishes and takes a press again' $tested "TestNowButton enabled=$tested"
     $accounts = @(Get-AllTexts (Find-ByAutomationId $board 'MyAccountsPanel1'))
     # Every heading My accounts can file an account under. Only once every source has a reading from this session may it
     # say 'Not in a watched clan'; before that it says how much has been read (PanelText.NotFound), and a main clan with no
@@ -127,6 +131,7 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
     "RoRoRo running: $rororo"
 }

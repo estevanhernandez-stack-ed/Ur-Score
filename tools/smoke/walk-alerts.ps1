@@ -64,6 +64,7 @@ try {
     # Set before Ur Score starts, so the process inherits it.
     $env:UR_SCORE_RULES_FILE = $scratch
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
     Complete-ClanImport $profileFixture @() @('Diamonds', 'Player rank') | Out-Null
@@ -211,6 +212,7 @@ finally {
     if (Test-Path $scratchDir) { Remove-Item $scratchDir -Recurse -Force }
     $realAfter = Get-RealRulesHash
     Check '8 RoRoRo''s own rules file is exactly as it was' ($realAfter -eq $realBefore) "same=$($realAfter -eq $realBefore)"
+    Note-RoRoRo 'after'
     Show-Results
 }
 exit $LASTEXITCODE

@@ -188,6 +188,7 @@ try {
 '@
     $env:UR_SCORE_RULES_FILE = $scratch
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
     # 1. S2-F.8: the empty first-run starter can't be duplicated.
@@ -510,6 +511,7 @@ finally {
     }
     Remove-Item $scratchDir -Recurse -Force -ErrorAction SilentlyContinue
     Check '11 RoRoRo''s own rules file is unchanged' ((Get-RealRulesHash) -eq $realBefore) 'hash compared'
+    Note-RoRoRo 'after'
     Show-Results
 }
 exit $LASTEXITCODE

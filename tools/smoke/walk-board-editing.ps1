@@ -15,6 +15,7 @@ function Get-SavedPanels([int]$index = 0) { @(@(Read-Boards)[$index].panels) }
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     $board = Initialize-ClanBoard $Main $Alt
 
     # 1. The starter still follows your sources, and nothing is written for it (R1).
@@ -134,6 +135,7 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
 }
 exit $LASTEXITCODE

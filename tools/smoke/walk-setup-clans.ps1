@@ -15,6 +15,7 @@ function Get-SourceRoles { Read-Sources | ForEach-Object { "$($_.inputs.clan)=$(
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     Start-UrScore | Out-Null
     $setup = Complete-ClanImport $clanFixture @('Points') @()
     $setup = Wait-UrWindow '^Setup$' 30
@@ -77,6 +78,7 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
 }
 exit $LASTEXITCODE

@@ -10,6 +10,7 @@ $backup = $null
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     Start-UrScore | Out-Null
     $setup = Complete-ClanImport $clanFixture @('Points') @()
     $setup = Wait-UrWindow '^Setup$' 30
@@ -18,7 +19,15 @@ try {
 
     $board = Get-BoardWindow
     Invoke-Element (Find-ByAutomationId $board 'TestNowButton')
-    Start-Sleep -Seconds 20
+    # Wait for the read to land rather than twenty seconds: Test now is disabled for exactly as long as it runs,
+    # and the state line then says what the read found ("Last read ..."). A fixed sleep raced a slow source and
+    # then counted a book that had nothing in it yet (S1-L.3).
+    Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10 | Out-Null
+    $landed = Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240
+    $stateAfter = Wait-Line (Get-BoardWindow) 'StateLine' 'Last read' 30
+    Check '0b The read lands and the state line says what it found' ($landed -and $stateAfter -match 'Last read') "enabled again=$landed; '$stateAfter'"
+    # The book writes on its own thread a moment after the read; give the month file a bounded moment to appear.
+    Wait-Until { [bool](Get-ChildItem (Join-Path $UrData 'scorebook') -Recurse -Filter *.jsonl -ErrorAction SilentlyContinue) } 15 | Out-Null
 
     $setup = Open-SetupPage 'Score book'
     $folder = Line $setup 'BookFolderLine'
@@ -53,6 +62,7 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
 }
 exit $LASTEXITCODE
