@@ -166,7 +166,7 @@ public partial class BoardWindow : Window
         catch (Exception ex)
         {
             _bookProblem = _services.Redactor.Redact(BoardText.BookUnread(ex));
-            _services.AddTrail($"BOOK NOT LOADED: {ex}");
+            _services.AddTrail($"BOOK NOT LOADED: {ex.GetType().Name}");
             return false;
         }
         finally
@@ -219,7 +219,9 @@ public partial class BoardWindow : Window
             RenderPopOuts(live);
         }
 
-        _ = ResolveNamesAsync(live);
+        // Not awaited, and not lost: a lookup failing used to vanish, since a discarded task's fault reaches no
+        // handler; its type goes to the trail now (S1-14.6).
+        Unawaited.TrailFailures(ResolveNamesAsync(live), _services.AddTrail, "NAMES NOT RESOLVED");
         RenderLines(live);
     }
 
@@ -724,12 +726,14 @@ public partial class BoardWindow : Window
 
     /// <summary>
     /// The window must never die on a cycle. Said on the line until the next Start, Stop or Test now, in plain words: the press's
-    /// own redraw used to draw over it at once. The exception goes to the trail, which Diagnostics shows.
+    /// own redraw used to draw over it at once. The exception's type goes to the trail, which Diagnostics shows — the type
+    /// only, as every trail line: the whole exception carries its message and a stack, and a message can carry a path with
+    /// the user's name in it or an address with a key in it (S1-14.14).
     /// </summary>
     private void ShowFailure(Exception ex)
     {
         _failed = true;
-        _services.AddTrail($"EXCEPTION: {ex}");
+        _services.AddTrail($"EXCEPTION: {ex.GetType().Name}");
         RenderLines();
     }
 

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Recipes;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -27,7 +28,7 @@ public partial class RecipesPage : UserControl, ISetupPage
     {
         RecipesList.ItemsSource = RecipesModel.Items(_services.Installed, _services.Sources, _services.IconFileFor);
         RecipesEmptyLine.Visibility = _services.Installed.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        Show(RecipeProblemsLine, _services.RecipeProblems.Count == 0
+        ShowLine(RecipeProblemsLine, _services.RecipeProblems.Count == 0
             ? ""
             : "Some recipe files could not be read: " + string.Join(" | ", _services.RecipeProblems));
 
@@ -66,12 +67,12 @@ public partial class RecipesPage : UserControl, ISetupPage
 
         try
         {
-            Show(ImportProblemLine, "");
-            var outcome = await ImportFlow.RunTextAsync(_window, _services, builtIn.Text, text => Show(RecipesLine, text.Length > 0 ? text : before.News));
+            ShowLine(ImportProblemLine, "");
+            var outcome = await ImportFlow.RunTextAsync(_window, _services, builtIn.Text, text => ShowLine(RecipesLine, text.Length > 0 ? text : before.News));
 
             var after = ImportFlow.LinesAfter(before, outcome);
-            Show(RecipesLine, after.News);
-            Show(ImportProblemLine, after.Problem);
+            ShowLine(RecipesLine, after.News);
+            ShowLine(ImportProblemLine, after.Problem);
             // As a file import does: the recipe's own Clans page takes over, carrying what the import said (S1-12.4).
             if (outcome is { ChooseSources: true }) _window.ShowPage(SetupPages.ClansId(outcome.Slug), outcome.Message);
         }
@@ -95,13 +96,13 @@ public partial class RecipesPage : UserControl, ISetupPage
 
         try
         {
-            Show(ImportProblemLine, "");
-            var outcome = await ImportFlow.RunAsync(_window, _services, text => Show(RecipesLine, text.Length > 0 ? text : before.News));
+            ShowLine(ImportProblemLine, "");
+            var outcome = await ImportFlow.RunAsync(_window, _services, text => ShowLine(RecipesLine, text.Length > 0 ? text : before.News));
 
             // An import that couldn't happen is said under the button that started it, not in a stock box.
             var after = ImportFlow.LinesAfter(before, outcome);
-            Show(RecipesLine, after.News);
-            Show(ImportProblemLine, after.Problem);
+            ShowLine(RecipesLine, after.News);
+            ShowLine(ImportProblemLine, after.Problem);
 
             // This page is replaced by the recipe's Clans page at once, so what the import did goes there with it (S1-12.4).
             if (outcome is { ChooseSources: true }) _window.ShowPage(SetupPages.ClansId(outcome.Slug), outcome.Message);
@@ -124,11 +125,11 @@ public partial class RecipesPage : UserControl, ISetupPage
         try
         {
             _services.SaveSettings(_services.Settings with { StartOnOpen = StartOnOpenBox.IsChecked == true });
-            Show(StartOnOpenProblemLine, "");
+            ShowLine(StartOnOpenProblemLine, "");
         }
         catch (Exception ex)
         {
-            Show(StartOnOpenProblemLine, _services.Redactor.Redact($"Could not save that: {ex.Message}"));
+            ShowLine(StartOnOpenProblemLine, _services.Redactor.Redact($"Could not save that: {ex.Message}"));
             _settingBox = true;
             StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
             _settingBox = false;
@@ -146,17 +147,11 @@ public partial class RecipesPage : UserControl, ISetupPage
         try
         {
             _services.RemoveRecipe(slug);
-            Show(RecipesLine, $"Removed {recipe.Name}. {RecipesModel.KeepsBook}");
+            ShowLine(RecipesLine, $"Removed {recipe.Name}. {RecipesModel.KeepsBook}");
         }
         catch (Exception ex)
         {
-            Show(RecipesLine, _services.Redactor.Redact($"Could not remove it: {ex.Message}"));
+            ShowLine(RecipesLine, _services.Redactor.Redact($"Could not remove it: {ex.Message}"));
         }
-    }
-
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

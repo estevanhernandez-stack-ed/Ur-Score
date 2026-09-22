@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.Theming;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -42,11 +43,11 @@ public partial class ImportWindow : Window
             .ToList();
 
         PollLine.Text = $"Asks every {recipe.EffectiveEverySeconds} seconds.";
-        Show(ReusedLine, string.Join(" ", review.ReusedKeys));
-        Show(ChangesLine, comparison.Changes.Count == 0
+        ShowLine(ReusedLine, string.Join(" ", review.ReusedKeys));
+        ShowLine(ChangesLine, comparison.Changes.Count == 0
             ? ""
             : "What changed:" + string.Concat(comparison.Changes.Select(c => Environment.NewLine + "• " + c)));
-        Show(InputsNote, comparison.IsUpdate ? "" : ImportText.InputsNote(recipe));
+        ShowLine(InputsNote, comparison.IsUpdate ? "" : ImportText.InputsNote(recipe));
 
         KeptNote.Text = ImportText.KeptNote(recipe);
         KeptList.ItemsSource = ImportText.Kept(recipe).Select(label => "• " + label).ToList();
@@ -63,7 +64,7 @@ public partial class ImportWindow : Window
                 readCounterNames is null ? null : _ => readCounterNames(),
                 ImportText.ShowEveryStat, review.Refusals,
                 fresh ? StatsTableModel.Suggested(recipe) : _existing.ChoicesForUpdate);
-            Show(SuggestedLine, fresh ? ImportText.SuggestedNote(recipe) : "");
+            ShowLine(SuggestedLine, fresh ? ImportText.SuggestedNote(recipe) : "");
             StatsTable.Changed += (_, _) => Refresh();
         }
 
@@ -80,7 +81,7 @@ public partial class ImportWindow : Window
     private void Refresh()
     {
         // With the table hidden, the review's own refusals need a line of their own.
-        Show(ImportRefusalLine, _recipe.IsGroupList ? string.Join(Environment.NewLine, _review.Refusals) : "");
+        ShowLine(ImportRefusalLine, _recipe.IsGroupList ? string.Join(Environment.NewLine, _review.Refusals) : "");
         ImportButton.IsEnabled = _review.CanImport && (_recipe.IsGroupList || StatsTable.AnyTicked);
     }
 
@@ -105,9 +106,4 @@ public partial class ImportWindow : Window
     }
 
     /// <summary>An empty line takes no space, so the screen has no gaps where nothing applies.</summary>
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-    }
 }

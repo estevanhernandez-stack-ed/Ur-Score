@@ -26,7 +26,7 @@ namespace Labs626.UrScore.Fetch;
 /// icon, and the window keeps Ur Score's own.
 /// </para>
 /// </summary>
-public sealed class IconClient : IAvatarSource, IIconSource
+public sealed class IconClient : IAvatarSource, IIconSource, IDisposable
 {
     public const string ThumbnailsHost = "thumbnails.roblox.com";
 
@@ -73,6 +73,9 @@ public sealed class IconClient : IAvatarSource, IIconSource
         _clock = clock;
         _requestTimeout = requestTimeout ?? DefaultRequestTimeout;
     }
+
+    /// <summary>Releases the HTTP client this owns, as the composition root does for the two it builds itself (S1-14.12).</summary>
+    public void Dispose() => _http.Dispose();
 
     public static string DefaultCacheDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

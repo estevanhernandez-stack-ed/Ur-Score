@@ -7,6 +7,7 @@ using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -29,15 +30,17 @@ public partial class ClansPage : UserControl, ISetupPage
         InitializeComponent();
         _services = services;
         _slug = recipeSlug;
-        Show(ImportedLine, note ?? "");
+        ShowLine(ImportedLine, note ?? "");
 
-        MainClanSearch.Picked += name => _ = PickAsync(name, SourceRole.Main);
-        MineClanSearch.Picked += name => _ = PickAsync(name, SourceRole.Mine);
-        WatchClanSearch.Picked += name => _ = PickAsync(name, SourceRole.Watch);
+        // Not awaited, and not lost: a pick or the name list failing past its own catches used to vanish, since a
+        // discarded task's fault reaches no handler (S1-11.1). Its type goes to the trail now.
+        MainClanSearch.Picked += name => Unawaited.TrailFailures(PickAsync(name, SourceRole.Main), _services.AddTrail, "CLAN PICK");
+        MineClanSearch.Picked += name => Unawaited.TrailFailures(PickAsync(name, SourceRole.Mine), _services.AddTrail, "CLAN PICK");
+        WatchClanSearch.Picked += name => Unawaited.TrailFailures(PickAsync(name, SourceRole.Watch), _services.AddTrail, "CLAN PICK");
         Unloaded += (_, _) => _closing.Cancel();
 
         Refresh();
-        _ = LoadNamesAsync();
+        Unawaited.TrailFailures(LoadNamesAsync(), _services.AddTrail, "CLAN NAMES");
     }
 
     private InstalledRecipe? Installed =>
@@ -72,13 +75,13 @@ public partial class ClansPage : UserControl, ISetupPage
 
             MineLabel.Text = $"{groups} your accounts are in";
             MineList.ItemsSource = lists.Mine;
-            Show(MineEmptyLine, lists.Mine.Count == 0 ? "None yet." : "");
+            ShowLine(MineEmptyLine, lists.Mine.Count == 0 ? "None yet." : "");
             AddMineButton.Content = $"Add a {group} your accounts are in";
             MineClanSearch.SetLabel($"Add a {group} your accounts are in");
 
             WatchLabel.Text = $"{groups} you're watching";
             WatchList.ItemsSource = lists.Watching;
-            Show(WatchEmptyLine, lists.Watching.Count == 0 ? "None yet." : "");
+            ShowLine(WatchEmptyLine, lists.Watching.Count == 0 ? "None yet." : "");
             WatchClanButton.Content = $"Watch a {group}";
             WatchClanSearch.SetLabel($"Watch a {group}");
 
@@ -97,7 +100,7 @@ public partial class ClansPage : UserControl, ISetupPage
                     + $"Every read keeps where yours stands, how the field is doing, and the top {GroupRows.Top} by name.";
             }
 
-            Show(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.Sources, _services.Installed, accounts.Count)));
+            ShowLine(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.Sources, _services.Installed, accounts.Count)));
         }
         finally
         {
@@ -163,13 +166,13 @@ public partial class ClansPage : UserControl, ISetupPage
         }
         catch (Exception ex)
         {
-            Show(line, _services.Redactor.Redact($"Could not add that: {ex.Message}"));
+            ShowLine(line, _services.Redactor.Redact($"Could not add that: {ex.Message}"));
             return;
         }
 
         if (change.Note is not null)
         {
-            Show(line, change.Note);
+            ShowLine(line, change.Note);
             return;
         }
 
@@ -186,19 +189,19 @@ public partial class ClansPage : UserControl, ISetupPage
         }
         catch (Exception ex)
         {
-            Show(line, _services.Redactor.Redact($"Could not save that change: {ex.Message}"));
+            ShowLine(line, _services.Redactor.Redact($"Could not save that change: {ex.Message}"));
             return;
         }
 
         if (role == SourceRole.Watch)
         {
             WatchClanSearch.Visibility = Visibility.Collapsed;
-            Show(line, $"Watching {name}. Only its own numbers are read; none of its members are matched to your accounts.");
+            ShowLine(line, $"Watching {name}. Only its own numbers are read; none of its members are matched to your accounts.");
             Refresh();
             return;
         }
 
-        Show(line, $"Reading {name} once…");
+        ShowLine(line, $"Reading {name} once…");
 
         RecipeSnapshot? snapshot;
         try
@@ -211,12 +214,12 @@ public partial class ClansPage : UserControl, ISetupPage
         }
         catch (Exception ex)
         {
-            Show(line, _services.Redactor.Redact($"Added {name}, but the read failed: {ex.Message}"));
+            ShowLine(line, _services.Redactor.Redact($"Added {name}, but the read failed: {ex.Message}"));
             return;
         }
 
         var probe = ClansModel.Probe(name, snapshot, _services.KnownAccounts);
-        Show(line, _services.Redactor.Redact(probe.Text));
+        ShowLine(line, _services.Redactor.Redact(probe.Text));
 
         if (role == SourceRole.Main) _mainProbeId = probe.OfferWatch ? change.SourceId : null;
         else _mineProbeId = probe.OfferWatch ? change.SourceId : null;
@@ -245,7 +248,7 @@ public partial class ClansPage : UserControl, ISetupPage
 
         if (!Save(ClansModel.WatchInstead(_services.Sources, id))) return;
 
-        Show(fromMain ? MainFoundLine : MineFoundLine,
+        ShowLine(fromMain ? MainFoundLine : MineFoundLine,
             "Watching it instead. Only its own numbers are read; none of its members are matched to your accounts.");
         ((Button)sender).Visibility = Visibility.Collapsed;
         if (fromMain) _mainProbeId = null;
@@ -281,14 +284,8 @@ public partial class ClansPage : UserControl, ISetupPage
         }
         catch (Exception ex)
         {
-            Show(RequestsLine, _services.Redactor.Redact($"Could not save that change: {ex.Message}"));
+            ShowLine(RequestsLine, _services.Redactor.Redact($"Could not save that change: {ex.Message}"));
             return false;
         }
-    }
-
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

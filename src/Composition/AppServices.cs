@@ -576,6 +576,11 @@ public sealed class AppServices : ISetupServices, IDisposable
         _host.Dispose();
         _recipeHttp.Dispose();
         _namesHttp.Dispose();
+        _icons.Dispose();
+
+        // _closing is cancelled above and deliberately NOT disposed: its token has been handed to work that may
+        // still be unwinding, and a disposed source throws from .Token, so a cancelled-but-undisposed source is
+        // the safer end for a token that lives as long as the process (S1-14.12).
     }
 
     // ---- watches ----
@@ -841,7 +846,9 @@ public sealed class AppServices : ISetupServices, IDisposable
         SaveCounterNames(sourceId, snapshot);
         RefreshPolicies();
         WarnPastBudget();
-        _ = ApplyIconAsync(sourceId, snapshot);
+        // Not awaited, and not lost: the icon fetch never throws past a stop by contract, and if that contract
+        // ever breaks the break is a trail line rather than a task nobody heard from (S1-14.6).
+        Unawaited.TrailFailures(ApplyIconAsync(sourceId, snapshot), AddTrail, "ICON NOT APPLIED");
         RaiseChanged();
     }
 
@@ -874,7 +881,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
         catch (Exception ex)
         {
-            AddTrail($"COUNTER NAMES NOT SAVED: {ex.Message}");
+            AddTrail($"COUNTER NAMES NOT SAVED: {ex.GetType().Name}");
         }
     }
 
@@ -894,7 +901,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
         catch (Exception ex)
         {
-            AddTrail($"BUDGET NOT CHECKED: {ex.Message}");
+            AddTrail($"BUDGET NOT CHECKED: {ex.GetType().Name}");
         }
     }
 

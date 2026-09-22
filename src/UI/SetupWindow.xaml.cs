@@ -94,6 +94,8 @@ public partial class SetupWindow : Window
         var note = _note is { } pending && pending.PageId == page.Id ? pending.Text : null;
         _note = null;
 
+        // Every id SetupPages.For can name has its own arm, and an id it cannot is a bug and says so, rather than
+        // showing Diagnostics for whatever page somebody adds to the list and forgets here (S1-12.9).
         return page.Id switch
         {
             _ when page.RecipeSlug is { } slug => new ClansPage(_services, slug, note),
@@ -102,7 +104,8 @@ public partial class SetupWindow : Window
             SetupPages.Recipes => new RecipesPage(_services, this),
             SetupPages.Alerts => new AlertsPage(_services),
             SetupPages.ScoreBook => new ScoreBookPage(_services),
-            _ => new DiagnosticsPage(_services),
+            SetupPages.Diagnostics => new DiagnosticsPage(_services),
+            _ => throw new ArgumentOutOfRangeException(nameof(page), page.Id, "A Setup page with no page to build for it."),
         };
     }
 }

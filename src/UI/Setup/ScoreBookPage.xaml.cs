@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
 using Microsoft.Win32;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -26,7 +27,7 @@ public partial class ScoreBookPage : UserControl, ISetupPage
     {
         BookFolderLine.Text = _services.Book.Root;
 
-        Show(BookPendingLine, ScoreBookModel.PendingLine(_services.Book.Pending, _services.Book.Dropped));
+        ShowLine(BookPendingLine, ScoreBookModel.PendingLine(_services.Book.Pending, _services.Book.Dropped));
 
         BookLoadingLine.Visibility = _services.ReaderLoaded ? Visibility.Collapsed : Visibility.Visible;
         BookRecipesList.ItemsSource = _services.ReaderLoaded
@@ -58,20 +59,20 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
         _bringing = true;
         BringBookButton.IsEnabled = false;
-        Show(BringBookProblemLine, "");
+        ShowLine(BringBookProblemLine, "");
         BringBookLine.Text = "Reading that book…";
 
         try
         {
             var outcome = await Task.Run(() => BookImport.Run(dialog.FolderName, _services));
             BringBookLine.Text = outcome.Message;
-            Show(BringBookProblemLine, outcome.Problem);
+            ShowLine(BringBookProblemLine, outcome.Problem);
             if (outcome.Added > 0) await _services.ReloadBookAsync();
         }
         catch (Exception ex)
         {
             BringBookLine.Text = "";
-            Show(BringBookProblemLine, _services.Redactor.Redact($"That book could not be brought in: {ex.Message}"));
+            ShowLine(BringBookProblemLine, _services.Redactor.Redact($"That book could not be brought in: {ex.Message}"));
         }
         finally
         {
@@ -89,18 +90,12 @@ public partial class ScoreBookPage : UserControl, ISetupPage
         {
             Directory.CreateDirectory(_services.Book.Root);
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_services.Book.Root}\"") { UseShellExecute = true });
-            Show(BookFolderProblemLine, "");
+            ShowLine(BookFolderProblemLine, "");
         }
         catch (Exception ex)
         {
             _services.AddTrail($"FOLDER NOT OPENED: {ex.GetType().Name}");
-            Show(BookFolderProblemLine, ScoreBookModel.FolderNotOpened(ex));
+            ShowLine(BookFolderProblemLine, ScoreBookModel.FolderNotOpened(ex));
         }
-    }
-
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

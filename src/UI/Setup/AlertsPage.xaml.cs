@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -68,9 +69,9 @@ public partial class AlertsPage : UserControl, ISetupPage
 
     private void DrawLines()
     {
-        Show(AlertsEmptyLine, AlertCards.EmptyLine(_services.Installed, _view));
+        ShowLine(AlertsEmptyLine, AlertCards.EmptyLine(_services.Installed, _view));
         AlertsResultLine.DataContext = _ui;
-        Show(AlertsResultLine, AlertCards.OrphanResult(_view, _ui));
+        ShowLine(AlertsResultLine, AlertCards.OrphanResult(_view, _ui));
         AlertsNextLine.Visibility = _view.ShowNext ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -204,11 +205,5 @@ public partial class AlertsPage : UserControl, ISetupPage
         }
 
         return false;
-    }
-
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

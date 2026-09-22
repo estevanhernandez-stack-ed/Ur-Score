@@ -1,15 +1,10 @@
-using System.Runtime.ExceptionServices;
 using System.Windows.Controls;
-using System.Windows.Threading;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.UI;
 
 namespace UrScore.Tests;
 
-[CollectionDefinition("Legacy update window", DisableParallelization = true)]
-public class LegacyUpdateWindowCollection;
-
-[Collection("Legacy update window")]
+[Collection(WpfApplicationCollection.Name)]
 public class LegacyRecipeUpdateTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "urscore-legacy-" + Guid.NewGuid().ToString("N"));
@@ -150,30 +145,10 @@ public class LegacyRecipeUpdateTests : IDisposable
         });
     }
 
-    private static void OnSta(Action action)
-    {
-        ExceptionDispatchInfo? failure = null;
-        var thread = new Thread(() =>
-        {
-            var application = new Labs626.UrScore.App { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
-            try
-            {
-                application.InitializeComponent();
-                action();
-            }
-            catch (Exception exception) { failure = ExceptionDispatchInfo.Capture(exception); }
-            finally
-            {
-                application.Shutdown();
-                Dispatcher.CurrentDispatcher.InvokeShutdown();
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        // A Join with no timeout cannot fail, only wait. On 2026-09-17 six of the eight tests built this way
-        // were stuck on one at once and the whole run hung until a human noticed (V3-S.38). A bounded wait
-        // turns that into a named failing test, which is the difference between a diagnosis and a mystery.
-        Assert.True(thread.Join(UiThread.Longest), $"the UI thread did not finish within {UiThread.Longest}");
-        failure?.Throw();
-    }
+    /// <summary>
+    /// Once this file's own copy of "an App on an STA thread, shut down after": now <see cref="UiThread.RunInApp"/>,
+    /// which builds the process's ONE application and runs every caller on it — WPF permits no second one, which
+    /// this copy could not have known while it was the only caller (2026-09-22).
+    /// </summary>
+    private static void OnSta(Action action) => UiThread.RunInApp(action);
 }
