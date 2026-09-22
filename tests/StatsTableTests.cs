@@ -5,7 +5,7 @@ using Labs626.UrScore.UI;
 
 namespace UrScore.Tests;
 
-[Collection(WpfApplicationCollection.Name)]
+[Collection(WpfCollection.Name)]
 public class StatsTableTests
 {
     /// <summary>

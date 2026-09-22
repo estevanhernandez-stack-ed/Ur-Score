@@ -49,6 +49,9 @@
                  AutomationProperties.Name="Stats this recipe offers">
             <ListBox.ItemContainerStyle>
                 <Style TargetType="ListBoxItem">
+                    <!-- Each row is named for UI Automation by its stat's label; without this a screen reader read the
+                         row as "Labs626.UrScore.UI.StatRow" (RowListFenceTests, S1-L.4). -->
+                    <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
                     <Setter Property="Focusable" Value="False" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="Template">

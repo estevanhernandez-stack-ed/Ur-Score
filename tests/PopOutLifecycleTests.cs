@@ -8,6 +8,7 @@ using System.Windows.Threading;
 
 namespace UrScore.Tests;
 
+[Collection(WpfCollection.Name)]
 public class PopOutLifecycleTests
 {
     private static readonly PopOutRect Place = new(100, 200, 400, 300);

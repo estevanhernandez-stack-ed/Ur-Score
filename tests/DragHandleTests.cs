@@ -9,6 +9,7 @@ using System.Xml.Linq;
 
 namespace UrScore.Tests;
 
+[Collection(WpfCollection.Name)]
 public class DragHandleTests
 {
     [Fact]

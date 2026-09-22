@@ -6,6 +6,7 @@ namespace UrScore.Tests;
 /// <summary>
 /// Every panel type builds its own view, and a type nobody wrote a view for fails here rather than on a board.
 /// </summary>
+[Collection(WpfCollection.Name)]
 public class PanelViewsTests
 {
     /// <summary>

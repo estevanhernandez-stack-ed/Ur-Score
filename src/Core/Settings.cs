@@ -18,9 +18,7 @@ public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = n
     public static Settings Defaults { get; } = new();
 
     /// <summary>A sibling of RoRoRo's own folder, never inside it.</summary>
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "626labs.ur-score", "settings.json");
+    public static string DefaultPath => AppPaths.Default.Settings;
 
     /// <summary>Case-insensitive so a file written by an older PascalCase build still loads.</summary>
     private static readonly JsonSerializerOptions Options = new()

@@ -7,6 +7,7 @@ using Labs626.UrScore.UI;
 
 namespace UrScore.Tests;
 
+[Collection(WpfCollection.Name)]
 public class AlertResultThemeTests
 {
     [Fact]

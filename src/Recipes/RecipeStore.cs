@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Recipes;
 
@@ -97,9 +98,7 @@ public sealed class RecipeStore(string directory)
         WriteIndented = true,
     };
 
-    public static string DefaultDirectory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "626labs.ur-score", "recipes");
+    public static string DefaultDirectory => AppPaths.Default.Recipes;
 
     public RecipeStoreLoad LoadAll()
     {

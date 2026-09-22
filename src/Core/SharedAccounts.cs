@@ -18,8 +18,7 @@ public sealed class AccountsCache(string path)
         WriteIndented = true,
     };
 
-    public static string DefaultPath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "accounts.json");
+    public static string DefaultPath => AppPaths.Default.Accounts;
 
     public IReadOnlyList<HostAccount> Load()
     {

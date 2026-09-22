@@ -30,7 +30,8 @@ public interface IScoreBook
 /// </summary>
 public sealed class ScoreBook : IScoreBook, IDisposable
 {
-    public const int MaxPending = 5000;
+    /// <summary>How many lines wait in memory for a file that can't be written before the oldest readings go.</summary>
+    public const int DefaultMaxPending = 5000;
 
     public static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
 
@@ -48,10 +49,17 @@ public sealed class ScoreBook : IScoreBook, IDisposable
     private int _dropped;
     private int _disposed;
 
-    public ScoreBook(string root, bool background = true)
+    /// <param name="maxPending">
+    /// The limit, <see cref="DefaultMaxPending"/> unless a test says otherwise. Every line written is flushed to disk,
+    /// which is the right choice for a book and made the one test of this limit take 24 seconds — five thousand
+    /// syncs on the way to proving that the oldest reading goes first (S1-5.6). The limit is the rule under test;
+    /// the number is not, so a test may use a small one and the app never does.
+    /// </param>
+    public ScoreBook(string root, bool background = true, int maxPending = DefaultMaxPending)
     {
         Root = root;
         _background = background;
+        MaxPending = maxPending;
         if (background)
         {
             _thread = new Thread(Run) { IsBackground = true, Name = "Ur Score book writer" };
@@ -60,6 +68,8 @@ public sealed class ScoreBook : IScoreBook, IDisposable
     }
 
     public string Root { get; }
+
+    public int MaxPending { get; }
 
     public event Action<BookLine>? Written;
 

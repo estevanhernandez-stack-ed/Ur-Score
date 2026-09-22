@@ -29,22 +29,32 @@ public class SourceHostTests
     private sealed class GatedEngine : IRecipeEngine
     {
         private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _started;
+        private int _finished;
+        private int _cancelled;
 
-        public int Started { get; private set; }
+        public int Started => Volatile.Read(ref _started);
 
-        public int Finished { get; private set; }
+        public int Finished => Volatile.Read(ref _finished);
 
-        public int Cancelled { get; private set; }
+        public int Cancelled => Volatile.Read(ref _cancelled);
 
         /// <summary>Set when the first read is waiting at the gate, so a test can act while one is in flight.</summary>
         public TaskCompletionSource Waiting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>
+        /// Set when a read has SEEN its cancellation. The cancel itself lands on the token at once, but the read's
+        /// own catch runs on a pool thread a moment later, and a test that counted cancellations before that moment
+        /// read a zero — once in twelve runs on 2026-09-22. Awaited, not assumed.
+        /// </summary>
+        public TaskCompletionSource CancelledOnce { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public void Open() => _gate.TrySetResult();
 
         public async Task<RecipeReading> ReadAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs,
             IReadOnlyCollection<long> accountUserIds, IReadOnlySet<string> trackedStats, CancellationToken cancellationToken)
         {
-            Started++;
+            Interlocked.Increment(ref _started);
             Waiting.TrySetResult();
             try
             {
@@ -52,11 +62,12 @@ public class SourceHostTests
             }
             catch (OperationCanceledException)
             {
-                Cancelled++;
+                Interlocked.Increment(ref _cancelled);
+                CancelledOnce.TrySetResult();
                 throw;
             }
 
-            Finished++;
+            Interlocked.Increment(ref _finished);
             return Reading();
         }
     }
@@ -231,6 +242,101 @@ public class SourceHostTests
     }
 
     /// <summary>
+    /// The loop reads again when its interval has passed and not a moment before. This is the timer-driven read
+    /// S1-8.7 could not test while the wait ran on the wall clock — the floor is a minute, so proving the second
+    /// read meant sitting through one. The host's clock is now a <see cref="TimeProvider"/> and the test's is
+    /// moved by hand: the loop is caught waiting (its timer registered), the clock is advanced to a second short
+    /// of the interval, then over it, and the second read carries the timer trigger.
+    /// </summary>
+    [Fact]
+    public async Task TheLoopReadsAgainWhenTheIntervalHasPassedAndNotBefore()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero));
+        var engine = new StubEngine(Reading);
+        var book = new MemoryBook();
+        using var host = new SourceHost(new Factory(engine, book).Create, _ => 180, time);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await WaitingAsync(time);
+        Assert.Equal(1, engine.Calls);
+
+        time.Advance(TimeSpan.FromSeconds(179));
+        Assert.Equal(1, engine.Calls);
+
+        var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => second.TrySetResult();
+        time.Advance(TimeSpan.FromSeconds(1));
+        await second.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, engine.Calls);
+        Assert.Equal(new[] { BookLine.TriggerStart, BookLine.TriggerTimer }, book.Lines.Select(l => l.Trigger).ToArray());
+    }
+
+    /// <summary>
+    /// The floor holds in the loop, not only in <see cref="SourceHost.DelaySeconds"/>: a lookup asking for five
+    /// seconds gets no second read at five seconds and gets one at the floor. Cheap now, and the one that says
+    /// the clamp is actually wired to the wait (S1-8.7).
+    /// </summary>
+    [Fact]
+    public async Task TheLoopWaitsAtLeastTheFloorWhateverTheLookupAsks()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero));
+        var engine = new StubEngine(Reading);
+        using var host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 5, time);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await WaitingAsync(time);
+
+        time.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, engine.Calls);
+
+        var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => second.TrySetResult();
+        time.Advance(TimeSpan.FromSeconds(Recipe.MinimumEverySeconds - 5));
+        await second.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, engine.Calls);
+    }
+
+    /// <summary>
+    /// A source removed while its loop waits between reads never reads again: the wait is cut short and the loop
+    /// leaves, so advancing past the interval brings no read for it. The other half of S1-8.7's removal question —
+    /// a removal during a read — is covered by the gated-engine tests above.
+    /// </summary>
+    [Fact]
+    public async Task ASourceRemovedBetweenReadsDoesNotReadAgainWhenTheIntervalPasses()
+    {
+        var time = new ManualTime(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero));
+        var engine = new StubEngine(Reading);
+        using var host = new SourceHost(new Factory(engine, new MemoryBook()).Create, _ => 180, time);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await WaitingAsync(time);
+
+        host.Apply([]);
+        await Task.Delay(50);
+        time.Advance(TimeSpan.FromSeconds(600));
+        await Task.Delay(50);
+
+        Assert.Equal(1, engine.Calls);
+        Assert.Equal(0, time.Waiting);
+    }
+
+    /// <summary>The loop is between reads: its wait is registered on the clock. Bounded, so a loop that never waits is a named failure.</summary>
+    private static async Task WaitingAsync(ManualTime time)
+    {
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (time.Waiting == 0)
+        {
+            Assert.True(DateTime.UtcNow < until, "the loop never reached its wait");
+            await Task.Delay(10);
+        }
+    }
+
+    /// <summary>
     /// A recipe asking to be read more often than the floor allows is clamped to it. The floor exists to protect
     /// somebody else's server, so a recipe cannot opt out of it by asking for five seconds — and an interval
     /// ABOVE the floor has to survive untouched, or the clamp would quietly make every recipe poll every minute.
@@ -401,6 +507,7 @@ public class SourceHostTests
         host.Apply([]);
         engine.Open();
         await testNow.WaitAsync(TimeSpan.FromSeconds(5));
+        await engine.CancelledOnce.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(1, engine.Cancelled);
         Assert.Equal(0, engine.Finished);
@@ -458,6 +565,7 @@ public class SourceHostTests
         host.Apply([SourceNamed("s-1", "CCGP")]);
         engine.Open();
         await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await engine.CancelledOnce.Task.WaitAsync(TimeSpan.FromSeconds(5));
         host.Stop();
 
         Assert.Equal(2, engine.Started);

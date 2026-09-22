@@ -11,6 +11,8 @@
                  AutomationProperties.Name="Names matching what you typed">
             <ListBox.ItemContainerStyle>
                 <Style TargetType="ListBoxItem">
+                    <!-- Each match is named for UI Automation by its text (RowListFenceTests, S1-L.4). -->
+                    <Setter Property="AutomationProperties.Name" Value="{Binding}" />
                     <Setter Property="Focusable" Value="False" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="Template">

@@ -6,14 +6,108 @@ using Labs626.UrScore.Recipes;
 
 namespace UrScore.Tests;
 
-/// <summary>A clock tests move by hand.</summary>
+/// <summary>
+/// A clock tests move by hand — and, since 2026-09-22, the timers that run on it. <see cref="Advance"/> moves the
+/// clock through every timer that falls due on the way, firing each at its own moment, so a loop written as
+/// <c>await Task.Delay(interval, time, token)</c> takes its next turn when the test says the interval has passed
+/// and never sooner. Before this a loop's interval was a minute of real waiting nobody could afford, so the loop
+/// itself went untested (S1-8.7, Sweep E).
+/// <para>
+/// A callback runs on the thread that called <see cref="Advance"/>, and an awaiting continuation may run right
+/// there inside it. A callback that creates a timer due within the same advance is served in the same call.
+/// </para>
+/// </summary>
 internal sealed class ManualTime(DateTimeOffset start) : TimeProvider
 {
-    public DateTimeOffset Now { get; set; } = start;
+    private readonly object _gate = new();
+    private readonly List<Timer> _timers = [];
+    private DateTimeOffset _now = start;
+
+    public DateTimeOffset Now
+    {
+        get
+        {
+            lock (_gate) return _now;
+        }
+        set => Advance(value - Now);
+    }
 
     public override DateTimeOffset GetUtcNow() => Now;
 
-    public void Advance(TimeSpan by) => Now += by;
+    /// <summary>How many timers are waiting to fire: a loop between turns holds one.</summary>
+    public int Waiting
+    {
+        get
+        {
+            lock (_gate) return _timers.Count(t => t.Due is not null);
+        }
+    }
+
+    public void Advance(TimeSpan by)
+    {
+        if (by < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(by), "the clock does not go back");
+
+        DateTimeOffset target;
+        lock (_gate) target = _now + by;
+
+        while (true)
+        {
+            Timer? next;
+            lock (_gate)
+            {
+                next = _timers.Where(t => t.Due is { } due && due <= target).MinBy(t => t.Due!.Value);
+                if (next is null)
+                {
+                    _now = target;
+                    return;
+                }
+
+                _now = next.Due!.Value;
+                next.Due = next.Period > TimeSpan.Zero ? next.Due + next.Period : null;
+            }
+
+            next.Fire();
+        }
+    }
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        var timer = new Timer(this, callback, state);
+        timer.Change(dueTime, period);
+        return timer;
+    }
+
+    private sealed class Timer(ManualTime time, TimerCallback callback, object? state) : ITimer
+    {
+        public DateTimeOffset? Due { get; set; }
+
+        public TimeSpan Period { get; private set; }
+
+        public void Fire() => callback(state);
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            lock (time._gate)
+            {
+                Period = period > TimeSpan.Zero ? period : TimeSpan.Zero;
+                Due = dueTime == Timeout.InfiniteTimeSpan ? null : time._now + (dueTime < TimeSpan.Zero ? TimeSpan.Zero : dueTime);
+                if (!time._timers.Contains(this)) time._timers.Add(this);
+            }
+
+            return true;
+        }
+
+        public void Dispose()
+        {
+            lock (time._gate) time._timers.Remove(this);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }
 
 internal sealed class StubHost(bool reachable, params HostAccount[] accounts) : IHostClient
