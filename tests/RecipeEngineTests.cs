@@ -949,6 +949,30 @@ public class RecipeEngineTests
             reading.Groups.Select(g => (g.Name, g.Rank)).ToArray());
     }
 
+    /// <summary>
+    /// A read that stops on its LAST step still carries the period its earlier steps established, on both
+    /// shapes of recipe. The per-account path always did; the list path dropped it, so the same failure told
+    /// the board which battle it was reading on one recipe and not the other (S1-2.1). The period is what the
+    /// board's top line shows, and "SpaceMineBattle2026 · couldn't be reached" is more use than a bare
+    /// "couldn't be reached" when step one had the name in hand. Nothing downstream records a stop, so a period
+    /// on one is information and not a decision.
+    /// </summary>
+    [Fact]
+    public async Task AStopOnTheLastStepStillCarriesThePeriodTheFirstStepFound()
+    {
+        // The clan-battle fixture, because it declares a period; the top-clans fixture in tests/Fixtures is an
+        // older copy that does not, and a recipe with no period has none to carry whatever the code does.
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)
+            .On("https://ps99.biggamesapi.io/api/clan/", 503, "");
+        var recipe = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
+
+        var reading = await Read(transport, recipe);
+
+        Assert.Equal(ReadingOutcome.Unreachable, reading.Outcome);
+        Assert.Equal("B", reading.Period?.Value);
+    }
+
     [Fact]
     public async Task ACountingStatReadsHowManyEntriesItsObjectOrListHolds()
     {

@@ -220,6 +220,27 @@ public class ClansModelTests
         Assert.StartsWith("That makes more than 5 clans for Pet Sim 99 clan battle points.", ClansModel.ConfirmText(Clan, []));
     }
 
+    /// <summary>
+    /// The Top switch on a recipe's page turns THAT recipe's list source on and off. It used to take the first
+    /// installed group-list recipe's source whichever page it was on, which is invisible with one list installed
+    /// and wrong the moment there are two: the switch on B's page toggled A's list (S1-11.2). The two lists here
+    /// are distinct recipes with distinct sources, and the second is asked for, so "first" and "the page's own"
+    /// give different answers.
+    /// </summary>
+    [Fact]
+    public void TheSwitchFindsThePagesOwnListNotTheFirstInstalled()
+    {
+        var first = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-top-clans.recipe.json")).Recipe!;
+        var second = RecipeParser.Parse(GroupList).Recipe!;
+        IReadOnlyList<InstalledRecipe> installed = [new(first, "", new RecipeState()), new(second, "", new RecipeState())];
+        var firstSource = new Source("s-0000000a", first.Slug, new Dictionary<string, string>(), SourceRole.Watch);
+        var secondSource = new Source("s-0000000b", second.Slug, new Dictionary<string, string>(), SourceRole.Watch);
+
+        Assert.Same(secondSource, ClansModel.GroupListSource([firstSource, secondSource], installed, second.Slug));
+        Assert.Same(firstSource, ClansModel.GroupListSource([firstSource, secondSource], installed, first.Slug));
+        Assert.Null(ClansModel.GroupListSource([firstSource, secondSource], installed, "not-a-list"));
+    }
+
     [Fact]
     public void TheSwitchFindsTheGroupListSource()
     {
@@ -227,7 +248,9 @@ public class ClansModelTests
         var installed = new[] { new InstalledRecipe(Clan, "", new RecipeState()), new InstalledRecipe(top, "", new RecipeState()) };
         var topSource = new Source("s-0000000a", top.Slug, new Dictionary<string, string>(), SourceRole.Watch);
 
-        Assert.Same(topSource, ClansModel.GroupListSource([ClanSource("s-00000001", "CCGP", SourceRole.Main), topSource], installed));
-        Assert.Null(ClansModel.GroupListSource([ClanSource("s-00000001", "CCGP", SourceRole.Main)], installed));
+        Assert.Same(topSource, ClansModel.GroupListSource([ClanSource("s-00000001", "CCGP", SourceRole.Main), topSource], installed, top.Slug));
+        Assert.Null(ClansModel.GroupListSource([ClanSource("s-00000001", "CCGP", SourceRole.Main)], installed, top.Slug));
+        // And asked from a page that is not a list, there is no switch to show.
+        Assert.Null(ClansModel.GroupListSource([ClanSource("s-00000001", "CCGP", SourceRole.Main), topSource], installed, Clan.Slug));
     }
 }

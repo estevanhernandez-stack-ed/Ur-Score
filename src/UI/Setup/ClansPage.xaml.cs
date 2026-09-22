@@ -82,7 +82,7 @@ public partial class ClansPage : UserControl, ISetupPage
             WatchClanButton.Content = $"Watch a {group}";
             WatchClanSearch.SetLabel($"Watch a {group}");
 
-            var top = ClansModel.GroupListSource(_services.Sources, _services.Installed);
+            var top = ClansModel.GroupListSource(_services.Sources, _services.Installed, _slug);
             TopRow.Visibility = top is null ? Visibility.Collapsed : Visibility.Visible;
             if (top is not null
                 && _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, top.Recipe, StringComparison.Ordinal))?.Recipe is { } topRecipe)
@@ -265,7 +265,7 @@ public partial class ClansPage : UserControl, ISetupPage
     private void OnTopSwitched(object sender, RoutedEventArgs e)
     {
         if (_rendering) return;
-        if (ClansModel.GroupListSource(_services.Sources, _services.Installed) is { } top)
+        if (ClansModel.GroupListSource(_services.Sources, _services.Installed, _slug) is { } top)
         {
             Save(ClansModel.SetEnabled(_services.Sources, top.Id, TopSwitch.IsChecked == true));
         }
