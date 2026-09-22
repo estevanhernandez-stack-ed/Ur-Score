@@ -669,7 +669,7 @@ public class SetupMergeTests
     {
         var mine = new Source("s-local001", Clan.Slug, new Dictionary<string, string> { ["clan"] = " k0i2 " }, SourceRole.Mine);
         var here = Here([new InstalledRecipe(Clan, ClanText, new RecipeState())], [mine, Rival]);
-        var file = File(
+        var file = Pack(
             [FileRecipe(Clan, ClanText)],
             [new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main),   // same clan, other role
              new Source("s-file0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "NovaForge" }, SourceRole.Watch), // same as Rival
