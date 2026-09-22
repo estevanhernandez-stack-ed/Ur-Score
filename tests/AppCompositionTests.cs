@@ -202,75 +202,106 @@ public class AppCompositionTests
     }
 
     /// <summary>
-    /// The whole setup, PC to PC, through the real composition on both sides (spec §6). A has two recipes, three clans
-    /// and an edited board; B is pristine. After the import with everything ticked, B's clans have B's own ids, B's
-    /// board points at them, every send is off, and the stats landed. Then into a B that already WATCHES one of
-    /// the clans: the plan says Replace, and afterward B has one such clan, not two.
+    /// The whole setup, PC to PC, through the real composition on both sides (spec §6). A has two recipes, three
+    /// clans, an edited board and a generated book; B starts with an unreadable boards.json and is otherwise
+    /// pristine. After the import with everything ticked, B's clans have B's own ids, B's board points at them,
+    /// every send is off, B's own starter tabs are still there beside the imported board (spec §2: an import
+    /// deletes nothing), the unreadable boards file does not survive the import, and the stats travel too, through
+    /// the same book merge the stats-only import uses. Then into a B that already WATCHES one of the clans: the
+    /// plan says Replace, and afterward B has one such clan, not two.
     /// </summary>
     [Fact]
     public async Task TheWholeSetupTravelsAndArrivesUnderTheOtherPcsOwnIds()
     {
         using var a = TempDir.Create("urscore-app-a");
         using var b = TempDir.Create("urscore-app-b");
-        var clanText = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
-        var clan = RecipeParser.Parse(clanText).Recipe!;
-        var topText = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
-        var top = RecipeParser.Parse(topText).Recipe!;
-        var pathsA = new AppPaths(a.Path);
-        new RecipeStore(pathsA.Recipes).Save(clan, clanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") }));
-        new RecipeStore(pathsA.Recipes).Save(top, topText, new RecipeState());
-        var sourcesA = new List<Source>
+        try
         {
-            new("s-000000a1", clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main),
-            new("s-000000a2", clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Mine),
-            new("s-000000a3", top.Slug, new Dictionary<string, string>(), SourceRole.Watch),
-        };
-        new SourceStore(pathsA.Sources).Save(sourcesA);
-        var file = Path.Combine(a.Path, "everything.zip");
-        using (var exporter = Compose(a, new StubHost(reachable: false), new FakeTransport()))
-        {
-            exporter.SaveImportedBoards([new BoardDef("b-a1", "Rivals", [new PanelDef("p-1", PanelType.Standing, new PanelSize(6), new PanelSettings(clan.Slug, SourceId: "s-000000a1"))])]);
-            var manifest = exporter.ExportStats(file);
-            Assert.True(manifest.Setup);
+            var clanText = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
+            var clan = RecipeParser.Parse(clanText).Recipe!;
+            var topText = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
+            var top = RecipeParser.Parse(topText).Recipe!;
+            var pathsA = new AppPaths(a.Path);
+            new RecipeStore(pathsA.Recipes).Save(clan, clanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") }));
+            new RecipeStore(pathsA.Recipes).Save(top, topText, new RecipeState());
+            var sourcesA = new List<Source>
+            {
+                new("s-000000a1", clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main),
+                new("s-000000a2", clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Mine),
+                new("s-000000a3", top.Slug, new Dictionary<string, string>(), SourceRole.Watch),
+            };
+            new SourceStore(pathsA.Sources).Save(sourcesA);
+            var written = BookGenerator.Write(pathsA.Book, clanSources: 2, days: 1);
+            var file = Path.Combine(a.Path, "everything.zip");
+            using (var exporter = Compose(a, new StubHost(reachable: false), new FakeTransport()))
+            {
+                exporter.SaveImportedBoards([new BoardDef("b-a1", "Rivals", [new PanelDef("p-1", PanelType.Standing, new PanelSize(6), new PanelSettings(clan.Slug, SourceId: "s-000000a1"))])]);
+                var manifest = exporter.ExportStats(file);
+                Assert.True(manifest.Setup);
+                Assert.Equal((written.Lines - written.Finals, written.Finals), (manifest.Readings, manifest.Finals));
+            }
+
+            // B's boards.json is there but unreadable (R3) — the import must still land, and the trouble must clear.
+            File.WriteAllText(Path.Combine(b.Path, "boards.json"), "{ not valid json");
+
+            using var importer = Compose(b, new StubHost(reachable: false), new FakeTransport());
+            Assert.NotNull(importer.BoardsProblem);
+            await importer.LoadBookAsync();
+            var opened = BookPack.Open(file);
+            Assert.NotNull(opened.Setup);
+            var plan = SetupMerge.Plan(opened.Setup!, importer.SetupWriter.Here, opened.Manifest!.Readings, opened.Manifest.Finals);
+            var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), importer.SetupWriter, Start);
+
+            Assert.Null(applied.FailedStep);
+            Assert.Equal((2, 3, 1), (applied.Recipes, applied.Clans, applied.Boards));
+            Assert.Equal(2, importer.Installed.Count);
+            Assert.All(importer.Installed.SelectMany(i => i.State.StatChoices.Values), choice => Assert.False(choice.Send));
+            Assert.Equal(3, importer.Sources.Count);
+            Assert.All(importer.Sources, s => Assert.DoesNotContain(s.Id, sourcesA.Select(x => x.Id)));
+            var k0i2 = Assert.Single(importer.Sources, s => s.InputsKey == "clan=k0i2");
+            Assert.NotNull(importer.Runner.WatchFor(k0i2.Id));
+            var rivals = Assert.Single(importer.SavedBoards, bd => bd.Name == "Rivals");
+            Assert.Equal(k0i2.Id, rivals.Panels[0].Settings.SourceId);
+            Assert.Null(importer.BoardsProblem);
+            Assert.Contains(importer.Trail, line => line.Contains("BOARDS: the unreadable boards file was kept as", StringComparison.Ordinal));
+            Assert.True(Directory.GetDirectories(b.Path, "626labs.ur-score.before-import-*").Length == 1 || Directory.GetDirectories(Path.GetDirectoryName(b.Path)!, Path.GetFileName(b.Path) + ".before-import-*").Length == 1);
+
+            // The starter tabs are still there beside the imported one: an import adds and replaces, it never removes.
+            Assert.Contains(importer.Boards, board => board.Name == "Rivals");
+            Assert.Contains(importer.Boards, board => board.Follows is not null);
+
+            // The setup's own stats travel too, through the same merge the stats-only import uses (BookImport.Run).
+            // B has no source named Clan0 or Clan1 — only the top-clans watch, whose empty inputs match on both
+            // sides — so exactly the list source's readings land, and the two clan sources are named, not guessed at.
+            var bookOutcome = BookImport.Run(opened.Folder!, importer);
+            BookPack.Discard(opened);
+            var expectedListReadings = (written.Lines - written.Finals) / 3;
+            Assert.Equal(expectedListReadings, bookOutcome.Added);
+            Assert.Contains("Clan0", bookOutcome.Message, StringComparison.Ordinal);
+            Assert.Equal(expectedListReadings, BookFiles.ReadAll(importer.Book.Root, top.Slug).Count());
+
+            // A B that already watches K0i2: Replace, not a second clan.
+            using var c = TempDir.Create("urscore-app-c");
+            var pathsC = new AppPaths(c.Path);
+            new RecipeStore(pathsC.Recipes).Save(clan, clanText, new RecipeState());
+            new SourceStore(pathsC.Sources).Save([new Source("s-000000c1", clan.Slug, new Dictionary<string, string> { ["clan"] = "k0i2" }, SourceRole.Watch)]);
+            using var watcher = Compose(c, new StubHost(reachable: false), new FakeTransport());
+            await watcher.LoadBookAsync();
+            var openedAgain = BookPack.Open(file);
+            var planC = SetupMerge.Plan(openedAgain.Setup!, watcher.SetupWriter.Here, 0, 0);
+            Assert.Equal(SetupOutcome.Replace, Assert.Single(planC.Items, i => i.Kind == SetupKind.Clan && i.Name == "K0i2").Outcome);
+            SetupMerge.Apply(planC, planC.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), watcher.SetupWriter, Start);
+            BookPack.Discard(openedAgain);
+
+            var k0i2C = Assert.Single(watcher.Sources, s => s.InputsKey == "clan=k0i2");
+            Assert.Equal(("s-000000c1", SourceRole.Main), (k0i2C.Id, k0i2C.Role));
         }
-
-        using var importer = Compose(b, new StubHost(reachable: false), new FakeTransport());
-        await importer.LoadBookAsync();
-        var opened = BookPack.Open(file);
-        Assert.NotNull(opened.Setup);
-        var plan = SetupMerge.Plan(opened.Setup!, importer.SetupWriter.Here, opened.Manifest!.Readings, opened.Manifest.Finals);
-        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), importer.SetupWriter, Start);
-        BookPack.Discard(opened);
-
-        Assert.Null(applied.FailedStep);
-        Assert.Equal((2, 3, 1), (applied.Recipes, applied.Clans, applied.Boards));
-        Assert.Equal(2, importer.Installed.Count);
-        Assert.All(importer.Installed.SelectMany(i => i.State.StatChoices.Values), choice => Assert.False(choice.Send));
-        Assert.Equal(3, importer.Sources.Count);
-        Assert.All(importer.Sources, s => Assert.DoesNotContain(s.Id, sourcesA.Select(x => x.Id)));
-        var k0i2 = Assert.Single(importer.Sources, s => s.InputsKey == "clan=k0i2");
-        Assert.NotNull(importer.Runner.WatchFor(k0i2.Id));
-        var rivals = Assert.Single(importer.SavedBoards, bd => bd.Name == "Rivals");
-        Assert.Equal(k0i2.Id, rivals.Panels[0].Settings.SourceId);
-        Assert.True(Directory.GetDirectories(b.Path, "626labs.ur-score.before-import-*").Length == 1 || Directory.GetDirectories(Path.GetDirectoryName(b.Path)!, Path.GetFileName(b.Path) + ".before-import-*").Length == 1);
-
-        // A B that already watches K0i2: Replace, not a second clan.
-        using var c = TempDir.Create("urscore-app-c");
-        var pathsC = new AppPaths(c.Path);
-        new RecipeStore(pathsC.Recipes).Save(clan, clanText, new RecipeState());
-        new SourceStore(pathsC.Sources).Save([new Source("s-000000c1", clan.Slug, new Dictionary<string, string> { ["clan"] = "k0i2" }, SourceRole.Watch)]);
-        using var watcher = Compose(c, new StubHost(reachable: false), new FakeTransport());
-        await watcher.LoadBookAsync();
-        var openedAgain = BookPack.Open(file);
-        var planC = SetupMerge.Plan(openedAgain.Setup!, watcher.SetupWriter.Here, 0, 0);
-        Assert.Equal(SetupOutcome.Replace, Assert.Single(planC.Items, i => i.Kind == SetupKind.Clan && i.Name == "K0i2").Outcome);
-        SetupMerge.Apply(planC, planC.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), watcher.SetupWriter, Start);
-        BookPack.Discard(openedAgain);
-
-        var k0i2C = Assert.Single(watcher.Sources, s => s.InputsKey == "clan=k0i2");
-        Assert.Equal(("s-000000c1", SourceRole.Main), (k0i2C.Id, k0i2C.Role));
-
-        foreach (var aside in Directory.GetDirectories(Path.GetTempPath(), "urscore-app-*.before-import-*")) Directory.Delete(aside, true);
+        finally
+        {
+            // The aside folder lands BESIDE the data root under %TEMP% (AsideFolder), not inside a/b/c's own scope,
+            // so it survives a failed assertion above unless this cleanup runs whatever the outcome (finding 5c).
+            foreach (var aside in Directory.GetDirectories(Path.GetTempPath(), "urscore-app-*.before-import-*")) Directory.Delete(aside, true);
+        }
     }
 
     private sealed class FakeTransport : IRecipeTransport

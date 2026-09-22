@@ -210,7 +210,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public IScoreBook Book => _book;
 
-    /// <summary>What boards.json holds, or the starter boards' sanitized reflection while there is no file: never null and never dirty.</summary>
+    /// <summary>What boards.json holds — following entries and your own boards — as last loaded; empty while there is no file.</summary>
     public IReadOnlyList<BoardDef> SavedBoards => _savedBoards ?? [];
 
     /// <summary>The stores a setup import writes through, built once over this instance.</summary>
@@ -338,13 +338,23 @@ public sealed class AppServices : ISetupServices, IDisposable
         RaiseChanged();
     }
 
-    /// <summary>Replaces the saved boards wholesale: sanitized to your own ids, written once, redrawn. The setup import's step 4.</summary>
+    /// <summary>
+    /// Replaces the saved boards wholesale: every following tab stays, shown or hidden — an import deletes nothing
+    /// (spec §2, <see cref="Board.Following.KeepFollowing"/>) — sanitized to your own ids (R17), written once, redrawn.
+    /// Mirrors <see cref="SaveBoards"/>'s own handling of an old file that couldn't be read at start (R3) and the
+    /// trail line it leaves. The setup import's step 4.
+    /// </summary>
     public void SaveImportedBoards(IReadOnlyList<BoardDef> saved)
     {
-        var clean = BoardDefs.Sanitize(saved, LiveBoard.UserIdsOf(KnownAccounts));
-        _boardsFile.Save(clean, keepExisting: _boardsUnread);
-        _savedBoards = clean.Count > 0 ? clean : null;
+        var clean = BoardDefs.Sanitize(Following.KeepFollowing(_savedBoards, StarterBoards.All(Installed, Sources), saved), LiveBoard.UserIdsOf(KnownAccounts));
+
+        var kept = _boardsFile.Save(clean, keepExisting: _boardsUnread);
         _boardsUnread = false;
+
+        _savedBoards = clean.Count > 0 ? clean : null;
+        BoardsProblem = null;
+        if (kept is not null) AddTrail($"BOARDS: the unreadable boards file was kept as {Path.GetFileName(kept)}.");
+
         RaiseChanged();
     }
 

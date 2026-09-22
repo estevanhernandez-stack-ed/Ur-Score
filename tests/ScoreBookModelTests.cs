@@ -21,6 +21,7 @@ public class ScoreBookModelTests
     /// <summary>What Export stats says beside the button, from the file's own manifest, with the file's name and where to go next.</summary>
     [Theory]
     [InlineData(1, 1, null, "Exported 1 reading and 1 finished battle to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
+    [InlineData(1, 1, "1|1|1", "Exported 1 reading and 1 finished battle, with 1 recipe, 1 clan and 1 board, to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
     [InlineData(16_800, 0, "3|5|2", "Exported 16,800 readings and 0 finished battles, with 3 recipes, 5 clans and 2 boards, to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book.")]
     public void TheExportedLineCountsWhatWentIntoTheFile(int readings, int finals, string? setup, string expected)
     {

@@ -56,6 +56,27 @@ public class BoardsFileFenceTests
         var app = files.Single(f => string.Equals(f.Relative, Path.Combine("Composition", "AppServices.cs"), StringComparison.Ordinal)).Text;
         Assert.Contains("var clean = BoardDefs.Sanitize(", app, StringComparison.Ordinal);
         Assert.Contains("_boardsFile.Save(clean,", app, StringComparison.Ordinal);
+
+        // AppServices now has two writers — SaveBoards and SaveImportedBoards — and both Contains checks above
+        // are satisfied the moment EITHER one calls Save(clean,. A second writer that sidesteps Sanitize (saves
+        // the argument it was handed, unsanitized) would still pass both lines above. Every call this file makes
+        // to _boardsFile.Save( must be a call to _boardsFile.Save(clean, — same count, no exceptions.
+        var everyCall = CountOccurrences(app, "_boardsFile.Save(");
+        var sanitizedCall = CountOccurrences(app, "_boardsFile.Save(clean,");
+        Assert.True(everyCall > 0, "expected at least one _boardsFile.Save( call in AppServices.cs");
+        Assert.Equal(everyCall, sanitizedCall);
+    }
+
+    /// <summary>How many times <paramref name="token"/> occurs in <paramref name="text"/>, non-overlapping.</summary>
+    private static int CountOccurrences(string text, string token)
+    {
+        var count = 0;
+        for (var index = text.IndexOf(token, StringComparison.Ordinal); index >= 0; index = text.IndexOf(token, index + token.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     /// <summary>
