@@ -68,10 +68,11 @@
        one legible MSB3061 instead of a mystery on the following build. ContinueOnError because a file still
        held is exactly the case this exists for, and failing here would trade one confusing error for another.
 
-       It is a mitigation and not a cure. The holder is most likely on-access virus scanning, which fits every
-       symptom: intermittent, only after a file's content changes, gone on an immediate retry, and untouched by
-       -nodeReuse:false because the holder is not MSBuild. Real-time protection is on, and this machine's
-       exclusion list needs an administrator to read. Excluding this repo's obj folder is the owner's call.
+       It is a mitigation, and the cure is in Directory.Build.props. The holder turned out to be C# Dev Kit's
+       design-time build, run on every save through its own MSBuild nodes in the same obj\ - confirmed from the
+       process tree after an on-access-scanning theory, and the obj exclusion it led to, had not closed it. The
+       props file moves design-time intermediates to obj\designtime\, so the two builds no longer share files;
+       this target stays because a leftover from any other cause is still cleared before it can confuse anyone.
 
        Ruled out, and checked rather than assumed: IncludePackageReferencesDuringMarkupCompilation=false would
        remove the .nuget.g.props from the dance entirely, but it also drops source generators from the markup

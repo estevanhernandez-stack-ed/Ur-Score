@@ -1,0 +1,26 @@
+<Project>
+  <!-- Design-time builds keep their intermediates apart from real ones.
+
+       C# Dev Kit runs a design-time build every time a source file is saved, through its own MSBuild worker
+       nodes, and those builds used the same obj\ as a `dotnet build` typed a moment after the save. The two
+       collided on the WPF temp project's files there - MSB3061 on the delete, or a missing App.g.cs and CS5001
+       on the next pass. Confirmed 2026-09-21 by the process tree: an MSBuild node whose parent is the Dev Kit
+       project-system build host, plus two orphaned by earlier design-time builds, after an on-access-scanning
+       theory and an obj exclusion had both been tried and had not closed it (V3-S.39).
+
+       Design-time builds carry DesignTimeBuild=true as a global property, so this reaches them and nothing
+       else: the IDE's intermediates go to obj\designtime\, a real build's stay in obj\, and neither can hold
+       the other's files. Set here rather than in a response file because Dev Kit's nodes run /noautoresponse
+       and read none, and because a -p: in the response file stops `dotnet test` after its restore step. -->
+  <PropertyGroup Condition="'$(DesignTimeBuild)' == 'true'">
+    <BaseIntermediateOutputPath>obj/designtime/</BaseIntermediateOutputPath>
+  </PropertyGroup>
+
+  <!-- With two obj trees, the SDK's default compile glob excludes only the one a given build is using, so
+       the generated .cs files under the other are picked up as source and every assembly attribute is declared
+       twice (CS0579). Excluding obj\** by name keeps every obj tree out of the glob. The SDK adds the files it
+       generates by explicit Compile items, not through this glob, so nothing it needs is lost. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;**/obj/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>
