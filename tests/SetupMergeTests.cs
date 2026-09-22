@@ -79,6 +79,20 @@ public class SetupMergeTests
     }
 
     [Fact]
+    public void ARecipeOrBoardOnlyHereIsKeptAndListed()
+    {
+        var onlyHereBoard = new BoardDef("b-1", "OnlyHere", []);
+        var here = Here([new InstalledRecipe(Clan, ClanText, new RecipeState())], boards: [onlyHereBoard]);
+
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Profile, ProfileText)]), here, 0, 0);
+
+        var keptRecipe = Item(plan, SetupKind.Recipe, Clan.Name);
+        Assert.Equal((SetupOutcome.Kept, false), (keptRecipe.Outcome, keptRecipe.Ticked));
+        var keptBoard = Item(plan, SetupKind.Board, "OnlyHere");
+        Assert.Equal((SetupOutcome.Kept, false), (keptBoard.Outcome, keptBoard.Ticked));
+    }
+
+    [Fact]
     public void ABoardIsReplacedByNameOrAddedAndFollowingTabsAreLeftAlone()
     {
         var hereBattle = new BoardDef("b-1", "battle", [new PanelDef("p-1", PanelType.Standing, new PanelSize(6), new PanelSettings(Clan.Slug))]);
@@ -93,6 +107,18 @@ public class SetupMergeTests
         Assert.Contains("1 panel here, 2 in the file", replaced.Note, StringComparison.Ordinal);
         Assert.Equal(SetupOutcome.Add, Item(plan, SetupKind.Board, "Rivals").Outcome);
         Assert.DoesNotContain(plan.Items, i => i.Kind == SetupKind.Board && i.Name == "Alts");
+    }
+
+    [Fact]
+    public void TwoLocalBoardsFoldingToTheSameNameDoNotThrowAndTheFirstIsMatched()
+    {
+        var battle = new BoardDef("b-1", "Battle", []);
+        var battleAgain = new BoardDef("b-2", " battle ", []);
+        var fileBattle = new BoardDef("b-9", "BATTLE", []);
+
+        var plan = SetupMerge.Plan(Pack(boards: [fileBattle]), Here(boards: [battle, battleAgain]), 0, 0);
+
+        Assert.Equal(SetupOutcome.Replace, Assert.Single(plan.Items, i => i.Kind == SetupKind.Board).Outcome);
     }
 
     [Fact]
@@ -137,5 +163,16 @@ public class SetupMergeTests
         Assert.Equal((true, "clan.battle.points"), (arriving.StatChoices["value"].Show, arriving.StatChoices["value"].MetricId));
         Assert.Equal([AltOne.AccountId], arriving.Excluded);
         Assert.Equal(1, dropped);
+    }
+
+    [Fact]
+    public void ArrivingDoesNotThrowWhenTwoHostAccountsShareARobloxIdAndMapsToTheFirst()
+    {
+        var alsoTwoOhOne = new HostAccount(Guid.Parse("55555555-5555-5555-5555-555555555555"), 201, "SecondAsh");
+
+        var arriving = SetupMerge.Arriving(new RecipeState(), [201], [AltOne, alsoTwoOhOne], out var dropped);
+
+        Assert.Equal([AltOne.AccountId], arriving.Excluded);
+        Assert.Equal(0, dropped);
     }
 }

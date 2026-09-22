@@ -48,8 +48,10 @@ public static class SetupMerge
         var items = new List<SetupItem>();
         var installedHere = here.Installed.ToDictionary(i => i.Recipe.Slug, StringComparer.Ordinal);
 
+        var fileRecipeSlugs = new HashSet<string>(StringComparer.Ordinal);
         foreach (var recipe in file.Recipes)
         {
+            fileRecipeSlugs.Add(recipe.Slug);
             var key = "recipe:" + recipe.Slug;
             if (installedHere.TryGetValue(recipe.Slug, out var local))
             {
@@ -62,6 +64,13 @@ public static class SetupMerge
             {
                 items.Add(new SetupItem(SetupKind.Recipe, key, recipe.Name, SetupOutcome.Add, "sends off until you tick them", Ticked: true));
             }
+        }
+
+        // A recipe the file doesn't carry is still an account of this machine's setup (spec §2: anything only here is
+        // Kept, listed). First-wins is moot here — installedHere is already keyed by slug, one entry per recipe.
+        foreach (var installed in here.Installed.Where(i => !fileRecipeSlugs.Contains(i.Recipe.Slug)))
+        {
+            items.Add(new SetupItem(SetupKind.Recipe, "recipe:" + installed.Recipe.Slug, installed.Recipe.Name, SetupOutcome.Kept, "only this PC has it", Ticked: false));
         }
 
         var fileNames = file.Sources.Select(s => s.Recipe + "|" + s.InputsKey).ToHashSet(StringComparer.Ordinal);
@@ -93,18 +102,32 @@ public static class SetupMerge
         }
 
         static string BoardKey(BoardDef b) => "board:" + b.Name.Trim().ToLowerInvariant();
-        var hereBoards = here.SavedBoards.Where(b => b.Follows is null).ToDictionary(BoardKey, StringComparer.Ordinal);
+
+        // First-wins rather than throwing: the Rename window only checks a board against its own old name, so two
+        // local boards can fold to the same key (case or spacing) today.
+        var hereBoards = new Dictionary<string, BoardDef>(StringComparer.Ordinal);
+        foreach (var board in here.SavedBoards.Where(b => b.Follows is null)) hereBoards.TryAdd(BoardKey(board), board);
+
+        var fileBoardKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var board in file.Boards.Where(b => b.Follows is null))
         {
-            if (hereBoards.TryGetValue(BoardKey(board), out var local))
+            var boardKey = BoardKey(board);
+            fileBoardKeys.Add(boardKey);
+            if (hereBoards.TryGetValue(boardKey, out var local))
             {
-                items.Add(new SetupItem(SetupKind.Board, BoardKey(board), board.Name, SetupOutcome.Replace,
+                items.Add(new SetupItem(SetupKind.Board, boardKey, board.Name, SetupOutcome.Replace,
                     $"{Panels(local.Panels.Count)} here, {board.Panels.Count} in the file", Ticked: true));
             }
             else
             {
-                items.Add(new SetupItem(SetupKind.Board, BoardKey(board), board.Name, SetupOutcome.Add, $"{Panels(board.Panels.Count)}", Ticked: true));
+                items.Add(new SetupItem(SetupKind.Board, boardKey, board.Name, SetupOutcome.Add, $"{Panels(board.Panels.Count)}", Ticked: true));
             }
+        }
+
+        // A saved board the file doesn't carry is still an account of this machine's setup (spec §2).
+        foreach (var (boardKey, local) in hereBoards.Where(kv => !fileBoardKeys.Contains(kv.Key)))
+        {
+            items.Add(new SetupItem(SetupKind.Board, boardKey, local.Name, SetupOutcome.Kept, "only this PC has it", Ticked: false));
         }
 
         foreach (var key in file.Keys)
@@ -121,7 +144,7 @@ public static class SetupMerge
     /// <summary>The state as it arrives (spec §2): every send off, exclusions mapped to this PC's accounts by Roblox id, the unmatched counted.</summary>
     public static RecipeState Arriving(RecipeState fileState, IReadOnlyList<long> excludedUserIds, IReadOnlyList<HostAccount> accounts, out int droppedExclusions)
     {
-        var byUserId = accounts.Where(a => a.RobloxUserId != 0).ToDictionary(a => a.RobloxUserId, a => a.AccountId);
+        var byUserId = AccountMap.Build(accounts);
         var excluded = excludedUserIds.Where(byUserId.ContainsKey).Select(id => byUserId[id].ToString()).ToList();
         droppedExclusions = excludedUserIds.Count - excluded.Count;
         return fileState with
