@@ -221,9 +221,9 @@ public partial class BoardWindow
         return slot;
     }
 
-    /// <summary>A pop-out's panel keeps its board automation id, "StandingPanel1", inside its own window.</summary>
+    /// <summary>A pop-out's panel is named for its board and its slot (<see cref="BoardEdits.PopOutAutomationId"/>).</summary>
     private static string AutomationIdIn(IReadOnlyList<BoardDef> boards, string panelId) =>
-        BoardEdits.AutomationIdOf(boards, panelId) ?? "PopOutPanel";
+        BoardEdits.PopOutAutomationId(boards, panelId) ?? "PopOutPanel";
 
     private static PopOutRect VirtualScreen() => new(
         SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,

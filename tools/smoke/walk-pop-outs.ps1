@@ -9,9 +9,6 @@ param([string]$Main = 'CCGP')
 $ErrorActionPreference = 'Stop'
 $backup = $null
 
-function Get-PopOutFor([string]$panelId) {
-    Get-PopOutWindows | Where-Object { Find-ByAutomationId $_ $panelId } | Select-Object -First 1
-}
 
 function Get-SavedPanel([string]$type) {
     foreach ($b in @(Read-Boards)) {
@@ -43,7 +40,7 @@ try {
     # skipped, not failed. A running battle with no number still fails.
     Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton')
     Start-Sleep -Seconds 20
-    $texts = @(Get-AllTexts (Find-ByAutomationId (Get-PopOutFor 'StandingPanel1') 'StandingPanel1'))
+    $texts = @(Get-AllTexts (Find-PopOutPanel (Get-PopOutFor 'StandingPanel1') 'StandingPanel1'))
     # A number read from the source: not the clan's own name, and not the battle line's "ends in 3d".
     $numbers = @($texts | Where-Object { $_ -match '[0-9]' -and $_ -ne $Main -and $_ -notmatch 'ends in|ended|next read|Reads every' })
     $dash = [string][char]0x2014

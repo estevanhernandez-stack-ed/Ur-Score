@@ -18,6 +18,7 @@ public static class BoardEdits
         return $"Board {number}";
     }
 
+    /// <summary>The name a new board gets: what was typed, else the suggestion; a starter keeps the starter's own name unless something else was typed.</summary>
     public static string NewBoardName(string? typedName, string suggestedName, string? starterName)
     {
         var typed = BoardDefs.CleanName(typedName);
@@ -127,8 +128,10 @@ public static class BoardEdits
     /// <summary>Which tool a resize came from, so focus goes back to it: Tall keeps the span and flips Tall; the size box picks a span.</summary>
     public static bool IsTallTick(PanelSize before, PanelSize after) => before.Span == after.Span && before.Tall != after.Tall;
 
+    /// <summary>A new board goes last.</summary>
     public static IReadOnlyList<BoardDef> Add(IReadOnlyList<BoardDef> boards, BoardDef board) => [.. boards, board];
 
+    /// <summary>The board with this id, replaced in place; a board that isn't there changes nothing.</summary>
     public static IReadOnlyList<BoardDef> Replace(IReadOnlyList<BoardDef> boards, BoardDef board) =>
         IndexOf(boards, board.Id) < 0 ? boards : [.. boards.Select(b => b.Id == board.Id ? board : b)];
 
@@ -141,6 +144,7 @@ public static class BoardEdits
             : [.. boards.Select(b => b.Id == boardId ? b with { Name = clean } : b)];
     }
 
+    /// <summary>A following board with no panels of its own has nothing to copy; every other board can be duplicated.</summary>
     public static bool CanDuplicate(BoardDef board) => board.Follows is null || board.Panels.Count > 0;
 
     /// <summary>R13: right after the original, "name copy", new panel ids, and nothing popped out. A long name is cut to leave room for " copy".</summary>
@@ -167,9 +171,11 @@ public static class BoardEdits
     public static IReadOnlyList<BoardDef> Delete(IReadOnlyList<BoardDef> boards, string boardId) =>
         boards.Count <= 1 || IndexOf(boards, boardId) < 0 ? boards : [.. boards.Where(b => b.Id != boardId)];
 
+    /// <summary>A new panel goes last, at its type's default size, with a fresh id.</summary>
     public static BoardDef AddPanel(BoardDef board, PanelType type, PanelSettings settings) =>
         board with { Panels = [.. board.Panels, new PanelDef(BoardDefs.NewPanelId(), type, BoardDefs.DefaultSize(type), settings)] };
 
+    /// <summary>The panel with this id, gone; a panel that isn't there changes nothing.</summary>
     public static BoardDef RemovePanel(BoardDef board, string panelId) =>
         PanelIndex(board, panelId) < 0 ? board : board with { Panels = [.. board.Panels.Where(p => p.Id != panelId)] };
 
@@ -221,12 +227,15 @@ public static class BoardEdits
             : Update(board, panelId, p => p with { Settings = settings });
     }
 
+    /// <summary>The panel remembers where its pop-out window is (R19), so a restart reopens it there.</summary>
     public static BoardDef PopOut(BoardDef board, string panelId, PopOutRect rect) =>
         Update(board, panelId, p => p with { PopOut = rect });
 
+    /// <summary>The panel is back on the board: no pop-out place kept.</summary>
     public static BoardDef Return(BoardDef board, string panelId) =>
         Update(board, panelId, p => p with { PopOut = null });
 
+    /// <summary>The panel with this id and the board holding it, whichever board that is; null when none does.</summary>
     public static (BoardDef Board, PanelDef Panel)? Find(IReadOnlyList<BoardDef> boards, string panelId)
     {
         foreach (var board in boards)
@@ -254,6 +263,16 @@ public static class BoardEdits
     /// <summary>A panel's stage 1 id ("StandingPanel2") on whichever board holds it; null when no board does.</summary>
     public static string? AutomationIdOf(IReadOnlyList<BoardDef> boards, string panelId) =>
         Find(boards, panelId) is { } found ? AutomationIds(found.Board)[PanelIndex(found.Board, panelId)] : null;
+
+    /// <summary>
+    /// The id a panel carries inside its own pop-out window: its board's id and its slot id, "b-starter-battle/StandingPanel1".
+    /// The slot id alone is the first Standing panel of WHICHEVER board holds it, so two boards each with one, both popped
+    /// out, gave two live windows whose panels carried the same id — which breaks any automation that looks a pop-out up by
+    /// it, and is wrong for a screen reader besides (S2-P.16). The slot's id on the board itself is unchanged, since a board
+    /// shows one board at a time. Null when no board holds the panel. Owner's scheme, 2026-09-21.
+    /// </summary>
+    public static string? PopOutAutomationId(IReadOnlyList<BoardDef> boards, string panelId) =>
+        Find(boards, panelId) is { } found ? $"{found.Board.Id}/{AutomationIds(found.Board)[PanelIndex(found.Board, panelId)]}" : null;
 
     /// <summary>The period line follows an enabled panel source, then a panel recipe's source, then the main, then a panel's group list.</summary>
     public static string? AnchorSourceId(BoardDef board, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)

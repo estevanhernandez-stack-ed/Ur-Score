@@ -75,6 +75,9 @@ public static class RecipeParser
             var (steps, lastUsesValues) = ParseSteps(root, metricId, valueLabel, problems);
             var headline = ParseHeadline(root, problems);
             var period = ParsePeriod(root, problems);
+            // The same rule as Recipe.IsGroupList, repeated here on purpose: the Recipe does not exist yet at this
+            // point, and this check decides whether a recipe with no metricId is a problem or a group list, which
+            // has to be settled before one can be built (S1-1.3). The two must agree; the parser tests pin it.
             var groupList = steps.Count > 0 && steps[^1].GroupName is not null;
 
             // The top-level metricId only names a single 'value'. A 'values' list names each of its own.

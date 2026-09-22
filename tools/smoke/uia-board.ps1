@@ -239,6 +239,22 @@ function Read-Boards {
 
 function Get-PopOutWindows { @(Get-UrWindows | Where-Object { $_.Current.AutomationId -eq 'PopOutWindow' }) }
 
+# A pop-out's panel is named "<boardId>/<slotId>" (S2-P.16), so a slot id such as 'StandingPanel1' is matched as
+# the suffix and a board-qualified id in full is matched exactly. With one board, as every walk here has, the
+# suffix names the same window it always did; with two, it is the first found, and a walk that cares which must
+# pass the qualified id. One definition, used by every walk: two of them used to carry their own copy.
+function Find-PopOutPanel($window, [string]$panelId) {
+    if (-not $window) { return $null }
+    @($window.FindAll($TS::Descendants, $Cond::TrueCondition)) | Where-Object {
+        $id = $_.Current.AutomationId
+        $id -eq $panelId -or $id.EndsWith('/' + $panelId)
+    } | Select-Object -First 1
+}
+
+function Get-PopOutFor([string]$panelId) {
+    Get-PopOutWindows | Where-Object { Find-PopOutPanel $_ $panelId } | Select-Object -First 1
+}
+
 # Quits by closing the board window, so a pop-out is never mistaken for the main window.
 function Stop-UrScoreFromBoard([int]$seconds = 20) {
     $board = Get-BoardWindow

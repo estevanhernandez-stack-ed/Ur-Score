@@ -275,6 +275,28 @@ public class BoardEditsTests
         Assert.Null(BoardEdits.AutomationIdOf(boards, "p-gone"));
     }
 
+    /// <summary>
+    /// Two boards, each with a Standing panel as its first: on the BOARD both are "StandingPanel1", which is fine
+    /// because a board shows one board at a time. In their own pop-out windows they are not, because both windows
+    /// can be open at once, and two live windows carrying the same id broke every walk that looked a pop-out up by
+    /// it (S2-P.16). The pop-out id is the board's id and the slot's, so the two differ and each still ends in the
+    /// slot id a walk asks for. This is the exact collision, not a stand-in: same type, same position, two boards.
+    /// </summary>
+    [Fact]
+    public void TwoBoardsFirstStandingPanelsShareASlotIdButNotAPopOutId()
+    {
+        IReadOnlyList<BoardDef> boards = [BoardOf("b-1", PanelType.Standing), BoardOf("b-2", PanelType.Standing)];
+
+        Assert.Equal(BoardEdits.AutomationIdOf(boards, "p-b-1-1"), BoardEdits.AutomationIdOf(boards, "p-b-2-1"));
+
+        var one = BoardEdits.PopOutAutomationId(boards, "p-b-1-1");
+        var two = BoardEdits.PopOutAutomationId(boards, "p-b-2-1");
+        Assert.Equal("b-1/StandingPanel1", one);
+        Assert.Equal("b-2/StandingPanel1", two);
+        Assert.NotEqual(one, two);
+        Assert.Null(BoardEdits.PopOutAutomationId(boards, "p-gone"));
+    }
+
     [Fact]
     public void TheAnchorIsTheFirstPanelsSourceThatIsStillOn()
     {
