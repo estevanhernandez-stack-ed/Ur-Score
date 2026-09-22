@@ -5,8 +5,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>How fast this clan is going, how fast the field is, and what catching the place above would take.</summary>
 public sealed record PaceModel(PanelHead Head, IReadOnlyList<FactModel> Facts);
 

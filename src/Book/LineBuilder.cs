@@ -5,7 +5,7 @@ using Labs626.UrScore.Recipes;
 namespace Labs626.UrScore.Book;
 
 /// <summary>Everything a line needs about the read that isn't in the reading.</summary>
-public sealed record ReadContext(Labs626.UrScore.Core.Source Source, Recipe Recipe, string RecipeHash, string Trigger, DateTimeOffset At, int OffsetMinutes);
+public sealed record ReadContext(Source Source, Recipe Recipe, string RecipeHash, string Trigger, DateTimeOffset At, int OffsetMinutes);
 
 /// <summary>
 /// Score book spec §5.2, §5.3 and §5.6. The only place a reading becomes a line, and so the only place the
@@ -163,7 +163,7 @@ public static class LineBuilder
             .GroupBy(h => h.Id, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Number!.Value, StringComparer.Ordinal);
 
-    private static Dictionary<string, string> Inputs(Labs626.UrScore.Core.Source source) => new(source.Inputs, StringComparer.Ordinal);
+    private static Dictionary<string, string> Inputs(Source source) => new(source.Inputs, StringComparer.Ordinal);
 
     private static BookPeriod? Period(ReadingPeriod? period) => period is null ? null : new BookPeriod(period.Value, period.Starts, period.Ends);
 

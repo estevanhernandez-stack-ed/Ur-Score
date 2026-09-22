@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace Labs626.UrScore.Source;
+namespace Labs626.UrScore.Fetch;
 
 /// <summary>
 /// Turns a recipe's icon text into a picture file on disk, or nothing (stats design §3.3).

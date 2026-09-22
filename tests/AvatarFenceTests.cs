@@ -49,12 +49,12 @@ public class AvatarFenceTests
             .ToList();
 
         Assert.Equal(
-            new[] { Path.Combine("Source", "AvatarBook.cs"), Path.Combine("Source", "IconClient.cs") },
+            new[] { Path.Combine("Fetch", "AvatarBook.cs"), Path.Combine("Fetch", "IconClient.cs") },
             files.Where(f => f.Text.Contains("HeadshotsAsync", StringComparison.Ordinal))
                 .Select(f => f.Relative).Order(StringComparer.Ordinal).ToArray());
 
         Assert.Equal(
-            new[] { Path.Combine("Source", "IconClient.cs") },
+            new[] { Path.Combine("Fetch", "IconClient.cs") },
             files.Where(f => f.Text.Contains("avatar-headshot", StringComparison.Ordinal)).Select(f => f.Relative).ToArray());
 
         Assert.Equal(

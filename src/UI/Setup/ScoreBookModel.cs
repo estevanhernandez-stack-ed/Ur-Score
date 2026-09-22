@@ -6,8 +6,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-using Source = Labs626.UrScore.Core.Source;
-
 public sealed record BookRecipeItem(string Name, string Readings, string First, string Finals, string Size)
 {
     public string Summary => string.Join(" · ", new[] { Readings, First, Finals, Size }.Where(part => part.Length > 0));

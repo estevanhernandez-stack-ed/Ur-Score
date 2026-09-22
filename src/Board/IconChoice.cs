@@ -3,9 +3,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
-// The bare name Source would find the Labs626.UrScore.Source namespace from in here, so the type is aliased after the namespace
-// line, which is consulted first.
-using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>
 /// The window's icon: the picture file, or null for Ur Score's own, and whose it is. <see cref="Name"/> is null when no source's

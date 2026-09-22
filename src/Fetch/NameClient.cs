@@ -2,7 +2,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace Labs626.UrScore.Source;
+namespace Labs626.UrScore.Fetch;
 
 /// <summary>The seam the window and the tests use, so neither needs the network.</summary>
 public interface INameSource

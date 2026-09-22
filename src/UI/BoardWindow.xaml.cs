@@ -5,10 +5,9 @@ using System.Windows.Threading;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Theming;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.UI;
-
-using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>One tab. Its text is the board's name, so a screen reader and UI Automation read the name.</summary>
 public sealed record BoardTabItem(string Id, string Name)

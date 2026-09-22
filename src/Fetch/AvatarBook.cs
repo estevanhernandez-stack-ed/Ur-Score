@@ -1,4 +1,4 @@
-namespace Labs626.UrScore.Source;
+namespace Labs626.UrScore.Fetch;
 
 /// <summary>The seam the app and the tests use for headshots, so neither needs the network. <see cref="IconClient"/> implements it.</summary>
 public interface IAvatarSource

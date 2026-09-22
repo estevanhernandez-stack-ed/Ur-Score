@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using Labs626.UrScore.Recipes;
-using Labs626.UrScore.Source;
+using Labs626.UrScore.Fetch;
 
 namespace UrScore.Tests;
 

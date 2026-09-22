@@ -101,7 +101,7 @@ public class SourceIconFenceTests
             .ToList();
 
         Assert.Equal(
-            new[] { Path.Combine("Source", "IconClient.cs"), Path.Combine("Source", "SourceIcons.cs") },
+            new[] { Path.Combine("Fetch", "IconClient.cs"), Path.Combine("Fetch", "SourceIcons.cs") },
             files.Where(f => f.Text.Contains("CachedFile(", StringComparison.Ordinal) || f.Text.Contains("IIconSource", StringComparison.Ordinal))
                 .Select(f => f.Relative).Order(StringComparer.Ordinal).ToArray());
 

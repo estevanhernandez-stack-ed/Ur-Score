@@ -10,8 +10,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>
 /// Setup › Clans for one recipe (spec §7.1): the main clan search, the clans your accounts are in, the
 /// clans you watch, and the Top switch. Every change is saved and applied at once.

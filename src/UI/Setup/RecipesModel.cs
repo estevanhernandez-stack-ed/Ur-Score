@@ -1,10 +1,9 @@
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Recipes;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.UI;
-
-using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>One recipe Ur Score carries with it, as the Recipes page offers it: not yet installed, one press away.</summary>
 public sealed record BuiltInItem(string Slug, string Name, string Hosts)

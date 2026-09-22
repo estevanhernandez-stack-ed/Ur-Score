@@ -3,12 +3,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
-// NOT redundant, checked by deleting it: `Source` alone binds to the Labs626.UrScore.Source NAMESPACE, which
-// shadows the Core type everywhere outside Core, and the build fails with CS0118. Three separate reviews have
-// now filed this alias as removable (S2-2.1, S1-7.1, S1-9.5) and all three were wrong, which is a sign the
-// collision should be fixed at its cause rather than re-explained: see V3-S.44.
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>
 /// Every change to boards and panels (spec §9.2, §9.3), as pure functions. An edit that doesn't apply returns
 /// its input, the same instance, so a caller can tell nothing changed.

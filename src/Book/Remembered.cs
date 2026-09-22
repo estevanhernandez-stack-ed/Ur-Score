@@ -4,9 +4,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Book;
 
-// The bare name Source would find the Labs626.UrScore.Source namespace from in here; LineBuilder writes it out in full
-// for the same reason.
-using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>
 /// The last numbers the score book kept, as a snapshot the panels can draw before the first read of the session lands

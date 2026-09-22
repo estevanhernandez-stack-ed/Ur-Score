@@ -3,8 +3,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>One panel on a board: its type, how many of the 12 columns it spans, and what it shows.</summary>
 public sealed record PanelSpec(PanelType Type, int Span, PanelSettings Settings);
 

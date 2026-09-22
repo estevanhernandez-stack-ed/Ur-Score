@@ -12,11 +12,10 @@ using Labs626.UrScore.UI;
 
 namespace Labs626.UrScore.Composition;
 
-using NameClient = Labs626.UrScore.Source.NameClient;
-using IconClient = Labs626.UrScore.Source.IconClient;
-using AvatarBook = Labs626.UrScore.Source.AvatarBook;
-using SourceIcons = Labs626.UrScore.Source.SourceIcons;
-using Source = Labs626.UrScore.Core.Source;
+using NameClient = Labs626.UrScore.Fetch.NameClient;
+using IconClient = Labs626.UrScore.Fetch.IconClient;
+using AvatarBook = Labs626.UrScore.Fetch.AvatarBook;
+using SourceIcons = Labs626.UrScore.Fetch.SourceIcons;
 
 /// <summary>
 /// Everything the app runs on, built once (spec §4.2, §5, §7). The one place a watch is constructed: each

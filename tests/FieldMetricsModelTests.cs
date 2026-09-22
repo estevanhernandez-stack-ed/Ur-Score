@@ -4,8 +4,6 @@ using Labs626.UrScore.UI;
 
 namespace UrScore.Tests;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>
 /// Setup › Stats' clan-and-field section: what it offers, what a Save writes, and what it says when the one
 /// thing these numbers need — knowing which row is yours — has not been set up yet.

@@ -7,8 +7,6 @@ using static UrScore.Tests.BoardFixtures;
 
 namespace UrScore.Tests;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>
 /// The numbers the window shows before its first read. These pin what a remembered snapshot may carry (your own
 /// accounts and the source's own headline, nothing else), what makes one refuse to be built, and that every one is

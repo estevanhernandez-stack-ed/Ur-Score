@@ -3,10 +3,6 @@ using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Book;
 
-// `Source` alone binds to the Labs626.UrScore.Source NAMESPACE here, not the type, so an unqualified name does not
-// compile. The same alias the UI files use, rather than spelling the full name at each site (S1-7.1, S1-9.5).
-using Source = Labs626.UrScore.Core.Source;
-
 public sealed record SeriesPoint(DateTimeOffset T, double Value, DateTimeOffset? AsOf, bool Stale, int Off);
 
 /// <summary>

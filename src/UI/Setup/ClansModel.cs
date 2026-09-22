@@ -5,8 +5,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>One row of a Clans list: the source, its name, and who was found in it.</summary>
 public sealed record ClanRow(string SourceId, string Name, SourceRole Role, string Who)
 {

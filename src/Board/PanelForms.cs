@@ -4,8 +4,6 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
-using Source = Labs626.UrScore.Core.Source;
-
 /// <summary>One thing a panel's form can ask for.</summary>
 public enum PanelField { Source, Sources, ToSource, Stat, Account }
 

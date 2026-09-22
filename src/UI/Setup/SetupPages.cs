@@ -1,9 +1,8 @@
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Recipes;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.UI;
-
-using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>One entry in Setup's list. Its text is its title, so a screen reader and UI Automation read the title.</summary>
 public sealed record SetupPage(string Id, string Title, string? RecipeSlug = null)
