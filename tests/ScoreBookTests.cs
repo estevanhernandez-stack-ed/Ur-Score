@@ -140,20 +140,26 @@ public class ScoreBookTests
         Assert.Equal(2, BookFiles.ReadAll(dir.Path, Slug).Count());
     }
 
+    /// <summary>
+    /// The limit at fifty rather than five thousand: the rule under test is "the oldest reading goes first and a
+    /// final never goes", and the number changes nothing about that. At the real limit this took 24 s, all of it
+    /// in the Flush at the end — five thousand lines each synced to disk, the durability the app is right to keep
+    /// and a test has no use for (S1-5.6).
+    /// </summary>
     [Fact]
     public void PastTheLimitTheOldestReadingsAreDroppedButNeverAFinal()
     {
         using var dir = TempDir.Create("urscore-book");
-        using var book = new ScoreBook(dir.Path, background: false);
+        using var book = new ScoreBook(dir.Path, background: false, maxPending: 50);
         book.Append(Line(T), "recipe text");
         var file = BookFiles.MonthFile(dir.Path, Slug, T);
 
         using (new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             book.Append(Line(T, BookLine.KindFinal), "recipe text");
-            for (var i = 0; i < ScoreBook.MaxPending + 10; i++) book.Append(Line(T.AddSeconds(i + 1)), "recipe text");
+            for (var i = 0; i < book.MaxPending + 10; i++) book.Append(Line(T.AddSeconds(i + 1)), "recipe text");
 
-            Assert.Equal(ScoreBook.MaxPending, book.Pending);
+            Assert.Equal(50, book.Pending);
             Assert.Equal(11, book.Dropped);
         }
 

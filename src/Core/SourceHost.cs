@@ -9,8 +9,15 @@ namespace Labs626.UrScore.Core;
 /// A source keeps its watch for as long as its id exists (F2: a watch built per cycle has a fresh
 /// serialization guard, and one observation could then be reported twice).
 /// </summary>
-public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Source, int> intervalSeconds) : IDisposable
+/// <param name="time">
+/// The clock the wait between reads runs on. The app passes its own; a test passes one it can move, so the loop's
+/// next turn is a call to advance rather than a minute of waiting — which is how the loop itself came to have
+/// tests at all, its floor being a minute (S1-8.7, Sweep E).
+/// </param>
+public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Source, int> intervalSeconds, TimeProvider? time = null) : IDisposable
 {
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+
     private readonly object _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, RecipeSnapshot> _latest = new(StringComparer.Ordinal);
@@ -259,7 +266,7 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(seconds), loop).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(seconds), _time, loop).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

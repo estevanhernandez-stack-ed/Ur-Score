@@ -139,7 +139,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         _avatars = new AvatarBook(_icons);
         _sourceIcons = new SourceIcons(_icons, Path.Combine(IconClient.DefaultCacheDirectory, SourceIcons.FileName));
 
-        Runner = new SourceHost(CreateWatch, IntervalFor);
+        Runner = new SourceHost(CreateWatch, IntervalFor, _time);
         Runner.SnapshotReady += OnSnapshotReady;
 
         LoadAtStart();
