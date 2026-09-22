@@ -7,16 +7,40 @@ namespace Labs626.UrScore.Book;
 public sealed record BookImportOutcome(int Added, string Message, string Problem = "");
 
 /// <summary>
-/// Bringing another PC's score book into this one, from a folder a person picked.
+/// Importing another PC's score book into this one: from the stats file Export stats wrote there, or from a folder
+/// somebody copied by hand.
 /// <para>
-/// The folder is that machine's data folder or its <c>scorebook</c> — both are accepted, because "the Ur Score
-/// folder" is what a person has in hand and which of the two they point at is an implementation detail. Lines are
-/// matched to this PC's sources by <see cref="BookMerge"/>, appended through the book's own writer so they land in
-/// the same files as everything else, and anything already here is skipped.
+/// The file is a <see cref="BookPack"/>; it is unpacked, imported and the unpacked copy removed. The folder is that
+/// machine's data folder or its <c>scorebook</c> — both are accepted, because "the Ur Score folder" is what a person
+/// has in hand and which of the two they point at is an implementation detail; and since the file dialog cannot pick
+/// a folder, a month file inside one finds it (<see cref="ScoreBookRootOfPickedFile"/>). Lines are matched to this
+/// PC's sources by <see cref="BookMerge"/>, appended through the book's own writer so they land in the same files as
+/// everything else, and anything already here is skipped.
 /// </para>
 /// </summary>
 public static class BookImport
 {
+    /// <summary>What a person picked in the dialog: a stats file, or any file inside a copied folder.</summary>
+    public static BookImportOutcome RunFile(string path, ISetupServices services)
+    {
+        if (string.Equals(Path.GetExtension(path), BookPack.Extension, StringComparison.OrdinalIgnoreCase))
+        {
+            var opened = BookPack.Open(path);
+            try
+            {
+                return opened.Folder is null ? new BookImportOutcome(0, "", opened.Problem) : Run(opened.Folder, services);
+            }
+            finally
+            {
+                BookPack.Discard(opened);
+            }
+        }
+
+        return ScoreBookRootOfPickedFile(path) is { } root
+            ? Run(root, services)
+            : new BookImportOutcome(0, "", "That is not an Ur Score stats file, and no score book was found around it. Pick the file Export stats made on the other PC, or a month file inside a copied 626labs.ur-score folder.");
+    }
+
     public static BookImportOutcome Run(string folder, ISetupServices services)
     {
         var root = ScoreBookRoot(folder);
@@ -70,9 +94,9 @@ public static class BookImport
         {
             added switch
             {
-                0 => "Nothing new to bring in.",
-                1 => "Brought in 1 reading.",
-                _ => $"Brought in {added:N0} readings.",
+                0 => "Nothing new to import.",
+                1 => "Imported 1 reading.",
+                _ => $"Imported {added:N0} readings.",
             },
         };
 
@@ -81,6 +105,21 @@ public static class BookImport
         if (noRecipe.Count > 0) parts.Add($"No recipe here for: {string.Join(", ", noRecipe)}.");
 
         return string.Join(" ", parts);
+    }
+
+    /// <summary>
+    /// The scorebook folder a picked month file sits in: a copied folder keeps the app's own layout, so the file
+    /// is in a slug folder inside a folder named <c>scorebook</c>, and nothing else is looked at. Not a shape
+    /// check on the folders around it — a stray month file's parent's parent could be a temp folder, and
+    /// enumerating that to see whether it "looks like a book" is slow and can say yes. Null for anything else.
+    /// </summary>
+    internal static string? ScoreBookRootOfPickedFile(string path)
+    {
+        if (!string.Equals(Path.GetExtension(path), ".jsonl", StringComparison.OrdinalIgnoreCase)) return null;
+
+        var slugFolder = Path.GetDirectoryName(Path.GetFullPath(path));
+        var root = slugFolder is null ? null : Path.GetDirectoryName(slugFolder);
+        return root is not null && string.Equals(Path.GetFileName(root), "scorebook", StringComparison.OrdinalIgnoreCase) ? root : null;
     }
 
     /// <summary>The scorebook folder inside what was picked, or the folder itself when that is already it.</summary>

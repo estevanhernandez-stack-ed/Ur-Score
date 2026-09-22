@@ -8,6 +8,7 @@ $backup = $null
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     Start-UrScore | Out-Null
     Start-Import $profileFixture
     $screen = Wait-UrWindow '^Import recipe$' 30
@@ -67,6 +68,7 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
     "RoRoRo running: $rororo"
 }

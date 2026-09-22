@@ -19,6 +19,7 @@ function Get-Toggle($root, [string]$name) {
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
     # 1. A first import ticks what the recipe suggests, to show only, and says so.
@@ -121,6 +122,7 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
     "RoRoRo running: $rororo"
 }

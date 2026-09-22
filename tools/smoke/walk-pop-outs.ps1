@@ -19,6 +19,7 @@ function Get-SavedPanel([string]$type) {
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     $board = Initialize-ClanBoard $Main ''
 
     # 1. Pop out the clan standing.
@@ -49,8 +50,17 @@ try {
     $battleRuns = $periodLine -and $periodLine -ne '(absent)' -and $periodLine -notlike 'Reads every*' -and $periodLine -notmatch '\bended\b'
     $noBattle = ($periodLine -like 'Reads every*') -or ($periodLine -match '\bended\b') -or
         ($numbers.Count -eq 0 -and @($texts | Where-Object { $_ -eq $dash }).Count -gt 0)
-    $seen = "period line '$periodLine'; " + ($texts -join ' | ')
-    if ($numbers.Count -eq 0 -and -not $battleRuns -and $noBattle) {
+    # The board's state line, which after a Test now on a stopped board says what the read found: a source in
+    # trouble is named first ("Last read of CCGP: Could not reach the data."), and an idle clan is not trouble
+    # ("Nothing to read right now"). That is the one thing the panel's own text cannot say - a broken read and
+    # no battle both draw dashes - and it closes the last hole in this step without leaving the board (S2-FR.3).
+    $stateLine = Line (Get-BoardWindow) 'StateLine'
+    $readBroken = $stateLine -match 'Last read of .+: (Could not reach|Nothing matched|The response was not|The source asked|The source wants|A key|The source rejected|Waiting for)'
+    $seen = "period line '$periodLine'; state '$stateLine'; " + ($texts -join ' | ')
+    if ($readBroken) {
+        Check '3 The pop-out shows numbers after a read' $false "the read is broken, whatever the battle: $seen"
+    }
+    elseif ($numbers.Count -eq 0 -and -not $battleRuns -and $noBattle) {
         Skip '3 The pop-out shows numbers after a read' 'needs a live battle' "no battle is running: $seen"
     }
     else {
@@ -72,6 +82,37 @@ try {
     Check '5 Both pop-outs reopen' ((Get-PopOutWindows).Count -eq 2) "count=$((Get-PopOutWindows).Count)"
     Check '5b ...where they were' ((Get-SavedPanel 'standing').popout.x -eq $afterX) "x=$((Get-SavedPanel 'standing').popout.x)"
 
+    # 5c/5d (S2-8.6). A pop-out moved to the second screen reopens on it, at the same place, after a restart. The app
+    # is system-DPI aware, not per-monitor, so on a second screen with a different scale Windows stretches the window;
+    # what this pins is that the saved place still comes back as the same pixels. Each screen's DPI is recorded, so the
+    # step says which case it verified: two scales, or one.
+    $screens = @(Get-UrScreens)
+    $other = $screens | Where-Object { -not $_.Primary } | Select-Object -First 1
+    $dpis = ($screens | ForEach-Object { "$($_.Width)x$($_.Height)@$($_.Dpi)dpi" }) -join ', '
+    if ($null -eq $other) {
+        Skip '5c A pop-out moved to the second screen reopens there' 'needs a second screen' "screens: $dpis"
+    }
+    else {
+        $window = Get-PopOutFor 'StandingPanel1'
+        $window.GetCurrentPattern([System.Windows.Automation.TransformPattern]::Pattern).Move($other.X + 80, $other.Y + 80)
+        Start-Sleep -Seconds 2
+        $moved = (Get-PopOutFor 'StandingPanel1').Current.BoundingRectangle
+        Stop-UrScoreFromBoard
+        Start-UrScore | Out-Null
+        Wait-Until { (Get-PopOutWindows).Count -eq 2 } 30 | Out-Null
+        $back = (Get-PopOutFor 'StandingPanel1').Current.BoundingRectangle
+        $centreX = $back.X + $back.Width / 2
+        $centreY = $back.Y + $back.Height / 2
+        $onOther = $centreX -ge $other.X -and $centreX -lt ($other.X + $other.Width) -and $centreY -ge $other.Y -and $centreY -lt ($other.Y + $other.Height)
+        $mixed = @($screens | Select-Object -ExpandProperty Dpi -Unique).Count -gt 1
+        $case = if ($mixed) { 'two scales' } else { 'one scale, so the mixed-DPI half stays unverified' }
+        Check '5c A pop-out moved to the second screen reopens on it' $onOther "after restart: $($back.X),$($back.Y) $($back.Width)x$($back.Height); screens: $dpis ($case)"
+        Check '5d ...at the same place, within 8 px' ([math]::Abs($back.X - $moved.X) -le 8 -and [math]::Abs($back.Y - $moved.Y) -le 8) "moved to $($moved.X),$($moved.Y); back at $($back.X),$($back.Y)"
+        # Back to the primary, so the steps that follow see what they always saw.
+        (Get-PopOutFor 'StandingPanel1').GetCurrentPattern([System.Windows.Automation.TransformPattern]::Pattern).Move(120, 140)
+        Start-Sleep -Seconds 2
+    }
+
     # 6. Closing a pop-out returns its panel.
     Invoke-Element (Find-ByAutomationId (Get-PopOutFor 'StandingPanel1') 'ReturnPanelButton')
     Start-Sleep -Seconds 1
@@ -85,10 +126,14 @@ try {
 
     & (Join-Path $PSScriptRoot 'check-boards-privacy.ps1') | Out-Host
     $privacy = $LASTEXITCODE
-    Check '8 boards.json holds no other player' ($privacy -eq 0) "exit=$privacy"
+    # Exit 2 is "nothing to check": no accounts.json, which is every walk with RoRoRo quit (the rule since 2026-09-22).
+    # The check can only tell a stranger's id from yours once RoRoRo has said which are yours; the score-book walk
+    # has read it this way since it was written, and this one now agrees with it.
+    Check '8 boards.json holds no other player' ($privacy -eq 0 -or $privacy -eq 2) "check-boards-privacy exit $privacy$(if ($privacy -eq 2) { ' (nothing to check: RoRoRo never listed your accounts)' })"
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
 }
 exit $LASTEXITCODE

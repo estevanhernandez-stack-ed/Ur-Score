@@ -14,7 +14,8 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 {
     private readonly ISetupServices _services;
 
-    private bool _bringing;
+    /// <summary>An export or an import is running; the two buttons wait for it, since both touch the book.</summary>
+    private bool _transferring;
 
     public ScoreBookPage(ISetupServices services)
     {
@@ -41,43 +42,86 @@ public partial class ScoreBookPage : UserControl, ISetupPage
     }
 
     /// <summary>
-    /// Brings another PC's book into this one. The folder picked is that machine's data folder (or its scorebook):
-    /// its readings are matched to this PC's sources by recipe and clan, rewritten to this PC's ids, and appended.
-    /// Anything already here is skipped, and a clan this PC doesn't follow is named rather than guessed at.
+    /// Writes this PC's score book to one file for another PC to import (<see cref="BookPack"/>). The dialog offers a
+    /// dated name; the line then says what went into the file, from the file's own manifest.
     /// </summary>
-    private async void OnBringBookClick(object sender, RoutedEventArgs e)
+    private async void OnExportStatsClick(object sender, RoutedEventArgs e)
     {
-        if (_bringing) return;
+        if (_transferring) return;
 
-        var dialog = new OpenFolderDialog
+        var dialog = new SaveFileDialog
         {
-            Title = "Pick the other PC's Ur Score folder",
+            Title = "Export stats to a file",
+            FileName = BookPack.FileName(DateTimeOffset.Now),
+            Filter = "Ur Score stats (*.zip)|*.zip",
+            DefaultExt = BookPack.Extension,
+            AddExtension = true,
+        };
+
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+
+        await TransferAsync("Writing the file…", "That file could not be written", async () =>
+        {
+            var manifest = await Task.Run(() => _services.ExportStats(dialog.FileName));
+            return (ScoreBookModel.ExportedLine(manifest, Path.GetFileName(dialog.FileName)), "", false);
+        });
+    }
+
+    /// <summary>
+    /// Imports another PC's stats: the file Export stats made there, or, for a folder somebody copied by hand, a month
+    /// file inside it. Readings are matched to this PC's sources by recipe and clan, rewritten to this PC's ids, and
+    /// appended; anything already here is skipped, and a clan this PC doesn't follow is named rather than guessed at.
+    /// </summary>
+    private async void OnImportStatsClick(object sender, RoutedEventArgs e)
+    {
+        if (_transferring) return;
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "Import stats from another PC",
+            Filter = "Ur Score stats (*.zip)|*.zip|A month file inside a copied Ur Score folder (*.jsonl)|*.jsonl",
             Multiselect = false,
         };
 
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
 
-        _bringing = true;
-        BringBookButton.IsEnabled = false;
-        ShowLine(BringBookProblemLine, "");
-        BringBookLine.Text = "Reading that book…";
+        await TransferAsync("Reading that file…", "That file could not be imported", async () =>
+        {
+            var outcome = await Task.Run(() => BookImport.RunFile(dialog.FileName, _services));
+            return (outcome.Message, outcome.Problem, outcome.Added > 0);
+        });
+    }
+
+    /// <summary>
+    /// One shape for both transfers: the buttons wait, the line says what is happening, then what happened or what
+    /// went wrong (the exception's message redacted, as every screen line is), and the page redraws. A reload of the
+    /// book follows an import that added lines.
+    /// </summary>
+    private async Task TransferAsync(string doing, string failed, Func<Task<(string Said, string Problem, bool Reload)>> transfer)
+    {
+        _transferring = true;
+        ExportStatsButton.IsEnabled = false;
+        ImportStatsButton.IsEnabled = false;
+        ShowLine(StatsTransferProblemLine, "");
+        StatsTransferLine.Text = doing;
 
         try
         {
-            var outcome = await Task.Run(() => BookImport.Run(dialog.FolderName, _services));
-            BringBookLine.Text = outcome.Message;
-            ShowLine(BringBookProblemLine, outcome.Problem);
-            if (outcome.Added > 0) await _services.ReloadBookAsync();
+            var (said, problem, reload) = await transfer();
+            StatsTransferLine.Text = said;
+            ShowLine(StatsTransferProblemLine, problem);
+            if (reload) await _services.ReloadBookAsync();
         }
         catch (Exception ex)
         {
-            BringBookLine.Text = "";
-            ShowLine(BringBookProblemLine, _services.Redactor.Redact($"That book could not be brought in: {ex.Message}"));
+            StatsTransferLine.Text = "";
+            ShowLine(StatsTransferProblemLine, _services.Redactor.Redact($"{failed}: {ex.Message}"));
         }
         finally
         {
-            _bringing = false;
-            BringBookButton.IsEnabled = true;
+            _transferring = false;
+            ExportStatsButton.IsEnabled = true;
+            ImportStatsButton.IsEnabled = true;
             Refresh();
         }
     }

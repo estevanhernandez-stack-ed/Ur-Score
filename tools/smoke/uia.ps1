@@ -368,8 +368,23 @@ function Assert-UrDataSendsNothing {
     }
 }
 
+# The .smoke-backup-* folders beside the data folder, oldest first: a walk that was killed mid-run leaves one
+# behind with YOUR data in it, and the folder that stands in its place is the walk's scratch.
+function Get-UrLeftoverBackups {
+    $parent = Split-Path $UrData -Parent
+    $leaf = Split-Path $UrData -Leaf
+    return @(Get-ChildItem -Path $parent -Directory -Filter "$leaf.smoke-backup-*" -ErrorAction SilentlyContinue | Sort-Object Name)
+}
+
 function Move-UrDataAside {
     Stop-UrScore
+    # A leftover backup means the last walk never put your data back (S1-16.1). Moving aside again would bury it
+    # under a second backup and run the walk on the last walk's scratch, so this stops and says what to do instead.
+    $leftovers = Get-UrLeftoverBackups
+    if ($leftovers.Count -gt 0) {
+        $names = ($leftovers | ForEach-Object { $_.FullName }) -join "`n  "
+        throw "A previous walk left your data in a backup folder and did not put it back:`n  $names`nRename the newest one back to $UrData (delete the folder standing there first; it is the walk's scratch), then run again."
+    }
     $backup = "$UrData.smoke-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     if (Test-Path $UrData) {
         Rename-Item $UrData (Split-Path $backup -Leaf)
@@ -392,6 +407,37 @@ function Restore-UrData([string]$backup) {
     if (Test-Path $UrData) { Remove-Item $UrData -Recurse -Force }
     if ($backup -and (Test-Path $backup)) { Rename-Item $backup (Split-Path $UrData -Leaf) }
     "Your data folder is back: $(Test-Path $UrData)"
+}
+
+# Whether RoRoRo's host process is up. Quitting RoRoRo for a walk is the owner's call (README), and a check before
+# the walk is not a check for its duration: RoRoRo is URI-activatable and a Discord Join can start it cold while a
+# walk runs (rororoblox-fc, 2026-09-22). So every walk records this BEFORE and AFTER, and a host that is up at the
+# end but was not at the start is recorded as having possibly seen the walk's data. RoRoRo is a tray app: a closed
+# window is not a quit process, which is why this asks the process list and not the screen.
+function Test-RoRoRoUp {
+    return [bool](Get-Process -Name 'ROROROblox.App' -ErrorAction SilentlyContinue)
+}
+
+# Records RoRoRo's presence as a step. Call once at the start of a walk and once at the end (from the finally).
+function Note-RoRoRo([string]$when) {
+    $up = Test-RoRoRoUp
+    if ($when -eq 'before') {
+        $script:RoRoRoUpBefore = $up
+        Check "0 RoRoRo before the walk" $true $(if ($up) { 'RoRoRo IS running: this walk reports as the real plugin; the seeded folder sends nothing' } else { 'RoRoRo is not running' })
+    } else {
+        $came = $up -and -not $script:RoRoRoUpBefore
+        Check "9 RoRoRo after the walk" (-not $came) $(if ($came) { 'RoRoRo came up DURING the walk: assume it saw the seeded data' } elseif ($up) { 'RoRoRo running, as before' } else { 'RoRoRo is not running' })
+    }
+}
+
+# The screens, physical bounds and DPI each, primary first (S2-8.6). Asked of a child process: see screens.ps1.
+function Get-UrScreens {
+    $lines = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'screens.ps1') 2>$null
+    $screens = foreach ($line in @($lines | Where-Object { $_ -like '\\.\DISPLAY*' })) {
+        $f = $line -split '\|'
+        [pscustomobject]@{ Device = $f[0]; Primary = ($f[1] -eq 'True'); X = [int]$f[2]; Y = [int]$f[3]; Width = [int]$f[4]; Height = [int]$f[5]; Dpi = [int]$f[6] }
+    }
+    return @($screens | Sort-Object { -not $_.Primary })
 }
 
 function Check([string]$step, [bool]$ok, [string]$seen) {

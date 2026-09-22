@@ -15,6 +15,7 @@ function Get-SavedPanels([int]$index = 0) { @(@(Read-Boards)[$index].panels) }
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     $board = Initialize-ClanBoard $Main $Alt
 
     # 1. The starter still follows your sources, and nothing is written for it (R1).
@@ -128,12 +129,14 @@ try {
     # 11. boards.json holds only your own account ids.
     & (Join-Path $PSScriptRoot 'check-boards-privacy.ps1') | Out-Host
     $privacy = $LASTEXITCODE
-    Check '11 boards.json holds no other player' ($privacy -eq 0) "exit=$privacy"
+    # Exit 2 is "nothing to check" (no accounts.json: RoRoRo quit), as the score-book and pop-out walks read it.
+    Check '11 boards.json holds no other player' ($privacy -eq 0 -or $privacy -eq 2) "check-boards-privacy exit $privacy$(if ($privacy -eq 2) { ' (nothing to check: RoRoRo never listed your accounts)' })"
 
     & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'board-editing.png') | Out-Null
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
 }
 exit $LASTEXITCODE

@@ -12,23 +12,29 @@ public static class UrWin32Msg {
 "@
 }
 
-# Presses Import recipe... on Setup > Recipes, types the path into the file picker and presses Open.
-function Start-Import([string]$path) {
-    $setup = Open-SetupPage 'Recipes'
-    Invoke-Element (Find-ByAutomationId $setup 'ImportRecipeButton')
-    $dlg = Wait-UrWindow '^Import a recipe$' 20
-    if (-not $dlg) { throw 'the file picker did not open' }
+# Types a path into the Windows file picker that is open under this title (Open or Save alike) and presses its
+# main button. The common dialog's classic controls surface only as panes to this UIA client, so it is driven by
+# handle: the file name text (WM_SETTEXT into the Edit - 1148 in an Open dialog, 1001 in a Save dialog, probed
+# 2026-09-22), then the button (BM_CLICK on button 1, Open or Save).
+function Complete-FileDialog([string]$titlePattern, [string]$path) {
+    $dlg = Wait-UrWindow $titlePattern 20
+    if (-not $dlg) { throw "the file picker '$titlePattern' did not open" }
     Start-Sleep -Milliseconds 800
-    # The common dialog's classic controls surface only as panes to this UIA client, so drive them by handle:
-    # set the file name text (WM_SETTEXT), then click Open (BM_CLICK).
     $all = $dlg.FindAll($TS::Descendants, $Cond::TrueCondition)
-    $edit = $all | Where-Object { $_.Current.AutomationId -eq '1148' -and $_.Current.ClassName -eq 'Edit' } | Select-Object -First 1
+    $edit = $all | Where-Object { $_.Current.AutomationId -in @('1148', '1001') -and $_.Current.ClassName -eq 'Edit' } | Select-Object -First 1
     $open = $all | Where-Object { $_.Current.AutomationId -eq '1' -and $_.Current.ClassName -eq 'Button' } | Select-Object -First 1
     if (-not $edit -or -not $open) { throw 'file picker controls not found' }
     [UrWin32Msg]::SendMessage([IntPtr]$edit.Current.NativeWindowHandle, 0x000C, [IntPtr]::Zero, $path) | Out-Null
     Start-Sleep -Milliseconds 300
     [UrWin32Msg]::PostMessage([IntPtr]$open.Current.NativeWindowHandle, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
     Start-Sleep -Seconds 2
+}
+
+# Presses Import recipe... on Setup > Recipes, types the path into the file picker and presses Open.
+function Start-Import([string]$path) {
+    $setup = Open-SetupPage 'Recipes'
+    Invoke-Element (Find-ByAutomationId $setup 'ImportRecipeButton')
+    Complete-FileDialog '^Import a recipe$' $path
 }
 
 # Why an import was refused, in the words the page says it in. A refused import no longer raises a message box

@@ -205,6 +205,13 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public IScoreBook Book => _book;
 
+    public BookPackManifest ExportStats(string path)
+    {
+        _book.Flush();
+        var version = typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        return BookPack.Write(_book.Root, path, version, _time.GetUtcNow());
+    }
+
     public ScoreBookReader Reader { get; }
 
     public bool ReaderLoaded { get; private set; }

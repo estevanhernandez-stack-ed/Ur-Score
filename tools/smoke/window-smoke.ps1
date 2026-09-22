@@ -11,6 +11,7 @@ $backup = $null
 
 try {
     $backup = Move-UrDataAside
+    Note-RoRoRo 'before'
     $board = Start-UrScore
 
     Check '1 First run asks for a recipe' ((Line $board 'EmptyStateLine') -eq 'Import a recipe to start') (Line $board 'EmptyStateLine')
@@ -82,6 +83,7 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    Note-RoRoRo 'after'
     Show-Results
     "RoRoRo running: $rororo"
 }
