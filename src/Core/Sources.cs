@@ -52,19 +52,43 @@ public sealed class SourceStore(string path)
     /// <summary>A missing or hand-broken file is no sources. <see cref="LoadResult"/> says which it was.</summary>
     public IReadOnlyList<Source> Load() => LoadResult().Sources;
 
-    /// <summary>The sources, whether the file exists, and whether it could be read (a broken or locked file can't).</summary>
+    /// <summary>
+    /// The sources, whether the file exists, and whether it could be read (a broken, locked or denied file can't).
+    /// <para>
+    /// "Exists" is answered by trying to open the file, never by <c>File.Exists</c>. S1-14.15 feared that call
+    /// answers false for a file that is there but denied — the one false answer that would do damage, because
+    /// start reads "no file" as "migrate and save", which would write over the user's clans. CHECKED 2026-09-21
+    /// with a real deny rule on the file, Read and then FullControl: on this platform <c>File.Exists</c> answers
+    /// true both times, so the old code already reached the unreadable branch and start held. The open-based
+    /// shape is kept anyway, because it is the one that cannot be fooled by any platform's answer to
+    /// <c>File.Exists</c>, nor by the file vanishing between an exists check and the read: not-found means not
+    /// there, and anything else that stops the read means there but unreadable.
+    /// </para>
+    /// </summary>
     public SourceLoad LoadResult()
     {
+        string text;
         try
         {
-            if (!File.Exists(path)) return new SourceLoad([], Exists: false, Readable: true);
+            text = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return new SourceLoad([], Exists: false, Readable: true);
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return new SourceLoad([], Exists: true, Readable: false);
+        }
 
-            var loaded = JsonSerializer.Deserialize<List<Source>>(File.ReadAllText(path), Options) ?? [];
+        try
+        {
+            var loaded = JsonSerializer.Deserialize<List<Source>>(text, Options) ?? [];
             return new SourceLoad(
                 [.. loaded.Where(s => !string.IsNullOrWhiteSpace(s.Id) && !string.IsNullOrWhiteSpace(s.Recipe) && s.Inputs is not null)],
                 Exists: true, Readable: true);
         }
-        catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException or UnauthorizedAccessException)
+        catch (JsonException)
         {
             return new SourceLoad([], Exists: true, Readable: false);
         }

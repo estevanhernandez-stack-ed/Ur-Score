@@ -116,9 +116,18 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
             .GroupBy(x => x.line.Period!.Value, StringComparer.Ordinal)
             .Select(g =>
             {
-                var first = g.OrderBy(x => x.order).First();
+                // Two clocks for one entry, on purpose. Its PLACE in the list is the earliest final, because that
+                // is closest to when the period ended, and a correction written days later must not make a
+                // battle jump to the top as though it had just finished (which is why S1-9.4 was not a defect).
+                // Its CONTENT is the latest final, because a later final is a correction and the whole point of
+                // a correction is to replace what it corrects; the reader used to keep the first and drop the
+                // rest (S1-9.2). Latest by T rather than by file order: a "Bring in stats" merge appends another
+                // machine's lines after this one's whatever their times, so position in the file says nothing.
+                var first = g.OrderBy(x => x.line.T).ThenBy(x => x.order).First();
+                var latestFirst = g.OrderByDescending(x => x.line.T).ThenByDescending(x => x.order).ToList();
+
                 var accounts = new Dictionary<long, BookAccount>();
-                foreach (var (line, _) in g.OrderBy(x => x.order))
+                foreach (var (line, _) in latestFirst)
                 {
                     foreach (var (key, account) in line.Accounts)
                     {
@@ -126,7 +135,7 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
                     }
                 }
 
-                return (Entry: new FinalEntry(g.Key, g.Min(x => x.line.T), first.order, first.line.Headline, accounts), first.order);
+                return (Entry: new FinalEntry(g.Key, first.line.T, first.order, latestFirst[0].line.Headline, accounts), first.order);
             })
             .OrderByDescending(x => x.Entry.T)
             .ThenByDescending(x => x.order)
