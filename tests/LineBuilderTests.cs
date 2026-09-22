@@ -106,6 +106,49 @@ public class LineBuilderTests
         Assert.Equal(new Dictionary<string, double> { ["clan-place"] = 14 }, line.Headline);
     }
 
+    /// <summary>
+    /// A headline number that matches a stranger's id is dropped when the reading knew that id through anything,
+    /// not only through its rows. A read can carry ids in three places — the rows, the accounts the source said
+    /// it could not show, and the ones a stat missed for — and the guard used to look only at the rows, so an id
+    /// the reading itself surfaced could still be written to disk as a headline number (S1-6.10).
+    /// <para>
+    /// The three cases are asserted TOGETHER with a fourth that must survive, because a guard that dropped
+    /// everything would pass any test that only checked the dropping. `clan-place` is the control.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AHeadlineMatchingAStrangersIdIsDroppedHoweverTheReadKnewThatId()
+    {
+        var reading = ClanReading(
+            [Row(7_000_001, 5), Row(7_000_002, 9)],
+            Head("clan-place", 14),
+            Head("from-a-row", 7_000_002),
+            Head("from-unavailable", 7_000_003),
+            Head("from-a-cell-miss", 7_000_004)) with
+        {
+            Unavailable = new Dictionary<long, string> { [7_000_003] = "hidden profile" },
+            CellMisses = new Dictionary<(long UserId, string Stat), string> { [(7_000_004, "value")] = "no points here" },
+        };
+
+        var line = LineBuilder.Reading(Context(Clan), reading, new Dictionary<long, Guid> { [7_000_001] = A }, Points)!;
+
+        Assert.Equal(new Dictionary<string, double> { ["clan-place"] = 14 }, line.Headline);
+    }
+
+    /// <summary>
+    /// And your OWN id is not a stranger's, so a headline that happens to equal it still goes. Without this the
+    /// test above would pass under a guard that dropped every integer it had ever seen.
+    /// </summary>
+    [Fact]
+    public void AHeadlineMatchingYourOwnIdIsKept()
+    {
+        var reading = ClanReading([Row(7_000_001, 5)], Head("yours", 7_000_001));
+
+        var line = LineBuilder.Reading(Context(Clan), reading, new Dictionary<long, Guid> { [7_000_001] = A }, Points)!;
+
+        Assert.Equal(7_000_001d, line.Headline["yours"]);
+    }
+
     [Fact]
     public void ShowOnlyStatsAreWrittenAndUntickedOnesAreNot()
     {
