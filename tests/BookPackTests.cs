@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using Labs626.UrScore.Book;
+using Labs626.UrScore.Core;
 
 namespace UrScore.Tests;
 
@@ -75,7 +76,7 @@ public class BookPackTests
         var newer = Path.Combine(dir.Path, "newer.zip");
         using (var zip = ZipFile.Open(newer, ZipArchiveMode.Create))
         {
-            WriteEntry(zip, BookPack.ManifestName, """{"v":2,"takenAt":"2026-09-22T12:00:00+00:00","app":"9.0.0","readings":0,"finals":0}""");
+            WriteEntry(zip, BookPack.ManifestName, """{"v":3,"takenAt":"2026-09-22T12:00:00+00:00","app":"9.0.0","readings":0,"finals":0}""");
         }
 
         var first = BookPack.Open(noManifest);
@@ -121,6 +122,53 @@ public class BookPackTests
         Directory.CreateDirectory(Path.GetDirectoryName(stray)!);
         File.WriteAllText(stray, "{}" + Environment.NewLine);
         Assert.Null(BookImport.ScoreBookRootOfPickedFile(stray));
+    }
+
+    /// <summary>A file with a setup in it carries it back out; the manifest says so; a v:1 file (0.5.5) opens as stats only.</summary>
+    [Fact]
+    public void ASetupTravelsWithTheStatsAndAStatsOnlyFileStillOpens()
+    {
+        using var dir = TempDir.Create("urscore-pack");
+        var book = Path.Combine(dir.Path, "scorebook");
+        BookGenerator.Write(book, clanSources: 1, days: 1);
+        var setup = new SetupPack([], [BoardFixtures.MainClan], [], Labs626.UrScore.Core.Settings.Defaults, []);
+        var withSetup = Path.Combine(dir.Path, "with.zip");
+        var without = Path.Combine(dir.Path, "without.zip");
+
+        var manifest = BookPack.Write(book, withSetup, "0.5.6", Now, setup);
+        var plain = BookPack.Write(book, without, "0.5.6", Now);
+        var opened = BookPack.Open(withSetup);
+        var openedPlain = BookPack.Open(without);
+
+        Assert.Equal((2, true), (manifest.V, manifest.Setup));
+        Assert.False(plain.Setup);
+        Assert.NotNull(opened.Setup);
+        var back = Assert.Single(opened.Setup!.Sources);
+        Assert.Equal(
+            (BoardFixtures.MainClan.Id, BoardFixtures.MainClan.Recipe, BoardFixtures.MainClan.Role, BoardFixtures.MainClan.InputsKey),
+            (back.Id, back.Recipe, back.Role, back.InputsKey));
+        Assert.Null(openedPlain.Setup);
+        BookPack.Discard(opened);
+        BookPack.Discard(openedPlain);
+    }
+
+    [Fact]
+    public void AFileFromTheVersionBeforeOpensAsStatsOnly()
+    {
+        using var dir = TempDir.Create("urscore-pack");
+        var file = Path.Combine(dir.Path, "old.zip");
+        using (var zip = ZipFile.Open(file, ZipArchiveMode.Create))
+        {
+            WriteEntry(zip, BookPack.ManifestName, """{"v":1,"takenAt":"2026-09-22T12:00:00+00:00","app":"0.5.5","readings":0,"finals":0}""");
+        }
+
+        var opened = BookPack.Open(file);
+
+        Assert.Equal("", opened.Problem);
+        Assert.NotNull(opened.Folder);
+        Assert.Null(opened.Setup);
+        Assert.False(opened.Manifest!.Setup);
+        BookPack.Discard(opened);
     }
 
     private static void WriteEntry(ZipArchive zip, string name, string text)
