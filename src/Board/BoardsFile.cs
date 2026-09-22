@@ -49,7 +49,10 @@ public sealed class BoardsFile(string path, TimeProvider time)
     /// <summary>
     /// Writes the boards. Returns where the old file was kept, or null. The old file is kept when it doesn't
     /// parse, or, with <paramref name="keepExisting"/>, whatever it holds: a file that couldn't be read at start
-    /// may read now, and was still never shown (R3). Throws when the folder can't be written.
+    /// may read now, and was still never shown (R3). Throws when the folder can't be written — and also while
+    /// READING the old file to decide whether to keep it, if that file is locked at that moment (S2-1.2, S2-1.1):
+    /// the caller gets the same "not saved" outcome either way and nothing is lost, since the new boards are only
+    /// written after the old file has been dealt with.
     /// </summary>
     public string? Save(IReadOnlyList<BoardDef> boards, bool keepExisting = false)
     {

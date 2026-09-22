@@ -7,7 +7,11 @@ public interface IScoreBook
 {
     void Append(BookLine line, string recipeText);
 
-    /// <summary>Raised after a line reaches disk, on the writer's thread.</summary>
+    /// <summary>
+    /// Raised after a line reaches disk. On the writer's thread when the book runs one (the app), and on the
+    /// caller's own thread when it does not (<c>background: false</c>, which the tests use so a write is done
+    /// when <c>Append</c> returns). Either way the line is on disk before this fires (S1-5.2).
+    /// </summary>
     event Action<BookLine>? Written;
 
     int Pending { get; }
