@@ -269,6 +269,33 @@ public class SourcesTests
         Assert.Same(loaded, SourceRules.ForNewRecipes(loaded, [], [clan, profile]));
     }
 
+    /// <summary>
+    /// The sources' JSON, callable without a file: what a stats file carries a setup's clans as. <see cref="Source"/>
+    /// is a record whose <c>Inputs</c> is an <see cref="IReadOnlyDictionary{TKey,TValue}"/>, and records compare
+    /// such members by REFERENCE — so whole-record equality (<c>Assert.Equal(sources, back)</c>) would fail here
+    /// even though every value round-trips. Compared field by field instead; xUnit's dictionary comparison for
+    /// <c>Inputs</c> is by content.
+    /// </summary>
+    [Fact]
+    public void SourcesRoundTripThroughTheirJson()
+    {
+        var sources = new List<Source>
+        {
+            new("s-0000000a", "pet-sim-99-clan-battle-points", new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main),
+            new("s-0000000b", "pet-sim-99-top-clans", new Dictionary<string, string>(), SourceRole.Watch, Enabled: false),
+        };
+
+        var back = SourceStore.Parse(SourceStore.Serialize(sources));
+
+        Assert.Equal(sources.Count, back.Count);
+        foreach (var (a, b) in sources.Zip(back))
+        {
+            Assert.Equal((a.Id, a.Recipe, a.Role, a.Enabled, a.InputsKey), (b.Id, b.Recipe, b.Role, b.Enabled, b.InputsKey));
+            Assert.Equal(a.Inputs, b.Inputs);
+        }
+        Assert.Contains("\"role\": \"watch\"", SourceStore.Serialize(sources), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheStoreRoundTripsAndABrokenFileLoadsAsNoSources()
     {
