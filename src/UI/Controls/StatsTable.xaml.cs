@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using Labs626.UrScore.Recipes;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -64,7 +65,7 @@ public partial class StatsTable : UserControl
         ReadNamesButton.Content = readNamesLabel;
         AutomationProperties.SetName(ReadNamesButton, readNamesLabel);
         CounterPanel.Visibility = recipe.LastStep.Counters is null || readNames is null ? Visibility.Collapsed : Visibility.Visible;
-        Show(NamesLine, StatsTableModel.NamesLine(recipe, _counterNames.Count));
+        ShowLine(NamesLine, StatsTableModel.NamesLine(recipe, _counterNames.Count));
 
         StatsSearchBox.Text = "";
         Rebuild(startTicks ?? existing.StatChoices);
@@ -78,7 +79,7 @@ public partial class StatsTable : UserControl
         var recipe = _recipe;
         _reading = true;
         ReadNamesButton.IsEnabled = false;
-        Show(NamesLine, StatsTableModel.ReadingNamesLine(recipe));
+        ShowLine(NamesLine, StatsTableModel.ReadingNamesLine(recipe));
 
         try
         {
@@ -91,7 +92,7 @@ public partial class StatsTable : UserControl
                 Rebuild(Choices);
             }
 
-            Show(NamesLine, found.Names.Count > 0
+            ShowLine(NamesLine, found.Names.Count > 0
                 ? StatsTableModel.FoundNamesLine(found.Names.Count)
                 : found.Problem ?? "No statistic names came back.");
             Refresh();
@@ -102,7 +103,7 @@ public partial class StatsTable : UserControl
         }
         catch (Exception ex)
         {
-            Show(NamesLine, $"Could not read them ({ex.GetType().Name}).");
+            ShowLine(NamesLine, $"Could not read them ({ex.GetType().Name}).");
         }
         finally
         {
@@ -115,7 +116,7 @@ public partial class StatsTable : UserControl
         _recipe is null ? [] : StatsTableModel.SaveProblems(_recipe, _existing, _installed, _accountIds(), _rows);
 
     /// <summary>Stays on screen until the next change, so a collided name can be fixed right here.</summary>
-    public void ShowProblems(IReadOnlyList<string> problems) => Show(RefusalLine, string.Join(Environment.NewLine, problems));
+    public void ShowProblems(IReadOnlyList<string> problems) => ShowLine(RefusalLine, string.Join(Environment.NewLine, problems));
 
     private async void OnReadNamesClick(object sender, RoutedEventArgs e) => await ReadNamesAsync(CancellationToken.None);
 
@@ -139,30 +140,34 @@ public partial class StatsTable : UserControl
     {
         var visible = StatsTableModel.Visible(_rows, StatsSearchBox.Text);
         StatsRows.ItemsSource = visible;
-        Show(ShowingLine, StatsTableModel.ShowingLine(visible.Count, _rows.Count, StatsSearchBox.Text));
+        ShowLine(ShowingLine, StatsTableModel.ShowingLine(visible.Count, _rows.Count, StatsSearchBox.Text));
     }
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is not (nameof(StatRow.Show) or nameof(StatRow.Send) or nameof(StatRow.MetricId))) return;
 
-        if (!_reverting)
-        {
-            _budgetRefusal = null;
+        // The undo's own change lands here too; the undo redraws once itself, after it (S1-10.2).
+        if (_reverting) return;
 
-            // Stats design §5.3: a Send tick that would pass RoRoRo's limit is undone, and says why.
-            if (sender is StatRow { Send: true } row && e.PropertyName == nameof(StatRow.Send) && _recipe is not null
-                && StatsTableModel.Budget(_recipe, _existing, _installed, _accountIds(), _rows) is { Allowed: false } refused)
+        _budgetRefusal = null;
+
+        // Stats design §5.3: a Send tick that would pass RoRoRo's limit is undone, and says why. One redraw for
+        // the whole thing, after the undo, rather than three — one for the tick, one for the undo's change, one
+        // for the undo's own redraw. Nobody could see three; every one raised Changed, though, and the host
+        // enables its Save button from that (S1-10.2).
+        if (sender is StatRow { Send: true } row && e.PropertyName == nameof(StatRow.Send) && _recipe is not null
+            && StatsTableModel.Budget(_recipe, _existing, _installed, _accountIds(), _rows) is { Allowed: false } refused)
+        {
+            _budgetRefusal = refused.Line;
+            Dispatcher.BeginInvoke(() =>
             {
-                _budgetRefusal = refused.Line;
-                Dispatcher.BeginInvoke(() =>
-                {
-                    _reverting = true;
-                    row.Send = false;
-                    _reverting = false;
-                    Refresh();
-                });
-            }
+                _reverting = true;
+                row.Send = false;
+                _reverting = false;
+                Refresh();
+            });
+            return;
         }
 
         Refresh();
@@ -172,16 +177,9 @@ public partial class StatsTable : UserControl
     {
         if (_recipe is null) return;
 
-        Show(SlotLine, StatsTableModel.Budget(_recipe, _existing, _installed, _accountIds(), _rows).Line);
-        Show(RuleLine, StatsTableModel.RuleLines(_rows, _ruleSentence));
-        Show(RefusalLine, string.Join(Environment.NewLine, StatsTableModel.Refusals(_extraRefusals, _rows, _budgetRefusal)));
+        ShowLine(SlotLine, StatsTableModel.Budget(_recipe, _existing, _installed, _accountIds(), _rows).Line);
+        ShowLine(RuleLine, StatsTableModel.RuleLines(_rows, _ruleSentence));
+        ShowLine(RefusalLine, string.Join(Environment.NewLine, StatsTableModel.Refusals(_extraRefusals, _rows, _budgetRefusal)));
         Changed?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>An empty line takes no space.</summary>
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

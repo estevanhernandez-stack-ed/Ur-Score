@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -24,11 +25,10 @@ public partial class StatsPage : UserControl, ISetupPage
 
     private string? _slug;
 
-    public StatsPage(ISetupServices services, string? recipeSlug = null)
+    public StatsPage(ISetupServices services)
     {
         InitializeComponent();
         _services = services;
-        _slug = recipeSlug;
         StatsTable.Changed += (_, _) => SaveStatsButton.IsEnabled = StatsTable.AnyTicked;
         Unloaded += (_, _) => _closing.Cancel();
         Refresh();
@@ -37,7 +37,7 @@ public partial class StatsPage : UserControl, ISetupPage
     public void Refresh()
     {
         var groupLists = _services.Installed.Where(i => i.Recipe.IsGroupList).Select(i => i.Recipe.Name).ToList();
-        Show(StatsGroupListLine, groupLists.Count == 0 ? ""
+        ShowLine(StatsGroupListLine, groupLists.Count == 0 ? ""
             : $"{string.Join(", ", groupLists)} {(groupLists.Count == 1 ? "has" : "have")} no account stats to tick — its rows are "
               + "other people's clans. What it can send is in Clan and field, below.");
 
@@ -92,7 +92,7 @@ public partial class StatsPage : UserControl, ISetupPage
             recipe.LastStep.Counters is null ? null : ct => _services.ReadCounterNamesAsync(recipe, ct),
             "Read stat names again");
 
-        Show(StatsSavedLine, "");
+        ShowLine(StatsSavedLine, "");
         SaveStatsButton.IsEnabled = StatsTable.AnyTicked;
 
         // Spec §7.3: no saved names and a recipe with counters means ONE read when the page opens. Once per recipe
@@ -123,7 +123,7 @@ public partial class StatsPage : UserControl, ISetupPage
         FieldSection.Visibility = Visibility.Visible;
         FieldLine.Text = FieldMetricsModel.Line(list, _services.Sources, _services.Installed);
         FieldNumbers.ItemsSource = FieldMetricsModel.Items(list.State);
-        Show(FieldSavedLine, "");
+        ShowLine(FieldSavedLine, "");
     }
 
     private void OnSaveFieldClick(object sender, RoutedEventArgs e)
@@ -139,19 +139,19 @@ public partial class StatsPage : UserControl, ISetupPage
             var budget = FieldMetricsModel.Budget(list.Recipe, list.State, _services.Installed, [.. _services.KnownAccounts.Select(a => a.AccountId)], ticked);
             if (!budget.Allowed)
             {
-                Show(FieldSavedLine, budget.Line);
+                ShowLine(FieldSavedLine, budget.Line);
                 return;
             }
 
             _services.SaveRecipeState(list.Recipe, list.State with { SentFieldMetrics = ticked });
             LoadField();
-            Show(FieldSavedLine, ticked.Count == 0
+            ShowLine(FieldSavedLine, ticked.Count == 0
                 ? "Saved. No clan number is sent."
                 : $"Saved. {ticked.Count} clan number(s) go to RoRoRo from the next read.");
         }
         catch (Exception ex)
         {
-            Show(FieldSavedLine, _services.Redactor.Redact($"Could not save those numbers: {ex.Message}"));
+            ShowLine(FieldSavedLine, _services.Redactor.Redact($"Could not save those numbers: {ex.Message}"));
         }
     }
 
@@ -174,17 +174,11 @@ public partial class StatsPage : UserControl, ISetupPage
                 CounterNames = StatsTable.CounterNames,
             });
             Load();
-            Show(StatsSavedLine, "Saved. The next read asks for these stats.");
+            ShowLine(StatsSavedLine, "Saved. The next read asks for these stats.");
         }
         catch (Exception ex)
         {
-            Show(StatsSavedLine, _services.Redactor.Redact($"Could not save those stats: {ex.Message}"));
+            ShowLine(StatsSavedLine, _services.Redactor.Redact($"Could not save those stats: {ex.Message}"));
         }
-    }
-
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

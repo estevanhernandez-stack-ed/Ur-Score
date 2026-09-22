@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Labs626.UrScore.Composition;
+using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
@@ -44,12 +45,12 @@ public partial class AccountsPage : UserControl, ISetupPage
 
         RecipeHeaders.ItemsSource = AccountsModel.SendingRecipes(_services.Installed).Select(r => r.Recipe.Name).ToList();
         AccountsTable.ItemsSource = _rows;
-        Show(AccountsEmptyLine, accounts.Count == 0 ? "RoRoRo hasn't shared any accounts yet. Start RoRoRo and add your accounts there." : "");
+        ShowLine(AccountsEmptyLine, accounts.Count == 0 ? "RoRoRo hasn't shared any accounts yet. Start RoRoRo and add your accounts there." : "");
         ShowMessage();
     }
 
     /// <summary>Every redraw says the message line from what the page keeps, so none wipes what it said (backlog S1-12.4).</summary>
-    private void ShowMessage() => Show(AccountsBudgetLine, AccountsModel.MessageLine(_refusal, _problem, _services.BudgetWarning));
+    private void ShowMessage() => ShowLine(AccountsBudgetLine, AccountsModel.MessageLine(_refusal, _problem, _services.BudgetWarning));
 
     private async Task AskForAccountsAsync()
     {
@@ -113,11 +114,5 @@ public partial class AccountsPage : UserControl, ISetupPage
                 ShowMessage();
             }
         }, DispatcherPriority.Background);
-    }
-
-    private static void Show(TextBlock line, string text)
-    {
-        line.Text = text;
-        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }
