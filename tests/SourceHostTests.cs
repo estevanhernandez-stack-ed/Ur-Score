@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Host;
@@ -19,6 +20,51 @@ public class SourceHostTests
     private static RecipeReading Reading() =>
         new(ReadingOutcome.Read, null, [new RecipeRow(111, new Dictionary<string, double> { ["value"] = 5 })],
             [new HeadlineValue("Clan place", "3") { Id = "clan-place", Number = 3 }], "battle=B", 1);
+
+    /// <summary>
+    /// An engine whose read blocks until the test opens a gate, and honours cancellation while it waits. The
+    /// suite's <see cref="StubEngine"/> answers at once and ignores the token, which cannot show what happens to
+    /// a read that is IN FLIGHT when its source is removed — the whole question of S1-8.2, S1-8.3 and S1-8.4.
+    /// </summary>
+    private sealed class GatedEngine : IRecipeEngine
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Started { get; private set; }
+
+        public int Finished { get; private set; }
+
+        public int Cancelled { get; private set; }
+
+        /// <summary>Set when the first read is waiting at the gate, so a test can act while one is in flight.</summary>
+        public TaskCompletionSource Waiting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Open() => _gate.TrySetResult();
+
+        public async Task<RecipeReading> ReadAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs,
+            IReadOnlyCollection<long> accountUserIds, IReadOnlySet<string> trackedStats, CancellationToken cancellationToken)
+        {
+            Started++;
+            Waiting.TrySetResult();
+            try
+            {
+                await _gate.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Cancelled++;
+                throw;
+            }
+
+            Finished++;
+            return Reading();
+        }
+    }
+
+    private static SourceHost HostOf(IRecipeEngine engine, MemoryBook book, StubHost? host = null, Func<Source, int>? interval = null) =>
+        new(source => new RecipeWatch(engine, host ?? new StubHost(true, Alt), new NoKeys(), new ReportPolicy([], new HashSet<Guid>()),
+                Clan, source.Inputs, new HashSet<string> { "value" }, book, source, recipeText: ClanText),
+            interval ?? (_ => 180));
 
     private sealed class Factory(StubEngine engine, MemoryBook book)
     {
@@ -268,6 +314,141 @@ public class SourceHostTests
         Assert.False(host.Running);
         await host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
         Assert.Equal(WatchState.Showing, host.Latest["s-1"].State);
+    }
+
+    /// <summary>
+    /// Test now used to run each read under the caller's token alone, so a source removed while its read was in
+    /// flight had only its snapshot hidden: the read went on, recorded to the book and sent to RoRoRo for a source
+    /// that was gone. The timer loop's reads were always cancelled by a removal; Test now's are now too (S1-8.3).
+    /// The engine is gated so the removal lands with the read provably in flight, and the gate is opened AFTER the
+    /// removal so that, were the read not cancelled, it would go on to finish and record — which is the failure
+    /// this test exists to catch, and the one it showed before the fix.
+    /// </summary>
+    [Fact]
+    public async Task ASourceRemovedWhileTestNowIsReadingItHasThatReadCancelledNotHidden()
+    {
+        var engine = new GatedEngine();
+        var book = new MemoryBook();
+        using var host = HostOf(engine, book);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        var testNow = host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+        await engine.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        host.Apply([]);
+        engine.Open();
+        await testNow.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, engine.Cancelled);
+        Assert.Equal(0, engine.Finished);
+        Assert.Empty(book.Lines);
+        Assert.Empty(host.Latest);
+    }
+
+    /// <summary>
+    /// The fetch honoured the token; nothing after it did. So a read whose fetch had RETURNED by the time its
+    /// source was removed still recorded and sent, because the only cancellation point was behind it. There is
+    /// now one after the fetch too (S1-8.3). The engine answers at once here and the caller's own token is
+    /// cancelled between the answer and the record, which is exactly the window.
+    /// </summary>
+    [Fact]
+    public async Task AReadCancelledAfterItsFetchReturnsRecordsAndSendsNothing()
+    {
+        var book = new MemoryBook();
+        var cancel = new CancellationTokenSource();
+        // Cancels from inside the engine's answer: the fetch has "returned", the token is now cancelled, and the
+        // next thing the watch does decides whether that matters.
+        var engine = new StubEngine(() => { cancel.Cancel(); return Reading(); });
+        var sent = new StubHost(true, Alt);
+        using var host = HostOf(engine, book, sent);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        await host.RunAllNowAsync(BookLine.TriggerManual, cancel.Token);
+
+        Assert.Equal(1, engine.Calls);
+        Assert.Empty(book.Lines);
+        Assert.Empty(sent.Reported);
+    }
+
+    /// <summary>
+    /// Switching a clan off and straight back on while it is being read: the old watch's read is cancelled by
+    /// the removal and the new watch starts its own, so for a moment there are two — one draining, one
+    /// starting. What the row feared was two watches READING: a burst against the server and a doubled line in
+    /// the book (S1-8.4). This pins the bound: the old read is cancelled, never finishes, and never records; the
+    /// new one reads once. Two starts, one finish, one line. A third start or a second line is the defect.
+    /// </summary>
+    [Fact]
+    public async Task OffAndStraightBackOnDuringAReadLeavesOneReaderStanding()
+    {
+        var engine = new GatedEngine();
+        var book = new MemoryBook();
+        using var host = HostOf(engine, book);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => ready.TrySetResult();
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await engine.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, engine.Started);
+
+        host.Apply([SourceNamed("s-1", "CCGP") with { Enabled = false }]);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+        engine.Open();
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        host.Stop();
+
+        Assert.Equal(2, engine.Started);
+        Assert.Equal(1, engine.Cancelled);
+        Assert.Equal(1, engine.Finished);
+        Assert.Single(book.Lines);
+    }
+
+    /// <summary>
+    /// Exit gives a read in flight a moment to land before cancelling it. Dispose used to cancel everything at
+    /// once, so a read that had already fetched lost its lines every time the window happened to close during
+    /// one — at most one read's worth, and a read a person could have kept for a moment's patience (S1-8.2).
+    /// The gate is opened from another thread a beat after Dispose begins, inside the grace, and the line is
+    /// expected in the book; under the old code the read is cancelled before the gate opens and the book is empty.
+    /// </summary>
+    [Fact]
+    public async Task ExitWaitsBrieflyForAReadInFlightBeforeCancellingIt()
+    {
+        var engine = new GatedEngine();
+        var book = new MemoryBook();
+        var host = HostOf(engine, book);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await engine.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        _ = Task.Run(async () => { await Task.Delay(300); engine.Open(); });
+        host.Dispose();
+
+        Assert.Equal(1, engine.Finished);
+        Assert.Equal(0, engine.Cancelled);
+        Assert.Single(book.Lines);
+    }
+
+    /// <summary>
+    /// And the grace is a grace, not a wait: a read that never lands is cancelled once the grace is up, so exit
+    /// cannot hang on a dead network. Cheap to pin and expensive to lose.
+    /// </summary>
+    [Fact]
+    public async Task ExitDoesNotWaitLongerThanTheGraceForAReadThatNeverLands()
+    {
+        var engine = new GatedEngine();
+        var host = HostOf(engine, new MemoryBook());
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        host.Start();
+        await engine.Waiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var began = Stopwatch.GetTimestamp();
+        host.Dispose();
+        var took = Stopwatch.GetElapsedTime(began);
+
+        Assert.True(took >= SourceHost.ExitGrace - TimeSpan.FromMilliseconds(50), $"exit gave up too early: {took.TotalMilliseconds:F0} ms");
+        Assert.True(took < SourceHost.ExitGrace + TimeSpan.FromSeconds(2), $"exit hung past the grace: {took.TotalMilliseconds:F0} ms");
     }
 
     [Fact]

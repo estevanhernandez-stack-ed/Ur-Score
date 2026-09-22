@@ -26,6 +26,24 @@ public class BuildFenceTests
         Assert.Contains("-nodeReuse:false", lines);
     }
 
+    /// <summary>
+    /// Design-time builds keep their intermediates apart from real ones, or C# Dev Kit's build-on-save and a
+    /// `dotnet build` typed a moment later collide in one obj tree on the WPF temp project's files — which was
+    /// V3-S.39's actual cause, found from the process tree after two other theories. As with the response file,
+    /// deleting this would break no build today and would bring the flake back, so the line is pinned.
+    /// </summary>
+    [Fact]
+    public void DesignTimeBuildsKeepTheirOwnIntermediates()
+    {
+        var props = Path.Combine(RepoRoot(), "Directory.Build.props");
+        Assert.True(File.Exists(props), $"{props} is missing; the IDE and the command line would share one obj tree again.");
+
+        var text = File.ReadAllText(props);
+        Assert.Contains("'$(DesignTimeBuild)' == 'true'", text);
+        Assert.Contains("<BaseIntermediateOutputPath>obj/designtime/</BaseIntermediateOutputPath>", text);
+        Assert.Contains("obj/**", text);
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

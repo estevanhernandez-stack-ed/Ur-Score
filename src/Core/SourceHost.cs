@@ -14,7 +14,20 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
     private readonly object _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, RecipeSnapshot> _latest = new(StringComparer.Ordinal);
+
+    /// <summary>Every read currently running, so exit can wait for them (<see cref="Dispose"/>). Keyed by an id that is unique per read, never per source: two reads of one source can overlap across a Stop/Start.</summary>
+    private readonly Dictionary<long, Task> _inFlight = [];
+    private long _nextRead;
+
+    /// <summary>
+    /// Two sources per run, because exit and Stop want different things. <see cref="_run"/> stops the loops:
+    /// no new read starts and a loop waiting out its interval wakes and leaves. <see cref="_reads"/> cancels
+    /// the reads themselves. Stop cancels both at once, as it always did. Exit cancels the loops, gives reads
+    /// already in flight <see cref="ExitGrace"/> to land, and only then cancels them (S1-8.2). With one source
+    /// there was no way to say "no more reads, but finish the one you are on".
+    /// </summary>
     private CancellationTokenSource? _run;
+    private CancellationTokenSource _reads = new();
 
     /// <summary>Raised on the thread pool after each read, with the source id.</summary>
     public event Action<string, RecipeSnapshot>? SnapshotReady;
@@ -80,6 +93,7 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
             if (_run is not null) return;
 
             _run = new CancellationTokenSource();
+            if (_reads.IsCancellationRequested) _reads = new CancellationTokenSource();
             foreach (var entry in _entries.Values) StartLoop(entry, _run.Token);
         }
     }
@@ -87,13 +101,18 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
     public void Stop()
     {
         CancellationTokenSource? stopping;
+        CancellationTokenSource reads;
         lock (_gate)
         {
             stopping = _run;
             _run = null;
+            reads = _reads;
         }
 
         if (stopping is null) return;
+
+        // Stop means stop: the read in flight is cancelled too, as it always was. Exit is the path that waits.
+        reads.Cancel();
 
         // Cancelled OUTSIDE the lock. Cancel runs every linked source's callbacks on this thread, and doing that
         // while holding the gate means a callback that ever wanted the gate would deadlock against itself. None
@@ -106,56 +125,116 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
         stopping.Dispose();
     }
 
+    /// <summary>
+    /// Every source read once, now. Each read runs under its own entry's token as well as the caller's, so a
+    /// source removed or switched off while its read is in flight has that read cancelled — exactly as the
+    /// timer loop's reads always were. Test now used to run under the caller's token alone, so a removal
+    /// hid the snapshot and nothing else: the read went on to record and send for a source that was gone
+    /// (S1-8.3).
+    /// </summary>
     public Task RunAllNowAsync(string trigger, CancellationToken cancellationToken)
     {
         List<Entry> entries;
         lock (_gate) entries = [.. _entries.Values];
 
-        return Task.WhenAll(entries.Select(entry => RunOneAsync(entry, trigger, cancellationToken)));
+        CancellationToken reads;
+        lock (_gate) reads = _reads.Token;
+
+        return Task.WhenAll(entries.Select(async entry =>
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, reads, entry.Stop.Token);
+            await RunOneAsync(entry, trigger, linked.Token).ConfigureAwait(false);
+        }));
     }
 
+    /// <summary>
+    /// How long exit waits for reads already in flight before cancelling them. Long enough for a read that has
+    /// fetched to record and send; short enough that closing the window never feels stuck. A read that is still
+    /// waiting on the network after this is cancelled and its lines are lost, which is the bargain exit makes
+    /// — but only after it has offered the read a chance to land (S1-8.2).
+    /// </summary>
+    public static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Stops the timers first, so no NEW read starts, then gives reads already in flight <see cref="ExitGrace"/>
+    /// to finish before cancelling whatever is left. Exit used to cancel everything at once, so a read that had
+    /// just fetched lost its lines every time the window happened to close during one — at most one read's
+    /// worth, and a read a person could have kept for the cost of a moment's patience (S1-8.2).
+    /// </summary>
     public void Dispose()
     {
-        Stop();
+        // The loops, not the reads: no new read starts, and the ones in flight get their grace below.
+        CancellationTokenSource? loops;
         lock (_gate)
         {
+            loops = _run;
+            _run = null;
+        }
+        loops?.Cancel();
+        loops?.Dispose();
+
+        Task[] inFlight;
+        lock (_gate) inFlight = [.. _inFlight.Values];
+        if (inFlight.Length > 0)
+        {
+            try
+            {
+                Task.WhenAll(inFlight).Wait(ExitGrace);
+            }
+            catch (AggregateException)
+            {
+                // A read that faulted on its way out has already had its say in its own catch; exit is not the
+                // place to hear it again.
+            }
+        }
+
+        CancellationTokenSource reads;
+        lock (_gate)
+        {
+            reads = _reads;
             foreach (var entry in _entries.Values) entry.Stop.Cancel();
         }
+
+        reads.Cancel();
     }
 
     private void StartLoop(Entry entry, CancellationToken runToken)
     {
-        var linked = CancellationTokenSource.CreateLinkedTokenSource(runToken, entry.Stop.Token);
+        var loop = CancellationTokenSource.CreateLinkedTokenSource(runToken, entry.Stop.Token);
+        var read = CancellationTokenSource.CreateLinkedTokenSource(_reads.Token, entry.Stop.Token);
 
-        // The loop owns the linked source and releases it on the way out, whichever way it leaves — cancelled,
+        // The loop owns both linked sources and releases them on the way out, whichever way it leaves — cancelled,
         // faulted, or simply finished. Before this, a Start/Stop cycle left one per entry behind, and each one
         // holds a registration on both of its parents (S1-8.1).
         _ = Task.Run(async () =>
         {
             try
             {
-                await LoopAsync(entry, linked.Token).ConfigureAwait(false);
+                await LoopAsync(entry, loop.Token, read.Token).ConfigureAwait(false);
             }
             finally
             {
-                linked.Dispose();
+                loop.Dispose();
+                read.Dispose();
             }
         });
     }
 
-    private async Task LoopAsync(Entry entry, CancellationToken cancellationToken)
+    /// <param name="loop">Ends the loop: no further read, and the wait between reads is cut short.</param>
+    /// <param name="read">Cancels the read itself. Exit cancels this one only after its grace.</param>
+    private async Task LoopAsync(Entry entry, CancellationToken loop, CancellationToken read)
     {
         var trigger = BookLine.TriggerStart;
-        while (!cancellationToken.IsCancellationRequested)
+        while (!loop.IsCancellationRequested)
         {
-            await RunOneAsync(entry, trigger, cancellationToken).ConfigureAwait(false);
+            await RunOneAsync(entry, trigger, read).ConfigureAwait(false);
             trigger = BookLine.TriggerTimer;
 
             var seconds = DelaySeconds(intervalSeconds, entry.Source);
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(seconds), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(seconds), loop).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -188,6 +267,27 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
     }
 
     private async Task RunOneAsync(Entry entry, string trigger, CancellationToken cancellationToken)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        long readId;
+        lock (_gate)
+        {
+            readId = ++_nextRead;
+            _inFlight[readId] = tcs.Task;
+        }
+
+        try
+        {
+            await ReadAndPublishAsync(entry, trigger, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_gate) _inFlight.Remove(readId);
+            tcs.TrySetResult();
+        }
+    }
+
+    private async Task ReadAndPublishAsync(Entry entry, string trigger, CancellationToken cancellationToken)
     {
         RecipeSnapshot snapshot;
         try
