@@ -9,6 +9,7 @@ namespace UrScore.Tests;
 /// when the user switches theme — the exact defect that made the first window unreadable. The only
 /// literal colours allowed are the fallback palette in App.xaml, which RoRoRo's feed replaces.
 /// </summary>
+[Collection(WpfCollection.Name)]
 public partial class ThemeFenceTests
 {
     [GeneratedRegex(@"#[0-9A-Fa-f]{3,8}\b")]

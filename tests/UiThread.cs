@@ -1,22 +1,32 @@
 namespace UrScore.Tests;
 
 /// <summary>
-/// The collection every test that runs inside the WPF <c>Application</c> belongs to.
+/// The collection every test class that touches WPF belongs to — a control, a window, a XAML parse, the
+/// application — so no two of them run at the same time.
 /// <para>
-/// Not for exclusion any more — <see cref="UiThread.RunInApp"/> serialises its callers through one dispatcher
-/// whatever collection they sit in — but kept as the visible mark of a class that needs the application, and as
-/// the record of why there is exactly one. WPF allows one <c>Application</c> per process, ever: the flag its
-/// constructor checks is never cleared, not by <c>Shutdown</c>, not by anything. Two classes each building their
-/// own met <c>InvalidOperationException: Cannot create more than one System.Windows.Application instance</c>, on
-/// a thread the runner does not own, which took the test host down; the run then reported "Passed!" with a
-/// quieter total and "Test Run Aborted" three lines later, and the six tests that never ran were neither failed
-/// nor skipped (found 2026-09-22, the first time a second class needed the application).
+/// WHY, with the evidence. On 2026-09-17 six STA tests blocked together and the run hung (V3-S.38 got the bounded
+/// join; V3-S.40 asked why). On 2026-09-22 it happened again, with the suite four seconds long and nine WPF classes
+/// starting cold within the same instant, and this time the stacks were taken (<c>dotnet-stack</c>, 28 threads).
+/// Every stuck STA thread was inside WPF's FIRST-TOUCH static initialisation: <c>ContentPresenter..cctor</c> under
+/// <c>ItemsControl..cctor</c> under a XAML parse on one thread, <c>WpfSharedBamlSchemaContext.GetKnownXamlType</c>
+/// on the others, <c>Application</c>'s constructor on a third. A type's static constructor runs under a lock the
+/// runtime holds per type, and WPF's schema context takes locks of its own inside those constructors; two threads
+/// initialising overlapping sets of WPF types at once can each hold what the other needs, and the runtime does not
+/// break that cycle. It is not one test's fault and no test can be written to avoid it: it is what happens when
+/// WPF is started on several threads in the same instant, which a fast parallel suite does by default.
+/// </para>
+/// <para>
+/// So WPF tests run one class at a time. The cost is nothing anybody can measure — they take milliseconds each —
+/// and the alternative was a run that hung on a quiet machine roughly once a week. The one <c>Application</c> per
+/// process (WPF permits no second; the flag is never cleared) is built by <see cref="UiThread.RunInApp"/> on its own
+/// thread and shared, which this collection also protects. A WPF-touching class outside it is what
+/// <c>WpfCollectionFenceTests</c> is for.
 /// </para>
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
-public sealed class WpfApplicationCollection
+public sealed class WpfCollection
 {
-    public const string Name = "The WPF application";
+    public const string Name = "WPF, one class at a time";
 }
 
 /// <summary>
@@ -75,7 +85,7 @@ internal static class UiThread
     /// <para>
     /// ONE application, built on first use on its own STA thread with a running dispatcher, and never shut down:
     /// WPF permits one per process and does not permit a second after the first is gone (see
-    /// <see cref="WpfApplicationCollection"/>). Every caller's work is invoked onto that dispatcher in turn, so two
+    /// <see cref="WpfCollection"/>). Every caller's work is invoked onto that dispatcher in turn, so two
     /// classes using this cannot collide whatever the runner does with them. <c>Application.Current</c> is
     /// therefore non-null for the rest of the process once any test has called this; the only code that reads it
     /// is <c>ThemeService</c>, which replaces brushes in its resources — harmless to a test application.

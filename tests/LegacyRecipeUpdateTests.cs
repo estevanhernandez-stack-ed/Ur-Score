@@ -4,7 +4,7 @@ using Labs626.UrScore.UI;
 
 namespace UrScore.Tests;
 
-[Collection(WpfApplicationCollection.Name)]
+[Collection(WpfCollection.Name)]
 public class LegacyRecipeUpdateTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "urscore-legacy-" + Guid.NewGuid().ToString("N"));

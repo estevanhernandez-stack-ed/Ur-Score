@@ -7,6 +7,8 @@
         FontFamily="{StaticResource BodyFont}">
     <Window.Resources>
         <Style x:Key="NavItem" TargetType="ListBoxItem">
+            <!-- The item is named for UI Automation by its title, not by its record's ToString (RowListFenceTests, S1-L.4). -->
+            <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
             <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="Padding" Value="10,7" />
             <Setter Property="Margin" Value="0,1" />

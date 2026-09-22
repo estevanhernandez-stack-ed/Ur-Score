@@ -58,6 +58,20 @@ A walk is not free — it takes the app's single-instance lock and, as of 2026-0
 RoRoRo as the real plugin — so every change that needs one is batched into a single owner-watched launch,
 seeded through `Copy-UrControlData`. Read `tools/smoke/README.md` before writing one.
 
+## 5. WPF tests run one class at a time, and a hang gets its stacks taken
+
+Every test class that touches WPF — a control, a window, a XAML parse, the application — carries
+`[Collection(WpfCollection.Name)]`, and `WpfCollectionFenceTests` fails the build for one that does not. WPF's
+first-touch static initialisation deadlocks when two threads start it in the same instant (the stacks from
+2026-09-22 are in `docs/2026-09-22-sta-stall-stacks.txt`; the reasoning is on `WpfCollection`), and a parallel
+suite four seconds long starts it on several threads at once by default. Serialising those classes costs
+milliseconds. There is also exactly one `Application` per process, ever; `UiThread.RunInApp` builds it and any
+test that needs the app's resources goes through that.
+
+When a run hangs anyway: do not kill it first. `dotnet tool install -g dotnet-stack` once, then
+`dotnet-stack report -p <testhost pid>` gives every managed thread's stack in a second, and that is the whole
+diagnosis — V3-S.40 stayed open for five days for want of it. Then kill the host.
+
 ## Where the rules came from
 
 Backlog row V3-S.37 records the seven tests, what each failed to discriminate, and how each was caught. It is

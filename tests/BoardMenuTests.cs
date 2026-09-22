@@ -13,6 +13,7 @@ namespace UrScore.Tests;
 /// to say so. ⋯ beside the tabs opens that same menu; opening it from ⋯ has to leave the right-click exactly
 /// where it was, at the mouse, on whatever you clicked.
 /// </summary>
+[Collection(WpfCollection.Name)]
 public class BoardMenuTests
 {
     [Fact]
