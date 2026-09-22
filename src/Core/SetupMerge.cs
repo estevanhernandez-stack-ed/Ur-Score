@@ -57,9 +57,14 @@ public interface ISetupWriter
     void ReloadRecipes();
 }
 
-/// <summary>What Apply did, for the line the page says. <see cref="FailedStep"/> names the step that threw, or null.</summary>
+/// <summary>
+/// What Apply did, for the line the page says. <see cref="FailedStep"/> names the step that threw, or null.
+/// <see cref="SkippedRecipes"/> names a recipe that parsed on the sending PC but not here (a version gap), so it
+/// was counted by not counting it (spec §4.2) — null when nothing was skipped.
+/// </summary>
 public sealed record SetupApplied(
-    int Recipes, int Clans, int Boards, int KeptClans, int Keys, int DroppedExclusions, string? AsideFolder, string? FailedStep, string? FailureType);
+    int Recipes, int Clans, int Boards, int KeptClans, int Keys, int DroppedExclusions, string? AsideFolder, string? FailedStep, string? FailureType,
+    IReadOnlyList<string>? SkippedRecipes = null);
 
 /// <summary>
 /// Importing a setup: the plan, pure (spec §2), and the apply (spec §4, Task 6). Identity: a recipe by slug, a clan by
@@ -126,8 +131,6 @@ public static class SetupMerge
             items.Add(new SetupItem(SetupKind.Clan, "clan:" + local.Recipe + "|" + local.InputsKey, ClanName(local), SetupOutcome.Kept, "only this PC has it", Ticked: false, LocalId: local.Id));
         }
 
-        static string BoardKey(BoardDef b) => "board:" + b.Name.Trim().ToLowerInvariant();
-
         // First-wins rather than throwing: the Rename window only checks a board against its own old name, so two
         // local boards can fold to the same key (case or spacing) today.
         var hereBoards = new Dictionary<string, BoardDef>(StringComparer.Ordinal);
@@ -179,11 +182,13 @@ public static class SetupMerge
         var clans = 0;
         var boards = 0;
         var dropped = 0;
+        var skippedRecipes = new List<string>();
         string? aside = null;
         var step = "aside";
         try
         {
-            aside = Aside(writer.DataRoot, now);
+            aside = AsideFolder(writer.DataRoot, now);   // named before the copy runs, so a failure mid-copy still reports it
+            CopyAside(writer.DataRoot, aside);
 
             step = "recipes";
             var fileRecipes = plan.File.Recipes.ToDictionary(r => r.Slug, StringComparer.Ordinal);
@@ -191,7 +196,12 @@ public static class SetupMerge
             {
                 var recipe = fileRecipes[item.Key["recipe:".Length..]];
                 var parsed = RecipeParser.Parse(recipe.Text);
-                if (parsed.Recipe is null) continue;   // parsed there, not here: a version gap, counted by not counting it
+                if (parsed.Recipe is null)
+                {
+                    skippedRecipes.Add(recipe.Slug);   // parsed there, not here: a version gap, counted by not counting it
+                    continue;
+                }
+
                 var state = Arriving(recipe.State, recipe.ExcludedUserIds, here.Accounts, out var droppedHere);
                 dropped += droppedHere;
                 writer.SaveRecipe(parsed.Recipe, recipe.Text, state);
@@ -209,17 +219,24 @@ public static class SetupMerge
             foreach (var item in ticked.Where(i => i.Kind == SetupKind.Clan))
             {
                 var fromFile = plan.File.Sources.First(s => s.Id == item.FileId);
+                string localId;
                 if (item.Outcome == SetupOutcome.Replace)
                 {
                     var at = sources.FindIndex(s => s.Id == item.LocalId);
-                    sources[at] = fromFile with { Id = item.LocalId! };
+                    if (at < 0) throw new InvalidOperationException($"the clan \"{item.Name}\" is no longer here to replace");
+                    localId = item.LocalId!;
+                    sources[at] = fromFile with { Id = localId };
                 }
                 else
                 {
-                    var minted = SourceRules.NewId();
-                    idMap[fromFile.Id] = minted;
-                    sources.Add(fromFile with { Id = minted });
+                    localId = SourceRules.NewId();
+                    idMap[fromFile.Id] = localId;
+                    sources.Add(fromFile with { Id = localId });
                 }
+
+                // The arriving Main wins: at most one per recipe (Sources.cs), so an arriving Main demotes
+                // any other Main on the same recipe to Mine, the same rule SourceRules.Add already enforces.
+                if (fromFile.Role == SourceRole.Main) sources = SourceRules.MakeMain(sources, localId).ToList();
 
                 clans++;
             }
@@ -231,7 +248,6 @@ public static class SetupMerge
             var tickedBoards = ticked.Where(i => i.Kind == SetupKind.Board).Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
             if (tickedBoards.Count > 0)
             {
-                static string BoardKey(BoardDef b) => "board:" + b.Name.Trim().ToLowerInvariant();
                 var saved = here.SavedBoards.ToList();
                 foreach (var board in plan.File.Boards.Where(b => b.Follows is null && tickedBoards.Contains(BoardKey(b))))
                 {
@@ -250,13 +266,18 @@ public static class SetupMerge
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException)
         {
-            return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, step, ex.GetType().Name);
+            return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, step, ex.GetType().Name,
+                skippedRecipes.Count == 0 ? null : skippedRecipes);
         }
 
-        return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, null, null);
+        return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, null, null,
+            skippedRecipes.Count == 0 ? null : skippedRecipes);
     }
 
     private static int KeptClans(SetupMergePlan plan) => plan.Items.Count(i => i.Kind == SetupKind.Clan && i.Outcome == SetupOutcome.Kept);
+
+    /// <summary>A board's identity: its name, case and spaces aside — the one place both <see cref="Plan"/> and <see cref="Apply"/> fold it.</summary>
+    private static string BoardKey(BoardDef b) => "board:" + b.Name.Trim().ToLowerInvariant();
 
     /// <summary>A board from the file with every clan id it points at mapped to this machine's; an unmapped id is left as it is, which points at nothing here.</summary>
     private static BoardDef Rewrite(BoardDef board, IReadOnlyDictionary<string, string> idMap) =>
@@ -273,11 +294,26 @@ public static class SetupMerge
             })],
         };
 
-    /// <summary>The setup's files copied beside the data folder, dated, so a person can put them back by hand.</summary>
-    private static string Aside(string dataRoot, DateTimeOffset now)
+    /// <summary>
+    /// A fresh, empty aside folder beside the data folder, dated to the minute. Two imports in the same minute
+    /// never share one: a second (third, ...) gets <c>-2</c>, <c>-3</c>, ... rather than overwriting the first,
+    /// which is the only recovery there is. Named and created before anything is copied into it, so a copy that
+    /// throws still leaves a folder Apply can report.
+    /// </summary>
+    private static string AsideFolder(string dataRoot, DateTimeOffset now)
     {
-        var folder = $"{dataRoot.TrimEnd(Path.DirectorySeparatorChar)}.before-import-{now:yyyyMMdd-HHmm}";
+        var stamp = now.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture);
+        var baseName = $"{dataRoot.TrimEnd(Path.DirectorySeparatorChar)}.before-import-{stamp}";
+        var folder = baseName;
+        for (var n = 2; Directory.Exists(folder); n++) folder = $"{baseName}-{n}";
+
         Directory.CreateDirectory(folder);
+        return folder;
+    }
+
+    /// <summary>The setup's files copied into the aside folder, so a person can put them back by hand.</summary>
+    private static void CopyAside(string dataRoot, string folder)
+    {
         foreach (var name in new[] { "sources.json", "boards.json", "settings.json" })
         {
             var file = Path.Combine(dataRoot, name);
@@ -290,8 +326,6 @@ public static class SetupMerge
             Directory.CreateDirectory(Path.Combine(folder, "recipes"));
             foreach (var file in Directory.EnumerateFiles(recipes)) File.Copy(file, Path.Combine(folder, "recipes", Path.GetFileName(file)), overwrite: true);
         }
-
-        return folder;
     }
 
     /// <summary>The state as it arrives (spec §2): every send off, exclusions mapped to this PC's accounts by Roblox id, the unmatched counted.</summary>
