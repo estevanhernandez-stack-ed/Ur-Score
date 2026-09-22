@@ -29,6 +29,13 @@ public sealed record SetupPack(
 
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 
+    /// <summary>
+    /// <c>settings.json</c>'s own shape: exactly the two settings that travel. Written and read by hand, never
+    /// through <see cref="Settings.Save"/>/<see cref="Settings.Load"/>, so that <c>StartOnOpen</c> — a
+    /// per-machine choice — has no KEY on disk here, not merely a false value.
+    /// </summary>
+    private sealed record SettingsDto(bool ResolveNames, string? ActiveRecipe);
+
     /// <summary>This machine's setup, made ready to travel: boards sanitized to your own ids, exclusions as user ids, keys as names.</summary>
     public static SetupPack FromHere(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyList<BoardDef> savedBoards,
@@ -66,7 +73,8 @@ public sealed record SetupPack(
             JsonSerializer.Serialize(Recipes.ToDictionary(r => r.Slug, r => r.ExcludedUserIds), Json));
         File.WriteAllText(Path.Combine(folder, "sources.json"), SourceStore.Serialize(Sources));
         File.WriteAllText(Path.Combine(folder, "boards.json"), BoardJson.Serialize(Boards));
-        Settings.Save(Settings, Path.Combine(folder, "settings.json"));
+        File.WriteAllText(Path.Combine(folder, "settings.json"),
+            JsonSerializer.Serialize(new SettingsDto(Settings.ResolveNames, Settings.ActiveRecipe), Json));
         File.WriteAllText(Path.Combine(folder, "keys.json"), JsonSerializer.Serialize(Keys, Json));
     }
 
@@ -93,7 +101,9 @@ public sealed record SetupPack(
             recipes,
             File.Exists(Path.Combine(folder, "sources.json")) ? SourceStore.Parse(File.ReadAllText(Path.Combine(folder, "sources.json"))) : [],
             File.Exists(Path.Combine(folder, "boards.json")) ? BoardJson.Parse(File.ReadAllText(Path.Combine(folder, "boards.json"))) : [],
-            Settings.Load(Path.Combine(folder, "settings.json")),
+            ReadJson<SettingsDto>(Path.Combine(folder, "settings.json")) is { } settings
+                ? new Settings(ResolveNames: settings.ResolveNames, ActiveRecipe: settings.ActiveRecipe)
+                : Settings.Defaults,
             ReadJson<List<SetupKey>>(Path.Combine(folder, "keys.json")) ?? []);
     }
 

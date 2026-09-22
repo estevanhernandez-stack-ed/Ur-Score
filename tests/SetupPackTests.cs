@@ -47,6 +47,7 @@ public class SetupPackTests
         Assert.NotNull(back);
         Assert.Equal(pack.Recipes.Select(r => (r.Slug, r.Name, r.Text)), back.Recipes.Select(r => (r.Slug, r.Name, r.Text)));
         Assert.Equal(pack.Recipes[0].State.StatChoices["value"], back.Recipes[0].State.StatChoices["value"]);
+        Assert.Equal(pack.Recipes[0].ExcludedUserIds, back.Recipes[0].ExcludedUserIds);
 
         Assert.Equal(
             pack.Sources.Select(s => (s.Id, s.Recipe, s.Role, s.Enabled, s.InputsKey)),
@@ -97,16 +98,26 @@ public class SetupPackTests
         var everything = string.Concat(Directory.EnumerateFiles(Path.Combine(dir.Path, SetupPack.Folder), "*", SearchOption.AllDirectories).Select(File.ReadAllText));
         Assert.DoesNotContain("keys.dat", everything, StringComparison.Ordinal);
         Assert.DoesNotContain("SECRET-VALUE", everything, StringComparison.Ordinal);
+
+        // Nor does ClanInstalled's excluded RoRoRo account GUIDs: an account id, and one that isn't anybody's.
+        Assert.DoesNotContain("22222222-2222", everything, StringComparison.Ordinal);
+        Assert.DoesNotContain("00000000-0000-0000-0000-00000000dead", everything, StringComparison.Ordinal);
     }
 
     [Fact]
     public void StartOnOpenDoesNotTravelAndBoardsAreSanitized()
     {
+        using var dir = TempDir.Create("urscore-setup");
         var stranger = new BoardDef("b-1", "Battle", [new PanelDef("p-1", PanelType.AccountCard, new PanelSize(6), new PanelSettings(Clan.Slug, UserId: 987654321))]);
         var pack = SetupPack.FromHere([ClanInstalled()], [], [stranger], new Settings(StartOnOpen: true), [Main]);
 
         Assert.False(pack.Settings.StartOnOpen);
         Assert.Null(Assert.Single(pack.Boards).Panels[0].Settings.UserId);
+
+        // Not merely false: the KEY isn't on disk, so a later default flip can't turn it on by finding it there.
+        pack.ToFolder(dir.Path);
+        var settingsText = File.ReadAllText(Path.Combine(dir.Path, SetupPack.Folder, "settings.json"));
+        Assert.DoesNotContain("startOnOpen", settingsText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
