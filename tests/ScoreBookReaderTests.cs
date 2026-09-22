@@ -142,6 +142,36 @@ public class ScoreBookReaderTests
     /// backstop that is silent is the same fault as the one V3-S.35 fixed — but the trail line it feeds will be
     /// rare by construction, and this says so rather than implying a corrupt line is easy to come by.
     /// </summary>
+    /// <summary>
+    /// One pass over the files feeds the reader and the finals index both. Startup walked the whole book twice,
+    /// once for each — the same files, the same JSON parsed line by line, the same bad lines skipped and counted
+    /// by each — and on a season's book that was 2.2 s where 1.1 s would do (S1-F.2). The index handed in here is
+    /// the one the watches consult; a book with a final in it must answer through both after a single load. A line
+    /// <c>BookJson.TryParse</c> rejects reaches neither and is counted by neither — the "skipped" count on each is
+    /// for a line that parses and still cannot be taken in, which nothing today produces (S1-F.10's net).
+    /// </summary>
+    [Fact]
+    public void OneLoadFeedsTheReaderAndTheFinalsIndexTogether()
+    {
+        using var dir = TempDir.Create("urscore-reader");
+        var file = BookFiles.MonthFile(dir.Path, Slug, Now);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var nullInput = BookJson.Serialize(Final("X", Now.AddDays(-3), 1, 9)).Replace("\"clan\":\"K0i2\"", "\"clan\":null", StringComparison.Ordinal);
+        File.WriteAllLines(file, [BookJson.Serialize(Read(Now.AddMinutes(-3), 10)), BookJson.Serialize(Final("A", Now.AddDays(-1), 500, 3)), nullInput]);
+        var reader = new ScoreBookReader(dir.Path, new ManualTime(Now));
+        var index = new FinalsIndex();
+
+        var skipped = reader.Load(BookFiles.Slugs(dir.Path), index);
+
+        Assert.Equal(0, skipped);
+        Assert.Equal(0, index.Skipped);
+        Assert.True(index.HasClan(Slug, "clan=k0i2", "A"));
+        Assert.True(index.HasAccount(Slug, "clan=k0i2", "A", 111));
+        Assert.False(index.HasClan(Slug, "clan=k0i2", "X"));
+        Assert.Equal("A", Assert.Single(reader.Finals(Slug, "clan=k0i2")).Period);
+        Assert.Equal(1, reader.Readings(Slug));
+    }
+
     [Fact]
     public void ACleanBookLoadsWithNothingSkippedAndSaysSo()
     {
