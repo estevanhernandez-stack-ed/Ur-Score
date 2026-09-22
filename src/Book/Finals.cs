@@ -43,7 +43,10 @@ public sealed class FinalsIndex
         lock (_gate) return _accounts.Contains((slug, inputsKey, period, userId));
     }
 
-    /// <summary>A line that can't be indexed (a corrupt one that slipped past <see cref="BookJson.TryParse"/>) is skipped, never the book.</summary>
+    /// <summary>How many lines the load could not index and skipped, so the caller can say so (S1-F.10).</summary>
+    public int Skipped { get; private set; }
+
+    /// <summary>A line that can't be indexed (a corrupt one that slipped past <see cref="BookJson.TryParse"/>) is skipped and counted, never the book.</summary>
     public static FinalsIndex Load(string root)
     {
         var index = new FinalsIndex();
@@ -57,6 +60,7 @@ public sealed class FinalsIndex
                 }
                 catch (Exception)
                 {
+                    index.Skipped++;
                 }
             }
         }

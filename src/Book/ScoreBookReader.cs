@@ -36,11 +36,14 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
     /// <summary>
     /// One cutoff for the whole load, and a line older than it is never added, so nothing is pruned here. A line
     /// that can't be taken in (a corrupt one that slipped past <see cref="BookJson.TryParse"/>) is skipped, never
-    /// the book.
+    /// the book — and COUNTED, so the caller can say so. Returns how many were skipped. A silent skip was the
+    /// wrong kind of quiet: a book with a hundred unreadable lines loaded exactly like a book with none, and the
+    /// numbers were simply lower with nothing anywhere explaining why (S1-F.10).
     /// </summary>
-    public void Load(IEnumerable<string> slugs)
+    public int Load(IEnumerable<string> slugs)
     {
         var cutoff = time.GetUtcNow() - KeepReadings;
+        var skipped = 0;
         foreach (var slug in slugs.Distinct(StringComparer.Ordinal))
         {
             var data = new SlugData();
@@ -52,11 +55,14 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
                 }
                 catch (Exception)
                 {
+                    skipped++;
                 }
             }
 
             lock (_gate) _slugs[slug] = data;
         }
+
+        return skipped;
     }
 
     public void Apply(BookLine line)

@@ -286,25 +286,36 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         var root = _book.Root;
         var reader = Reader;
-        await Task.Run(() => reader.Load(BookFiles.Slugs(root)));
+        var skipped = await Task.Run(() => reader.Load(BookFiles.Slugs(root)));
+        if (skipped > 0) AddTrail(SkippedLines(skipped));
         RaiseChanged();
     }
+
+    /// <summary>
+    /// Said in the trail whenever a load left lines behind. A count and nothing else — a corrupt line's text
+    /// could hold anything, and Diagnostics is copied and pasted (S1-F.10).
+    /// </summary>
+    internal static string SkippedLines(int count) =>
+        $"BOOK: {count} line(s) could not be read and were skipped; the rest of the book loaded.";
 
     private async Task LoadBookOnceAsync()
     {
         var root = _book.Root;
         var reader = Reader;
-        _finals = await Task.Run(() =>
+        int skipped;
+        (_finals, skipped) = await Task.Run(() =>
         {
             var index = FinalsIndex.Load(root);
-            reader.Load(BookFiles.Slugs(root));
-            return index;
+            var unread = reader.Load(BookFiles.Slugs(root));
+            return (index, Math.Max(index.Skipped, unread));
         });
 
         ReaderLoaded = true;
         _book.Written += OnWritten;
         Runner.Apply(Sources);
         AddTrail($"BOOK: loaded from {root}.");
+        // The two loaders walk the same files, so the same bad line is skipped by both; one count, the larger.
+        if (skipped > 0) AddTrail(SkippedLines(skipped));
         AskForAvatars();
         RaiseChanged();
 

@@ -123,6 +123,28 @@ public class SourcesTests
         Assert.Equal(SourceRole.Main, sources.Single(s => s.Recipe == "other-recipe").Role);
     }
 
+    /// <summary>
+    /// Adding a clan you had switched off switches it back on, takes the new role, and keeps its id. On purpose:
+    /// adding is an affirmative act, and leaving it off would make the Add button look broken for that one clan.
+    /// The id matters because the score book's lines are filed under it. This went undocumented and untested
+    /// from the start (S1-3.2); the behaviour is unchanged, the intent is now written down and pinned.
+    /// </summary>
+    [Fact]
+    public void ReAddingASwitchedOffClanSwitchesItBackOnAndKeepsItsId()
+    {
+        var sources = SourceRules.Add([], "clan-recipe", Clan("CCGP"), SourceRole.Mine);
+        var id = sources[0].Id;
+        sources = [.. sources.Select(s => s with { Enabled = false })];
+        Assert.False(sources[0].Enabled);
+
+        var again = SourceRules.Add(sources, "clan-recipe", Clan("CCGP"), SourceRole.Watch);
+
+        var one = Assert.Single(again);
+        Assert.Equal(id, one.Id);
+        Assert.True(one.Enabled);
+        Assert.Equal(SourceRole.Watch, one.Role);
+    }
+
     [Fact]
     public void RemovingASourceOrARecipeTakesOnlyThose()
     {

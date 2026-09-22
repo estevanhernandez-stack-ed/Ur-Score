@@ -86,7 +86,11 @@ public class ScoreBookTests
 
         var file = BookFiles.MonthFile(dir.Path, Slug, T);
         Assert.Equal(2, File.ReadAllLines(file).Length);
+        // Exactly one file and no .tmp beside it: the recipe text goes through a temp file and one move now, like
+        // every other file this app writes, so a crash mid-write cannot leave a torn recipe under a name that,
+        // carrying the hash, would never be rewritten (S1-F.4).
         Assert.Single(Directory.GetFiles(Path.Combine(dir.Path, Slug, "recipes")));
+        Assert.Empty(Directory.GetFiles(Path.Combine(dir.Path, Slug, "recipes"), "*.tmp"));
         Assert.Equal("recipe text", File.ReadAllText(BookFiles.RecipeFile(dir.Path, Slug, BookFiles.Hash("recipe text"))));
         Assert.Equal(2, BookFiles.ReadAll(dir.Path, Slug).Count());
         Assert.Equal(new[] { Slug }, BookFiles.Slugs(dir.Path));

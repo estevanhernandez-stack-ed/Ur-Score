@@ -133,6 +133,32 @@ public class ScoreBookReaderTests
         Assert.Null(reader.LastReading("s-nothing-here"));
     }
 
+    /// <summary>
+    /// A load says how many lines it could not take in, and a clean book says none. Both loaders used to swallow
+    /// a bad line in an empty catch, so a book with a hundred unreadable lines loaded exactly like one with none
+    /// and the numbers were simply lower (S1-F.10). Only the clean case can be pinned from disk: everything that
+    /// reaches those catches has already passed <c>BookJson.TryParse</c> and both <c>Add</c>s are defensive, so
+    /// the catches are backstops for a failure nobody has produced. Counting a backstop is still right — a
+    /// backstop that is silent is the same fault as the one V3-S.35 fixed — but the trail line it feeds will be
+    /// rare by construction, and this says so rather than implying a corrupt line is easy to come by.
+    /// </summary>
+    [Fact]
+    public void ACleanBookLoadsWithNothingSkippedAndSaysSo()
+    {
+        using var dir = TempDir.Create("urscore-book");
+        using (var book = new ScoreBook(dir.Path, background: false))
+        {
+            book.Append(Read(Now.AddMinutes(-10), 5), "recipe text");
+            book.Append(Final("B", Now, 999, 1), "recipe text");
+        }
+
+        var reader = new ScoreBookReader(dir.Path, new ManualTime(Now));
+
+        Assert.Equal(0, reader.Load(BookFiles.Slugs(dir.Path)));
+        Assert.Equal(0, FinalsIndex.Load(dir.Path).Skipped);
+        Assert.Single(reader.Finals(Slug, Source.KeyOf(K0i2)));
+    }
+
     [Fact]
     public void FinalsMergeSupplementaryLinesAndListNewestFirst()
     {
