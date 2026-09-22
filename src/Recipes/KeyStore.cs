@@ -2,6 +2,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Recipes;
 
@@ -32,9 +33,7 @@ public sealed class KeyStore(string path) : IKeyStore
 
     private readonly Lock _gate = new();
 
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "626labs.ur-score", "keys.dat");
+    public static string DefaultPath => AppPaths.Default.Keys;
 
     public SavedKey? Find(string keyId)
     {

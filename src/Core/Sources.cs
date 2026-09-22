@@ -46,8 +46,7 @@ public sealed class SourceStore(string path)
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
-    public static string DefaultPath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "sources.json");
+    public static string DefaultPath => AppPaths.Default.Sources;
 
     /// <summary>A missing or hand-broken file is no sources. <see cref="LoadResult"/> says which it was.</summary>
     public IReadOnlyList<Source> Load() => LoadResult().Sources;

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Board;
 
@@ -30,8 +31,7 @@ public sealed class BoardsFile(string path, TimeProvider time)
         AllowTrailingCommas = true,
     };
 
-    public static string DefaultPath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "boards.json");
+    public static string DefaultPath => AppPaths.Default.Boards;
 
     public BoardsLoad Load()
     {

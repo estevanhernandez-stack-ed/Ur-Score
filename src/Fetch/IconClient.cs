@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Fetch;
 
@@ -77,9 +78,7 @@ public sealed class IconClient : IAvatarSource, IIconSource, IDisposable
     /// <summary>Releases the HTTP client this owns, as the composition root does for the two it builds itself (S1-14.12).</summary>
     public void Dispose() => _http.Dispose();
 
-    public static string DefaultCacheDirectory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "626labs.ur-score", "icon-cache");
+    public static string DefaultCacheDirectory => AppPaths.Default.IconCache;
 
     /// <summary>
     /// The cached picture for <paramref name="iconText"/>, fetching it first when the cache has none

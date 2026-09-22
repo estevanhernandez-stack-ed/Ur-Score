@@ -42,10 +42,15 @@ public sealed class AppServices : ISetupServices, IDisposable
     private static readonly TimeSpan ThemeRetry = TimeSpan.FromSeconds(15);
 
     private readonly Dispatcher _ui;
-    private readonly TimeProvider _time = TimeProvider.System;
+    private readonly TimeProvider _time;
     private readonly HttpClient _recipeHttp = new(HttpRecipeTransport.CreateHandler());
     private readonly HttpClient _namesHttp = new();
-    private readonly HostClient _host = new(PluginId);
+
+    /// <summary>RoRoRo, as the watches and the account list see it: the pipe in the app, a stub in a test (S1-14.9).</summary>
+    private readonly IHostClient _host;
+
+    /// <summary>The real pipe client behind <see cref="_host"/> when there is one; null in a test, where there is no pipe to speak of.</summary>
+    private readonly HostClient? _pipe;
 
     /// <summary>Its own connection, so the long-lived theme stream never shares a channel with reports.</summary>
     private readonly HostClient _themeHost = new(PluginId);
@@ -60,8 +65,8 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary>Each source's own picture, never one per recipe (backlog V3-S.7), and back from the cache at start (V3-S.6).</summary>
     private readonly SourceIcons _sourceIcons;
     private readonly SearchLists _searchLists;
-    private readonly SourceStore _sourceStore = new(SourceStore.DefaultPath);
-    private readonly BoardsFile _boardsFile = new(BoardsFile.DefaultPath, TimeProvider.System);
+    private readonly SourceStore _sourceStore;
+    private readonly BoardsFile _boardsFile;
 
     /// <summary>What <c>boards.json</c> holds, or null while there is no file (R1) or it couldn't be read (R3).</summary>
     private IReadOnlyList<BoardDef>? _savedBoards;
@@ -103,14 +108,39 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary><c>sources.json</c> was there at start but could not be read: this session never writes over it.</summary>
     private bool _sourcesUnreadable;
 
+    /// <summary>The app's own composition: the user's data folder, RoRoRo's pipe, the network, the wall clock.</summary>
     public AppServices(Dispatcher ui)
+        : this(ui, AppPaths.Default, host: null, transport: null, TimeProvider.System,
+            RulesFile.ResolvePath(Environment.GetEnvironmentVariable(RulesFile.PathVariable)))
+    {
+    }
+
+    /// <summary>
+    /// The composition with its seams open, for a test that composes the whole app against a folder of its own
+    /// (S1-14.9). A null <paramref name="host"/> or <paramref name="transport"/> means the real one — RoRoRo's pipe,
+    /// the HTTP transport — so a test that leaves either null has built the app for real and should know it: a
+    /// dev build is indistinguishable from the installed plugin to RoRoRo's host (V3-S.43).
+    /// </summary>
+    /// <param name="paths">Where every file lives; <see cref="AppPaths.Default"/> in the app.</param>
+    /// <param name="host">RoRoRo, for the watches and the account list. The theme stream keeps its own real client either way and is started only by the window.</param>
+    /// <param name="transport">What recipes fetch through; null builds the HTTP transport, spaced, with the redactor.</param>
+    /// <param name="time">The clock everything reads: the watches' timestamps, the reader's cutoff, the host's intervals.</param>
+    /// <param name="rulesPath">RoRoRo's rules file, or the one <c>UR_SCORE_RULES_FILE</c> names.</param>
+    public AppServices(Dispatcher ui, AppPaths paths, IHostClient? host, IRecipeTransport? transport, TimeProvider time, string rulesPath)
     {
         _ui = ui;
-        Keys = new KeyStore(KeyStore.DefaultPath);
+        _time = time;
+        _pipe = host is null ? new HostClient(PluginId) : null;
+        _host = host ?? _pipe!;
+        RulesPath = rulesPath;
+        _sourceStore = new SourceStore(paths.Sources);
+        _boardsFile = new BoardsFile(paths.Boards, time);
+        Keys = new KeyStore(paths.Keys);
         var keys = Keys;
         Redactor = new Redactor(() => keys.Values());
-        Store = new RecipeStore(RecipeStore.DefaultDirectory);
-        Settings = Settings.Load();
+        Store = new RecipeStore(paths.Recipes);
+        Settings = Settings.Load(paths.Settings);
+        _settingsPath = paths.Settings;
 
         // A walk's scratch rules file is never silent: Diagnostics' trail says which file alerts use.
         if (!string.Equals(RulesPath, RulesFile.DefaultPath, StringComparison.OrdinalIgnoreCase))
@@ -120,24 +150,24 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         // No raw responses kept: a response body holds every row the source returned, other players' ids and values
         // included, and other players never reach disk.
-        DeleteOldRawResponses();
-        var transport = new SpacedTransport(new HttpRecipeTransport(_recipeHttp, rawDirectory: null, Redactor), _time, SpacedTransport.DefaultSpacing);
+        DeleteOldRawResponses(paths.LastResponse);
+        transport ??= new SpacedTransport(new HttpRecipeTransport(_recipeHttp, rawDirectory: null, Redactor), _time, SpacedTransport.DefaultSpacing);
         _engine = new RecipeEngine(transport, Keys);
         _searchLists = new SearchLists(transport);
 
-        AccountsCache = new AccountsCache(AccountsCache.DefaultPath);
+        AccountsCache = new AccountsCache(paths.Accounts);
         _savedAccounts = LoadSavedAccounts(AccountsCache);
         Accounts = new SharedAccounts(_host, AccountsCache, _time);
         Accounts.Listed += OnListed;
         _claims = new AccountClaims(_time);
 
-        _book = new ScoreBook(BookFiles.DefaultRoot);
-        Reader = new ScoreBookReader(BookFiles.DefaultRoot, _time);
+        _book = new ScoreBook(paths.Book);
+        Reader = new ScoreBookReader(paths.Book, _time);
 
         Names = new NameClient(_namesHttp);
-        _icons = new IconClient(HttpRecipeTransport.CreateHandler(), IconClient.DefaultCacheDirectory, () => _time.GetUtcNow());
+        _icons = new IconClient(HttpRecipeTransport.CreateHandler(), paths.IconCache, () => _time.GetUtcNow());
         _avatars = new AvatarBook(_icons);
-        _sourceIcons = new SourceIcons(_icons, Path.Combine(IconClient.DefaultCacheDirectory, SourceIcons.FileName));
+        _sourceIcons = new SourceIcons(_icons, Path.Combine(paths.IconCache, SourceIcons.FileName));
 
         Runner = new SourceHost(CreateWatch, IntervalFor, _time);
         Runner.SnapshotReady += OnSnapshotReady;
@@ -185,10 +215,14 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public string? BudgetWarning { get; private set; }
 
-    public string HostText => $"host={_host.HostVersion ?? "(not connected)"} reject={_host.RejectReason ?? "(none)"}";
+    public string HostText => _pipe is null
+        ? "host=(not RoRoRo's pipe: a client the composition was given)"
+        : $"host={_pipe.HostVersion ?? "(not connected)"} reject={_pipe.RejectReason ?? "(none)"}";
 
     /// <summary>RoRoRo's rules file, or the full path <c>UR_SCORE_RULES_FILE</c> names: the Setup › Alerts walk's scratch copy (plan A1).</summary>
-    public string RulesPath { get; } = RulesFile.ResolvePath(Environment.GetEnvironmentVariable(RulesFile.PathVariable));
+    public string RulesPath { get; }
+
+    private readonly string _settingsPath;
 
     public IReadOnlyList<string> Trail
     {
@@ -416,7 +450,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     public void SaveSettings(Settings settings)
     {
-        Core.Settings.Save(settings);
+        Core.Settings.Save(settings, _settingsPath);
         Settings = settings;
         RaiseChanged();
     }
@@ -574,7 +608,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         _book.Dispose();
 
         _themeHost.Dispose();
-        _host.Dispose();
+        _pipe?.Dispose();
         _recipeHttp.Dispose();
         _namesHttp.Dispose();
         _icons.Dispose();
@@ -1081,9 +1115,8 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// Earlier versions kept each call's last response under <c>last-response</c>, other players' rows and all.
     /// That folder goes on start. Best effort: a folder that can't be removed costs a trail line, never the start.
     /// </summary>
-    private void DeleteOldRawResponses()
+    private void DeleteOldRawResponses(string folder)
     {
-        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "last-response");
         try
         {
             if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);

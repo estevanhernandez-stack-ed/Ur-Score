@@ -2,13 +2,13 @@ using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Book;
 
 public static class BookFiles
 {
-    public static string DefaultRoot { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "626labs.ur-score", "scorebook");
+    public static string DefaultRoot => AppPaths.Default.Book;
 
     public static string Hash(string recipeText) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(recipeText)))[..16].ToLowerInvariant();
