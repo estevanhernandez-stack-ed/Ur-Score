@@ -29,22 +29,32 @@ public class SourceHostTests
     private sealed class GatedEngine : IRecipeEngine
     {
         private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _started;
+        private int _finished;
+        private int _cancelled;
 
-        public int Started { get; private set; }
+        public int Started => Volatile.Read(ref _started);
 
-        public int Finished { get; private set; }
+        public int Finished => Volatile.Read(ref _finished);
 
-        public int Cancelled { get; private set; }
+        public int Cancelled => Volatile.Read(ref _cancelled);
 
         /// <summary>Set when the first read is waiting at the gate, so a test can act while one is in flight.</summary>
         public TaskCompletionSource Waiting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>
+        /// Set when a read has SEEN its cancellation. The cancel itself lands on the token at once, but the read's
+        /// own catch runs on a pool thread a moment later, and a test that counted cancellations before that moment
+        /// read a zero — once in twelve runs on 2026-09-22. Awaited, not assumed.
+        /// </summary>
+        public TaskCompletionSource CancelledOnce { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public void Open() => _gate.TrySetResult();
 
         public async Task<RecipeReading> ReadAsync(Recipe recipe, IReadOnlyDictionary<string, string> inputs,
             IReadOnlyCollection<long> accountUserIds, IReadOnlySet<string> trackedStats, CancellationToken cancellationToken)
         {
-            Started++;
+            Interlocked.Increment(ref _started);
             Waiting.TrySetResult();
             try
             {
@@ -52,11 +62,12 @@ public class SourceHostTests
             }
             catch (OperationCanceledException)
             {
-                Cancelled++;
+                Interlocked.Increment(ref _cancelled);
+                CancelledOnce.TrySetResult();
                 throw;
             }
 
-            Finished++;
+            Interlocked.Increment(ref _finished);
             return Reading();
         }
     }
@@ -496,6 +507,7 @@ public class SourceHostTests
         host.Apply([]);
         engine.Open();
         await testNow.WaitAsync(TimeSpan.FromSeconds(5));
+        await engine.CancelledOnce.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(1, engine.Cancelled);
         Assert.Equal(0, engine.Finished);
@@ -553,6 +565,7 @@ public class SourceHostTests
         host.Apply([SourceNamed("s-1", "CCGP")]);
         engine.Open();
         await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await engine.CancelledOnce.Task.WaitAsync(TimeSpan.FromSeconds(5));
         host.Stop();
 
         Assert.Equal(2, engine.Started);
