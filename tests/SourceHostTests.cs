@@ -93,6 +93,69 @@ public class SourceHostTests
         Assert.Equal(SourceRole.Main, host.WatchFor("s-1")!.Source!.Role);
     }
 
+    /// <summary>
+    /// An Apply whose factory throws changes nothing: the sources it would have removed are still there and the
+    /// ones it had already built are not added. The factory used to run inside the lock, in the same pass as the
+    /// removals and the adds, so a throw on the third source left the first two applied and the rest not — a
+    /// host in a state no caller asked for, with the caller's exception the only sign (S1-8.5). Now every watch
+    /// is built first and applied after, so the exception means "not applied" and nothing else.
+    /// </summary>
+    [Fact]
+    public void AnApplyWhoseFactoryThrowsAppliesNothing()
+    {
+        var factory = new Factory(new StubEngine(Reading), new MemoryBook());
+        using var host = new SourceHost(
+            source => source.Id == "s-3" ? throw new InvalidOperationException("the factory is broken") : factory.Create(source),
+            _ => 180);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+        var first = host.WatchFor("s-1");
+
+        Assert.Throws<InvalidOperationException>(() => host.Apply([SourceNamed("s-2", "K0i2"), SourceNamed("s-3", "NovaForge")]));
+
+        Assert.Same(first, host.WatchFor("s-1"));
+        Assert.Null(host.WatchFor("s-2"));
+        Assert.Null(host.WatchFor("s-3"));
+    }
+
+    /// <summary>
+    /// A slow factory holds up nobody but the Apply that called it. Inside the lock it held up every caller of
+    /// the host — a loop filing its snapshot, the window asking which watch a source has — for as long as the
+    /// factory took, and Apply runs on the UI thread, so "slow" there was the window frozen (S1-8.5). The factory
+    /// here blocks until released; another thread's <c>WatchFor</c> has to answer while it is blocked.
+    /// </summary>
+    [Fact]
+    public async Task ASlowFactoryDoesNotHoldUpTheHostsOtherCallers()
+    {
+        var factory = new Factory(new StubEngine(Reading), new MemoryBook());
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var host = new SourceHost(
+            source =>
+            {
+                if (source.Id == "s-2")
+                {
+                    entered.TrySetResult();
+                    release.Task.Wait();
+                }
+
+                return factory.Create(source);
+            },
+            _ => 180);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+
+        var applying = Task.Run(() => host.Apply([SourceNamed("s-1", "CCGP"), SourceNamed("s-2", "K0i2")]));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var asked = Task.Run(() => host.WatchFor("s-1"));
+        var answered = await Task.WhenAny(asked, Task.Delay(TimeSpan.FromMilliseconds(500))) == asked;
+        release.TrySetResult();
+        await applying.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(answered, "WatchFor waited on the factory");
+        Assert.NotNull(await asked);
+        Assert.NotNull(host.WatchFor("s-2"));
+    }
+
     [Fact]
     public async Task RemovedAndSwitchedOffSourcesLoseTheirWatchAndSnapshot()
     {

@@ -78,6 +78,31 @@ public class SharedAccountsTests
         Assert.NotEqual(cache.SavedAt(), cached.ListedAt);
     }
 
+    /// <summary>
+    /// A failure that is not the transport's is not "RoRoRo not answering". The fallback caught every exception,
+    /// so a bug in the client — an argument out of range, an invalid operation — was answered with the saved
+    /// accounts and a cached-list note, and looked exactly like RoRoRo being closed (S1-F.9). Now only the
+    /// transport's own failures (an RpcException, a pipe's IOException) take the saved list; anything else
+    /// leaves as the exception it is, lists nothing, and reaches the read's own "last read failed" line, where
+    /// its type is named. The transport case is covered beside this and is the control.
+    /// </summary>
+    [Fact]
+    public async Task AFailureThatIsNotTheTransportsIsNotAnsweredWithTheSavedAccounts()
+    {
+        using var dir = TempDir.Create("urscore-accounts");
+        var cache = new AccountsCache(Path.Combine(dir.Path, "accounts.json"));
+        cache.Save([Alt]);
+        var host = new StubHost(true, Alt) { AccountsFailure = new InvalidOperationException("a bug in the client") };
+        var shared = new SharedAccounts(host, cache, new ManualTime(Start));
+        var listed = 0;
+        shared.Listed += _ => listed++;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => shared.GetAsync(CancellationToken.None));
+
+        Assert.Null(shared.Last);
+        Assert.Equal(0, listed);
+    }
+
     [Fact]
     public async Task ARefusedAccountListIsDeniedAndEmpty()
     {

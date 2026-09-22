@@ -13,9 +13,11 @@ public class FinalsTests
 
     private static Recipe Clan => RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
 
-    private static ReadContext Context(SourceRole role = SourceRole.Mine) => new(
-        new Source("s-00000001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, role),
-        Clan, "3f9a1c0b7e2d4a55", BookLine.TriggerTimer, At, -300);
+    private static ReadContext Context(SourceRole role = SourceRole.Mine)
+    {
+        var source = new Source("s-00000001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, role);
+        return new(source, Clan, source.Inputs, "3f9a1c0b7e2d4a55", BookLine.TriggerTimer, At, -300);
+    }
 
     private static RecipeRow Row(long id, double points) => new(id, new Dictionary<string, double> { ["value"] = points });
 

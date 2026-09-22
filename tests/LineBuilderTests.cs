@@ -19,8 +19,11 @@ public class LineBuilderTests
     private static Source SourceOf(Recipe recipe, SourceRole role) =>
         new("s-00000001", recipe.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, role);
 
-    private static ReadContext Context(Recipe recipe, SourceRole role = SourceRole.Mine) =>
-        new(SourceOf(recipe, role), recipe, "3f9a1c0b7e2d4a55", BookLine.TriggerTimer, new DateTimeOffset(2026, 9, 19, 18, 3, 0, TimeSpan.Zero), -300);
+    private static ReadContext Context(Recipe recipe, SourceRole role = SourceRole.Mine)
+    {
+        var source = SourceOf(recipe, role);
+        return new(source, recipe, source.Inputs, "3f9a1c0b7e2d4a55", BookLine.TriggerTimer, new DateTimeOffset(2026, 9, 19, 18, 3, 0, TimeSpan.Zero), -300);
+    }
 
     private static RecipeRow Row(long id, double points) => new(id, new Dictionary<string, double> { ["value"] = points });
 
