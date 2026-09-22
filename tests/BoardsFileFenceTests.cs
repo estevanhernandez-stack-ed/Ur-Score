@@ -25,7 +25,7 @@ public class BoardsFileFenceTests
     {
         var src = Path.Combine(RepoRoot(), "src");
         var files = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
-            .Select(f => (Relative: Path.GetRelativePath(src, f), Text: File.ReadAllText(f)))
+            .Select(f => (Relative: Path.GetRelativePath(src, f), Text: Code(File.ReadAllLines(f))))
             .ToList();
 
         // The type itself, anywhere: its own file, and the one service allowed to hold one.
@@ -47,6 +47,26 @@ public class BoardsFileFenceTests
         Assert.Contains("var clean = BoardDefs.Sanitize(", app, StringComparison.Ordinal);
         Assert.Contains("_boardsFile.Save(clean,", app, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A file's lines with the comment-only ones dropped, so the scan below reads code rather than prose.
+    /// <para>
+    /// Learned the hard way, 2026-09-21: a comment in <c>PanelViews.cs</c> explaining that <c>BoardsFile</c>
+    /// rejects an unknown panel type failed this test. Naming a type is not using it, and a fence that cannot
+    /// tell the difference punishes exactly the thing this codebase wants more of — a comment saying why. Crude
+    /// on purpose still: it drops whole-line comments, not trailing ones, because a line with code on it is a
+    /// line worth reading whatever follows the slashes.
+    /// </para>
+    /// </summary>
+    private static string Code(IEnumerable<string> lines) =>
+        string.Join(
+            Environment.NewLine,
+            lines.Where(line =>
+            {
+                var trimmed = line.TrimStart();
+                return !trimmed.StartsWith("//", StringComparison.Ordinal)
+                    && !trimmed.StartsWith("*", StringComparison.Ordinal);
+            }));
 
     private static string RepoRoot()
     {

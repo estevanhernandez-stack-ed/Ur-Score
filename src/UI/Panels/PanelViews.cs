@@ -20,7 +20,15 @@ public static class PanelViews
         PanelType.ProfileStat => new ProfileStatPanel(),
         PanelType.AccountsTable => new AccountsTablePanel(),
         PanelType.Pace => new PacePanelView(),
-        _ => new LiveLeaderboardPanel(),
+        PanelType.LiveLeaderboard => new LiveLeaderboardPanel(),
+
+        // Every type names its own view. The default used to BE the leaderboard, so a type added to the enum and
+        // forgotten here drew a leaderboard on somebody's board with nothing anywhere saying why — a wrong panel
+        // that looks like a working one (S1-13.13). An unknown type cannot arrive from disk (BoardsFile.TypeOf
+        // rejects it with Enum.IsDefined), so the only way here is a new enum member, and that is a bug in this
+        // file rather than anything a user did. `PanelViewsTests` walks every value so it fails in the suite
+        // instead of on a board.
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No view is built for this panel type."),
     };
 
     public static void Render(

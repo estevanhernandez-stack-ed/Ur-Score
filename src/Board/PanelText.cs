@@ -66,9 +66,24 @@ public static class PanelText
             ? TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds((long)Math.Floor(unixSeconds)), zone).ToString("d MMM yyyy", CultureInfo.InvariantCulture)
             : StatText.Dash;
 
+    /// <summary>
+    /// The mark against the main clan, in one place. It appears BEFORE a name in a heading or a chip and AFTER
+    /// one in a table row, which is why there are two helpers rather than one — but only one file knows what the
+    /// mark is, so changing it cannot leave half the app starred one way and half the other (S2-4.1).
+    /// </summary>
+    public const string MainMark = "★";
+
+    /// <summary>
+    /// A name with the mark in front when it is the main, and untouched otherwise. Distinct from
+    /// <see cref="SourceLabel"/>, which also says "· watching" for a watched source: headings and account lines
+    /// want the star without the suffix, which is exactly why they were hand-building it.
+    /// </summary>
+    public static string StarredName(string name, SourceRole role) =>
+        role == SourceRole.Main ? $"{MainMark} {name}" : name;
+
     public static string Chip(SourceRole role) => role switch
     {
-        SourceRole.Main => "★ main",
+        SourceRole.Main => $"{MainMark} main",
         SourceRole.Mine => "yours",
         _ => "watching",
     };
@@ -82,9 +97,8 @@ public static class PanelText
     /// <summary>A source by its role: "★ CCGP", "K0i2", "NovaForge · watching".</summary>
     public static string SourceLabel(string name, SourceRole role) => role switch
     {
-        SourceRole.Main => $"★ {name}",
         SourceRole.Watch => $"{name} · watching",
-        _ => name,
+        _ => StarredName(name, role),
     };
 
     /// <summary>

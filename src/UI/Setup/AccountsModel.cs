@@ -96,7 +96,7 @@ public static class AccountsModel
 
             var recipe = withInputs.First(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal)).Recipe;
             var name = ClansModel.NameOf(recipe, source);
-            names.Add(source.Role == SourceRole.Main ? $"★ {name}" : name);
+            names.Add(PanelText.StarredName(name, source.Role));
         }
 
         if (names.Count > 0) return string.Join(", ", names.Distinct(StringComparer.Ordinal));

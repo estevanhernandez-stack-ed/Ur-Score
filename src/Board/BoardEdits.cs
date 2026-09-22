@@ -3,6 +3,10 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Board;
 
+// NOT redundant, checked by deleting it: `Source` alone binds to the Labs626.UrScore.Source NAMESPACE, which
+// shadows the Core type everywhere outside Core, and the build fails with CS0118. Three separate reviews have
+// now filed this alias as removable (S2-2.1, S1-7.1, S1-9.5) and all three were wrong, which is a sign the
+// collision should be fixed at its cause rather than re-explained: see V3-S.44.
 using Source = Labs626.UrScore.Core.Source;
 
 /// <summary>
@@ -291,23 +295,24 @@ public static class BoardEdits
     private static BoardDef Update(BoardDef board, string panelId, Func<PanelDef, PanelDef> change) =>
         PanelIndex(board, panelId) < 0 ? board : board with { Panels = [.. board.Panels.Select(p => p.Id == panelId ? change(p) : p)] };
 
-    private static int IndexOf(IReadOnlyList<BoardDef> boards, string boardId)
+    /// <summary>
+    /// Where an item with this id sits, or -1. Boards and panels were each searched by their own copy of this
+    /// loop (S2-2.2); both wrappers stay, because <c>IndexOf(boards, boardId)</c> reads better at a call site
+    /// than the generic does, but only one of them knows how to search.
+    /// </summary>
+    private static int IndexOfId<T>(IReadOnlyList<T> items, Func<T, string> idOf, string id)
     {
-        for (var i = 0; i < boards.Count; i++)
+        for (var i = 0; i < items.Count; i++)
         {
-            if (boards[i].Id == boardId) return i;
+            if (idOf(items[i]) == id) return i;
         }
 
         return -1;
     }
 
-    private static int PanelIndex(BoardDef board, string panelId)
-    {
-        for (var i = 0; i < board.Panels.Count; i++)
-        {
-            if (board.Panels[i].Id == panelId) return i;
-        }
+    private static int IndexOf(IReadOnlyList<BoardDef> boards, string boardId) =>
+        IndexOfId(boards, board => board.Id, boardId);
 
-        return -1;
-    }
+    private static int PanelIndex(BoardDef board, string panelId) =>
+        IndexOfId(board.Panels, panel => panel.Id, panelId);
 }

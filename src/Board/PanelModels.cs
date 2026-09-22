@@ -627,7 +627,7 @@ public static class PanelModels
                     live.AvatarFor(account.RobloxUserId))));
             }
 
-            var heading = source.Role == SourceRole.Main ? $"★ {live.SourceName(source)}" : live.SourceName(source);
+            var heading = PanelText.StarredName(live.SourceName(source), source.Role);
             groups.Add(new AccountGroupModel(heading, MissingLast(lines)));
         }
 
@@ -982,7 +982,7 @@ public static class PanelModels
             var isYours = yourNames.Contains(group.Row.Name);
             if (i >= TopCount && !shownNames.Contains(group.Row.Name)) continue;
 
-            var name = mainNames.Contains(group.Row.Name) ? $"{group.Row.Name} ★" : group.Row.Name;
+            var name = mainNames.Contains(group.Row.Name) ? $"{group.Row.Name} {PanelText.MainMark}" : group.Row.Name;
             rows.Add((group.Rank, new TopRow(group.Rank.ToString(CultureInfo.InvariantCulture), name, PanelText.Short(group.Value), isYours, false)));
         }
 
@@ -998,7 +998,7 @@ public static class PanelModels
             var mineRecipe = live.FindRecipe(mineSource.Recipe)!.Recipe;
             if (HeadlineNumber(live.LiveOf(mineSource.Id), TotalId(mineRecipe)) is not { } total) continue;
 
-            var shown = mainNames.Contains(name) ? $"{name} ★" : name;
+            var shown = mainNames.Contains(name) ? $"{name} {PanelText.MainMark}" : name;
 
             // Below every value the list itself shows, "~N+1" would claim a rank the list never proved.
             if (lowest is { } low && total < low)

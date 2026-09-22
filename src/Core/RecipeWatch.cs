@@ -167,6 +167,19 @@ public sealed class RecipeWatch(
     internal static string HeldBackDetail(int held) =>
         $" {held} clan number(s) held back: the alert name couldn't be written, and sending them would have named the wrong clan.";
 
+    /// <summary>
+    /// This watch's clock, and the only one it is allowed to read. Every observation, book line and metric
+    /// timestamp comes from here.
+    /// <para>
+    /// The account-stat reports used <c>DateTimeOffset.UtcNow</c> directly while everything else already took the
+    /// injected provider, so a test with a fixed clock got fabricated timestamps on one path and real wall-clock
+    /// ones on another, from the SAME read (S1-6.7). That is worse than either alone: RoRoRo keys a rate window
+    /// on the observation time, so two halves of one reading disagreeing about when it happened is not a tidiness
+    /// problem, it is a reading that cannot be reasoned about.
+    /// </para>
+    /// </summary>
+    private DateTimeOffset Now => (time ?? TimeProvider.System).GetUtcNow();
+
     private readonly Dictionary<Guid, AccountLine> _lines = [];
 
     /// <summary>
@@ -501,7 +514,7 @@ public sealed class RecipeWatch(
         IReadOnlyList<SentStat> stats;
         lock (_gate) stats = policy.SentStats;
 
-        var observedAt = DateTimeOffset.UtcNow;
+        var observedAt = Now;
 
         foreach (var (subject, values) in mine)
         {
@@ -600,7 +613,7 @@ public sealed class RecipeWatch(
         var summary = FieldSummary.Of(reading.Groups, valueKey, ours);
         if (summary.Count == 0) return (0, 0);
 
-        var now = (time ?? TimeProvider.System).GetUtcNow();
+        var now = Now;
         Remember(_fieldMine, summary, FieldSummary.Mine, now);
         Remember(_fieldAbove, summary, FieldSummary.Above, now);
 
@@ -885,7 +898,7 @@ public sealed class RecipeWatch(
 
     private ReadContext ContextFor(Recipe readRecipe, string readText, Source readSource, string trigger)
     {
-        var at = (time ?? TimeProvider.System).GetUtcNow();
+        var at = Now;
         return new ReadContext(readSource, readRecipe, BookFiles.Hash(readText), trigger, at, (int)TimeZoneInfo.Local.GetUtcOffset(at).TotalMinutes);
     }
 
