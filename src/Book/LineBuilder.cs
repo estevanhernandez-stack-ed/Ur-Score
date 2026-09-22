@@ -49,7 +49,7 @@ public static class LineBuilder
         }
 
         var stats = tracked.Order(StringComparer.Ordinal).ToList();
-        var headline = Headline(reading.Headline, OtherIds(reading.Rows, map));
+        var headline = Headline(reading.Headline, OtherIds(reading, map));
         var accounts = new Dictionary<string, BookAccount>(StringComparer.Ordinal);
         var unavail = new List<string>();
 
@@ -124,10 +124,38 @@ public static class LineBuilder
         }
     }
 
-    private static HashSet<long> OtherIds(IReadOnlyList<RecipeRow> rows, IReadOnlyDictionary<long, Guid> map) =>
-        rows.Select(r => r.UserId).Where(id => !map.ContainsKey(id)).ToHashSet();
+    /// <summary>
+    /// Every user id this READING mentions that is not one of yours: the rows, the accounts the source said it
+    /// could not show, and the ones a stat missed for. Until 2026-09-21 only the rows were looked at, so an id
+    /// the reading knew about through the other two was not guarded against (S1-6.10).
+    /// </summary>
+    private static HashSet<long> OtherIds(RecipeReading reading, IReadOnlyDictionary<long, Guid> map) =>
+        [.. reading.Rows.Select(row => row.UserId)
+            .Concat(reading.Unavailable.Keys)
+            .Concat(reading.CellMisses.Keys.Select(key => key.UserId))
+            .Where(id => !map.ContainsKey(id))];
 
-    /// <summary>Numbers only, and never a number that is another row's user id (score book spec §5.6).</summary>
+    private static HashSet<long> OtherIds(IReadOnlyList<RecipeRow> rows, IReadOnlyDictionary<long, Guid> map) =>
+        [.. rows.Select(row => row.UserId).Where(id => !map.ContainsKey(id))];
+
+    /// <summary>
+    /// Numbers only, and never a number that is a user id this reading mentioned for somebody who is not you
+    /// (score book spec §5.6).
+    /// <para>
+    /// BEST EFFORT, and the limit is worth stating plainly rather than leaving somebody to assume otherwise. A
+    /// stranger's id can only be recognised by having SEEN it, because nothing about the number gives it away: a
+    /// Roblox user id and a clan's battle points are both plain integers in the billions, so any rule based on
+    /// the shape or size of the number would throw away real points. So this catches an id the reading itself
+    /// surfaced and cannot catch one it did not — a recipe whose headline path points straight at, say, a
+    /// clan leader's id would keep that number, because the reading never mentions the leader anywhere else.
+    /// </para>
+    /// <para>
+    /// The control for that case is consent, not detection: the import screen lists every headline a recipe will
+    /// keep before it is installed. It lists the recipe author's LABELS, though, not the paths behind them, so it
+    /// is a real control and not an airtight one. The shipped recipes declare two headlines, Clan place and Clan
+    /// points, and neither is an id (S1-6.10).
+    /// </para>
+    /// </summary>
     private static Dictionary<string, double> Headline(IReadOnlyList<HeadlineValue> headline, HashSet<long> otherIds) =>
         headline
             .Where(h => h.Id.Length > 0 && h.Number is { } n && double.IsFinite(n)
