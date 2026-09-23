@@ -328,7 +328,9 @@ Nobody should ever manufacture a placeholder to get past it: RoRoRo's own Store 
 refuses placeholder logos, and shipping a made-up icon is worse than a build that stops and says
 why. The script publishes self-contained, so a clan member without the .NET 10 desktop runtime can
 still run the plugin, and writes `artifacts/manifest.json`, `artifacts/manifest.sha256` and
-`artifacts/plugin.zip` — the three files RoRoRo's installer expects at a release URL.
+`artifacts/plugin.zip` — the three files RoRoRo's installer expects at a release URL. A release
+adds `build/install.ps1` as a fourth, for installing by hand; how a release is cut, and the RoRoRo
+catalog bump that must follow it, is in [docs/releasing.md](docs/releasing.md).
 
 ## License
 
