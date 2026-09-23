@@ -37,8 +37,10 @@ try {
     Check '2 Per recipe: readings, first reading, finals and size' (
         ($recipes -contains 'Pet Sim 99 clan battle points') -and (@($recipes -match '^\d[\d,]* readings? kept .+ (bytes|KB|MB)$').Count -eq 1)) ($recipes -join ' | ')
 
+    # This walk never presses Start or Pause/Resume, only Test now (line 21), so the board has never started this
+    # session (AppServices.EverStarted is false): "Not started. ...", not "Paused. ..." (2026-09-23 review).
     $notRecording = @(Get-AllTexts (Find-ByAutomationId $setup 'NotRecordingList'))
-    Check '3 A stopped source says it is stopped' (@($notRecording -like '*Paused. Resume from the status chip on the board.*').Count -gt 0) ($notRecording -join ' | ')
+    Check '3 A never-started source says so' (@($notRecording -like '*Not started. Start reading from the status chip on the board.*').Count -gt 0) ($notRecording -join ' | ')
 
     $slugDir = Join-Path $UrData 'scorebook\pet-sim-99-clan-battle-points'
     $months = @(Get-ChildItem $slugDir -Filter *.jsonl -ErrorAction SilentlyContinue)

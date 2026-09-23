@@ -48,13 +48,27 @@ public class ScoreBookModelTests
     [InlineData(5505024L, "5.25 MB")]
     public void SizeReadsInBytesKilobytesOrMegabytes(long bytes, string text) => Assert.Equal(text, ScoreBookModel.Size(bytes));
 
+    /// <summary>Started this session, then paused: there is something to resume, so the text offers to.</summary>
     [Fact]
     public void StoppedSourcesSayStopped()
     {
         var items = ScoreBookModel.NotRecording([Installed], [ClanSource("s-00000001", "CCGP")],
-            new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Snapshot(true, null) }, running: false, accountsEverListed: true);
+            new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Snapshot(true, null) }, running: false, everStarted: true, accountsEverListed: true);
 
         Assert.Equal(new NotRecordingItem("CCGP · Pet Sim 99 clan battle points", "Paused. Resume from the status chip on the board."), Assert.Single(items));
+    }
+
+    /// <summary>
+    /// Never started this session (e.g. only a Test now read has run): nothing has been paused, so the text says
+    /// Start, not Resume, mirroring BoardText.StateLine's everStarted split (2026-09-23 review).
+    /// </summary>
+    [Fact]
+    public void NeverStartedSourcesSayNotStartedRatherThanPaused()
+    {
+        var items = ScoreBookModel.NotRecording([Installed], [ClanSource("s-00000001", "CCGP")],
+            new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Snapshot(true, null) }, running: false, everStarted: false, accountsEverListed: true);
+
+        Assert.Equal(new NotRecordingItem("CCGP · Pet Sim 99 clan battle points", "Not started. Start reading from the status chip on the board."), Assert.Single(items));
     }
 
     [Fact]
@@ -67,7 +81,7 @@ public class ScoreBookModelTests
             ["s-00000002"] = Snapshot(true, null),
         };
 
-        var items = ScoreBookModel.NotRecording([Installed], sources, latest, running: true, accountsEverListed: true);
+        var items = ScoreBookModel.NotRecording([Installed], sources, latest, running: true, everStarted: true, accountsEverListed: true);
 
         Assert.Equal(new NotRecordingItem("CCGP · Pet Sim 99 clan battle points", "The battle ended and its final is saved."), Assert.Single(items));
     }
@@ -77,7 +91,7 @@ public class ScoreBookModelTests
     {
         Source[] sources = [ClanSource("s-00000001", "CCGP", enabled: false), ClanSource("s-00000002", "K0i2")];
 
-        var items = ScoreBookModel.NotRecording([Installed], sources, new Dictionary<string, RecipeSnapshot>(), running: true, accountsEverListed: false);
+        var items = ScoreBookModel.NotRecording([Installed], sources, new Dictionary<string, RecipeSnapshot>(), running: true, everStarted: true, accountsEverListed: false);
 
         Assert.Equal(new[]
         {
@@ -127,7 +141,7 @@ public class ScoreBookModelTests
         var field = new Source("s-00000009", clans.Slug, new Dictionary<string, string>(), SourceRole.Watch);
         var latest = new Dictionary<string, RecipeSnapshot> { [field.Id] = Snapshot(false, "This read brought no clan with a number, so there was nothing to keep.") };
 
-        var items = ScoreBookModel.NotRecording([list], [field], latest, running: true, accountsEverListed: true);
+        var items = ScoreBookModel.NotRecording([list], [field], latest, running: true, everStarted: true, accountsEverListed: true);
 
         Assert.Equal(
             new NotRecordingItem("Pet Sim 99 top clans", "This read brought no clan with a number, so there was nothing to keep."),

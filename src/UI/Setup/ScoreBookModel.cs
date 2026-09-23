@@ -88,9 +88,15 @@ public static class ScoreBookModel
     /// Every source that isn't recording right now, and why (spec §7.6). A clans list is one of them from 0.5.3:
     /// it records, so it can fail to, and the page that explains a silence should explain that one too.
     /// </summary>
+    /// <param name="everStarted">
+    /// Whether reading has run this session at all (<c>AppServices.EverStarted</c>), the same split
+    /// <see cref="BoardText.StateLine"/> makes: a board that has never started has nothing to resume, so it isn't
+    /// told to. Without this a board that had only ever run a Test now read (never Start) was told to "resume"
+    /// something it had never started (2026-09-23 review).
+    /// </param>
     public static IReadOnlyList<NotRecordingItem> NotRecording(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest,
-        bool running, bool accountsEverListed)
+        bool running, bool everStarted, bool accountsEverListed)
     {
         var items = new List<NotRecordingItem>();
 
@@ -110,7 +116,7 @@ public static class ScoreBookModel
             var snapshot = latest.GetValueOrDefault(source.Id);
             var reason =
                 !source.Enabled ? "Switched off."
-                : !running ? "Paused. Resume from the status chip on the board."
+                : !running ? (everStarted ? "Paused. Resume from the status chip on the board." : "Not started. Start reading from the status chip on the board.")
                 : snapshot is null ? "Not read yet."
                 : snapshot.Recorded ? null
                 : snapshot.NotRecordingReason ?? "The last read kept nothing.";

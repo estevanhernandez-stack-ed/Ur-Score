@@ -38,7 +38,7 @@ public partial class ScoreBookPage : UserControl, ISetupPage
             : [];
 
         var everListed = _services.AccountsCache.SavedAt() is not null || _services.Accounts.Last is { Accounts.Count: > 0 };
-        var items = ScoreBookModel.NotRecording(_services.Installed, _services.Sources, _services.Latest, _services.Running, everListed);
+        var items = ScoreBookModel.NotRecording(_services.Installed, _services.Sources, _services.Latest, _services.Running, _services.EverStarted, everListed);
         NotRecordingList.ItemsSource = items;
         AllRecordingLine.Visibility = items.Count == 0 && _services.Sources.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
