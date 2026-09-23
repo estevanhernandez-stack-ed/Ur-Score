@@ -107,7 +107,10 @@ try {
             $sourcesOk = (-not (Test-Path $sourcesPath)) -or ((Get-Content $sourcesPath -Raw) -notmatch $Main)
             Check '4g The unticked clan never reaches sources.json' $sourcesOk "exists=$(Test-Path $sourcesPath)"
             $recipeState = Get-Content (Join-Path $UrData 'recipes\pet-sim-99-clan-battle-points.state.json') -Raw
-            Check '4h Nothing arrived set to send' ($recipeState -notmatch '"send":\s*true') 'state file read'
+            # BOTH send lists: the per-stat "send" tick, and sentFieldMetrics — a clans list's clan-and-field
+            # numbers, which go out under fixed ids whatever the clan's role (final review, 2026-09-22).
+            $sendOff = ($recipeState -notmatch '"send":\s*true') -and ($recipeState -notmatch '"sentFieldMetrics":\s*\[\s*"')
+            Check '4h Nothing arrived set to send, on either send list' $sendOff 'state file read'
             & (Join-Path $PSScriptRoot 'shot.ps1') -Title 'Setup' -OutPath (Join-Path $UrShots 'score-book-setup-import.png') | Out-Null
         }
         finally {

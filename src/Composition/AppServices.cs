@@ -674,7 +674,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         public string DataRoot => owner._paths.Root;
 
-        public Core.SetupHere Here => new(owner.Installed, owner.Sources, owner.SavedBoards, owner.KnownAccounts);
+        public Core.SetupHere Here => new(owner.Installed, owner.Sources, owner.SavedBoards, owner.KnownAccounts, owner.Settings);
 
         public void SaveRecipe(Recipe recipe, string text, RecipeState state) => owner.Store.Save(recipe, text, state);
 

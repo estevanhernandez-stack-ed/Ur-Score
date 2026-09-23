@@ -19,9 +19,14 @@ public sealed record SetupItem(
     SetupKind Kind, string Key, string Name, SetupOutcome Outcome, string Note, bool Ticked,
     string? DependsOnRecipe = null, string? FileId = null, string? LocalId = null);
 
-/// <summary>This machine's setup, as the plan needs it.</summary>
+/// <summary>
+/// This machine's setup, as the plan needs it. <see cref="Settings"/> is THIS PC's whole settings record — the
+/// settings step lays the file's two over it rather than writing the file's record, so <c>StartOnOpen</c>, which
+/// never travels, stays what this machine chose.
+/// </summary>
 public sealed record SetupHere(
-    IReadOnlyList<InstalledRecipe> Installed, IReadOnlyList<Source> Sources, IReadOnlyList<BoardDef> SavedBoards, IReadOnlyList<HostAccount> Accounts);
+    IReadOnlyList<InstalledRecipe> Installed, IReadOnlyList<Source> Sources, IReadOnlyList<BoardDef> SavedBoards, IReadOnlyList<HostAccount> Accounts,
+    Settings Settings);
 
 public sealed record SetupMergePlan(IReadOnlyList<SetupItem> Items, SetupPack File)
 {
@@ -173,6 +178,12 @@ public static class SetupMerge
     /// Applies the ticked items in dependency order (spec §4): the aside copy first, then recipes, clans, a reload,
     /// boards, settings. Each step is atomic on its own file; a step that throws ends the apply with its name and
     /// the exception's TYPE, and the steps before it stand. No roll-back: the aside folder is the recovery.
+    /// <para>
+    /// The catch takes anything but a cancellation, rather than a list of types: the call graph here runs through
+    /// the real stores, a JSON serializer and the file system, so the list was narrower than what can actually
+    /// arrive — and a named step with its aside folder is a better end for a person than an unhandled throw
+    /// becoming the page's generic "That file could not be imported" (final review, 2026-09-22).
+    /// </para>
     /// </summary>
     public static SetupApplied Apply(SetupMergePlan plan, IReadOnlySet<string> tickedKeys, ISetupWriter writer, DateTimeOffset now)
     {
@@ -242,6 +253,10 @@ public static class SetupMerge
             }
 
             if (clans > 0) writer.SaveSources(sources);
+
+            // Its own step: the reload reads every recipe file back and re-applies the sources, which is not the
+            // clans step and must not be named as it.
+            step = "reload";
             writer.ReloadRecipes();
 
             step = "boards";
@@ -262,9 +277,16 @@ public static class SetupMerge
             }
 
             step = "settings";
-            writer.SaveSettings(plan.File.Settings);
+            // Exactly the two that travel, laid over this PC's own record. The file's record is NOT written:
+            // SetupPack.FromFolder rebuilds it as new Settings(ResolveNames, ActiveRecipe), so StartOnOpen there
+            // is the record default, and saving it would turn this machine's choice off on every import.
+            writer.SaveSettings(here.Settings with
+            {
+                ResolveNames = plan.File.Settings.ResolveNames,
+                ActiveRecipe = plan.File.Settings.ActiveRecipe,
+            });
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, step, ex.GetType().Name,
                 skippedRecipes.Count == 0 ? null : skippedRecipes);
@@ -328,7 +350,18 @@ public static class SetupMerge
         }
     }
 
-    /// <summary>The state as it arrives (spec §2): every send off, exclusions mapped to this PC's accounts by Roblox id, the unmatched counted.</summary>
+    /// <summary>
+    /// The state as it arrives (spec §2): every send off, exclusions mapped to this PC's accounts by Roblox id, the
+    /// unmatched counted.
+    /// <para>
+    /// <see cref="RecipeState"/> holds TWO send lists, and both are cleared here.
+    /// <see cref="RecipeState.Stats"/>'s per-stat <see cref="StatChoice.Send"/> is the per-account one;
+    /// <see cref="RecipeState.SentFieldMetrics"/> is a clans list's clan-and-field numbers, which
+    /// <c>AppServices.PolicyFor</c> hands to every <c>ReportPolicy</c> OUTSIDE the role gate — so a clans-list
+    /// recipe arriving with that list intact would start reporting your clan's standing to the receiving PC's
+    /// RoRoRo with nothing ticked (final review, 2026-09-22).
+    /// </para>
+    /// </summary>
     public static RecipeState Arriving(RecipeState fileState, IReadOnlyList<long> excludedUserIds, IReadOnlyList<HostAccount> accounts, out int droppedExclusions)
     {
         var byUserId = AccountMap.Build(accounts);
@@ -338,6 +371,7 @@ public static class SetupMerge
         {
             Stats = fileState.Stats?.ToDictionary(kv => kv.Key, kv => kv.Value with { Send = false }, StringComparer.Ordinal),
             ExcludedAccountIds = excluded.Count == 0 ? null : excluded,
+            SentFieldMetrics = null,
         };
     }
 

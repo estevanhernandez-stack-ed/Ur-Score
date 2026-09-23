@@ -16,7 +16,7 @@ public class ImportPreviewModelTests
             [new SetupRecipe(Clan.Slug, Clan.Name, text, new RecipeState(), [])],
             [new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main)],
             [], Settings.Defaults, [new SetupKey("ps99", "PS99 key", Profile.Slug, Profile.Name)]);
-        return SetupMerge.Plan(file, new SetupHere([], [], [], []), 40, 2);
+        return SetupMerge.Plan(file, new SetupHere([], [], [], [], Settings.Defaults), 40, 2);
     }
 
     [Fact]

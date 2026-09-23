@@ -223,7 +223,7 @@ public class AppCompositionTests
             var top = RecipeParser.Parse(topText).Recipe!;
             var pathsA = new AppPaths(a.Path);
             new RecipeStore(pathsA.Recipes).Save(clan, clanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") }));
-            new RecipeStore(pathsA.Recipes).Save(top, topText, new RecipeState());
+            new RecipeStore(pathsA.Recipes).Save(top, topText, new RecipeState(SentFieldMetrics: [FieldMetrics.ThreatGap]));
             var sourcesA = new List<Source>
             {
                 new("s-000000a1", clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main),
@@ -256,6 +256,9 @@ public class AppCompositionTests
             Assert.Equal((2, 3, 1), (applied.Recipes, applied.Clans, applied.Boards));
             Assert.Equal(2, importer.Installed.Count);
             Assert.All(importer.Installed.SelectMany(i => i.State.StatChoices.Values), choice => Assert.False(choice.Send));
+            // The second send list too: A's clans list ticks a clan-and-field number, and B must arrive with
+            // none — PolicyFor hands FieldMetricKeys to every ReportPolicy whatever the clan's role.
+            Assert.All(importer.Installed, i => Assert.Empty(i.State.FieldMetricKeys));
             Assert.Equal(3, importer.Sources.Count);
             Assert.All(importer.Sources, s => Assert.DoesNotContain(s.Id, sourcesA.Select(x => x.Id)));
             var k0i2 = Assert.Single(importer.Sources, s => s.InputsKey == "clan=k0i2");

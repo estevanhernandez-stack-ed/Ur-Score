@@ -21,7 +21,7 @@ public class SetupMergeTests
         new(recipe.Slug, recipe.Name, text, state ?? new RecipeState(), excluded);
 
     private static SetupHere Here(IReadOnlyList<InstalledRecipe>? installed = null, IReadOnlyList<Source>? sources = null, IReadOnlyList<BoardDef>? boards = null) =>
-        new(installed ?? [], sources ?? [], boards ?? [], [Main, AltOne]);
+        new(installed ?? [], sources ?? [], boards ?? [], [Main, AltOne], Settings.Defaults);
 
     private static SetupPack Pack(IReadOnlyList<SetupRecipe>? recipes = null, IReadOnlyList<Source>? sources = null, IReadOnlyList<BoardDef>? boards = null, IReadOnlyList<SetupKey>? keys = null) =>
         new(recipes ?? [], sources ?? [], boards ?? [], Settings.Defaults, keys ?? []);
@@ -151,16 +151,22 @@ public class SetupMergeTests
     [Fact]
     public void AStateArrivesWithEverySendOffAndExclusionsMappedToThisPcsAccounts()
     {
-        var state = new RecipeState(Stats: new Dictionary<string, StatChoice>
-        {
-            ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points"),
-            ["rank"] = new(Show: false, Send: true, MetricId: "clan.battle.rank"),
-        });
+        var state = new RecipeState(
+            Stats: new Dictionary<string, StatChoice>
+            {
+                ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points"),
+                ["rank"] = new(Show: false, Send: true, MetricId: "clan.battle.rank"),
+            },
+            SentFieldMetrics: [FieldMetrics.ThreatGap, FieldMetrics.Points]);
 
         var arriving = SetupMerge.Arriving(state, [201, 999], [Main, AltOne], out var dropped);
 
         Assert.All(arriving.StatChoices.Values, choice => Assert.False(choice.Send));
         Assert.Equal((true, "clan.battle.points"), (arriving.StatChoices["value"].Show, arriving.StatChoices["value"].MetricId));
+        // The SECOND send list (a clans list's clan-and-field numbers, sent under fixed ids with no account
+        // attached). Stats[*].Send is not all of "sends arrive off": this one has its own property, and
+        // AppServices.PolicyFor hands it to every ReportPolicy outside the role gate.
+        Assert.Empty(arriving.FieldMetricKeys);
         Assert.Equal([AltOne.AccountId], arriving.Excluded);
         Assert.Equal(1, dropped);
     }
@@ -191,7 +197,7 @@ public class SetupMergeTests
         public void SaveSources(IReadOnlyList<Source> sources) { if (ThrowAt == "clans") throw new IOException("disk"); Calls.Add("SaveSources"); Sources = sources; }
         public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) { if (ThrowAt == "boards") throw new UnauthorizedAccessException("denied"); Calls.Add("SaveImportedBoards"); Boards = saved; }
         public void SaveSettings(Settings settings) { if (ThrowAt == "settings") throw new IOException("disk"); Calls.Add("SaveSettings"); Settings = settings; }
-        public void ReloadRecipes() { Calls.Add("ReloadRecipes"); Reloads++; }
+        public void ReloadRecipes() { if (ThrowAt == "reload") throw new IOException("disk"); Calls.Add("ReloadRecipes"); Reloads++; }
     }
 
     /// <summary>
@@ -208,7 +214,7 @@ public class SetupMergeTests
         Directory.CreateDirectory(Path.Combine(data, "recipes"));
         File.WriteAllText(Path.Combine(data, "recipes", "old.recipe.json"), "{}");
         var local = new Source("s-local001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Watch);
-        var here = new SetupHere([], [local, Rival], [new BoardDef("b-1", "Battle", [])], [Main, AltOne]);
+        var here = new SetupHere([], [local, Rival], [new BoardDef("b-1", "Battle", [])], [Main, AltOne], Settings.Defaults);
         var fileMain = new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main);
         var fileNew = new Source("s-file0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Mine);
         var fileBoard = new BoardDef("b-9", "Battle", [
@@ -299,6 +305,26 @@ public class SetupMergeTests
         }
     }
 
+    /// <summary>
+    /// The reload is its own step, not the tail of the clans one: it reads every recipe file back off disk and
+    /// re-applies the sources, so a failure there is nothing to do with saving clans and must not be reported as
+    /// "the clans could not be written" — the aside a person is told to reach for would be the wrong one.
+    /// </summary>
+    [Fact]
+    public void AReloadFailureNamesTheReloadAndNotTheClansStep()
+    {
+        var (plan, writer, dir) = Scenario(throwAt: "reload");
+        using (dir)
+        {
+            var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+
+            Assert.Equal(("reload", nameof(IOException)), (applied.FailedStep, applied.FailureType));
+            Assert.NotNull(writer.Sources);   // the clans step itself finished
+            Assert.Null(writer.Boards);
+            Assert.Null(writer.Settings);
+        }
+    }
+
     [Fact]
     public void ASettingsFailureNamesItsStepWithRecipesClansAndBoardsAlreadyStanding()
     {
@@ -315,13 +341,35 @@ public class SetupMergeTests
         }
     }
 
+    /// <summary>
+    /// Spec §1/§7: the file carries exactly two settings, and <c>StartOnOpen</c> is this machine's own. The settings
+    /// step must therefore write THIS PC's record with the file's two laid over it — never the file's whole record,
+    /// which <see cref="SetupPack.FromFolder"/> rebuilds with <c>StartOnOpen</c> at the record default, so every
+    /// import would quietly turn "Start reading as soon as Ur Score opens" back off (final review, 2026-09-22).
+    /// </summary>
+    [Fact]
+    public void TheSettingsStepTakesTheFilesTwoAndKeepsThisPcsStartOnOpen()
+    {
+        using var dir = TempDir.Create("urscore-apply-settings");
+        var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
+        var here = new SetupHere([], [], [], [Main, AltOne], new Settings(ResolveNames: true, ActiveRecipe: "something-else", StartOnOpen: true));
+        var file = new SetupPack([], [], [], new Settings(ResolveNames: false, ActiveRecipe: Clan.Slug), []);
+        var plan = SetupMerge.Plan(file, here, 0, 0);
+        var writer = new FakeSetupWriter(data, here);
+
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+
+        Assert.Null(applied.FailedStep);
+        Assert.Equal((false, Clan.Slug, true), (writer.Settings!.ResolveNames, writer.Settings.ActiveRecipe, writer.Settings.StartOnOpen));
+    }
+
     [Fact]
     public void AMainArrivingDemotesTheLocalMainOnThatRecipeToMine()
     {
         using var dir = TempDir.Create("urscore-apply-main");
         var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
         var y = new Source("s-local-y", Clan.Slug, new Dictionary<string, string> { ["clan"] = "Y" }, SourceRole.Main);
-        var here = new SetupHere([new InstalledRecipe(Clan, ClanText, new RecipeState())], [y], [], [Main, AltOne]);
+        var here = new SetupHere([new InstalledRecipe(Clan, ClanText, new RecipeState())], [y], [], [Main, AltOne], Settings.Defaults);
         var fileX = new Source("s-filex001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "X" }, SourceRole.Main);
         var file = new SetupPack([FileRecipe(Clan, ClanText)], [fileX], [], Settings.Defaults, []);
         var plan = SetupMerge.Plan(file, here, 0, 0);
@@ -342,14 +390,14 @@ public class SetupMergeTests
     public void AClanGoneFromTheStoreSincePlanFailsTheClansStepByNameInsteadOfThrowingRaw()
     {
         var local = new Source("s-local001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Watch);
-        var hereForPlan = new SetupHere([], [local], [], [Main, AltOne]);
+        var hereForPlan = new SetupHere([], [local], [], [Main, AltOne], Settings.Defaults);
         var fileMain = new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main);
         var file = new SetupPack([FileRecipe(Clan, ClanText)], [fileMain], [], Settings.Defaults, []);
         var plan = SetupMerge.Plan(file, hereForPlan, 0, 0);
 
         using var dir = TempDir.Create("urscore-apply-gone");
         var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
-        var hereForWriter = new SetupHere([], [], [], [Main, AltOne]);   // the local clan vanished before Apply ran
+        var hereForWriter = new SetupHere([], [], [], [Main, AltOne], Settings.Defaults);   // the local clan vanished before Apply ran
         var writer = new FakeSetupWriter(data, hereForWriter);
 
         var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
@@ -363,7 +411,7 @@ public class SetupMergeTests
     {
         using var dir = TempDir.Create("urscore-apply-badrecipe");
         var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
-        var here = new SetupHere([], [], [], [Main, AltOne]);
+        var here = new SetupHere([], [], [], [Main, AltOne], Settings.Defaults);
         var badRecipe = new SetupRecipe(Profile.Slug, Profile.Name, "not a recipe", new RecipeState(), []);
         var file = new SetupPack([badRecipe], [], [], Settings.Defaults, []);
         var plan = SetupMerge.Plan(file, here, 0, 0);

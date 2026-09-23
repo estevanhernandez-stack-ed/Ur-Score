@@ -118,7 +118,7 @@ public class ImportPreviewRenderTests
                 new Source("s-local0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Watch),
                 new Source("s-local0003", Clan.Slug, new Dictionary<string, string> { ["clan"] = "Z9" }, SourceRole.Mine),
             ],
-            [], []);
+            [], [], Settings.Defaults);
 
         return SetupMerge.Plan(file, here, 40, 2);
     }
