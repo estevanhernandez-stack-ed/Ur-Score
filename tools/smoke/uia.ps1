@@ -72,7 +72,8 @@ function Wait-UrWindow([string]$titlePattern, [int]$seconds = 15) {
     return $null
 }
 
-function Get-BoardWindow { Get-UrWindows | Where-Object { $_.Current.Name -eq 'RoRoRo Ur Score' } | Select-Object -First 1 }
+# The board's title gains " (Paused)" while reading is paused (BC2), so it is matched by pattern, not equality.
+function Get-BoardWindow { Get-UrWindows | Where-Object { $_.Current.Name -match '^RoRoRo Ur Score( \(Paused\))?$' } | Select-Object -First 1 }
 
 # ---- Ur Score's own confirmation ----
 # Ur Score raises no stock Windows message box any more (owner rule, backlog V3-S.10): a question opens
@@ -323,7 +324,12 @@ function Copy-UrControlData([string]$control) {
     if (Test-Path $settingsPath) {
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
         $settings | Add-Member -NotePropertyName 'startOnOpen' -NotePropertyValue $false -Force
+        $settings | Add-Member -NotePropertyName 'settingsVersion' -NotePropertyValue 2 -Force
         $settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+    } else {
+        # 0.6 reads on open by default and migrates any settings file without a version to on (BC1); a control
+        # folder with no settings.json of its own still needs one seeded off, same as Move-UrDataAside's fresh folder.
+        Set-Content $settingsPath -Encoding UTF8 -Value '{ "resolveNames": true, "activeRecipe": null, "startOnOpen": false, "settingsVersion": 2 }'
     }
 
     foreach ($file in Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue) {
@@ -349,6 +355,9 @@ function Assert-UrDataSendsNothing {
     if (Test-Path $settingsPath) {
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
         if ($settings.startOnOpen) { $problems += 'settings.json still has startOnOpen true' }
+        if (-not $settings.settingsVersion -or $settings.settingsVersion -lt 2) { $problems += 'settings.json has no settingsVersion 2, so opening would switch startOnOpen on' }
+    } else {
+        $problems += 'no settings.json, so opening would write one with startOnOpen on'
     }
 
     foreach ($file in Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue) {
@@ -393,6 +402,9 @@ function Move-UrDataAside {
     }
     try {
         New-Item -ItemType Directory -Force $UrData | Out-Null
+        # 0.6 reads on open by default and migrates any settings file without a version to on (BC1). A walk decides
+        # when reading starts, so its folder is born with start-on-open off and already migrated.
+        Set-Content (Join-Path $UrData 'settings.json') -Encoding UTF8 -Value '{ "resolveNames": true, "activeRecipe": null, "startOnOpen": false, "settingsVersion": 2 }'
     } catch {
         if ($backup) { Rename-Item $backup (Split-Path $UrData -Leaf) }
         throw

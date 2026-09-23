@@ -148,6 +148,29 @@ function Complete-EditMode($board) {
     Start-Sleep -Milliseconds 1000
 }
 
+# BC2: the chip opens the status card; Pause and Resume are inside it. The card is a popup, a top-level window of its
+# own, so its button is found across the process's windows. Returns the button's new name.
+# Unverified as of Task 9 (2026-09-23): the controller ruling for that task forbade launching the app or running a
+# walk, so nobody has confirmed by hand yet that Find-InUrWindows (which walks Get-UrWindows) actually reaches into
+# a WPF Popup's own HWND the way it reaches a menu or a pop-out window. Treat this as unproven until the first real
+# walk-top-bar run: if step 3 ("A click opens the card") times out into the throw below instead of passing, give the
+# Popup's Border an AutomationId and walk $AE::RootElement children by process id for it instead, and update this
+# comment with whichever one worked.
+function Invoke-PauseResume([int]$seconds = 10) {
+    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'StartStopButton')
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do {
+        $button = Find-InUrWindows 'PauseResumeButton'
+        if ($button) {
+            Invoke-Element $button
+            Start-Sleep -Milliseconds 600
+            return (Find-InUrWindows 'PauseResumeButton').Current.Name
+        }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    throw 'the status card never opened'
+}
+
 # Invokes a tool button inside one panel, found by the panel's automation id.
 function Invoke-PanelTool($root, [string]$panelId, [string]$toolId) {
     $panel = Find-ByAutomationId $root $panelId
