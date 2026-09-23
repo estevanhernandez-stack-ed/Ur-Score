@@ -53,7 +53,7 @@ public class BoardTextTests
         LiveBoard Board(bool running, params Source[] sources) => Live(sources, [Installed(Clan, "value")], snaps, running);
 
         Assert.Equal("Not started.", BoardText.StateLine(Board(false, MainClan, AltClan), everStarted: false));
-        Assert.Equal("Stopped.", BoardText.StateLine(Board(false, MainClan, AltClan), everStarted: true));
+        Assert.Equal(BoardText.Paused, BoardText.StateLine(Board(false, MainClan, AltClan), everStarted: true));
         Assert.Equal("K0i2: Could not reach the data.", BoardText.StateLine(Board(true, MainClan, AltClan), everStarted: true));
         Assert.Equal("Reading 1 source.", BoardText.StateLine(Board(true, MainClan), everStarted: true));
     }
@@ -285,9 +285,9 @@ public class BoardTextTests
     }
 
     /// <summary>
-    /// Backlog S1-14.5. While stopped the line only ever said "Not started." or "Stopped.", so what a Test now found was never said
-    /// where you pressed it. It now says what the read you asked for found: a source in trouble by name, else what they all found,
-    /// else how many answered.
+    /// Backlog S1-14.5. While stopped the line only ever said "Not started." or BoardText.Paused, so what a Test now found was never
+    /// said where you pressed it. It now says what the read you asked for found: a source in trouble by name, else what they all
+    /// found, else how many answered.
     /// </summary>
     [Fact]
     public void StoppedTheLineSaysWhatTheReadYouAskedForFound()
@@ -315,7 +315,7 @@ public class BoardTextTests
     }
 
     /// <summary>
-    /// The news is only for a read you asked for since reading stopped. Pressing Stop still says "Stopped." and nothing else, a
+    /// The news is only for a read you asked for since reading stopped. Pausing still says only BoardText.Paused and nothing else, a
     /// timed read that lands just after Stop isn't news you asked for, and a source read before the ask isn't part of its answer.
     /// </summary>
     [Fact]
@@ -328,13 +328,13 @@ public class BoardTextTests
             lastRead: new Dictionary<string, DateTimeOffset> { [MainClan.Id] = mainAt, [AltClan.Id] = altAt });
 
         var testedWhileRunning = new BoardActivity(AskedReadAt: Now.AddMinutes(-5), StoppedAt: Now.AddMinutes(-1));
-        Assert.Equal("Stopped.", BoardText.StateLine(Board(Now.AddMinutes(-4), Now.AddMinutes(-4)), everStarted: true, testedWhileRunning));
-        Assert.Equal("Stopped.", BoardText.StateLine(Board(Now.AddSeconds(-30), Now.AddSeconds(-30)), everStarted: true, testedWhileRunning));
+        Assert.Equal(BoardText.Paused, BoardText.StateLine(Board(Now.AddMinutes(-4), Now.AddMinutes(-4)), everStarted: true, testedWhileRunning));
+        Assert.Equal(BoardText.Paused, BoardText.StateLine(Board(Now.AddSeconds(-30), Now.AddSeconds(-30)), everStarted: true, testedWhileRunning));
 
         var testedSinceStop = new BoardActivity(AskedReadAt: Now.AddSeconds(-20), StoppedAt: Now.AddMinutes(-1));
-        Assert.Equal("Stopped. Last read: Reported to RoRoRo.",
+        Assert.Equal(BoardText.Paused + " Last read: Reported to RoRoRo.",
             BoardText.StateLine(Board(Now.AddSeconds(-10), Now.AddMinutes(-4)), everStarted: true, testedSinceStop));
-        Assert.Equal("Stopped. Last read of K0i2: Could not reach the data.",
+        Assert.Equal(BoardText.Paused + " Last read of K0i2: Could not reach the data.",
             BoardText.StateLine(Board(Now.AddSeconds(-10), Now.AddSeconds(-10)), everStarted: true, testedSinceStop));
     }
 

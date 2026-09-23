@@ -33,6 +33,9 @@ public static class BoardText
 
     public const string ReadingOnce = "Reading every source once…";
 
+    /// <summary>The state line while paused (BC2): the one sentence that says what pausing costs.</summary>
+    public const string Paused = "Paused. Nothing is read or sent, so phone alerts are off.";
+
     public const string Unexpected = "Something unexpected went wrong.";
 
     /// <summary>The detail under <see cref="Unexpected"/>. The exception itself goes to the trail, never onto the board.</summary>
@@ -74,7 +77,7 @@ public static class BoardText
         if (activity.Starting) return Starting + remembered;
         if (activity.Testing) return ReadingOnce + remembered;
 
-        if (!live.Running) return (everStarted ? "Stopped." : "Not started.") + LastReadNews(live, activity) + remembered;
+        if (!live.Running) return (everStarted ? Paused : "Not started.") + LastReadNews(live, activity) + remembered;
 
         var enabled = live.Sources.Where(s => s.Enabled).ToList();
         if (enabled.Count == 0) return "Running, with nothing to read yet." + remembered;
@@ -94,10 +97,10 @@ public static class BoardText
     }
 
     /// <summary>
-    /// Backlog S1-14.5: what the read you asked for while reading was stopped found, after "Not started." or "Stopped.". Only a
-    /// read asked for since the last Stop, and only the sources it read, so pressing Stop still says "Stopped." alone and a timed
-    /// read that lands just after it isn't mistaken for an answer. A source in trouble is named first, as the running line does;
-    /// else what every source found, when they found the same; else how many answered.
+    /// Backlog S1-14.5: what the read you asked for while reading was stopped found, after "Not started." or <see cref="Paused"/>.
+    /// Only a read asked for since the last Stop, and only the sources it read, so pausing still says <see cref="Paused"/> alone
+    /// and a timed read that lands just after it isn't mistaken for an answer. A source in trouble is named first, as the
+    /// running line does; else what every source found, when they found the same; else how many answered.
     /// </summary>
     private static string LastReadNews(LiveBoard live, BoardActivity activity)
     {
@@ -161,6 +164,55 @@ public static class BoardText
     /// </summary>
     public static string DetailLine(LiveBoard live, string? budgetWarning, string? boardsProblem, string? note = null) =>
         boardsProblem ?? note ?? DetailLine(live, budgetWarning);
+
+    /// <summary>
+    /// Whether reading is in trouble, for the chip: a source this session reads that isn't healthy, or RoRoRo down
+    /// (which the state line counts as healthy, since reading goes on, but nothing reaches the phone).
+    /// </summary>
+    public static bool InTrouble(LiveBoard live) =>
+        live.Snapshots.Values.Any(s => s.State == WatchState.HostDown)
+        || live.Sources.Where(s => s.Enabled).Any(s => live.LiveOf(s.Id) is { } snapshot && !Healthy(snapshot.State));
+
+    /// <summary>One line per switched-on source on the status card: its trouble, else when it was read and when it reads next.</summary>
+    public static IReadOnlyList<StatusRow> CardRows(LiveBoard live)
+    {
+        var rows = new List<StatusRow>();
+        foreach (var source in live.Sources.Where(s => s.Enabled))
+        {
+            if (live.LiveOf(source.Id) is { } snapshot && !Healthy(snapshot.State))
+            {
+                rows.Add(new StatusRow(live.SourceName(source), DiagnosticsModel.StateText(snapshot.State)));
+                continue;
+            }
+
+            if (!live.LastRead.TryGetValue(source.Id, out var last))
+            {
+                rows.Add(new StatusRow(live.SourceName(source), "not read yet"));
+                continue;
+            }
+
+            var line = $"read {StatText.Span(live.Now - last)} ago";
+            if (live.Running && live.FindRecipe(source.Recipe)?.Recipe is { } recipe)
+            {
+                var due = last.AddSeconds(recipe.EffectiveEverySeconds);
+                line += due > live.Now ? $" · next in {StatText.Span(due - live.Now)}" : " · next read due";
+            }
+
+            rows.Add(new StatusRow(live.SourceName(source), line));
+        }
+
+        return rows;
+    }
+
+    /// <summary>Whether the phone is hearing anything, on the status card.</summary>
+    public static string AlertsLine(bool running, bool sending, bool hostDown) =>
+        !sending ? "Phone alerts: nothing is set to send."
+        : !running ? "Phone alerts: off while reading is paused."
+        : hostDown ? "Phone alerts: RoRoRo is not running, so nothing is sent."
+        : "Phone alerts: sending.";
+
+    /// <summary>BC8: closing asks only while something is being read AND sent; a paused board closes silencing nothing.</summary>
+    public static bool AsksBeforeClose(bool running, bool sending) => running && sending;
 
     /// <summary>What Delete… asks before the board goes, for the themed confirmation to draw.</summary>
     /// <summary>
@@ -285,3 +337,6 @@ public static class BoardText
     private static bool Healthy(WatchState state) =>
         state is WatchState.Reporting or WatchState.Showing or WatchState.NoMatches or WatchState.HostDown or WatchState.SourceIdle;
 }
+
+/// <summary>One source's line on the status card.</summary>
+public sealed record StatusRow(string Name, string Line);
