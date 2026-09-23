@@ -310,7 +310,7 @@ function Select-FirstSearchMatch($root, [string]$searchLabel, [string]$query, [s
 # signature, so a dev build is indistinguishable from the installed plugin. Every walk must assume it connects.
 #
 # The cure is at the source rather than at the host: a folder with nothing set to send cannot send, whether the
-# host is up, down, 1.29 or 1.30. Quitting RoRoRo for the duration is the second layer and is the caller's call —
+# host is up, down, 1.29 or 1.30. Quitting RoRoRo for the duration is the second layer and is the caller's call:
 # it is the owner's notification host, not a walk's to close on a whim.
 #
 # Scrubbed, not trusted: the rewrite is verified afterwards and throws rather than returning, because a scrub that
@@ -426,6 +426,29 @@ function Restore-UrData([string]$backup) {
     if (Test-Path $UrData) { Remove-Item $UrData -Recurse -Force }
     if ($backup -and (Test-Path $backup)) { Rename-Item $backup (Split-Path $UrData -Leaf) }
     "Your data folder is back: $(Test-Path $UrData)"
+}
+
+# The <data folder>.before-import-* folders beside the data folder, as full paths. An import sets the old setup
+# aside in one of these (SetupMerge.AsideFolder), and the owner's REAL imports make them too, with the same name
+# pattern in the same place: they are the only copy of the setup that import replaced. A walk that imports takes
+# this snapshot at its start, before anything imports, and its cleanup removes only folders not in it
+# (2026-09-23: a cleanup that removed every before-import-* folder destroyed one of the owner's from 2026-09-22).
+function Get-UrBeforeImportFolders {
+    $parent = Split-Path $UrData -Parent
+    $leaf = Split-Path $UrData -Leaf
+    return @(Get-ChildItem -Path $parent -Directory -Filter "$leaf.before-import-*" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+}
+
+# Removes the before-import-* folders the walk made: every one beside the data folder that is not in $keep (the
+# snapshot Get-UrBeforeImportFolders took at the walk's start). A folder that was there before the walk is the
+# owner's, and stays whatever else happens. Says what it removed, so a walk's log shows it touched nothing else.
+function Remove-UrBeforeImportFoldersExcept([string[]]$keep) {
+    $keep = @($keep)
+    foreach ($folder in Get-UrBeforeImportFolders) {
+        if ($keep -contains $folder) { continue }
+        Remove-Item $folder -Recurse -Force -ErrorAction SilentlyContinue
+        "Removed the walk's own import aside: $(Split-Path $folder -Leaf)"
+    }
 }
 
 # Whether RoRoRo's host process is up. Quitting RoRoRo for a walk is the owner's call (README), and a check before

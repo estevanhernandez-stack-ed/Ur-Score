@@ -7,6 +7,8 @@ param([string]$Main = 'CCGP')
 $ErrorActionPreference = 'Stop'
 $clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
 $backup = $null
+# The owner's own import asides, taken before anything here imports, so cleanup removes only the walk's (4c2, 4f).
+$ownersAsides = Get-UrBeforeImportFolders
 
 try {
     $backup = Move-UrDataAside
@@ -114,7 +116,7 @@ try {
             $sourcesOk = (-not (Test-Path $sourcesPath)) -or ((Get-Content $sourcesPath -Raw) -notmatch $Main)
             Check '4g The unticked clan never reaches sources.json' $sourcesOk "exists=$(Test-Path $sourcesPath)"
             $recipeState = Get-Content (Join-Path $UrData 'recipes\pet-sim-99-clan-battle-points.state.json') -Raw
-            # BOTH send lists: the per-stat "send" tick, and sentFieldMetrics — a clans list's clan-and-field
+            # BOTH send lists: the per-stat "send" tick, and sentFieldMetrics - a clans list's clan-and-field
             # numbers, which go out under fixed ids whatever the clan's role (final review, 2026-09-22).
             $sendOff = ($recipeState -notmatch '"send":\s*true') -and ($recipeState -notmatch '"sentFieldMetrics":\s*\[\s*"')
             Check '4h Nothing arrived set to send, on either send list' $sendOff 'state file read'
@@ -123,7 +125,8 @@ try {
         finally {
             Stop-UrScore
             if ($second) { Remove-Item $UrData -Recurse -Force -ErrorAction SilentlyContinue; Rename-Item $second (Split-Path $UrData -Leaf) }
-            Get-ChildItem (Split-Path $UrData -Parent) -Directory -Filter '626labs.ur-score.before-import-*' | Remove-Item -Recurse -Force
+            # Only the asides this walk's imports made (4c2 and 4f); one that was here before the walk is the owner's.
+            Remove-UrBeforeImportFoldersExcept $ownersAsides | Out-Host
         }
         # The walk's remaining steps (Diagnostics, the privacy check) run against the folder just restored above,
         # so Ur Score comes back up here rather than leaving the walk stopped mid-way.
@@ -147,6 +150,8 @@ try {
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    # Again here: a step that throws between 4c2's import and the inner finally would otherwise leave 4c2's aside.
+    Remove-UrBeforeImportFoldersExcept $ownersAsides | Out-Host
     Note-RoRoRo 'after'
     Show-Results
 }
