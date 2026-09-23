@@ -138,12 +138,14 @@ Rules of the screen:
   reader reads it and the smoke walk drives it. Automation ids: `ImportPreviewList`, `ImportTickedButton`,
   `ImportCancelButton`, each row's tick named "Import <name>".
 - **Import ticked** applies (§4). **Cancel** writes nothing. The unpacked temp folder is removed either way.
-- A `v: 1` file shows only the STATS group and the sentence "This file holds stats and no setup."
+- A file with no setup — a 0.5.5 file, or a stats-only export — never opens this window at all: its stats
+  merge runs the way 0.5.5's import already does, with no preview.
 
 ## 4. Applying, and what a failure leaves behind
 
-`SetupMerge.Apply(plan, ticked, services)` runs off the UI thread, in dependency order, through the stores
-that exist. Nothing writes a file by a new route.
+`SetupMerge.Apply(plan, ticked, services)` runs on the UI thread, in dependency order, through the stores
+that exist — kilobytes, so no worker is needed there; the stats merge that follows it (step 6) does run on
+one. Nothing writes a file by a new route.
 
 1. **Aside first.** `sources.json`, `boards.json`, `settings.json` and the `recipes` folder are copied to
    `626labs.ur-score.before-import-<yyyyMMdd-HHmm>` beside the data folder. Kilobytes. The preview said
