@@ -66,6 +66,23 @@ public class TopBarFenceTests
         Assert.DoesNotContain("Content=\"Test now\"", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// R8 (task 14): the slot holding StateLines and ArrangeBanner used to carry the 16,8,16,0 margin itself, so an
+    /// 8 px strip showed under the bar even when both children were Collapsed (a healthy, non-arranging board). The
+    /// margin now lives on StateLines and ArrangeBanner individually, so a Collapsed child draws nothing at all.
+    /// </summary>
+    [Fact]
+    public void TheStatusSlotCarriesNoMarginOfItsOwn()
+    {
+        var doc = Board();
+        var slot = Named(doc, "StatusSlot");
+        Assert.Equal("Grid", slot.Name.LocalName);
+        Assert.Null(slot.Attribute("Margin"));
+
+        Assert.Equal("16,8,16,0", (string?)Named(doc, "StateLines").Attribute("Margin"));
+        Assert.Equal("16,8,16,0", (string?)Named(doc, "ArrangeBanner").Attribute("Margin"));
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

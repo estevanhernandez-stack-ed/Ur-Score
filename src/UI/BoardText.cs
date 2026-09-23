@@ -244,6 +244,13 @@ public static class BoardText
     /// <summary>Done, with how many changes it will save (spec §4.2).</summary>
     public static string DoneLabel(int changes) => changes == 0 ? "Done" : $"Done ({changes})";
 
+    /// <summary>
+    /// R8 (task 14): the banner while a save has failed. It still names the board, the same as
+    /// <see cref="ArrangingLine"/>, rather than showing the note on its own — arranging hasn't stopped, only saving
+    /// it has (V3-S.10: a failed save is never silent).
+    /// </summary>
+    public static string ArrangingNote(string boardName, string note) => $"Arranging \"{boardName}\" · {note}";
+
     /// <summary>BC5: asked only when something changed; "your changes", since ⋯ settings changed while arranging are in the draft.</summary>
     public static Confirm CancelArrangeQuestion(BoardDef board) => new(
         "Cancel arranging",

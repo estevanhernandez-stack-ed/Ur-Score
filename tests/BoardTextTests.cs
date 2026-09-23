@@ -434,6 +434,15 @@ public class BoardTextTests
             BoardText.ArrangingLine("Battle"));
     }
 
+    /// <summary>R8 (task 14): a save that fails while arranging keeps saying which board, rather than losing
+    /// "Arranging" to the note alone (V3-S.10: a failed save is never silent).</summary>
+    [Fact]
+    public void ArrangingNoteKeepsTheBoardNameAlongsideAFailedSave()
+    {
+        Assert.Equal("Arranging \"Battle\" · not saved: the disk is full",
+            BoardText.ArrangingNote("Battle", "not saved: the disk is full"));
+    }
+
     [Fact]
     public void DoneCountsTheChanges()
     {

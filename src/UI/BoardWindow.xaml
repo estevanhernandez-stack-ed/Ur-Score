@@ -163,15 +163,17 @@
         </Border>
 
         <!-- The lines under the bar, and while arranging the banner in their place (spec §4.2). Known limit: when the board
-             was healthy and its lines hidden (BC3), the banner adds its own height once on the way in; no panel changes size. -->
-        <Grid DockPanel.Dock="Top" Margin="16,8,16,0">
-            <StackPanel x:Name="StateLines">
+             was healthy and its lines hidden (BC3), the banner adds its own height once on the way in; no panel changes size.
+             R8 (task 14): the margin lives on StateLines and ArrangeBanner themselves, not this slot, so a healthy,
+             non-arranging board — both children Collapsed — draws no empty strip under the bar (TopBarFenceTests). -->
+        <Grid x:Name="StatusSlot" DockPanel.Dock="Top">
+            <StackPanel x:Name="StateLines" Margin="16,8,16,0">
                 <TextBlock x:Name="StateLine" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.HelpText="What Ur Score is doing" />
                 <TextBlock x:Name="DetailLine" Style="{StaticResource Muted}" Margin="0,2,0,0" />
             </StackPanel>
             <!-- BC5: Cancel is IsCancel, so Esc leaves arranging wherever focus is in the window; ApplyButtons disables it
                  outside arranging, and a disabled IsCancel button ignores Esc. The status card's own Esc is handled inside it. -->
-            <Border x:Name="ArrangeBanner" Visibility="Collapsed" Background="{DynamicResource RowBgBrush}"
+            <Border x:Name="ArrangeBanner" Visibility="Collapsed" Margin="16,8,16,0" Background="{DynamicResource RowBgBrush}"
                     BorderBrush="{DynamicResource CyanBrush}" BorderThickness="0,0,0,2" CornerRadius="4" Padding="12,6">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

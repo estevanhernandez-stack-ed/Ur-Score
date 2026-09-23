@@ -140,10 +140,12 @@ public partial class BoardWindow
 
     /// <summary>
     /// The banner's line: how to arrange this board, or, after a Done or tab-click save that failed, why it wasn't
-    /// saved. The banner covers the detail line that would otherwise say so, and a failed save is never silent (V3-S.10).
+    /// saved — still naming the board (<see cref="BoardText.ArrangingNote"/>, task 14 R8), since arranging hasn't
+    /// stopped, only saving it has. The banner covers the detail line that would otherwise say so, and a failed save
+    /// is never silent (V3-S.10).
     /// </summary>
     private string ArrangeBannerText() =>
-        _draft is not { } draft ? "" : _boardsNote ?? BoardText.ArrangingLine(draft.Name);
+        _draft is not { } draft ? "" : _boardsNote is { } note ? BoardText.ArrangingNote(draft.Name, note) : BoardText.ArrangingLine(draft.Name);
 
     private void OnEditTool(object? sender, PanelToolEventArgs e)
     {
