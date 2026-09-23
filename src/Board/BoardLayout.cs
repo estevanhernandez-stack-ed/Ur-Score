@@ -210,6 +210,14 @@ public static class BoardLayout
         rowHeight > 0 && wanted >= rowHeight * 1.5 ? 2 : 1;
 
     /// <summary>
+    /// The height of the first row a panel sits in: what a corner drag is measured against. Not the panel's slot,
+    /// which for a tall panel is two rows and a gap, and measured against itself calls every tall panel short.
+    /// Zero for a placement past the rows, which <see cref="RowsFor"/> reads as one row.
+    /// </summary>
+    public static double FirstRowHeight(PanelPlacement placement, IReadOnlyList<double> rows) =>
+        placement.Row >= 0 && placement.Row < rows.Count ? rows[placement.Row] : 0;
+
+    /// <summary>
     /// The mark for a drop at <paramref name="index"/>, an insertion index as <see cref="DropIndex"/> returns:
     /// the left edge of the cell it would insert before, or the right edge of the last cell when it goes at the
     /// end. It takes its top and height from THAT cell, so a caret on a shorter second row is drawn the height of

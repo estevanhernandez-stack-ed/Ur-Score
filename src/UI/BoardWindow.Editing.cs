@@ -23,8 +23,8 @@ public partial class BoardWindow
 
     private EditHintAdorner? _hints;
 
-    /// <summary>The panel being resized by its grip, which grip, and the cell it started from. Null when not.</summary>
-    private (int Index, bool Corner, CellRect From)? _resizing;
+    /// <summary>The panel being resized by its grip, which grip, the cell it started from and the height of its first row. Null when not.</summary>
+    private (int Index, bool Corner, CellRect From, double RowHeight)? _resizing;
 
     private bool Editing => _draft is not null;
 
@@ -317,7 +317,7 @@ public partial class BoardWindow
         if (!Editing || BoardPanels.GripAt(e.GetPosition(BoardPanels)) is not { } grip) return;
         if (grip.Index >= BoardPanels.Cells.Count) return;
 
-        _resizing = (grip.Index, grip.Corner, BoardPanels.Cells[grip.Index]);
+        _resizing = (grip.Index, grip.Corner, BoardPanels.Cells[grip.Index], BoardPanels.FirstRowHeightAt(grip.Index));
         BoardPanels.CaptureMouse();
         e.Handled = true;
     }
@@ -361,7 +361,7 @@ public partial class BoardWindow
         if (_draft is not { } draft || grip.Index >= draft.Panels.Count) return;
 
         var span = BoardLayout.SpanFor(shown.Width, BoardPanels.ActualWidth, BoardPanels.Gap);
-        var rows = grip.Corner ? BoardLayout.RowsFor(shown.Height, grip.From.Height) : (PanelGrid.GetTall(BoardPanels.Children[grip.Index]) ? 2 : 1);
+        var rows = grip.Corner ? BoardLayout.RowsFor(shown.Height, grip.RowHeight) : (PanelGrid.GetTall(BoardPanels.Children[grip.Index]) ? 2 : 1);
         var panelId = draft.Panels[grip.Index].Id;
 
         ChangeBoard(board => BoardEdits.Resize(board, panelId, new PanelSize(span, rows > 1)));

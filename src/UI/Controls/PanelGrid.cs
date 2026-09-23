@@ -21,6 +21,8 @@ public sealed class PanelGrid : Panel
 
     private IReadOnlyList<CellRect> _cells = [];
 
+    private IReadOnlyList<double> _firstRows = [];
+
     public static int GetSpan(UIElement element) => (int)element.GetValue(SpanProperty);
 
     public static void SetSpan(UIElement element, int value) => element.SetValue(SpanProperty, value);
@@ -42,6 +44,9 @@ public sealed class PanelGrid : Panel
     /// the order the board's own panel list is in, so an index here indexes that list too.
     /// </summary>
     public IReadOnlyList<CellRect> Cells => _cells;
+
+    /// <summary>The height of the first row the panel at <paramref name="index"/> sits in, for a corner drag; 0 when there is none.</summary>
+    public double FirstRowHeightAt(int index) => index >= 0 && index < _firstRows.Count ? _firstRows[index] : 0;
 
     /// <summary>
     /// The panel whose resize grip is under <paramref name="point"/>, and which grip, or null for neither. The
@@ -90,6 +95,7 @@ public sealed class PanelGrid : Panel
 
         var column = ColumnWidth(finalSize.Width);
         var cells = new List<CellRect>(placements.Count);
+        var firstRows = new List<double>(placements.Count);
         foreach (var placement in placements)
         {
             var child = children[placement.Index];
@@ -100,9 +106,11 @@ public sealed class PanelGrid : Panel
 
             // A drop is placed by the whole slot, so the space under a short panel still counts as that panel's.
             cells.Add(new CellRect(slot.X, slot.Y, slot.Width, slot.Height));
+            firstRows.Add(BoardLayout.FirstRowHeight(placement, rows));
         }
 
         _cells = cells;
+        _firstRows = firstRows;
         return finalSize;
     }
 
