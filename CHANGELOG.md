@@ -3,6 +3,22 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.6.1 - 2026-09-23
+
+### Added
+
+- **Arrange gets Cancel and Esc.** With nothing changed either just leaves; with a change, a themed
+  window asks first, naming the board. **Done** now counts the changes it will save ("Done (3)").
+  The panel a keyboard is moving shows a cyan focus ring.
+
+### Changed
+
+- **Edit board is Arrange.** Panels keep their height going in and out — the drag handle, ✕, and a
+  dashed outline are drawn inside the panel's own header instead of adding a row above it. The tabs,
+  **+ Board**, and the tab menu stay on and clickable while arranging: a tab click saves the draft
+  first, the same way Done does, then switches, and a save that fails keeps you on the board and
+  says why, in the banner.
+
 ## 0.6.0 - 2026-09-23
 
 ### Added

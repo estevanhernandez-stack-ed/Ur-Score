@@ -25,6 +25,10 @@ These are recorded here so a reviewer doesn't read them as drift from the spec. 
 - **R6. Tall panels flow like everything else.** Panels are placed in order at the first free spot at or after the previous panel's spot, so a tall panel's second row pushes later panels right. The order the user set is always reading order.
 - **R7. Moving has buttons as well as dragging.** In edit mode each panel shows **Move earlier** and **Move later** next to the drag handle. *Why:* keyboard users, screen readers and the smoke walks can't drag. *Cost if wrong:* two small buttons per panel in edit mode only.
 - **R8. Edit mode edits a draft.** **Done** saves it; there is no Cancel (the spec names none). Closing Ur Score while editing saves the draft too, since losing an arrangement is worse than keeping one. Tabs, + Board and the tab menu are disabled while editing. Panel settings changed from ⋯ while editing go into the draft.
+
+  Revised by BC5 (2026-09-23): Arrange has Cancel and Esc; closing still saves. Tabs also stay on and
+  clickable now, saving the draft first and switching, rather than staying disabled
+  (`docs/2026-09-23-board-chrome-design.md` §4.4, §4.5).
 - **R9. No drop marker.** Dragging shows the move cursor only; the drop position is worked out by `BoardLayout.DropIndex`. *Cost if wrong:* a later polish pass adds an insertion line.
 - **R10. + Add panel lives in edit mode,** and on an empty board's empty state. From edit mode the new panel joins the draft; from the empty state it is saved at once.
 - **R11. The last board can't be deleted.** Delete is disabled when only one board is left, and deleting asks for confirmation. Tabs can't be reordered: the spec lists click, + Board, Rename, Duplicate and Delete only.

@@ -31,8 +31,8 @@ Roblox's username and picture services, and a test (`NoHostnameFenceTests`) keep
 its recipe's own schedule — never faster than once a minute, whatever the recipe asks for — and
 draws the answer as panels you arrange yourself: standing, a race between groups, your accounts by
 a stat, a promotion check, an account card, past periods, records, the top of the period, a profile
-stat, an accounts table, and the live leaderboard. The tabs across the top are boards; **Edit
-board** and **+ Add panel** arrange them, and any panel pops out into a window of its own. Each of
+stat, an accounts table, and the live leaderboard. The tabs across the top are boards; **Arrange**
+and **+ Add panel** arrange them, and any panel pops out into a window of its own. Each of
 your own accounts shows its Roblox avatar; no other player's picture is ever asked for or kept.
 When a recipe reads a group's icon, that group's standing panel shows it, and your main group's icon
 is the window and taskbar icon. After its first read, it's there as soon as Ur Score opens.
@@ -177,11 +177,19 @@ right-clicking its tab or pressing **Shift+F10** opens the same menu.
 asks for. Each panel's **Settings** button changes those choices later. A panel whose source or
 stat was removed says so and offers **Choose another**.
 
-**Edit board** opens a draft of the board on screen. Drag a panel by its header to move it; drag its right edge
-to change its width, or its bottom-right corner to change its width and make it one or two rows tall. With the
-keyboard, focus one of a panel's buttons and use Left and Right to move it, Ctrl+Left and Ctrl+Right to change its
-width, and Ctrl+Up and Ctrl+Down for one or two rows. **✕** removes a panel. **Done** saves the draft; closing Ur
-Score while editing saves it too. Panels flow in reading order, so a move or a resize can move the panels after it.
+**Arrange** opens a draft of the board on screen, in a banner where the state and detail lines usually sit:
+`Arranging "Battle" · drag a header to move · drag an edge or corner to resize · ←/→ move`. Drag a panel by its
+header to move it; drag its right edge to change its width, or its bottom-right corner to change its width and
+make it one or two rows tall. With the keyboard, focus one of a panel's buttons and use Left and Right to move it,
+Ctrl+Left and Ctrl+Right to change its width, and Ctrl+Up and Ctrl+Down for one or two rows; the panel a keyboard
+is moving shows a cyan focus ring. **✕** removes a panel, and **+ Add panel** opens the gallery, both in the
+banner. The banner's **Done** saves the draft, counting the changes it will save ("Done (3)"); **Cancel**, or Esc
+from anywhere in the window, leaves arranging instead — with nothing changed it just leaves, with a change it
+asks first, in Ur Score's own themed window. The tabs, **+ Board**, and the tab menu stay clickable while
+arranging: clicking another tab saves the draft the same way Done does, then switches, and a save that fails
+keeps you on the board and says why, in the banner. Closing Ur Score while arranging saves the draft too. Panels
+flow in reading order, so a move or a resize can move the panels after it, and arranging never changes a panel's
+height on the way in or out.
 
 **Pop out** puts a panel in its own always-on-top window. It keeps updating with the board, and
 its saved position is restored on the next start. Use the pop-out's **Return to the board** button
