@@ -9,11 +9,12 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 
 - **Undo, per board.** Ctrl+Z takes back moving, resizing, adding, removing and changing (**Settings**) a panel,
   the last 20 steps for the session. Outside Arrange each change is its own step; while arranging, Ctrl+Z steps
-  back through the draft and **Done** folds the whole arrangement into one step, "Arranged Battle". A themed
-  toast at the bottom of the board names the change and offers **Undo** for about six seconds, while arranging
-  too (there its Undo steps back through the draft); entering Arrange hides a toast from before, and Cancel hides
-  the draft's. Undo never takes back a rename. A starter tab re-follows your clans again if the board an undo restores still matches what the
-  starter draws; otherwise the toast says so. Pop-outs are never undone, and deleting a board clears its history.
+  back through the draft and **Done** folds the whole arrangement into one step, "Arranged Battle". A themed toast
+  at the bottom of the board names the change and offers **Undo** for about six seconds, while arranging too (there
+  its Undo steps back through the draft); entering Arrange hides a toast from before, and Cancel hides the draft's,
+  and so does Done when arranging ends without saving a change. Undo never takes back a rename. A starter tab
+  re-follows your clans again if the board an undo restores still matches what the starter draws; otherwise the
+  toast says so. Pop-outs are never undone, and deleting a board clears its history.
 
 ## 0.6.1 - 2026-09-23
 

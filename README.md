@@ -192,16 +192,17 @@ keeps you on the board and says why, in the banner. Closing Ur Score while arran
 flow in reading order, so a move or a resize can move the panels after it, and arranging never changes a panel's
 height on the way in or out.
 
-**Undo** is Ctrl+Z, and works any time the board window has focus (a popped-out panel doesn't take it). Every change to a board — moving or resizing a
-panel, adding or removing one, and a panel's **Settings** — can be undone, per board, for as long as Ur Score
-stays open (the last 20, not saved anywhere). Outside Arrange, each change is its own undo step. While arranging,
-Ctrl+Z steps back through the draft one change at a time, and **Done** counts them ("Done (3)"); pressing Done
-folds the whole arrangement into a single step, so one Ctrl+Z after Done puts the board back exactly as it was
-before you started arranging. A themed toast at the bottom of the board says what an undo is offered or what it
-did — "Arranged Battle · Undo", "Changed Past battles · Undo", "Undid: Removed Battle race" — and shows for about
-six seconds; a new change replaces it. It shows while arranging too, where its Undo steps back through the draft;
-entering Arrange hides any toast from before, and Cancel hides the draft's. A rename is never undone. A save that fails leaves the
-undo history as it was and the toast says so, redacted like every other problem line. Undoing back onto a board a
+**Undo** is Ctrl+Z, and works any time the board window has focus (a popped-out panel doesn't take it). Every
+change to a board — moving or resizing a panel, adding or removing one, and a panel's **Settings** — can be undone,
+per board, for as long as Ur Score stays open (the last 20, not saved anywhere). Outside Arrange, each change is
+its own undo step. While arranging, Ctrl+Z steps back through the draft one change at a time, and **Done** counts
+them ("Done (3)"); pressing Done folds the whole arrangement into a single step, so one Ctrl+Z after Done puts the
+board back exactly as it was before you started arranging. A themed toast at the bottom of the board says what an
+undo is offered or what it did — "Arranged Battle · Undo", "Changed Past battles · Undo", "Undid: Removed Battle
+race" — and shows for about six seconds; a new change replaces it. It shows while arranging too, where its Undo
+steps back through the draft; entering Arrange hides any toast from before, and Cancel hides the draft's, and so
+does Done when arranging ends without saving a change. A rename is never undone. A save that fails leaves the undo
+history as it was and the toast says so, redacted like every other problem line. Undoing back onto a board a
 starter tab still matches re-follows your clans again; if your sources changed in between, the toast says so
 instead: "Restored, but Battle no longer follows your clans." Pop-outs are never undone, and deleting a board
 clears its history.

@@ -108,6 +108,11 @@ public partial class BoardWindow
     /// <see cref="ShownBoard"/>, which is the draft itself while arranging. A draft kept as a board of its own, its
     /// starter gone empty meanwhile, had no saved board to go back to and pushes nothing.
     /// </para>
+    /// <para>
+    /// Once arranging has actually ended, an "Arranged" toast here replaces whatever toast is up; with none to
+    /// replace it, that toast is hidden — it named a draft change (R10), and left up, its Undo would reach past
+    /// the ended draft into the saved history and pop an unrelated step (final review).
+    /// </para>
     /// </summary>
     private void FinishEditing()
     {
@@ -128,6 +133,7 @@ public partial class BoardWindow
             _undo.Push(before, BoardText.Arranged(before.Name));
             ShowToast(BoardText.Arranged(before.Name), canUndo: true);
         }
+        else HideToast();
 
         ShowEditMode();
         Render();
