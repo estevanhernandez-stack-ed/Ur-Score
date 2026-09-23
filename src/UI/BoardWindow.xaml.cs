@@ -78,7 +78,7 @@ public partial class BoardWindow : Window
     /// <summary>Start is asking RoRoRo for accounts before the loops begin.</summary>
     private bool _starting;
 
-    /// <summary>A Test now read is in flight. Stop still works; see <see cref="BoardButtons"/>.</summary>
+    /// <summary>A Test now read is in flight. Pausing still works; see <see cref="BoardButtons"/>.</summary>
     private bool _testing;
 
     /// <summary>The empty state's Import recipe… is in flight.</summary>
@@ -144,8 +144,8 @@ public partial class BoardWindow : Window
         // Sources already on at open are not "the first one came on" (§3.6); RenderBoard asks again only on none-to-some.
         _hadSources = _services.Sources.Any(s => s.Enabled);
 
-        // Plan A33: with "Start reading when Ur Score opens" ticked, the board does once what pressing Start
-        // does — after the book is read, and never while Setup has just opened on a recipe that has no source yet.
+        // Plan A33: with "Start reading when Ur Score opens" ticked, the board starts reading itself — after
+        // the book is read, and never while Setup has just opened on a recipe that has no source yet.
         if (!BoardButtons.StartsOnOpen(
                 _services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
                 _services.Installed.Count, _services.Sources.Any(s => s.Enabled), firstRun is not null))
@@ -619,7 +619,7 @@ public partial class BoardWindow : Window
         var chip = StatusChip.StateOf(_services.Running, _services.EverStarted, _starting, trouble: false);
         if (chip == ChipState.Starting) return;
 
-        if (chip == ChipState.StartReading)
+        if (StatusChip.ClickStarts(chip))
         {
             if (ButtonStates().StartStop) await StartReadingAsync();
             return;
@@ -628,11 +628,24 @@ public partial class BoardWindow : Window
         StatusCard.IsOpen = !StatusCard.IsOpen;
         if (!StatusCard.IsOpen) return;
 
-        RenderCard(_services.CurrentBoard());
+        // R6c: a throw here must not escape this async void (which would crash the process); it goes to the trail
+        // by type only, the way RenderLines already does for the lines under the bar.
+        try
+        {
+            RenderCard(_services.CurrentBoard());
+        }
+        catch (Exception ex)
+        {
+            _services.AddTrail($"LINES NOT DRAWN: {ex.GetType().Name}");
+        }
+
         // While the card is open a press on the chip only closes it (StaysOpen="False"): the chip takes no hit until the
         // card has closed, so that same press can't land on it and open the card again.
         StartStopButton.IsHitTestVisible = false;
-        FocusLater(PauseResumeButton);
+        // R6d: Pause disabled (e.g. a Test now read in flight) leaves nothing in the card to take focus, so a
+        // keyboard user tabbing to it would land back on the page behind the popup and Esc would never reach
+        // OnStatusCardKeyDown. The card's own Border is Focusable for exactly that case.
+        FocusLater(PauseResumeButton.IsEnabled ? PauseResumeButton : CardBorder);
     }
 
     /// <summary>Esc closes the card and nothing else: marked handled so Arrange's Cancel (IsCancel) never sees it (Review Focus 4).</summary>
@@ -694,7 +707,7 @@ public partial class BoardWindow : Window
     {
         if (_popOutLifecycle.ClosingApp) return;
         if (!BoardButtons.StartsLater(_services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
-                _services.EverStarted, _starting, _services.Installed.Count, _services.Sources.Any(s => s.Enabled)))
+                _services.EverStarted, _starting, _testing, _services.Installed.Count, _services.Sources.Any(s => s.Enabled)))
         {
             return;
         }

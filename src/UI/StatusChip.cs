@@ -82,4 +82,11 @@ public static class StatusChip
 
     /// <summary>The tabs' share of what the rest of the top bar leaves; the period line, never the chip or ⟳, gives way first.</summary>
     public static double TabBudget(double bar, double fixedWidth, double share) => Math.Max(0, (bar - fixedWidth) * share);
+
+    /// <summary>
+    /// BC2 pinned at the logic level: a click on the chip starts reading only from Start reading; every other state
+    /// opens the card and never pauses. <see cref="BoardWindow"/>'s click handler reads this instead of comparing
+    /// states inline, so the one exception can't quietly grow a second one.
+    /// </summary>
+    public static bool ClickStarts(ChipState state) => state == ChipState.StartReading;
 }

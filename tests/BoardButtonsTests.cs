@@ -203,13 +203,14 @@ public class BoardButtonsTests
     /// only while this session has never started, so a pause is never undone behind the player's back (BC7).
     /// </summary>
     [Theory]
-    [InlineData(true, true, false, false, false, 1, true, true)]    // the case: never started, now something to read
-    [InlineData(true, true, false, true, false, 1, true, false)]    // started earlier and paused: a pause stands
-    [InlineData(true, true, false, false, true, 1, true, false)]    // already starting
-    [InlineData(false, true, false, false, false, 1, true, false)]  // turned off in Setup
-    [InlineData(true, true, false, false, false, 1, false, false)]  // still nothing switched on
-    [InlineData(true, true, true, false, false, 1, true, false)]    // already running
+    [InlineData(true, true, false, false, false, false, 1, true, true)]    // the case: never started, now something to read
+    [InlineData(true, true, false, true, false, false, 1, true, false)]    // started earlier and paused: a pause stands
+    [InlineData(true, true, false, false, true, false, 1, true, false)]    // already starting
+    [InlineData(true, true, false, false, false, true, 1, true, false)]    // a read-now is in flight (R6a)
+    [InlineData(false, true, false, false, false, false, 1, true, false)]  // turned off in Setup
+    [InlineData(true, true, false, false, false, false, 1, false, false)]  // still nothing switched on
+    [InlineData(true, true, true, false, false, false, 1, true, false)]    // already running
     public void StartOnOpenIsAskedAgainOnlyForABoardThatNeverStarted(
-        bool startOnOpen, bool loaded, bool running, bool everStarted, bool starting, int installed, bool anySourceOn, bool starts) =>
-        Assert.Equal(starts, BoardButtons.StartsLater(startOnOpen, loaded, running, everStarted, starting, installed, anySourceOn));
+        bool startOnOpen, bool loaded, bool running, bool everStarted, bool starting, bool testing, int installed, bool anySourceOn, bool starts) =>
+        Assert.Equal(starts, BoardButtons.StartsLater(startOnOpen, loaded, running, everStarted, starting, testing, installed, anySourceOn));
 }

@@ -70,8 +70,10 @@ public static class BoardButtons
     /// <summary>
     /// Start on open, asked again after opening (spec §3.6): when Setup closes, and when the switched-on sources go from
     /// none to some. Only for a session that has never started — a pause lasts until Ur Score closes (BC7) — and
-    /// through <see cref="StartsOnOpen"/> itself, so the two can't disagree.
+    /// through <see cref="StartsOnOpen"/> itself, so the two can't disagree. Also never while a read-now is in flight
+    /// (<paramref name="testing"/>, R6a): without this, start-on-open could start reading while the "▶ Start reading"
+    /// chip itself sits disabled for the same read.
     /// </summary>
-    public static bool StartsLater(bool startOnOpen, bool loaded, bool running, bool everStarted, bool starting, int installed, bool anySourceOn) =>
-        !everStarted && !starting && StartsOnOpen(startOnOpen, loaded, running, installed, anySourceOn, firstRunPage: false);
+    public static bool StartsLater(bool startOnOpen, bool loaded, bool running, bool everStarted, bool starting, bool testing, int installed, bool anySourceOn) =>
+        !everStarted && !starting && !testing && StartsOnOpen(startOnOpen, loaded, running, installed, anySourceOn, firstRunPage: false);
 }

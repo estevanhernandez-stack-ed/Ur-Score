@@ -88,7 +88,7 @@ public class ClansModelTests
 
         Assert.Equal(new ClanProbe("Added CCGP, but it couldn't be read just now. Your clan hasn't joined this battle.", false),
             ClansModel.Probe("CCGP", idle, [Main]));
-        Assert.Equal(new ClanProbe("Added CCGP. It's read when you press Start.", false), ClansModel.Probe("CCGP", null, [Main]));
+        Assert.Equal(new ClanProbe("Added CCGP. It's read once reading starts, when Ur Score opens or from ▶ Start reading on the board.", false), ClansModel.Probe("CCGP", null, [Main]));
     }
 
     [Fact]

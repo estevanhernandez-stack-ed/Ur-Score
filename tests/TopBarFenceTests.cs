@@ -34,6 +34,19 @@ public class TopBarFenceTests
         Assert.Contains(card.Descendants(), e => (string?)e.Attribute(X + "Name") == "PauseResumeButton");
     }
 
+    /// <summary>
+    /// R6d: with Pause disabled as the card opens (e.g. a Test now read in flight), nothing inside the card can
+    /// take keyboard focus unless the card's own Border can — so it is Focusable, with the same ring a control gets.
+    /// </summary>
+    [Fact]
+    public void TheCardsBorderCanTakeFocusWhenPauseCannot()
+    {
+        var border = Named(Board(), "CardBorder");
+        Assert.Equal("Border", border.Name.LocalName);
+        Assert.Equal("True", (string?)border.Attribute("Focusable"));
+        Assert.Equal("{StaticResource FocusRing}", (string?)border.Attribute("FocusVisualStyle"));
+    }
+
     /// <summary>Tab order follows what is seen: the bar is a Grid in left-to-right order, the right-hand buttons last.</summary>
     [Fact]
     public void TheRightHandButtonsComeLastInTheBar()

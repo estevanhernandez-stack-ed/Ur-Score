@@ -136,7 +136,10 @@
                 <!-- The status card (spec §3.3): opening it changes nothing (BC2). Themed (V3-S.13). Esc and a click away close it. -->
                 <Popup x:Name="StatusCard" PlacementTarget="{Binding ElementName=StartStopButton}" Placement="Bottom" VerticalOffset="6"
                        StaysOpen="False" AllowsTransparency="True" Closed="OnStatusCardClosed">
-                    <Border Background="{DynamicResource RowBgBrush}" BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1"
+                    <!-- R6d: Focusable, with the same focus ring a control gets, so Esc still closes the card when Pause is
+                         disabled (e.g. a Test now read in flight) and nothing else inside it can take focus. -->
+                    <Border x:Name="CardBorder" Focusable="True" FocusVisualStyle="{StaticResource FocusRing}"
+                            Background="{DynamicResource RowBgBrush}" BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1"
                             CornerRadius="8" Padding="14" MinWidth="320" MaxWidth="460" PreviewKeyDown="OnStatusCardKeyDown"
                             KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.AutomationId="StatusCardBody"
                             AutomationProperties.Name="Reading status">

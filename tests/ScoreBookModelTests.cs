@@ -54,7 +54,7 @@ public class ScoreBookModelTests
         var items = ScoreBookModel.NotRecording([Installed], [ClanSource("s-00000001", "CCGP")],
             new Dictionary<string, RecipeSnapshot> { ["s-00000001"] = Snapshot(true, null) }, running: false, accountsEverListed: true);
 
-        Assert.Equal(new NotRecordingItem("CCGP · Pet Sim 99 clan battle points", "Stopped. Press Start on the board."), Assert.Single(items));
+        Assert.Equal(new NotRecordingItem("CCGP · Pet Sim 99 clan battle points", "Paused. Resume from the status chip on the board."), Assert.Single(items));
     }
 
     [Fact]

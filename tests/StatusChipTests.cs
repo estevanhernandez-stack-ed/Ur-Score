@@ -69,6 +69,11 @@ public class StatusChipTests
     public void TheLinesUnderTheBarShowOnlyWhenTheyMatter(bool loaded, ChipState state, bool failed, string detail, bool remembered, bool shows) =>
         Assert.Equal(shows, StatusChip.ShowsLines(loaded, state, failed, detail, remembered));
 
+    /// <summary>BC2, pinned at the logic level (R6b): a click starts reading only from Start reading; every other state just looks.</summary>
+    [Fact]
+    public void AClickStartsOnlyFromStartReading() =>
+        Assert.All(Enum.GetValues<ChipState>(), state => Assert.Equal(state == ChipState.StartReading, StatusChip.ClickStarts(state)));
+
     [Fact]
     public void TheTabsTakeTheirShareOfWhatIsLeftAndNeverLessThanNothing()
     {

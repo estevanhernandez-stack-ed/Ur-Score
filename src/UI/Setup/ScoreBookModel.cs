@@ -110,7 +110,7 @@ public static class ScoreBookModel
             var snapshot = latest.GetValueOrDefault(source.Id);
             var reason =
                 !source.Enabled ? "Switched off."
-                : !running ? "Stopped. Press Start on the board."
+                : !running ? "Paused. Resume from the status chip on the board."
                 : snapshot is null ? "Not read yet."
                 : snapshot.Recorded ? null
                 : snapshot.NotRecordingReason ?? "The last read kept nothing.";
