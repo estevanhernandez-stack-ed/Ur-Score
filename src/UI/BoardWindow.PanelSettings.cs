@@ -115,6 +115,9 @@ public partial class BoardWindow
     /// </summary>
     private void UndoLast()
     {
+        // Not mid-resize: swapping the draft under a held grip would land its size on whichever panel now has that index.
+        if (_resizing is not null) return;
+
         // The one place the choice is made, and it is BoardUndo.Target's, which a unit test pins (Review Focus 5).
         var history = BoardUndo.Target(Editing, _draftUndo, _undo);
 
@@ -144,7 +147,8 @@ public partial class BoardWindow
         Render();
 
         // Following.ToSave re-follows the tab only if the snapshot is what its starter draws now (spec §5.4).
+        // A re-followed tab whose starter draws nothing now isn't shown at all; that is still following, not unfollowed.
         var now = _services.Boards.FirstOrDefault(b => b.Id == board.Id);
-        ShowToast(BoardText.Undone(step, unfollowed: step.Before.Follows is not null && now?.Follows is null), canUndo: false);
+        ShowToast(BoardText.Undone(step, unfollowed: step.Before.Follows is not null && now is not null && now.Follows is null), canUndo: false);
     }
 }

@@ -55,6 +55,9 @@ public partial class BoardWindow
 
         _draft = _draftBase = ShownBoard(_services.Boards);
         _draftUndo.ClearAll();
+
+        // A toast from before Arrange names a saved change; its Undo would now pop the draft's history instead (BC6).
+        HideToast();
         ShowEditMode();
         Render();
 

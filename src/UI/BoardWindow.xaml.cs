@@ -752,6 +752,9 @@ public partial class BoardWindow : Window
     {
         if (!_toastCanUndo || _toastBoardId != _boardId) return;
         UndoLast();
+
+        // The pressed Undo collapses with the toast that follows; focus goes somewhere that stays.
+        FocusLater(Editing ? DoneButton : EditBoardButton);
     }
 
     /// <summary>Pause or Resume, from the status card (BC2); Pause lasts until Ur Score closes (BC7).</summary>
