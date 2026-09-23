@@ -38,13 +38,12 @@ public static partial class PanelModels
         // Live only (plan A40): the book never kept another member's row, so a remembered snapshot cannot place anyone.
         var fromRows = live.LiveOf(from.Id)?.Rows;
         var toRows = live.LiveOf(to.Id)?.Rows;
-        if (fromRows is null || toRows is null)
-        {
-            var (missing, missingName) = fromRows is null ? (from, fromName) : (to, toName);
-            // A read that happened and brought nothing back is said as that, not as a wait for one (S1-F.6).
-            var why = live.LiveOf(missing.Id) is null ? $"Waiting for a read of {missingName}." : PanelText.NothingBack(missingName);
-            return new PromotionModel(head with { Note = why }, lowestLabel, Dash, stat.Label, []);
-        }
+
+        // A read that happened and brought nothing back is said as that, not as a wait for one (S1-F.6).
+        string Why(Source missing, string missingName) =>
+            live.LiveOf(missing.Id) is null ? $"Waiting for a read of {missingName}." : PanelText.NothingBack(missingName);
+
+        if (toRows is null) return new PromotionModel(head with { Note = Why(to, toName) }, lowestLabel, Dash, stat.Label, []);
 
         var toValues = new List<(long UserId, double Value)>();
         foreach (var row in toRows)
@@ -53,6 +52,10 @@ public static partial class PanelModels
         }
 
         double? lowest = toValues.Count == 0 ? null : toValues.Min(r => r.Value);
+
+        // Your side came back empty but theirs did not: their lowest is still true, so it still shows.
+        if (fromRows is null) return new PromotionModel(head with { Note = Why(from, fromName) }, lowestLabel, PanelText.Full(lowest), stat.Label, []);
+
         var rows = new List<(double? Value, PromotionRow Row)>();
 
         foreach (var account in live.Accounts.Where(a => a.RobloxUserId != 0))

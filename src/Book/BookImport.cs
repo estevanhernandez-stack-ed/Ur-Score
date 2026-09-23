@@ -56,6 +56,7 @@ public static class BookImport
         }
 
         var added = 0;
+        var finals = 0;
         var already = 0;
         var notSetUp = new List<string>();
         var noRecipe = new List<string>();
@@ -78,27 +79,24 @@ public static class BookImport
             foreach (var line in plan.Lines) services.Book.Append(line, installed.Text);
 
             added += plan.Added;
+            finals += plan.Lines.Count(l => l.Kind == BookLine.KindFinal);
             already += plan.AlreadyHere;
             foreach (var name in plan.NotSetUp.Where(n => !notSetUp.Contains(n, StringComparer.OrdinalIgnoreCase))) notSetUp.Add(name);
         }
 
         if (added > 0) services.Book.Flush();
 
-        return new BookImportOutcome(added, Said(added, already, notSetUp, noRecipe));
+        return new BookImportOutcome(added, Said(added - finals, already, notSetUp, noRecipe, finals));
     }
 
     /// <summary>What happened, in one line, counting nothing twice and hiding nothing that was left out.</summary>
-    internal static string Said(int added, int already, IReadOnlyList<string> notSetUp, IReadOnlyList<string> noRecipe)
+    internal static string Said(int readings, int already, IReadOnlyList<string> notSetUp, IReadOnlyList<string> noRecipe, int finals = 0)
     {
-        var parts = new List<string>
-        {
-            added switch
-            {
-                0 => "Nothing new to import.",
-                1 => "Imported 1 reading.",
-                _ => $"Imported {added:N0} readings.",
-            },
-        };
+        // Readings and finished battles are counted apart, as the manifest and the preview count them.
+        var what = new List<string>();
+        if (readings > 0) what.Add(readings == 1 ? "1 reading" : $"{readings:N0} readings");
+        if (finals > 0) what.Add(finals == 1 ? "1 finished battle" : $"{finals:N0} finished battles");
+        var parts = new List<string> { what.Count == 0 ? "Nothing new to import." : $"Imported {string.Join(" and ", what)}." };
 
         if (already > 0) parts.Add(already == 1 ? "1 was already here." : $"{already:N0} were already here.");
         if (notSetUp.Count > 0) parts.Add($"Not set up on this PC, so left alone: {string.Join(", ", notSetUp)}.");

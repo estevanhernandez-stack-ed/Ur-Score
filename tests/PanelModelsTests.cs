@@ -1568,5 +1568,13 @@ public class PanelModelsTests
         Assert.Equal("Live only. Never saved.", PanelModels.LiveLeaderboard(unread, leaderboard, new Dictionary<long, string>()).Head.Note);
         Assert.Equal("Waiting for the first read.", PanelModels.Top(unread, topList).Head.Note);
         Assert.Equal("Waiting for a read of CCGP.", PanelModels.PromotionCheck(unread, promotion).Head.Note);
+
+        // Your side came back empty but the other clan's did not: its lowest is still true, and still shown.
+        var yoursEmpty = Live([top, main, alts], installed, Snaps(Idle(alts.Id), Snapshot(main.Id, [Row(301, 40), Row(302, 7)])));
+        var check = PanelModels.PromotionCheck(yoursEmpty, promotion);
+        Assert.Equal("The last read of K0i2 brought nothing back.", check.Head.Note);
+        Assert.Equal("CCGP's lowest now", check.LowestLabel);
+        Assert.NotEqual(StatText.Dash, check.Lowest);
+        Assert.Empty(check.Rows);
     }
 }

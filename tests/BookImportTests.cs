@@ -38,6 +38,8 @@ public class BookImportTests
         Assert.Equal("Imported 1,204 readings. 310 were already here.", BookImport.Said(1204, 310, [], []));
         Assert.Equal("Imported 1 reading.", BookImport.Said(1, 0, [], []));
         Assert.Equal("Nothing new to import. 12 were already here.", BookImport.Said(0, 12, [], []));
+        Assert.Equal("Imported 2,054 readings and 62 finished battles.", BookImport.Said(2054, 0, [], [], finals: 62));
+        Assert.Equal("Imported 1 finished battle.", BookImport.Said(0, 0, [], [], finals: 1));
 
         Assert.Equal(
             "Imported 40 readings. Not set up on this PC, so left alone: CCGP, K0i2.",
