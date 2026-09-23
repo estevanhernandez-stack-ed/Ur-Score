@@ -23,12 +23,15 @@ public partial class ImportPreviewWindow : Window
         _plan = plan;
 
         ImportFromLine.Text = $"Import from {fileName}";
-        ImportIntroLine.Text = ImportPreviewModel.Intro(manifest, fileName);
+        ImportIntroLine.Text = ImportPreviewModel.Intro(manifest);
         var groups = ImportPreviewModel.Groups(plan);
         _rows = groups.SelectMany(g => g.Rows).ToList();
         foreach (var row in _rows) row.PropertyChanged += OnRowChanged;
         ImportPreviewList.ItemsSource = groups;
-        ImportNothingSentLine.Text = plan.File.Recipes.Count > 0 ? ImportPreviewModel.NothingSent : ImportPreviewModel.StatsOnly;
+        // A setup-less file never reaches this window (Task 8's page opens it only when opened.Setup is not null),
+        // so "holds stats and no setup" can never be true here; a setup file with zero recipes just says nothing.
+        ImportNothingSentLine.Text = ImportPreviewModel.NothingSent;
+        ImportNothingSentLine.Visibility = plan.File.Recipes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ImportAsideLine.Text = ImportPreviewModel.AsideNote;
 
         Loaded += (_, _) => ImportCancelButton.Focus();

@@ -1,6 +1,8 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Automation.Peers;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -40,19 +42,40 @@ public class ImportPreviewRenderTests
             // window does, and walking from it reaches every descendant that does have one, flattening through
             // the panels that don't — the same as a real UIA client sees.
             var all = Flatten(UIElementAutomationPeer.CreatePeerForElement(window)).ToList();
-            Assert.Contains(all, p => p.GetName() == "Import CCGP");
+            var names = all.Select(p => p.GetName()).ToList();
+            Assert.Contains("Import CCGP", names);
+            Assert.Contains("Import K0i2", names);
+            Assert.Contains("RECIPES", names);
+            Assert.Contains("CLANS", names);
+            Assert.Contains("KEYS TO ENTER AGAIN", names);
+            Assert.Contains("STATS", names);
+            Assert.Contains("Import ticked", names);
+            Assert.Contains("Cancel", names);
+            Assert.Contains(ImportPreviewModel.NothingSent, names);
+
+            // The greyed row's own tick, not just its text: found in the VISUAL tree (not the automation peer tree)
+            // so this checks the real CheckBox control's real IsEnabled, the thing App.xaml's disabled trigger and
+            // the row's dimming both key off — not a proxy for it.
+            var ghostRunTick = FindCheckBoxNamed(window, "Import GhostRun");
+            Assert.NotNull(ghostRunTick);
+            Assert.False(ghostRunTick!.IsEnabled, "the greyed row's tick must be disabled, not just described as such");
 
             // The DockPanel paints only its children, not a background of its own — that's the Window's job, and
             // RenderTargetBitmap never sees the window's own fill, only what the content visual draws. Painted here
             // instead, so the picture shows the theme it is actually read against, not white text on nothing.
+            // The DockPanel's own Margin sits OUTSIDE its render bounds (ActualWidth/Height exclude it), so the
+            // canvas is padded by that margin on every side too, or the picture would crop the real window's edges.
             const int scale = 2;
-            var width = (int)(content.ActualWidth * scale);
-            var height = (int)(content.ActualHeight * scale);
+            var margin = content.Margin;
+            var totalWidth = content.ActualWidth + margin.Left + margin.Right;
+            var totalHeight = content.ActualHeight + margin.Top + margin.Bottom;
+            var width = (int)(totalWidth * scale);
+            var height = (int)(totalHeight * scale);
             var page = new DrawingVisual();
             using (var drawing = page.RenderOpen())
             {
-                drawing.DrawRectangle(Brush("BgBrush"), null, new Rect(0, 0, content.ActualWidth, content.ActualHeight));
-                drawing.DrawRectangle(new VisualBrush(content) { Stretch = Stretch.None }, null, new Rect(0, 0, content.ActualWidth, content.ActualHeight));
+                drawing.DrawRectangle(Brush("BgBrush"), null, new Rect(0, 0, totalWidth, totalHeight));
+                drawing.DrawRectangle(new VisualBrush(content) { Stretch = Stretch.None }, null, new Rect(margin.Left, margin.Top, content.ActualWidth, content.ActualHeight));
             }
 
             var bitmap = new RenderTargetBitmap(width, height, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
@@ -113,6 +136,21 @@ public class ImportPreviewRenderTests
             if (child is null) continue;
             foreach (var descendant in Flatten(child)) yield return descendant;
         }
+    }
+
+    /// <summary>The real <see cref="CheckBox"/> named <paramref name="name"/> by <c>AutomationProperties.Name</c>, found by
+    /// walking the visual tree directly — not the automation peer tree — so <c>IsEnabled</c> is read off the control
+    /// itself, not a peer's own idea of it.</summary>
+    private static CheckBox? FindCheckBoxNamed(DependencyObject root, string name)
+    {
+        if (root is CheckBox box && AutomationProperties.GetName(box) == name) return box;
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            if (FindCheckBoxNamed(VisualTreeHelper.GetChild(root, i), name) is { } found) return found;
+        }
+
+        return null;
     }
 
     private static SolidColorBrush Brush(string key) => (SolidColorBrush)Application.Current.Resources[key];

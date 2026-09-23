@@ -355,6 +355,16 @@
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource CyanBrush}" />
                                 </Trigger>
+                                <!-- Last, so it wins over IsChecked for a box that is both: a checked-but-disabled
+                                     box (a greyed setup-import row, spec §3) must read as inert, not as an ordinary
+                                     tick. Brushes already named above and in the Button style's own disabled trigger. -->
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Box" Property="Background" Value="{DynamicResource BgBrush}" />
+                                    <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+                                    <Setter TargetName="Tick" Property="Stroke" Value="{DynamicResource MutedTextBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                                    <Setter Property="Cursor" Value="Arrow" />
+                                </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>

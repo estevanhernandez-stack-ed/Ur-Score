@@ -46,8 +46,6 @@ public static class ImportPreviewModel
 {
     public const string NothingSent = "Nothing will be sent from this PC until you tick it in Setup › Stats.";
 
-    public const string StatsOnly = "This file holds stats and no setup.";
-
     public const string AsideNote = "Your clans, recipes and boards here are copied aside first, dated, in case.";
 
     public static IReadOnlyList<ImportPreviewGroup> Groups(SetupMergePlan plan)
@@ -62,7 +60,7 @@ public static class ImportPreviewModel
         return [.. order.Select(o => new ImportPreviewGroup(o.Heading, rows.Where(r => r.Item.Kind == o.Kind).ToList())).Where(g => g.Rows.Count > 0)];
     }
 
-    public static string Intro(BookPackManifest manifest, string fileName) =>
+    public static string Intro(BookPackManifest manifest) =>
         $"Exported {manifest.TakenAt.ToLocalTime():d MMM} by Ur Score {manifest.App} on the other PC.";
 
     public static IReadOnlySet<string> TickedKeys(IEnumerable<ImportPreviewRow> rows) =>
@@ -85,8 +83,9 @@ public static class ImportPreviewModel
         if (applied.FailedStep is { } step)
         {
             var done = Parts(applied.Recipes, applied.Clans, applied.Boards);
-            var before = done.Count == 0 ? "Nothing was imported before" : "Imported " + Join(done) + ", then";
-            return $"{before} the {step} could not be written ({applied.FailureType}); what was imported before that stands.{aside}";
+            return done.Count == 0
+                ? $"Nothing was imported: the {step} could not be written ({applied.FailureType}).{aside}"
+                : $"Imported {Join(done)}, then the {step} could not be written ({applied.FailureType}); what was imported before that stands.{aside}";
         }
 
         var parts = new List<string> { "Imported " + Join(Parts(applied.Recipes, applied.Clans, applied.Boards)) };
@@ -100,7 +99,7 @@ public static class ImportPreviewModel
 
         if (applied.Keys > 0) parts.Add(applied.Keys == 1 ? "1 key to enter in Setup › Recipes" : $"{applied.Keys} keys to enter in Setup › Recipes");
         var line = string.Join("; ", parts) + ".";
-        if (stats.Message.Length > 0) line += " Then " + stats.Message;
+        if (stats.Message.Length > 0) line += " Then " + char.ToLowerInvariant(stats.Message[0]) + stats.Message[1..];
         return line + aside;
     }
 

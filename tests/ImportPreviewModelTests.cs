@@ -58,9 +58,11 @@ public class ImportPreviewModelTests
         var applied = new SetupApplied(2, 3, 2, 1, 1, 0, @"C:\x\626labs.ur-score.before-import-20260922-1431", null, null);
         var stats = new BookImportOutcome(1204, "Imported 1,204 readings. 12 were already here.");
 
+        // The "Then " sentence reuses stats.Message verbatim except its own first letter, which is lowered so it
+        // reads as a continuation of "Then …" rather than a second, oddly-capitalised sentence.
         Assert.Equal(
             "Imported 2 recipes, 3 clans and 2 boards; 1 clan kept as it was; 1 key to enter in Setup › Recipes. "
-            + "Then Imported 1,204 readings. 12 were already here. Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
+            + "Then imported 1,204 readings. 12 were already here. Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
             ImportPreviewModel.AfterLine(applied, stats));
 
         // A recipe that parsed on the sending PC but not here (spec §4.2): counted by not counting it, and named
@@ -68,7 +70,7 @@ public class ImportPreviewModelTests
         var skipped = applied with { SkippedRecipes = ["clan-battle-v9"] };
         Assert.Equal(
             "Imported 2 recipes, 3 clans and 2 boards; 1 clan kept as it was; 1 recipe skipped as it did not parse here (clan-battle-v9); "
-            + "1 key to enter in Setup › Recipes. Then Imported 1,204 readings. 12 were already here. "
+            + "1 key to enter in Setup › Recipes. Then imported 1,204 readings. 12 were already here. "
             + "Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
             ImportPreviewModel.AfterLine(skipped, stats));
 
@@ -76,5 +78,12 @@ public class ImportPreviewModelTests
         Assert.Equal(
             "Imported 2 recipes and 3 clans, then the boards could not be written (UnauthorizedAccessException); what was imported before that stands. Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
             ImportPreviewModel.AfterLine(failed, new BookImportOutcome(0, "")));
+
+        // Nothing at all got written (the very first step, the aside copy, failed): its own arm, since "Imported
+        // nothing, then ..." reads as nonsense and "what was imported before that stands" is vacuous when nothing was.
+        var nothingDone = new SetupApplied(0, 0, 0, 0, 0, 0, @"C:\x\626labs.ur-score.before-import-20260922-1431", "aside", "UnauthorizedAccessException");
+        Assert.Equal(
+            "Nothing was imported: the aside could not be written (UnauthorizedAccessException). Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
+            ImportPreviewModel.AfterLine(nothingDone, new BookImportOutcome(0, "")));
     }
 }

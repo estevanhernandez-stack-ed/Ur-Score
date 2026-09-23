@@ -115,9 +115,19 @@ public partial class ScoreBookPage : UserControl, ISetupPage
                 var preview = new ImportPreviewWindow(plan, opened.Manifest, fileName) { Owner = Window.GetWindow(this) };
                 if (preview.ShowDialog() != true || preview.TickedKeys is not { } ticked) return ("Nothing imported.", "", false);
 
+                // Apply runs synchronously on this (UI) thread, but it writes files and can take a moment; the busy
+                // line said "Reading that file…" until now, which is stale the instant the yes was clicked.
+                StatsTransferLine.Text = "Importing that setup…";
                 var applied = SetupMerge.Apply(plan, ticked, _services.SetupWriter, DateTimeOffset.Now);
-                if (applied.FailedStep is not null) _services.AddTrail($"SETUP NOT IMPORTED AT {applied.FailedStep.ToUpperInvariant()}: {applied.FailureType}");
-                var stats = ticked.Contains("stats") && applied.FailedStep is null
+                if (applied.FailedStep is not null)
+                {
+                    _services.AddTrail($"SETUP NOT IMPORTED AT {applied.FailedStep.ToUpperInvariant()}: {applied.FailureType}");
+                    // A failed step is the page's "something went wrong" case: it belongs on the problem line, not
+                    // the muted said-line, same as every other failure this page reports.
+                    return ("", ImportPreviewModel.AfterLine(applied, new BookImportOutcome(0, "")), false);
+                }
+
+                var stats = ticked.Contains("stats")
                     ? await Task.Run(() => BookImport.Run(opened.Folder, _services))
                     : new BookImportOutcome(0, "");
                 return (ImportPreviewModel.AfterLine(applied, stats), stats.Problem, stats.Added > 0);
