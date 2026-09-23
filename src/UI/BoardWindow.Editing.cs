@@ -278,7 +278,7 @@ public partial class BoardWindow
         if (step != 0 && !control)
         {
             ChangeBoard(board => BoardEdits.MoveBy(board, panel.Id, step));
-            FocusPanelLater(index + step);
+            FocusPanelLater(panel.Id);
             e.Handled = true;
             return;
         }
@@ -288,7 +288,7 @@ public partial class BoardWindow
             var at = Array.IndexOf(Sizes, panel.Size.Span);
             var wanted = Sizes[Math.Clamp((at < 0 ? 1 : at) + step, 0, Sizes.Length - 1)];
             ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Span = wanted }));
-            FocusPanelLater(index);
+            FocusPanelLater(panel.Id);
             e.Handled = true;
             return;
         }
@@ -296,19 +296,24 @@ public partial class BoardWindow
         if (control && e.Key is Key.Up or Key.Down)
         {
             ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Tall = e.Key == Key.Down }));
-            FocusPanelLater(index);
+            FocusPanelLater(panel.Id);
             e.Handled = true;
         }
     }
 
     /// <summary>
-    /// Puts focus back on the panel after the change, because every edit rebuilds the grid and destroys the element
-    /// that had it — the same hand-off <see cref="OnEditTool"/> has always had to make, for the same reason.
+    /// Puts focus back in the moved panel once the grid has redrawn it, on its first tool: every edit rebuilds the
+    /// grid and destroys the element that had focus, and the panel itself can't hold it. Found by id, not index, so
+    /// it follows the panel to wherever the move put it.
     /// </summary>
-    private void FocusPanelLater(int index) => Dispatcher.BeginInvoke(
+    private void FocusPanelLater(string panelId) => Dispatcher.BeginInvoke(
         () =>
         {
-            if (index >= 0 && index < BoardPanels.Children.Count && BoardPanels.Children[index] is FrameworkElement panel) panel.Focus();
+            if (ViewOf(panelId) is not { } view) return;
+
+            if (view is PoppedOutSlot slot) slot.FocusButton(Editing);
+            else PanelFrame.Of(view)?.FocusFirstTool();
+            view.BringIntoView();
         },
         DispatcherPriority.Loaded);
 

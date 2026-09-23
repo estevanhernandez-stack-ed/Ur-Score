@@ -176,10 +176,15 @@ function Select-ComboItem($box, [string]$like) {
 # Moving and sizing lost their buttons when the header became the drag target and the edges became the grips,
 # so a walk drives them the way a person without a mouse does: focus the panel, then the keys. Focus is taken
 # again before every press because each change rebuilds the grid and the element that had focus is destroyed.
+# The panel is a UserControl and takes no focus; its first tool does, which is also where the app puts focus back
+# after a keyboard move. So the walk focuses that tool and the arrow keys reach the board's handler from there.
 function Focus-Panel($board, [string]$panelId) {
     $panel = Find-ByAutomationId $board $panelId
     if (-not $panel) { throw "no panel '$panelId' to focus" }
-    $panel.SetFocus()
+    $tool = @('PanelSettingsButton', 'RemovePanelButton') | ForEach-Object { Find-ByAutomationId $panel $_ } |
+        Where-Object { $_ -and $_.Current.IsKeyboardFocusable } | Select-Object -First 1
+    if (-not $tool) { throw "panel '$panelId' shows no tool that takes focus" }
+    $tool.SetFocus()
     Start-Sleep -Milliseconds 250
 }
 

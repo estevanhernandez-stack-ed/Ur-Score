@@ -74,6 +74,23 @@ public class PanelToolNamingTests
         Assert.Contains("AutomationProperties.SetName(ChooseAnotherButton, BoardText.ChooseAnotherName(title));", code);
     }
 
+    /// <summary>
+    /// A keyboard move put focus back with Focus() on the board child, a UserControl nothing makes focusable, so
+    /// focus fell out of the board after one arrow and the next arrow moved nothing. It goes to the panel's first
+    /// tool now, found by the panel's id after the redraw, the way every other tool hand-off already works.
+    /// </summary>
+    [Fact]
+    public void AKeyboardMoveHandsFocusToAToolOfTheMovedPanelNotToThePanel()
+    {
+        var editing = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "BoardWindow.Editing.cs"));
+        var frame = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", "PanelFrame.xaml.cs"));
+
+        Assert.DoesNotContain("panel.Focus()", editing, StringComparison.Ordinal);
+        Assert.DoesNotContain("FocusPanelLater(index", editing, StringComparison.Ordinal);
+        Assert.Contains("FocusPanelLater(panel.Id)", editing, StringComparison.Ordinal);
+        Assert.Contains("public bool FocusFirstTool()", frame, StringComparison.Ordinal);
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

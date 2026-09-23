@@ -91,6 +91,13 @@ public partial class PanelFrame : UserControl
         return target?.Focus() == true;
     }
 
+    /// <summary>
+    /// Focus on the first of this panel's own buttons that can take it — ⋯, else ✕ Remove, else ⧉ — for a board that
+    /// has just redrawn the panel under a keyboard move. The panel itself is a UserControl and takes no focus.
+    /// </summary>
+    public bool FocusFirstTool() =>
+        new Control[] { PanelSettingsButton, RemovePanelButton, PopOutButton }.Any(tool => tool.IsVisible && tool.Focus());
+
     private static DependencyProperty RegisterFlag(string name) => DependencyProperty.RegisterAttached(
         name, typeof(bool), typeof(PanelFrame),
         new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits, OnToolsChanged));
