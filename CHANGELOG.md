@@ -3,6 +3,15 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Closing Ur Score asks while it is sending.** Closing the board ends Ur Score, and with it the reads,
+  the score book and every report to RoRoRo, so your phone alerts stop. While a send tick or field metric
+  is on, closing now asks first; **Keep running** is the default, so Enter or Esc keeps it open. With
+  nothing sending it closes as before, and a Windows shutdown or sign-out never asks.
+
 ## 0.5.7 - 2026-09-22
 
 ### Fixed

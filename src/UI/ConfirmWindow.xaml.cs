@@ -24,7 +24,8 @@ public partial class ConfirmWindow : Window
         // The button that acts is named for what it acts on ("Delete the Rivals board"), so a screen reader — and
         // the smoke walk that answers this window — says which answer it is giving, not just "Delete".
         AutomationProperties.SetName(ConfirmDoButton, confirm.DoName);
-        ConfirmCancelButton.Content = Confirm.CancelText;
+        ConfirmCancelButton.Content = confirm.CancelButton;
+        AutomationProperties.SetName(ConfirmCancelButton, confirm.CancelButton);
 
         // Keyboard lands on the answer that does nothing, so Enter alone can't delete anything.
         Loaded += (_, _) => ConfirmCancelButton.Focus();

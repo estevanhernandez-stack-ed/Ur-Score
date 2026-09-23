@@ -84,6 +84,15 @@ public partial class App : Application
         e.Handled = true;
     }
 
+    /// <summary>Windows is signing out or shutting down: nothing can keep Ur Score running, so closing does not ask.</summary>
+    public static bool EndingSession { get; private set; }
+
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        EndingSession = true;
+        base.OnSessionEnding(e);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         // Flushes the score book's pending lines before the process goes.
