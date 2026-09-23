@@ -92,6 +92,11 @@ try {
         $second = "$UrData.smoke-second-$(Get-Date -Format 'HHmmss')"
         Rename-Item $UrData (Split-Path $second -Leaf)
         New-Item -ItemType Directory -Force $UrData | Out-Null
+        # This fresh folder is built by hand, not through Move-UrDataAside or Copy-UrControlData, so it needs the
+        # same guard those give theirs: seeded with reading off before anything launches against it, then proven
+        # (2026-09-23 review: without this a bare Settings.Load would write Defaults here, startOnOpen true).
+        Initialize-UrSettingsOff
+        Assert-UrDataSendsNothing
         try {
             Start-UrScore | Out-Null
             $setup = Open-SetupPage 'Score book'

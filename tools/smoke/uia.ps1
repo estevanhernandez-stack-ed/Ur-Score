@@ -327,9 +327,8 @@ function Copy-UrControlData([string]$control) {
         $settings | Add-Member -NotePropertyName 'settingsVersion' -NotePropertyValue 2 -Force
         $settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
     } else {
-        # 0.6 reads on open by default and migrates any settings file without a version to on (BC1); a control
-        # folder with no settings.json of its own still needs one seeded off, same as Move-UrDataAside's fresh folder.
-        Set-Content $settingsPath -Encoding UTF8 -Value '{ "resolveNames": true, "activeRecipe": null, "startOnOpen": false, "settingsVersion": 2 }'
+        # A control folder with no settings.json of its own still needs one seeded off, same as a fresh folder.
+        Initialize-UrSettingsOff
     }
 
     foreach ($file in Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue) {
@@ -377,6 +376,15 @@ function Assert-UrDataSendsNothing {
     }
 }
 
+# 0.6 reads on open by default and migrates any settings file without a version to on (BC1). Any walk that hands
+# Start-UrScore a folder of its own (fresh from New-Item, not seeded by Copy-UrControlData) must write this exact
+# line first, or a bare Settings.Load sees no file, writes its defaults, and startOnOpen comes back true under it.
+# One function so every caller writes the identical line rather than each keeping its own copy to drift out of
+# sync (2026-09-23 review: walk-score-book.ps1 built a second $UrData by hand and skipped this).
+function Initialize-UrSettingsOff {
+    Set-Content (Join-Path $UrData 'settings.json') -Encoding UTF8 -Value '{ "resolveNames": true, "activeRecipe": null, "startOnOpen": false, "settingsVersion": 2 }'
+}
+
 # The .smoke-backup-* folders beside the data folder, oldest first: a walk that was killed mid-run leaves one
 # behind with YOUR data in it, and the folder that stands in its place is the walk's scratch.
 function Get-UrLeftoverBackups {
@@ -402,9 +410,8 @@ function Move-UrDataAside {
     }
     try {
         New-Item -ItemType Directory -Force $UrData | Out-Null
-        # 0.6 reads on open by default and migrates any settings file without a version to on (BC1). A walk decides
-        # when reading starts, so its folder is born with start-on-open off and already migrated.
-        Set-Content (Join-Path $UrData 'settings.json') -Encoding UTF8 -Value '{ "resolveNames": true, "activeRecipe": null, "startOnOpen": false, "settingsVersion": 2 }'
+        # A walk decides when reading starts, so its folder is born with start-on-open off and already migrated.
+        Initialize-UrSettingsOff
     } catch {
         if ($backup) { Rename-Item $backup (Split-Path $UrData -Leaf) }
         throw

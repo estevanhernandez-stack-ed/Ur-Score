@@ -61,8 +61,11 @@ try {
     Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240 | Out-Null
     Check '7 F5 reads too' $f5 "f5 went=$f5"
 
-    # Still resized from the block above, so this is the 1024/three-tab shot for the paused state too.
-    & (Join-Path $PSScriptRoot 'shot.ps1') -OutPath (Join-Path $UrShots 'top-bar-paused.png') | Out-Null
+    # Still resized from the block above, so this is the 1024/three-tab shot for the paused state too. The board
+    # is paused here, so its title carries " (Paused)" (BC2) -- shot.ps1's FindWindow is an exact match, not a
+    # pattern like Get-BoardWindow's, so the title has to be given exactly or the shot silently finds nothing
+    # (2026-09-23 review).
+    & (Join-Path $PSScriptRoot 'shot.ps1') -Title 'RoRoRo Ur Score (Paused)' -OutPath (Join-Path $UrShots 'top-bar-paused.png') | Out-Null
 
     # 8. Paused closes without asking (BC8).
     Close-UrWindow (Get-BoardWindow)
