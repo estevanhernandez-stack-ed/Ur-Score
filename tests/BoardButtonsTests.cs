@@ -196,4 +196,20 @@ public class BoardButtonsTests
         Assert.False(BoardButtons.For(loaded: false, running: false, starting: false, testing: false, importing: false).StartStop);
         Assert.False(BoardButtons.StartsOnOpen(startOnOpen: true, loaded: false, running: false, installed: 1, anySourceOn: true, firstRunPage: false));
     }
+
+    /// <summary>
+    /// Spec §3.6, the first-run gap: opening decides once and skips while Setup opens on a recipe with no clan, so a new
+    /// player's board never started. It is asked again when Setup closes and when the first source is switched on —
+    /// only while this session has never started, so a pause is never undone behind the player's back (BC7).
+    /// </summary>
+    [Theory]
+    [InlineData(true, true, false, false, false, 1, true, true)]    // the case: never started, now something to read
+    [InlineData(true, true, false, true, false, 1, true, false)]    // started earlier and paused: a pause stands
+    [InlineData(true, true, false, false, true, 1, true, false)]    // already starting
+    [InlineData(false, true, false, false, false, 1, true, false)]  // turned off in Setup
+    [InlineData(true, true, false, false, false, 1, false, false)]  // still nothing switched on
+    [InlineData(true, true, true, false, false, 1, true, false)]    // already running
+    public void StartOnOpenIsAskedAgainOnlyForABoardThatNeverStarted(
+        bool startOnOpen, bool loaded, bool running, bool everStarted, bool starting, int installed, bool anySourceOn, bool starts) =>
+        Assert.Equal(starts, BoardButtons.StartsLater(startOnOpen, loaded, running, everStarted, starting, installed, anySourceOn));
 }

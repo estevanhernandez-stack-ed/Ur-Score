@@ -66,4 +66,12 @@ public static class BoardButtons
     public static bool StartsOnOpen(bool startOnOpen, bool loaded, bool running, int installed, bool anySourceOn, bool firstRunPage) =>
         startOnOpen && !running && installed > 0 && anySourceOn && !firstRunPage
         && For(loaded, running, starting: false, testing: false, importing: false).StartStop;
+
+    /// <summary>
+    /// Start on open, asked again after opening (spec §3.6): when Setup closes, and when the switched-on sources go from
+    /// none to some. Only for a session that has never started — a pause lasts until Ur Score closes (BC7) — and
+    /// through <see cref="StartsOnOpen"/> itself, so the two can't disagree.
+    /// </summary>
+    public static bool StartsLater(bool startOnOpen, bool loaded, bool running, bool everStarted, bool starting, int installed, bool anySourceOn) =>
+        !everStarted && !starting && StartsOnOpen(startOnOpen, loaded, running, installed, anySourceOn, firstRunPage: false);
 }
