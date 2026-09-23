@@ -256,6 +256,16 @@
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="14,12,14,14" />
+                <!-- Spec §4.6: while arranging, the panel a keyboard is moving shows which one it is. -->
+                <Style.Triggers>
+                    <MultiTrigger>
+                        <MultiTrigger.Conditions>
+                            <Condition Property="IsKeyboardFocusWithin" Value="True" />
+                            <Condition Property="ui:PanelFrame.ShowEditTools" Value="True" />
+                        </MultiTrigger.Conditions>
+                        <Setter Property="BorderBrush" Value="{DynamicResource CyanBrush}" />
+                    </MultiTrigger>
+                </Style.Triggers>
             </Style>
             <!-- The mock's .big (30 px, line height 1). WPF gives the line a third more height than CSS does, split evenly
                  here by the negative margins, so the figures sit in a 30 px box as the mock's do and a 12 px word beside

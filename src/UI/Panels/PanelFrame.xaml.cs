@@ -118,7 +118,10 @@ public partial class PanelFrame : UserControl
         AutomationProperties.SetName(ChooseAnotherButton, BoardText.ChooseAnotherName(title));
         AutomationProperties.SetName(RemovePanelButton, BoardText.RemovePanelName(title));
 
-        EditTools.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        var arranging = editing ? Visibility.Visible : Visibility.Collapsed;
+        DragHandle.Visibility = arranging;
+        RemovePanelButton.Visibility = arranging;
+        HeaderOutline.Visibility = arranging;
 
         // The header is the drag target while editing, so it says so under the pointer. Outside edit mode it is
         // an ordinary title again and must not suggest it can be moved.
@@ -138,12 +141,6 @@ public partial class PanelFrame : UserControl
         }
     }
 
-
-    private void OnDragHandleDown(object sender, MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        RaiseEvent(new PanelToolEventArgs(ToolEvent, PanelTool.DragStart));
-    }
 
     /// <summary>
     /// Where the pointer went down on the header, until it moves far enough to be a drag. Null when it is not down,
