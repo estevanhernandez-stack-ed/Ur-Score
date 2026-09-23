@@ -37,6 +37,13 @@ jobs:
         shell: pwsh
         run: ./build/build-plugin.ps1
 
+      # The release page leads with this version's CHANGELOG section and how to install it. No section, no
+      # release: a page that says nothing about what changed is what this step exists to prevent. It runs after
+      # the build because build-plugin.ps1 clears artifacts/.
+      - name: Release notes from the CHANGELOG
+        shell: pwsh
+        run: ./build/release-notes.ps1 -Version ('${{ github.ref_name }}'.TrimStart('v'))
+
       - name: Show artifacts
         shell: pwsh
         run: |
@@ -65,8 +72,12 @@ jobs:
           gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
             $pre = @(if ($tag -match 'rc|beta') { '--prerelease' })
-            gh release create $tag --draft --verify-tag --generate-notes --title $tag @pre
+            gh release create $tag --draft --verify-tag --notes-file artifacts/release-notes.md --generate-notes --title $tag @pre
             if ($LASTEXITCODE -ne 0) { throw "gh release create $tag failed" }
+          } else {
+            # A draft left by a failed run still gets this run's notes.
+            gh release edit $tag --notes-file artifacts/release-notes.md
+            if ($LASTEXITCODE -ne 0) { throw "gh release edit $tag failed" }
           }
 
           for ($attempt = 1; $attempt -le 3; $attempt++) {

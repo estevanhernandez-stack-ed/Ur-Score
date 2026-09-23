@@ -28,3 +28,7 @@ jobs:
       - name: The by-hand installer (build/install.ps1) under Windows PowerShell 5.1
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/smoke/checks/install-check.ps1
+
+      - name: The current version has release notes in the CHANGELOG
+        shell: pwsh
+        run: ./build/release-notes.ps1 -Version (Get-Content manifest.json -Raw | ConvertFrom-Json).version
