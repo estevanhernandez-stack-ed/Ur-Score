@@ -38,4 +38,20 @@ public sealed class BoardUndo
 
     /// <summary>Which history an undo reads: the draft's while arranging, whatever the saved one holds (Review Focus 5).</summary>
     public static BoardUndo Target(bool arranging, BoardUndo draft, BoardUndo saved) => arranging ? draft : saved;
+
+    /// <summary>
+    /// The count Done (n) shows: the draft's steps, but only while the draft is drawn differently from the board as
+    /// arranging began (<see cref="BoardEdits.Changed"/>). A panel moved right then back left is two steps and no change,
+    /// so Done shows none, as Cancel then leaves without asking (BC5, BC6).
+    /// </summary>
+    public static int DoneCount(BoardDef? atEdit, BoardDef? draft, BoardUndo history) =>
+        atEdit is { } b && draft is { } d && BoardEdits.Changed(b, d) ? history.Count(d.Id) : 0;
+
+    /// <summary>
+    /// What an undo of a saved board puts back: the snapshot's panels, under the board's name as it is
+    /// (<paramref name="now"/>) and with each panel's pop-out as <paramref name="boards"/> has it. A rename and a pop-out
+    /// are not undoable changes (spec §5.1), so undoing a panel change must not also take back either.
+    /// </summary>
+    public static BoardDef Restorable(UndoStep step, BoardDef now, IReadOnlyList<BoardDef> boards) =>
+        BoardEdits.CarryPopOuts(step.Before with { Name = now.Name }, boards);
 }

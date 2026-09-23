@@ -87,9 +87,11 @@ public partial class BoardWindow
         if (!Editing || _draft is not { } draft) return;
         if (_draftBase is { } atEdit && BoardEdits.Changed(atEdit, draft) && !ConfirmWindow.Ask(this, BoardText.CancelArrangeQuestion(atEdit))) return;
 
-        // Cancel discards the draft's history with the draft (spec §5.2); nothing reaches the saved one.
+        // Cancel discards the draft's history with the draft (spec §5.2); nothing reaches the saved one, and a draft
+        // change's toast (R10) goes with it, its Undo having nothing left to take back.
         _draft = _draftBase = null;
         _draftUndo.ClearAll();
+        HideToast();
         ShowEditMode();
         Render();
         FocusLater(EditBoardButton);
@@ -131,6 +133,9 @@ public partial class BoardWindow
         Render();
     }
 
+    /// <summary>Done's label, counting the draft's steps only while the draft differs from the board as arranging began (<see cref="BoardUndo.DoneCount"/>).</summary>
+    private string DoneLabel() => BoardText.DoneLabel(BoardUndo.DoneCount(_draftBase, _draft, _draftUndo));
+
     /// <summary>
     /// What shows while arranging: the banner in the status lines' place (spec §4.2), naming the board and counting
     /// Done's changes. Which buttons take a press is <see cref="ApplyButtons"/>'s, as always; the lines come back
@@ -144,7 +149,7 @@ public partial class BoardWindow
         ArrangeBanner.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
         if (editing) StateLines.Visibility = Visibility.Collapsed;
         ArrangeLine.Text = ArrangeBannerText();
-        DoneButton.Content = BoardText.DoneLabel(_draft is { } draft ? _draftUndo.Count(draft.Id) : 0);
+        DoneButton.Content = DoneLabel();
 
         ApplyButtons();
         RenderLines();

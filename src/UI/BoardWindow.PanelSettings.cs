@@ -80,8 +80,12 @@ public partial class BoardWindow
 
             if (what is not null) _draftUndo.Push(draft, what);
             _draft = edited;
-            DoneButton.Content = BoardText.DoneLabel(_draftUndo.Count(draft.Id));
+            DoneButton.Content = DoneLabel();
             Render();
+
+            // R10: the toast shows while arranging too. Its Undo is UndoLast, which only steps back through the draft, and
+            // ShowToast ties it to _boardId, the draft's own board, so a tab click that saves and switches hides its Undo.
+            if (what is not null) ShowToast(what, canUndo: true);
 
             // Every panel's cell may have moved, so the grips drawn over them are stale until the grid re-arranges.
             Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
@@ -125,8 +129,9 @@ public partial class BoardWindow
         {
             if (history.Pop(draft.Id) is not { } draftStep) return;
 
-            _draft = draftStep.Before;
-            DoneButton.Content = BoardText.DoneLabel(_draftUndo.Count(draft.Id));
+            // The snapshot's pop-outs may be stale: Bring back while arranging saves and patches the draft, not its history.
+            _draft = BoardEdits.CarryPopOuts(draftStep.Before, _services.Boards);
+            DoneButton.Content = DoneLabel();
             Render();
             Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
             ShowToast(BoardText.Undone(draftStep, unfollowed: false), canUndo: false);
@@ -137,7 +142,8 @@ public partial class BoardWindow
         var board = ShownBoard(boards);
         if (history.Peek(board.Id) is not { } step) return;
 
-        if (!SaveBoards(BoardEdits.Replace(boards, BoardEdits.CarryPopOuts(step.Before, boards))))
+        // The name stays as it is now: a rename isn't undoable, and the toast names only the panel change (spec §5.1).
+        if (!SaveBoards(BoardEdits.Replace(boards, BoardUndo.Restorable(step, board, boards))))
         {
             ShowToast(BoardText.UndoNotSaved, canUndo: false);
             return;

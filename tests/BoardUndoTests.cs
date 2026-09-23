@@ -55,6 +55,44 @@ public class BoardUndoTests
     }
 
     [Fact]
+    public void AnUndoRestoresThePanelsButKeepsTheNameAndPopOutsAsTheyAreNow()
+    {
+        // The snapshot: two panels, the second one wide, under the old name, nothing out.
+        var before = Board("b-1", 2);
+        before = before with { Panels = [before.Panels[0], before.Panels[1] with { Size = new PanelSize(PanelSize.Wide) }] };
+        var step = new UndoStep(before, "Resized Race");
+
+        // Now: renamed since (not undoable, spec 5.1), a third panel added, and the first panel popped out.
+        var rect = new PopOutRect(10, 10, 360, 300);
+        var now = Board("b-1", 3) with { Name = "Battle" };
+        now = now with { Panels = [now.Panels[0] with { PopOut = rect }, now.Panels[1], now.Panels[2]] };
+        IReadOnlyList<BoardDef> boards = [now, Board("b-2", 1)];
+
+        var restored = BoardUndo.Restorable(step, now, boards);
+
+        Assert.Equal("Battle", restored.Name);
+        Assert.Equal(new[] { "p-0", "p-1" }, restored.Panels.Select(p => p.Id).ToArray());
+        Assert.Equal(new PanelSize(PanelSize.Wide), restored.Panels[1].Size);
+        Assert.Equal(new[] { rect, null }, restored.Panels.Select(p => p.PopOut).ToArray());
+        Assert.Equal("b-1", restored.Id);
+    }
+
+    [Fact]
+    public void DoneCountsItsStepsOnlyWhileTheDraftDiffers()
+    {
+        // Moved right, then back left: two steps, nothing changed, so Done shows no count (and Cancel doesn't ask).
+        var atEdit = Board("b-1", 2);
+        var history = new BoardUndo();
+        history.Push(atEdit, "Moved p-0");
+        history.Push(atEdit with { Panels = [atEdit.Panels[1], atEdit.Panels[0]] }, "Moved p-0");
+
+        Assert.Equal(0, BoardUndo.DoneCount(atEdit, atEdit with { Panels = [.. atEdit.Panels] }, history));
+        Assert.Equal(2, BoardUndo.DoneCount(atEdit, Board("b-1", 1), history));
+        Assert.Equal(0, BoardUndo.DoneCount(null, Board("b-1", 1), history));
+        Assert.Equal(0, BoardUndo.DoneCount(atEdit, null, history));
+    }
+
+    [Fact]
     public void WhileArrangingOnlyTheDraftIsUndone()
     {
         var draft = new BoardUndo();

@@ -702,10 +702,18 @@ public partial class BoardWindow : Window
 
     /// <summary>
     /// F5 is ⟳, through the same gate (spec §3.5). Pop-outs have no ⟳ and don't take it. Ctrl+Z is undo on the board
-    /// on screen, toast or not (BC6, spec §5.3).
+    /// on screen, toast or not (BC6, spec §5.3). Esc mid-resize ends the resize, keeping nothing.
     /// </summary>
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        // Esc during a grip drag cancels the drag, not Arrange: handled here, so Cancel (IsCancel) never sees it.
+        if (e.Key == Key.Escape && _resizing is not null)
+        {
+            e.Handled = true;
+            EndResize(commit: false);
+            return;
+        }
+
         if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
         {
             e.Handled = true;
