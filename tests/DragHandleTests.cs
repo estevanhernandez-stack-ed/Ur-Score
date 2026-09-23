@@ -112,8 +112,46 @@ public class DragHandleTests
         Assert.Equal("OnTitleRowDown", (string?)row.Attribute("MouseLeftButtonDown"));
         Assert.Equal("OnTitleRowMove", (string?)row.Attribute("MouseMove"));
         Assert.Equal("OnTitleRowUp", (string?)row.Attribute("MouseLeftButtonUp"));
+        Assert.Equal("OnTitleRowLostCapture", (string?)row.Attribute("LostMouseCapture"));
 
         var background = (string?)row.Attribute("Background");
         Assert.False(string.IsNullOrWhiteSpace(background), "the title row needs a Background or its empty space is hit-test invisible");
+    }
+
+    /// <summary>
+    /// A press on the header captures the mouse while arranging, and the drag lets it go before it starts. Without
+    /// the capture a pointer that left the ~20px title row before crossing the drag threshold (a quick diagonal
+    /// move, which is how a real hand drags a panel to the one below) never raised TitleRow's MouseMove again, and
+    /// nothing dragged; the UIA walk's real-pointer drag from the grip failed exactly this way (2026-09-23). The
+    /// release has to come BEFORE DragStart is raised, because DoDragDrop runs inside that event and needs the
+    /// mouse. Read from source: capture needs a real window and a real pointer, which no unit test here has.
+    /// </summary>
+    [Fact]
+    public void AHeaderPressCapturesTheMouseAndTheDragReleasesItFirst()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(System.IO.Path.Combine(directory.FullName, "Ur-Score.csproj"))) directory = directory.Parent;
+        Assert.NotNull(directory);
+        var source = File.ReadAllText(System.IO.Path.Combine(directory!.FullName, "src", "UI", "Panels", "PanelFrame.xaml.cs"));
+
+        string Body(string signature, string next)
+        {
+            var start = source.IndexOf(signature, StringComparison.Ordinal);
+            var end = source.IndexOf(next, start + 1, StringComparison.Ordinal);
+            Assert.True(start >= 0 && end > start, $"{signature} has moved or been renamed; this fence is looking in the wrong place.");
+            return source[start..end];
+        }
+
+        var down = Body("private void OnTitleRowDown(", "private void OnTitleRowMove(");
+        Assert.Contains("TitleRow.CaptureMouse()", down, StringComparison.Ordinal);
+
+        var move = Body("private void OnTitleRowMove(", "private void OnTitleRowUp(");
+        var release = move.LastIndexOf("TitleRow.ReleaseMouseCapture()", StringComparison.Ordinal);
+        var drag = move.IndexOf("PanelTool.DragStart", StringComparison.Ordinal);
+        Assert.True(release >= 0 && drag > release, "the drag must release the capture before it raises DragStart");
+
+        var up = Body("private void OnTitleRowUp(", "private void OnTitleRowLostCapture(");
+        Assert.Contains("TitleRow.ReleaseMouseCapture()", up, StringComparison.Ordinal);
+        Assert.Contains("_pressedAt = null", source[source.IndexOf("private void OnTitleRowLostCapture(", StringComparison.Ordinal)..], StringComparison.Ordinal);
     }
 }

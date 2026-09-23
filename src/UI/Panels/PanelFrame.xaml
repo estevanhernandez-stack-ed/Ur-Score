@@ -5,8 +5,8 @@
     <StackPanel>
         <!-- Arranging (spec §4.3): the header says it drags, with a dashed edge, the grip and ✕, all inside the line that is
              already there, so no panel changes height on the way in. Moving is dragging the header; the grip is the
-             visible cue and has no handler of its own: its press bubbles to TitleRow, which waits for the system's
-             drag threshold. Sizing is hauling an edge, which has no button either. Both are still reachable from the
+             visible cue and has no handler of its own: its press bubbles to TitleRow, which captures the mouse and waits
+             for the system's drag threshold. Sizing is hauling an edge, which has no button either. Both are still reachable from the
              keyboard on the focused panel (BoardWindow.Editing.OnBoardKeyDown), which is how a board is arranged
              without a mouse and how the smoke walks arrange one at all. -->
         <Grid>
@@ -17,7 +17,8 @@
                  so without this a press between the title and the tools would fall through and the header would only
                  drag where there happens to be text. -->
             <DockPanel x:Name="TitleRow" LastChildFill="False" Background="Transparent"
-                       MouseLeftButtonDown="OnTitleRowDown" MouseMove="OnTitleRowMove" MouseLeftButtonUp="OnTitleRowUp">
+                       MouseLeftButtonDown="OnTitleRowDown" MouseMove="OnTitleRowMove" MouseLeftButtonUp="OnTitleRowUp"
+                       LostMouseCapture="OnTitleRowLostCapture">
                 <StackPanel x:Name="PanelTools" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Both are named in UpdateTools from the panel's own title ("Pop out Past battles"), so five panels
                          don't give a screen reader five identical buttons; no name here, which would go stale beside it. -->
