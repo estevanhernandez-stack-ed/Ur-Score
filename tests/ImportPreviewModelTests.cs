@@ -86,4 +86,19 @@ public class ImportPreviewModelTests
             "Nothing was imported: the aside could not be written (UnauthorizedAccessException). Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
             ImportPreviewModel.AfterLine(nothingDone, new BookImportOutcome(0, "")));
     }
+
+    [Fact]
+    public void TheAfterLineSaysNothingNewInTheSetupWhenEveryRowWasSame()
+    {
+        // Every row Same (a clan already in the file too, ticked but nothing to apply): "Imported nothing" would
+        // read like a failure, so an empty Parts() gets its own plain sentence instead.
+        var applied = new SetupApplied(0, 0, 0, KeptClans: 1, Keys: 0, DroppedExclusions: 0,
+            AsideFolder: @"C:\x\626labs.ur-score.before-import-20260922-1431", FailedStep: null, FailureType: null);
+        var stats = new BookImportOutcome(0, "Nothing new to import. 40 were already here.");
+
+        Assert.Equal(
+            "Nothing new in the setup; 1 clan kept as it was. Then nothing new to import. 40 were already here. "
+            + "Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
+            ImportPreviewModel.AfterLine(applied, stats));
+    }
 }

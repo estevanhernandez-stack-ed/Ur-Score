@@ -88,7 +88,8 @@ public static class ImportPreviewModel
                 : $"Imported {Join(done)}, then the {step} could not be written ({applied.FailureType}); what was imported before that stands.{aside}";
         }
 
-        var parts = new List<string> { "Imported " + Join(Parts(applied.Recipes, applied.Clans, applied.Boards)) };
+        var changed = Parts(applied.Recipes, applied.Clans, applied.Boards);
+        var parts = new List<string> { changed.Count == 0 ? "Nothing new in the setup" : "Imported " + Join(changed) };
         if (applied.KeptClans > 0) parts.Add(applied.KeptClans == 1 ? "1 clan kept as it was" : $"{applied.KeptClans} clans kept as they were");
         if (applied.SkippedRecipes is { Count: > 0 } skipped)
         {

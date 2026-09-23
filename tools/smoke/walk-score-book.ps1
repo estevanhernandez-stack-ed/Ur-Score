@@ -49,7 +49,9 @@ try {
         ($lines.Count -ge 1) -and (@($lines | Where-Object { $_.v -ne 1 }).Count -eq 0)) "months=$($months.Name -join ',') recipes=$($recipeTexts.Count) lines=$($lines.Count)"
 
     # Export stats, then import the same file: one file made where asked, the line counting what went into it, and
-    # an import of it adding nothing because every reading is already here (2026-09-22, the owner's second machine).
+    # an import of it back into this same, unchanged PC. The file always carries the setup now, so the re-import
+    # opens the preview too; every row is Same (nothing here differs from what was just exported), so nothing new
+    # applies to the setup and every reading is already in the book (2026-09-22, the owner's second machine).
     $exportDir = Join-Path $env:TEMP "urscore-smoke-export-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     New-Item -ItemType Directory -Force $exportDir | Out-Null
     $exportFile = Join-Path $exportDir 'ur-score-stats-smoke.zip'
@@ -63,8 +65,11 @@ try {
         $setup = Get-SetupWindow
         Invoke-Element (Get-Button $setup 'Import stats from another PC''s file')
         Complete-FileDialog '^Import stats from another PC$' $exportFile
-        $imported = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^(Nothing new to import|Imported )' 30
-        Check '4c Importing it back adds nothing: every reading is already here' ($imported -match '^Nothing new to import\. \d[\d,]* were already here\.') "'$imported'"
+        $preview = Wait-UrWindow '^Import from another PC$' 20
+        Check '4c The re-import of this PC''s own file opens the preview' ([bool]$preview) "preview=$([bool]$preview)"
+        Invoke-Element (Get-Button $preview 'Import ticked')
+        $imported = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^Nothing new in the setup' 60
+        Check '4c2 Every row is Same, so nothing new in the setup, and every reading is already here' ($imported -match '^Nothing new in the setup\. Then nothing new to import\. \d[\d,]* were already here\. Your previous setup is in 626labs\.ur-score\.before-import-\d{8}-\d{4}(-\d+)?\.$') "'$imported'"
         & (Join-Path $PSScriptRoot 'shot.ps1') -Title 'Setup' -OutPath (Join-Path $UrShots 'score-book-export-import.png') | Out-Null
 
         # 4d/4e/4f/4g/4h. The setup travels (V3-S.46): export from this folder (it has a recipe and one clan),
