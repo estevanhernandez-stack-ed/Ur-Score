@@ -20,8 +20,12 @@ manifest.json          v: 2, takenAt, app, readings, finals, setup: true|false
 scorebook/…            the month files and the recipe texts the book keeps, exactly as in 0.5.5
 setup/
   recipes/<slug>.recipe.json    the recipe text, as installed
-  recipes/<slug>.state.json     RecipeState: ticks, metric ids, counter names, field numbers;
-                                exclusions carried by ROBLOX USER ID, never RoRoRo's account GUIDs
+  recipes/<slug>.state.json     RecipeState: ticks, metric ids, counter names, field numbers. It carries
+                                NO exclusions of its own — RoRoRo's account GUIDs mean nothing on the
+                                other PC, so that list is emptied on the way into the file
+  exclusions.json               per recipe slug, the accounts switched off, by ROBLOX USER ID: the one id
+                                that means the same on both machines. Mapped back to this PC's accounts on
+                                the way in, and any that match nothing here are counted, not guessed at
   sources.json                  your clans, with the ids this machine minted
   boards.json                   as saved, sanitized: your own account ids only (BoardDefs.Sanitize)
   settings.json                 ResolveNames and ActiveRecipe. NOT StartOnOpen: a per-machine choice
@@ -36,8 +40,10 @@ other file an older version left behind, and anything RoRoRo owns — alerts liv
 **Versioning, honestly.** The manifest goes to `v: 2`. A 0.5.5 importer refuses it as "exported by a newer
 Ur Score — update this one" rather than silently importing only the stats. A 0.5.5 file (`v: 1`) imports
 into the new version as stats only: no preview opens, and its stats merge runs the way 0.5.5's import
-already does. `setup: false` is the same file without the folder, for a stats-only export; the button
-stays one button and the manifest says which the file is.
+already does. `setup: false` is the same file without the folder — what a PC with nothing to carry writes:
+no recipes, no clans, no boards, no key names, so there is nothing for the other side to preview and the
+folder is left off rather than attached empty. The button stays one button and the manifest says which the
+file is.
 
 **The export line** grows: "Exported 1,204 readings and 12 finished battles, with 3 recipes, 5 clans and
 2 boards, to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book."
@@ -138,8 +144,8 @@ Rules of the screen:
   reader reads it and the smoke walk drives it. Automation ids: `ImportPreviewList`, `ImportTickedButton`,
   `ImportCancelButton`, each row's tick named "Import <name>".
 - **Import ticked** applies (§4). **Cancel** writes nothing. The unpacked temp folder is removed either way.
-- A file with no setup — a 0.5.5 file, or a stats-only export — never opens this window at all: its stats
-  merge runs the way 0.5.5's import already does, with no preview.
+- A file with no setup — a 0.5.5 file, or an export from a PC that had nothing to carry — never opens this
+  window at all: its stats merge runs the way 0.5.5's import already does, with no preview.
 
 ## 4. Applying, and what a failure leaves behind
 

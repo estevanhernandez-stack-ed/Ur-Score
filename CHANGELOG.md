@@ -8,7 +8,8 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 ### Added
 
 - **Your setup travels with your stats.** Export stats now carries your recipes with their ticks, your
-  clans, your boards and two settings, and Import stats shows you what will change — added, updated,
+  clans, your boards and two settings, applied whatever you tick (Start on open stays this PC's own), and
+  Import stats shows you what will change — added, updated,
   replaced, kept — with a tick on each, before anything is written. Keys never travel (the file names
   the ones to enter again). **Nothing arrives set to send:** every send tick is off until you tick it on
   the new PC, so a file from elsewhere can never start reports on its own. Your previous setup is copied
