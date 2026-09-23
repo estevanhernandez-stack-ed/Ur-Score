@@ -121,11 +121,8 @@
                                   VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                 <StackPanel x:Name="TopButtons" Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0"
                             SizeChanged="OnTopBarSizeChanged">
-                    <Button x:Name="EditBoardButton" Content="Edit board" Click="OnEditBoardClick" AutomationProperties.Name="Edit board" />
-                    <Button x:Name="AddPanelButton" Content="+ Add panel" Margin="8,0,0,0" Visibility="Collapsed" Click="OnAddPanelClick"
-                            AutomationProperties.Name="Add panel" />
-                    <Button x:Name="DoneButton" Content="Done" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Visibility="Collapsed"
-                            Click="OnDoneClick" AutomationProperties.Name="Done" />
+                    <!-- BC4: the gate stays, as Arrange. It stays in place while arranging, disabled; the banner holds the rest. -->
+                    <Button x:Name="EditBoardButton" Content="Arrange" Click="OnEditBoardClick" AutomationProperties.Name="Arrange" />
                     <Button x:Name="SetupButton" Margin="8,0,0,0" Click="OnSetupClick" AutomationProperties.Name="Setup">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0" />
@@ -165,10 +162,29 @@
             </Grid>
         </Border>
 
-        <StackPanel x:Name="StateLines" DockPanel.Dock="Top" Margin="16,8,16,0">
-            <TextBlock x:Name="StateLine" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.HelpText="What Ur Score is doing" />
-            <TextBlock x:Name="DetailLine" Style="{StaticResource Muted}" Margin="0,2,0,0" />
-        </StackPanel>
+        <!-- The lines under the bar, and while arranging the banner in their place (spec §4.2). Known limit: when the board
+             was healthy and its lines hidden (BC3), the banner adds its own height once on the way in; no panel changes size. -->
+        <Grid DockPanel.Dock="Top" Margin="16,8,16,0">
+            <StackPanel x:Name="StateLines">
+                <TextBlock x:Name="StateLine" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.HelpText="What Ur Score is doing" />
+                <TextBlock x:Name="DetailLine" Style="{StaticResource Muted}" Margin="0,2,0,0" />
+            </StackPanel>
+            <!-- BC5: Cancel is IsCancel, so Esc leaves arranging wherever focus is in the window; ApplyButtons disables it
+                 outside arranging, and a disabled IsCancel button ignores Esc. The status card's own Esc is handled inside it. -->
+            <Border x:Name="ArrangeBanner" Visibility="Collapsed" Background="{DynamicResource RowBgBrush}"
+                    BorderBrush="{DynamicResource CyanBrush}" BorderThickness="0,0,0,2" CornerRadius="4" Padding="12,6">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="AddPanelButton" Content="+ Add panel" Click="OnAddPanelClick" AutomationProperties.Name="Add panel" />
+                        <Button x:Name="CancelArrangeButton" Content="Cancel" Margin="8,0,0,0" IsCancel="True" Click="OnCancelArrangeClick"
+                                AutomationProperties.Name="Cancel arranging" />
+                        <Button x:Name="DoneButton" Content="Done" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"
+                                Click="OnDoneClick" AutomationProperties.Name="Done" />
+                    </StackPanel>
+                    <TextBlock x:Name="ArrangeLine" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource WhiteBrush}" />
+                </DockPanel>
+            </Border>
+        </Grid>
 
         <TextBlock x:Name="AttributionLine" DockPanel.Dock="Bottom" Style="{StaticResource Muted}" FontSize="11" Margin="16,4,16,8" />
 

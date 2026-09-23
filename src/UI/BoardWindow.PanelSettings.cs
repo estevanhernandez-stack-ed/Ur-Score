@@ -71,6 +71,8 @@ public partial class BoardWindow
             if (ReferenceEquals(edited, draft)) return;
 
             _draft = edited;
+            _draftSteps++;
+            DoneButton.Content = BoardText.DoneLabel(_draftSteps);
             Render();
 
             // Every panel's cell may have moved, so the grips drawn over them are stale until the grid re-arranges.

@@ -21,6 +21,9 @@ public partial class BoardWindow
     /// </summary>
     private BoardDef? _draftBase;
 
+    /// <summary>How many changes the draft holds, for Done (n). Stage 3 replaces this with the draft's undo count.</summary>
+    private int _draftSteps;
+
     private EditHintAdorner? _hints;
 
     /// <summary>The panel being resized by its grip, which grip, the cell it started from and the height of its first row. Null when not.</summary>
@@ -50,14 +53,15 @@ public partial class BoardWindow
 
     private void OnEditBoardClick(object sender, RoutedEventArgs e)
     {
-        // The button is collapsed and disabled while editing; this only catches a press already on its way.
+        // The button is disabled while arranging; this only catches a press already on its way.
         if (!ButtonStates().EditBoard) return;
 
         _draft = _draftBase = ShownBoard(_services.Boards);
+        _draftSteps = 0;
         ShowEditMode();
         Render();
 
-        // Edit board has just hidden itself; focus goes to what replaced it.
+        // Arrange is disabled now; focus goes to Done in the banner that opened in the lines' place.
         FocusLater(DoneButton);
     }
 
@@ -70,8 +74,24 @@ public partial class BoardWindow
     {
         FinishEditing();
 
-        // Done has hidden itself, unless the save failed and edit mode stays.
+        // Done has hidden itself with the banner, unless the save failed and arranging stays.
         if (!Editing) FocusLater(EditBoardButton);
+    }
+
+    /// <summary>
+    /// BC5: Cancel and Esc (IsCancel) leave arranging. With nothing changed they just leave; with changes they ask first,
+    /// in the theme. Closing the window still saves the draft (R8).
+    /// </summary>
+    private void OnCancelArrangeClick(object sender, RoutedEventArgs e)
+    {
+        if (!Editing || _draft is not { } draft) return;
+        if (_draftBase is { } atEdit && BoardEdits.Changed(atEdit, draft) && !ConfirmWindow.Ask(this, BoardText.CancelArrangeQuestion(atEdit))) return;
+
+        _draft = _draftBase = null;
+        _draftSteps = 0;
+        ShowEditMode();
+        Render();
+        FocusLater(EditBoardButton);
     }
 
     /// <summary>
@@ -91,26 +111,39 @@ public partial class BoardWindow
         if (!ReferenceEquals(finished, boards) && !SaveBoards(finished)) return;
 
         _draft = _draftBase = null;
+        _draftSteps = 0;
         ShowEditMode();
         Render();
     }
 
-    /// <summary>What shows in edit mode. Which buttons take a press is <see cref="ApplyButtons"/>'s, as always.</summary>
+    /// <summary>
+    /// What shows while arranging: the banner in the status lines' place (spec §4.2), naming the board and counting
+    /// Done's changes. Which buttons take a press is <see cref="ApplyButtons"/>'s, as always; the lines come back
+    /// through <see cref="RenderLines"/> once arranging ends.
+    /// </summary>
     private void ShowEditMode()
     {
         var editing = Editing;
         PanelFrame.SetShowEditTools(BoardPanels, editing);
 
-        EditBoardButton.Visibility = editing ? Visibility.Collapsed : Visibility.Visible;
-        AddPanelButton.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
-        DoneButton.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        ArrangeBanner.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        if (editing) StateLines.Visibility = Visibility.Collapsed;
+        ArrangeLine.Text = ArrangeBannerText();
+        DoneButton.Content = BoardText.DoneLabel(_draftSteps);
 
         ApplyButtons();
+        RenderLines();
 
-        // After the grid has arranged, not now: a cell has no rectangle until it has been placed, and entering edit
-        // mode changes every panel's height by adding the tools row above it.
+        // After the grid has arranged, not now: a cell has no rectangle until it has been placed.
         Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
     }
+
+    /// <summary>
+    /// The banner's line: how to arrange this board, or, after a Done or tab-click save that failed, why it wasn't
+    /// saved. The banner covers the detail line that would otherwise say so, and a failed save is never silent (V3-S.10).
+    /// </summary>
+    private string ArrangeBannerText() =>
+        _draft is not { } draft ? "" : _boardsNote ?? BoardText.ArrangingLine(draft.Name);
 
     private void OnEditTool(object? sender, PanelToolEventArgs e)
     {
@@ -148,7 +181,7 @@ public partial class BoardWindow
     private void FocusToolLater(string? panelId, PanelTool tool) =>
         FocusPanelLater(panelId, frame => frame.FocusTool(tool));
 
-    /// <summary>Focus on a top bar button once it shows: Edit board and Done hide themselves when pressed.</summary>
+    /// <summary>Focus on a button once the layout has settled: Done and Cancel hide with the banner, and Arrange is disabled while it shows.</summary>
     private void FocusLater(UIElement element) => Dispatcher.BeginInvoke(() => { element.Focus(); }, DispatcherPriority.Loaded);
 
     private FrameworkElement? ViewOf(string? panelId) =>

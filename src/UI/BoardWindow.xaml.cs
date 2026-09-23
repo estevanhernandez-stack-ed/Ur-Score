@@ -356,6 +356,7 @@ public partial class BoardWindow : Window
         PeriodLine.Lead = BoardText.TopLine(live, _anchorSourceId);
         PeriodLine.Ends = BoardText.TopEnds(live, _anchorSourceId);
         AttributionLine.Text = BoardText.Attribution(live);
+        ArrangeLine.Text = ArrangeBannerText();
 
         var chip = StatusChip.StateOf(live.Running, _services.EverStarted, _starting, BoardText.InTrouble(live));
         RenderChip(chip);
@@ -367,7 +368,8 @@ public partial class BoardWindow : Window
             // draw (R3).
             StateLine.Text = BoardText.BookStateLine(unread: _bookProblem is not null);
             DetailLine.Text = _bookProblem ?? boardsProblem ?? _importNote ?? "";
-            StateLines.Visibility = Visibility.Visible;
+            // Arranging keeps the banner in the lines' place (spec §4.2).
+            StateLines.Visibility = Editing ? Visibility.Collapsed : Visibility.Visible;
             return;
         }
 
@@ -376,8 +378,9 @@ public partial class BoardWindow : Window
         StateLine.Text = BoardText.StateLine(live, _services.EverStarted, activity);
         DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem, _failed ? BoardText.UnexpectedDetail : _importNote);
 
-        // BC3: the pair shows only when it has something to say; the card always has the lot.
-        StateLines.Visibility = StatusChip.ShowsLines(true, chip, _failed, DetailLine.Text, live.OldestRemembered is not null)
+        // BC3: the pair shows only when it has something to say; the card always has the lot. While arranging the
+        // banner holds their slot (spec §4.2).
+        StateLines.Visibility = StatusChip.ShowsLines(true, chip, _failed, DetailLine.Text, live.OldestRemembered is not null) && !Editing
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -439,6 +442,18 @@ public partial class BoardWindow : Window
     private void OnTabChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_selectingTab || !ButtonStates().Tabs || BoardTabs.SelectedItem is not BoardTabItem tab || tab.Id == _boardId) return;
+
+        // Spec §4.5: a tab click while arranging saves the draft the way Done does, then switches. A save that fails keeps
+        // arranging on this board, and the redraw puts the tab selection back where it was.
+        if (Editing)
+        {
+            FinishEditing();
+            if (Editing)
+            {
+                Render();
+                return;
+            }
+        }
 
         ShowBoard(tab.Id);
     }
@@ -797,6 +812,9 @@ public partial class BoardWindow : Window
         EditBoardButton.IsEnabled = states.EditBoard;
         AddPanelButton.IsEnabled = states.AddPanel;
         DoneButton.IsEnabled = states.Done;
+
+        // A disabled IsCancel button ignores Esc, so Esc outside arranging does nothing here (BC5).
+        CancelArrangeButton.IsEnabled = states.Cancel;
     }
 
     /// <summary>What every button, tab and tab menu item takes right now, for <see cref="ApplyButtons"/> and the press guards.</summary>

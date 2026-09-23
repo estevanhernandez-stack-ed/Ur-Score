@@ -162,7 +162,7 @@ public class BoardTextTests
     [Fact]
     public void ASavedBoardWithNoPanelsSaysSo() =>
         Assert.Equal(
-            ("This board has no panels yet", "Add panels from the gallery, then arrange them with Edit board.", "Add panel"),
+            ("This board has no panels yet", "Add panels from the gallery, then arrange them with Arrange.", "Add panel"),
             BoardText.EmptyState(BoardEmpty.NoPanels, Clan));
 
     [Fact]
@@ -425,5 +425,30 @@ public class BoardTextTests
         Assert.Equal(BoardEmpty.BookUnread, BoardText.EmptyFor(starters, withPanel, bookUnread: true));
         Assert.Equal(BoardEmpty.BookUnread, BoardText.EmptyFor(StarterBoards.All([], []), withPanel, editing: true, bookUnread: true));
         Assert.Equal(BoardEmpty.None, BoardText.EmptyFor(starters, withPanel, bookUnread: false));
+    }
+
+    [Fact]
+    public void TheArrangeBannerTeachesTheGestures()
+    {
+        Assert.Equal("Arranging \"Battle\" · drag a header to move · drag an edge or corner to resize · ←/→ move",
+            BoardText.ArrangingLine("Battle"));
+    }
+
+    [Fact]
+    public void DoneCountsTheChanges()
+    {
+        Assert.Equal("Done", BoardText.DoneLabel(0));
+        Assert.Equal("Done (3)", BoardText.DoneLabel(3));
+    }
+
+    /// <summary>BC5: "your changes", because ⋯ settings changed while arranging are in the draft too.</summary>
+    [Fact]
+    public void CancelAsksAboutAllTheChangesToTheBoard()
+    {
+        var question = BoardText.CancelArrangeQuestion(new BoardDef("b-1", "Battle", []));
+
+        Assert.Equal("Throw away your changes to the Battle board?", question.Question);
+        Assert.Equal("Throw away", question.DoText);
+        Assert.Equal("Keep arranging", question.CancelButton);
     }
 }

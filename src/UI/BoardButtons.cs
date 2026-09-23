@@ -34,7 +34,7 @@ public static class BoardButtons
     /// only asks about Start/Stop or Test now, and it leaves Delete off; anything that reads DeleteBoard passes the real count.
     /// </param>
     /// <param name="editing">
-    /// Edit mode is on (R8): one draft at a time, so the tab menu and + Board wait for Done, and Edit board gives way
+    /// Arranging is on (R8): one draft at a time, so the tab menu and + Board wait for Done, and Arrange gives way
     /// to + Add panel and Done. The tabs don't, since a tab click saves and switches (BC5). Reading, Stop and the
     /// empty state don't wait.
     /// </param>

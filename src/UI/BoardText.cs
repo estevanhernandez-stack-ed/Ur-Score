@@ -237,6 +237,20 @@ public static class BoardText
         "Delete",
         $"Delete the {board.Name} board");
 
+    /// <summary>The Arrange banner (spec §4.2): what arranging this board is, and how to do it.</summary>
+    public static string ArrangingLine(string boardName) =>
+        $"Arranging \"{boardName}\" · drag a header to move · drag an edge or corner to resize · ←/→ move";
+
+    /// <summary>Done, with how many changes it will save (spec §4.2).</summary>
+    public static string DoneLabel(int changes) => changes == 0 ? "Done" : $"Done ({changes})";
+
+    /// <summary>BC5: asked only when something changed; "your changes", since ⋯ settings changed while arranging are in the draft.</summary>
+    public static Confirm CancelArrangeQuestion(BoardDef board) => new(
+        "Cancel arranging",
+        $"Throw away your changes to the {board.Name} board?",
+        "Throw away",
+        $"Throw away your changes to {board.Name}") { CancelButton = "Keep arranging" };
+
     /// <summary>
     /// A board change that couldn't be written, in plain words. No stack; an unknown IO reason is Windows' own
     /// sentence. Anything that isn't IO says only that it was unexpected: its message was never meant for you.
@@ -308,7 +322,7 @@ public static class BoardText
         : board.Panels.Count == 0 ? BoardEmpty.NoPanels
         : BoardEmpty.None;
 
-    /// <param name="editing">In edit mode an empty board is told to press Done, not Edit board, which is where you are.</param>
+    /// <param name="editing">While arranging, an empty board is told to press Done, not Arrange, which is where you are.</param>
     public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe, bool editing = false)
     {
         var group = recipe is null ? "source" : RecipeWords.Group(recipe);
@@ -328,7 +342,7 @@ public static class BoardText
                 "It comes back once Ur Score can read your score book. The line above says what stopped it.",
                 "Try again"),
             BoardEmpty.NoPanels => ("This board has no panels yet",
-                editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Edit board.",
+                editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Arrange.",
                 "Add panel"),
             _ => ("", "", ""),
         };
