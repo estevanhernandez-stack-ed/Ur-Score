@@ -10,8 +10,9 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 - **Undo, per board.** Ctrl+Z takes back moving, resizing, adding, removing and changing (**Settings**) a panel,
   the last 20 steps for the session. Outside Arrange each change is its own step; while arranging, Ctrl+Z steps
   back through the draft and **Done** folds the whole arrangement into one step, "Arranged Battle". A themed
-  toast at the bottom of the board names the change and offers **Undo** for about six seconds; entering Arrange
-  hides it. A starter tab re-follows your clans again if the board an undo restores still matches what the
+  toast at the bottom of the board names the change and offers **Undo** for about six seconds, while arranging
+  too (there its Undo steps back through the draft); entering Arrange hides a toast from before, and Cancel hides
+  the draft's. Undo never takes back a rename. A starter tab re-follows your clans again if the board an undo restores still matches what the
   starter draws; otherwise the toast says so. Pop-outs are never undone, and deleting a board clears its history.
 
 ## 0.6.1 - 2026-09-23
@@ -19,16 +20,17 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 ### Added
 
 - **Arrange gets Cancel and Esc.** With nothing changed either just leaves; with a change, a themed
-  window asks first, naming the board. **Done** now counts the changes it will save ("Done (3)").
+  window asks first, naming the board. **Done** now counts the changes it will save ("Done (3)"), and shows
+  no count once the draft is back as it was.
   The panel a keyboard is moving shows a cyan focus ring.
 
 ### Changed
 
 - **Edit board is Arrange.** Panels keep their height going in and out — the drag handle, ✕, and a
-  dashed outline are drawn inside the panel's own header instead of adding a row above it. The tabs,
-  **+ Board**, and the tab menu stay on and clickable while arranging: a tab click saves the draft
-  first, the same way Done does, then switches, and a save that fails keeps you on the board and
-  says why, in the banner.
+  dashed outline are drawn inside the panel's own header instead of adding a row above it. The tabs
+  stay clickable while arranging (**+ Board** and the tab menu are off until Done or Cancel): a tab
+  click saves the draft first, the same way Done does, then switches, and a save that fails keeps
+  you on the board and says why, in the banner.
 
 ## 0.6.0 - 2026-09-23
 

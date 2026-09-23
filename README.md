@@ -182,23 +182,25 @@ stat was removed says so and offers **Choose another**.
 header to move it; drag its right edge to change its width, or its bottom-right corner to change its width and
 make it one or two rows tall. With the keyboard, focus one of a panel's buttons and use Left and Right to move it,
 Ctrl+Left and Ctrl+Right to change its width, and Ctrl+Up and Ctrl+Down for one or two rows; the panel a keyboard
-is moving shows a cyan focus ring. **✕** removes a panel, and **+ Add panel** opens the gallery, both in the
-banner. The banner's **Done** saves the draft, counting the changes it will save ("Done (3)"); **Cancel**, or Esc
+is moving shows a cyan focus ring. **✕**, in each panel's header, removes that panel, and **+ Add panel**, in the
+banner, opens the gallery. The banner's **Done** saves the draft, counting the changes it will save ("Done (3)";
+no count once the draft is back as it was); **Cancel**, or Esc
 from anywhere in the window, leaves arranging instead — with nothing changed it just leaves, with a change it
-asks first, in Ur Score's own themed window. The tabs, **+ Board**, and the tab menu stay clickable while
-arranging: clicking another tab saves the draft the same way Done does, then switches, and a save that fails
+asks first, in Ur Score's own themed window. The tabs stay clickable while arranging (**+ Board** and the tab
+menu are off until Done or Cancel): clicking another tab saves the draft the same way Done does, then switches, and a save that fails
 keeps you on the board and says why, in the banner. Closing Ur Score while arranging saves the draft too. Panels
 flow in reading order, so a move or a resize can move the panels after it, and arranging never changes a panel's
 height on the way in or out.
 
-**Undo** is Ctrl+Z, and works any time a board window has focus. Every change to a board — moving or resizing a
+**Undo** is Ctrl+Z, and works any time the board window has focus (a popped-out panel doesn't take it). Every change to a board — moving or resizing a
 panel, adding or removing one, and a panel's **Settings** — can be undone, per board, for as long as Ur Score
 stays open (the last 20, not saved anywhere). Outside Arrange, each change is its own undo step. While arranging,
 Ctrl+Z steps back through the draft one change at a time, and **Done** counts them ("Done (3)"); pressing Done
 folds the whole arrangement into a single step, so one Ctrl+Z after Done puts the board back exactly as it was
 before you started arranging. A themed toast at the bottom of the board says what an undo is offered or what it
 did — "Arranged Battle · Undo", "Changed Past battles · Undo", "Undid: Removed Battle race" — and shows for about
-six seconds; a new change replaces it. Entering Arrange hides any toast on screen. A save that fails leaves the
+six seconds; a new change replaces it. It shows while arranging too, where its Undo steps back through the draft;
+entering Arrange hides any toast from before, and Cancel hides the draft's. A rename is never undone. A save that fails leaves the
 undo history as it was and the toast says so, redacted like every other problem line. Undoing back onto a board a
 starter tab still matches re-follows your clans again; if your sources changed in between, the toast says so
 instead: "Restored, but Battle no longer follows your clans." Pop-outs are never undone, and deleting a board
@@ -264,7 +266,7 @@ touching by hand:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. There is no checkbox for this. |
-| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Recipes**; no reason to edit it by hand. It takes effect the next time you open Ur Score, and reading still happens only while the window is open. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
+| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Recipes**; no reason to edit it by hand. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet, and reading still happens only while the window is open. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
 | `activeRecipe` | *(none)* | Nothing reads it. It is left over from before recipes had sources of their own; which sources are on lives in `sources.json`. Leave it alone. |
 
 Beside those, in the same folder: `recipes\` (the recipe files you imported and their state),
