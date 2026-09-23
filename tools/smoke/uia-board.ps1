@@ -153,9 +153,9 @@ function Complete-EditMode($board) {
 # Unverified as of Task 9 (2026-09-23): the controller ruling for that task forbade launching the app or running a
 # walk, so nobody has confirmed by hand yet that Find-InUrWindows (which walks Get-UrWindows) actually reaches into
 # a WPF Popup's own HWND the way it reaches a menu or a pop-out window. Treat this as unproven until the first real
-# walk-top-bar run: if step 3 ("A click opens the card") times out into the throw below instead of passing, give the
-# Popup's Border an AutomationId and walk $AE::RootElement children by process id for it instead, and update this
-# comment with whichever one worked.
+# walk-top-bar run: if step 3 ("A click opens the card") times out into the throw below instead of passing, walk
+# $AE::RootElement children by process id for PauseResumeButton itself (a Button, so it has a UIA peer; a Border has
+# none and is never found by id), and update this comment with whichever one worked.
 function Invoke-PauseResume([int]$seconds = 10) {
     Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'StartStopButton')
     $deadline = (Get-Date).AddSeconds($seconds)
