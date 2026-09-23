@@ -460,4 +460,17 @@ public class BoardTextTests
         Assert.Equal("Throw away", question.DoText);
         Assert.Equal("Keep arranging", question.CancelButton);
     }
+
+    [Fact]
+    public void TheUndoToastSaysWhatWasDoneAndWhatUndoingDid()
+    {
+        var board = new BoardDef("b-starter-battle", "Battle", [], Follows: "battle");
+
+        Assert.Equal("Removed Battle race", BoardText.Changed("Removed", "Battle race"));
+        Assert.Equal("Arranged Battle", BoardText.Arranged("Battle"));
+        Assert.Equal("Undid: Removed Battle race", BoardText.Undone(new UndoStep(board, "Removed Battle race"), unfollowed: false));
+
+        // Spec §5.4: an undo that can't make a starter tab follow again says so.
+        Assert.Equal("Restored, but Battle no longer follows your clans.", BoardText.Undone(new UndoStep(board, "Moved Race"), unfollowed: true));
+    }
 }

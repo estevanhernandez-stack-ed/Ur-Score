@@ -207,6 +207,17 @@
                 <Button x:Name="EmptyStateButton" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Center" Margin="0,16,0,0"
                         Click="OnEmptyStateClick" />
             </StackPanel>
+            <!-- The undo toast (spec §5.3): themed, bottom centre, one at a time, about six seconds. A polite live region, so a
+                 screen reader hears it; its Undo is a Tab stop while it shows, and Ctrl+Z works with or without it. -->
+            <Border x:Name="UndoToast" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16"
+                    Background="{DynamicResource RowBgBrush}" BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1" CornerRadius="8" Padding="14,8">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="UndoToastText" VerticalAlignment="Center" Foreground="{DynamicResource WhiteBrush}"
+                               AutomationProperties.LiveSetting="Polite" AutomationProperties.AutomationId="UndoToastText" />
+                    <Button x:Name="UndoToastButton" Content="Undo" Style="{StaticResource FlatButton}" Margin="12,0,0,0"
+                            Foreground="{DynamicResource CyanBrush}" Click="OnUndoToastClick" AutomationProperties.Name="Undo" />
+                </StackPanel>
+            </Border>
         </Grid>
     </DockPanel>
 </Window>

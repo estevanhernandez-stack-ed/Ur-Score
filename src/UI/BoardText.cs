@@ -251,6 +251,25 @@ public static class BoardText
     /// </summary>
     public static string ArrangingNote(string boardName, string note) => $"Arranging \"{boardName}\" · {note}";
 
+    /// <summary>What a board change was, for the undo toast: "Removed Battle race" (BC6, spec §5.3).</summary>
+    public static string Changed(string verb, string title) => $"{verb} {title}";
+
+    /// <summary>A whole arranging session, which Done makes one undo step (spec §5.2).</summary>
+    public static string Arranged(string boardName) => $"Arranged {boardName}";
+
+    /// <summary>
+    /// What an undo did. A starter tab re-follows only when the restored board matches what its starter draws now
+    /// (Following.cs); when the sources changed in between it can't, and the toast says so (spec §5.4).
+    /// </summary>
+    public static string Undone(UndoStep step, bool unfollowed) =>
+        unfollowed ? $"Restored, but {step.Before.Name} no longer follows your clans." : $"Undid: {step.What}";
+
+    /// <summary>
+    /// A failed undo leaves the history as it was (spec §5.5); the detail line already carries the redacted reason
+    /// (<see cref="BoardsNotSaved"/>), so the toast points at it rather than repeating it.
+    /// </summary>
+    public const string UndoNotSaved = "That undo wasn't saved; the line above says why.";
+
     /// <summary>BC5: asked only when something changed; "your changes", since ⋯ settings changed while arranging are in the draft.</summary>
     public static Confirm CancelArrangeQuestion(BoardDef board) => new(
         "Cancel arranging",

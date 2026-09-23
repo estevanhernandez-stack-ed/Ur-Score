@@ -21,9 +21,6 @@ public partial class BoardWindow
     /// </summary>
     private BoardDef? _draftBase;
 
-    /// <summary>How many changes the draft holds, for Done (n). Stage 3 replaces this with the draft's undo count.</summary>
-    private int _draftSteps;
-
     private EditHintAdorner? _hints;
 
     /// <summary>The panel being resized by its grip, which grip, the cell it started from and the height of its first row. Null when not.</summary>
@@ -57,7 +54,7 @@ public partial class BoardWindow
         if (!ButtonStates().EditBoard) return;
 
         _draft = _draftBase = ShownBoard(_services.Boards);
-        _draftSteps = 0;
+        _draftUndo.ClearAll();
         ShowEditMode();
         Render();
 
@@ -87,8 +84,9 @@ public partial class BoardWindow
         if (!Editing || _draft is not { } draft) return;
         if (_draftBase is { } atEdit && BoardEdits.Changed(atEdit, draft) && !ConfirmWindow.Ask(this, BoardText.CancelArrangeQuestion(atEdit))) return;
 
+        // Cancel discards the draft's history with the draft (spec §5.2); nothing reaches the saved one.
         _draft = _draftBase = null;
-        _draftSteps = 0;
+        _draftUndo.ClearAll();
         ShowEditMode();
         Render();
         FocusLater(EditBoardButton);
@@ -99,19 +97,33 @@ public partial class BoardWindow
     /// <see cref="SaveBoards"/> (<see cref="BoardEdits.Finish"/>), with every pop-out as the saved boards have it now.
     /// A changed draft of a tab whose starter went empty meanwhile is saved as a board of its own. One that isn't
     /// changed writes nothing. A save that fails stays in edit mode, so the arrangement isn't lost.
+    /// <para>
+    /// BC6: a save that changed something folds the whole session into one step on the saved history, "Arranged
+    /// Battle" (spec §5.2). The step holds the board as saved just before the draft replaced it (R3) — not
+    /// <see cref="ShownBoard"/>, which is the draft itself while arranging. A draft kept as a board of its own, its
+    /// starter gone empty meanwhile, had no saved board to go back to and pushes nothing.
+    /// </para>
     /// </summary>
     private void FinishEditing()
     {
         if (_draft is not { } draft) return;
 
         var boards = _services.Boards;
+        var before = boards.FirstOrDefault(b => b.Id == draft.Id);
         var finished = _draftBase is { } atEdit
             ? BoardEdits.Finish(boards, atEdit, draft)
             : BoardEdits.Replace(boards, BoardEdits.CarryPopOuts(draft, boards));
-        if (!ReferenceEquals(finished, boards) && !SaveBoards(finished)) return;
+        var changed = !ReferenceEquals(finished, boards);
+        if (changed && !SaveBoards(finished)) return;
 
         _draft = _draftBase = null;
-        _draftSteps = 0;
+        _draftUndo.ClearAll();
+        if (changed && before is not null)
+        {
+            _undo.Push(before, BoardText.Arranged(before.Name));
+            ShowToast(BoardText.Arranged(before.Name), canUndo: true);
+        }
+
         ShowEditMode();
         Render();
     }
@@ -129,7 +141,7 @@ public partial class BoardWindow
         ArrangeBanner.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
         if (editing) StateLines.Visibility = Visibility.Collapsed;
         ArrangeLine.Text = ArrangeBannerText();
-        DoneButton.Content = BoardText.DoneLabel(_draftSteps);
+        DoneButton.Content = BoardText.DoneLabel(_draft is { } draft ? _draftUndo.Count(draft.Id) : 0);
 
         ApplyButtons();
         RenderLines();
@@ -162,7 +174,7 @@ public partial class BoardWindow
             case PanelTool.Remove:
                 e.Handled = true;
                 var next = _draft is { } shown ? BoardEdits.FocusAfterRemove(shown, def.Id) : null;
-                ChangeBoard(board => BoardEdits.RemovePanel(board, def.Id));
+                ChangeBoard(board => BoardEdits.RemovePanel(board, def.Id), BoardText.Changed("Removed", PanelTitle(def)));
 
                 // A neighbour's ⋯, never its Remove: a button clicks on every repeated Enter, and the draft is saved on close (R8).
                 FocusToolLater(next, PanelTool.Settings);
@@ -275,7 +287,7 @@ public partial class BoardWindow
 
         if (step != 0 && !control)
         {
-            ChangeBoard(board => BoardEdits.MoveBy(board, panel.Id, step));
+            ChangeBoard(board => BoardEdits.MoveBy(board, panel.Id, step), BoardText.Changed("Moved", PanelTitle(panel)));
             FocusPanelLater(panel.Id);
             e.Handled = true;
             return;
@@ -285,7 +297,7 @@ public partial class BoardWindow
         {
             var at = Array.IndexOf(Sizes, panel.Size.Span);
             var wanted = Sizes[Math.Clamp((at < 0 ? 1 : at) + step, 0, Sizes.Length - 1)];
-            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Span = wanted }));
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Span = wanted }), BoardText.Changed("Resized", PanelTitle(panel)));
             FocusPanelLater(panel.Id);
             e.Handled = true;
             return;
@@ -293,7 +305,7 @@ public partial class BoardWindow
 
         if (control && e.Key is Key.Up or Key.Down)
         {
-            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Tall = e.Key == Key.Down }));
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Tall = e.Key == Key.Down }), BoardText.Changed("Resized", PanelTitle(panel)));
             FocusPanelLater(panel.Id);
             e.Handled = true;
         }
@@ -387,9 +399,9 @@ public partial class BoardWindow
 
         var span = BoardLayout.SpanFor(shown.Width, BoardPanels.ActualWidth, BoardPanels.Gap);
         var rows = grip.Corner ? BoardLayout.RowsFor(shown.Height, grip.RowHeight) : (PanelGrid.GetTall(BoardPanels.Children[grip.Index]) ? 2 : 1);
-        var panelId = draft.Panels[grip.Index].Id;
+        var panel = draft.Panels[grip.Index];
 
-        ChangeBoard(board => BoardEdits.Resize(board, panelId, new PanelSize(span, rows > 1)));
+        ChangeBoard(board => BoardEdits.Resize(board, panel.Id, new PanelSize(span, rows > 1)), BoardText.Changed("Resized", PanelTitle(panel)));
     }
 
     private void OnBoardDragOver(object sender, DragEventArgs e)
@@ -418,7 +430,11 @@ public partial class BoardWindow
         // Still editing by then, or the move would be saved straight to the board.
         Dispatcher.BeginInvoke(() =>
         {
-            if (Editing) ChangeBoard(board => BoardEdits.MoveTo(board, panelId, index));
+            if (_draft?.Panels.FirstOrDefault(p => p.Id == panelId) is not { } panel) return;
+            ChangeBoard(board => BoardEdits.MoveTo(board, panelId, index), BoardText.Changed("Moved", PanelTitle(panel)));
         }, DispatcherPriority.Background);
     }
+
+    /// <summary>A panel's title as its header shows it, naming the change in the undo toast (BC6, spec §5.3).</summary>
+    private string PanelTitle(PanelDef panel) => PanelGallery.TitleOf(panel, _services.CurrentBoard());
 }

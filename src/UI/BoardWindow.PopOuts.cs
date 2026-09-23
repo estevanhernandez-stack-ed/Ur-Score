@@ -59,7 +59,8 @@ public partial class BoardWindow
             ? PopOutPlacement.Clamp(last, areas)
             : PopOutPlacement.Default(BoardRect(), _popOuts.Count, areas, size.Width, size.Height);
 
-        ChangeBoard(board => BoardEdits.PopOut(board, def.Id, rect));
+        // Not undoable (spec §5.1): Bring back is its undo.
+        ChangeBoard(board => BoardEdits.PopOut(board, def.Id, rect), what: null);
 
         // The ⧉ pressed went with the redraw; focus goes to the slot's Bring back, the keyboard path home.
         FocusToolLater(def.Id, PanelTool.PopOut);

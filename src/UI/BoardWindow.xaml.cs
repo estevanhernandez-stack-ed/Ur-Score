@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -28,6 +29,16 @@ public partial class BoardWindow : Window
 
     private readonly AppServices _services;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(20) };
+
+    /// <summary>How long the undo toast shows (spec §5.3: about six seconds).</summary>
+    private readonly DispatcherTimer _toastClock = new() { Interval = TimeSpan.FromSeconds(6) };
+
+    /// <summary>
+    /// The board the undo toast speaks for, and whether it offers Undo. Its Undo shows only while that board is on
+    /// screen, so a toast carried over a tab switch (Done by tab click) can't undo a different board (BC6).
+    /// </summary>
+    private string? _toastBoardId;
+    private bool _toastCanUndo;
 
     /// <summary>What is on the grid now, in order: each panel's definition, its view and its automation id.</summary>
     private readonly List<(PanelDef Def, FrameworkElement View, string AutomationId)> _panels = [];
@@ -109,10 +120,16 @@ public partial class BoardWindow : Window
         // At open, from last session's pictures (V3-S.6): the icon doesn't wait for the first read.
         ApplyIcon(_services.WindowIcon);
         _clock.Tick += (_, _) => RenderLines();
+        _toastClock.Tick += (_, _) =>
+        {
+            _toastClock.Stop();
+            UndoToast.Visibility = Visibility.Collapsed;
+        };
         Loaded += OnLoaded;
         Closed += (_, _) =>
         {
             _clock.Stop();
+            _toastClock.Stop();
             _services.Changed -= Render;
             _services.IconChanged -= ApplyIcon;
         };
@@ -206,6 +223,7 @@ public partial class BoardWindow : Window
         var boards = _services.Boards;
         var board = ShownBoard(boards);
         _boardId = board.Id;
+        ShowToastUndo();
 
         RenderTabs(boards, board);
         RenderEmpty(board);
@@ -542,6 +560,10 @@ public partial class BoardWindow : Window
         var remaining = BoardEdits.Delete(boards, board.Id);
         if (ReferenceEquals(remaining, boards) || !SaveBoards(remaining)) return;
 
+        // Its history goes with it (spec §5.1); the delete itself isn't undoable, it asked first.
+        _undo.Clear(board.Id);
+        if (_toastBoardId == board.Id) HideToast();
+
         ShowBoard(remaining[0].Id);
         FocusShownTab();
     }
@@ -678,12 +700,58 @@ public partial class BoardWindow : Window
         FocusLater(StartStopButton);
     }
 
-    /// <summary>F5 is ⟳, through the same gate (spec §3.5). Pop-outs have no ⟳ and don't take it.</summary>
+    /// <summary>
+    /// F5 is ⟳, through the same gate (spec §3.5). Pop-outs have no ⟳ and don't take it. Ctrl+Z is undo on the board
+    /// on screen, toast or not (BC6, spec §5.3).
+    /// </summary>
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            e.Handled = true;
+            UndoLast();
+            return;
+        }
+
         if (e.Key != Key.F5 || Keyboard.Modifiers != ModifierKeys.None) return;
         e.Handled = true;
         OnTestNowClick(TestNowButton, new RoutedEventArgs());
+    }
+
+    /// <summary>
+    /// Shows the undo toast for the board on screen, replacing any other (spec §5.3); a live region raises its change
+    /// for a screen reader. The clock restarts, so each toast gets its full six seconds.
+    /// </summary>
+    private void ShowToast(string text, bool canUndo)
+    {
+        _toastBoardId = _boardId;
+        _toastCanUndo = canUndo;
+        UndoToastText.Text = text;
+        ShowToastUndo();
+        UndoToast.Visibility = Visibility.Visible;
+        var peer = UIElementAutomationPeer.FromElement(UndoToastText) ?? UIElementAutomationPeer.CreatePeerForElement(UndoToastText);
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+
+        _toastClock.Stop();
+        _toastClock.Start();
+    }
+
+    private void HideToast()
+    {
+        _toastClock.Stop();
+        _toastCanUndo = false;
+        UndoToast.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>The toast's Undo shows only while the board it speaks for is on screen (BC6).</summary>
+    private void ShowToastUndo() =>
+        UndoToastButton.Visibility = _toastCanUndo && _toastBoardId == _boardId ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>The toast's Undo is Ctrl+Z, for the board it named; on any other board it does nothing (BC6).</summary>
+    private void OnUndoToastClick(object sender, RoutedEventArgs e)
+    {
+        if (!_toastCanUndo || _toastBoardId != _boardId) return;
+        UndoLast();
     }
 
     /// <summary>Pause or Resume, from the status card (BC2); Pause lasts until Ur Score closes (BC7).</summary>
