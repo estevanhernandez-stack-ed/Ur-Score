@@ -3,6 +3,17 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.7 - 2026-09-22
+
+### Fixed
+
+- **The import preview names every clan.** A profile or clans-list source showed its recipe's slug
+  (`pet-sim-99-profile`); it now shows the recipe's name.
+- **The import's stats line counts battles apart.** "Imported 2,054 readings and 62 finished battles",
+  as the preview counts them, instead of adding the battles to the readings.
+- **Promotion check keeps the other clan's lowest.** When your clan's read brought nothing back, the
+  panel hid the other clan's lowest as well; it is still true, so it now shows beside the note.
+
 ## 0.5.6 - 2026-09-22
 
 ### Added
