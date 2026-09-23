@@ -36,13 +36,20 @@ public static class ScoreBookModel
             ? ""
             : $"{pending} lines are waiting to be written, and {dropped} readings were dropped because the file couldn't be written.";
 
-    /// <summary>What Export stats did, said beside the button: the counts from the file's own manifest, and the file's name.</summary>
-    public static string ExportedLine(BookPackManifest manifest, string fileName)
+    /// <summary>
+    /// What Export stats did, said beside the button: the counts from the file's own manifest, and the file's name.
+    /// With a setup, the recipes, clans and boards it carried are said too, so the line matches what the other PC's
+    /// preview will offer.
+    /// </summary>
+    public static string ExportedLine(BookPackManifest manifest, string fileName, SetupPack? setup)
     {
         var readings = manifest.Readings == 1 ? "1 reading" : $"{manifest.Readings:N0} readings";
         var finals = manifest.Finals == 1 ? "1 finished battle" : $"{manifest.Finals:N0} finished battles";
-        return $"Exported {readings} and {finals} to {fileName}. Import it on the other PC from Setup › Score book.";
+        var setupPart = setup is null ? "" : $", with {Count(setup.Recipes.Count, "recipe")}, {Count(setup.Sources.Count, "clan")} and {Count(setup.Boards.Count, "board")},";
+        return $"Exported {readings} and {finals}{setupPart} to {fileName}. Import it on the other PC from Setup › Score book.";
     }
+
+    private static string Count(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 
     public static string Size(long bytes) =>
         bytes < 1024 ? $"{bytes} bytes"

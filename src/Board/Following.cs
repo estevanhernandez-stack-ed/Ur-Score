@@ -75,4 +75,18 @@ public static class Following
 
     /// <summary>A following board as <c>boards.json</c> keeps it: its id, its starter's name, and no panels.</summary>
     private static BoardDef Entry(BoardDef built) => new(built.Id, built.Name, [], built.Follows);
+
+    /// <summary>
+    /// What <c>boards.json</c> holds after a setup import replaces it with <paramref name="imported"/>: those boards,
+    /// plus an <see cref="Entry"/> for every following tab <see cref="All"/> already draws from <paramref name="saved"/>
+    /// and <paramref name="starters"/> — shown or hidden, since deleting one was never an import's to do (spec §2:
+    /// "Follows and the starter boards are left alone"). A following board an imported one already claims the id of
+    /// is not added twice.
+    /// </summary>
+    public static IReadOnlyList<BoardDef> KeepFollowing(IReadOnlyList<BoardDef>? saved, IReadOnlyList<StarterBoard> starters, IReadOnlyList<BoardDef> imported)
+    {
+        var importedIds = imported.Select(b => b.Id).ToHashSet(StringComparer.Ordinal);
+        var kept = All(saved, starters).Where(b => b.Follows is not null && !importedIds.Contains(b.Id)).Select(Entry);
+        return [.. imported, .. kept];
+    }
 }

@@ -2,8 +2,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Core;
 using Microsoft.Win32;
 using static Labs626.UrScore.UI.TextLines;
 
@@ -62,15 +64,18 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
         await TransferAsync("Writing the file…", "That file could not be written", async () =>
         {
-            var manifest = await Task.Run(() => _services.ExportStats(dialog.FileName));
-            return (ScoreBookModel.ExportedLine(manifest, Path.GetFileName(dialog.FileName)), "", false);
+            // The pack ExportStats wrote comes back with the manifest, so the line's counts — recipes, clans and
+            // boards — are the file's own and match what the other PC's preview will offer.
+            var exported = await Task.Run(() => _services.ExportStats(dialog.FileName));
+            return (ScoreBookModel.ExportedLine(exported.Manifest, Path.GetFileName(dialog.FileName), exported.Setup), "", false);
         });
     }
 
     /// <summary>
     /// Imports another PC's stats: the file Export stats made there, or, for a folder somebody copied by hand, a month
-    /// file inside it. Readings are matched to this PC's sources by recipe and clan, rewritten to this PC's ids, and
-    /// appended; anything already here is skipped, and a clan this PC doesn't follow is named rather than guessed at.
+    /// file inside it. A stats file from 0.5.5, or one with no setup, merges its readings as before. One with a setup
+    /// (0.5.6 on) opens a preview first (<see cref="ImportPreviewWindow"/>): nothing is written until it is ticked and
+    /// confirmed, then <see cref="SetupMerge.Apply"/> writes the setup and the stats merge follows, in that order.
     /// </summary>
     private async void OnImportStatsClick(object sender, RoutedEventArgs e)
     {
@@ -87,8 +92,57 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
         await TransferAsync("Reading that file…", "That file could not be imported", async () =>
         {
-            var outcome = await Task.Run(() => BookImport.RunFile(dialog.FileName, _services));
-            return (outcome.Message, outcome.Problem, outcome.Added > 0);
+            if (!dialog.FileName.EndsWith(BookPack.Extension, StringComparison.OrdinalIgnoreCase))
+            {
+                var outcome = await Task.Run(() => BookImport.RunFile(dialog.FileName, _services));
+                return (outcome.Message, outcome.Problem, outcome.Added > 0);
+            }
+
+            var opened = await Task.Run(() => BookPack.Open(dialog.FileName));
+            try
+            {
+                if (opened.Folder is null) return ("", opened.Problem, false);
+
+                var fileName = Path.GetFileName(dialog.FileName);
+                if (opened.Setup is null)
+                {
+                    // A 0.5.5 file, or a stats-only export: the stats merge as before, no preview needed.
+                    var statsOnly = await Task.Run(() => BookImport.Run(opened.Folder, _services));
+                    return (statsOnly.Message, statsOnly.Problem, statsOnly.Added > 0);
+                }
+
+                var plan = SetupMerge.Plan(opened.Setup, _services.SetupWriter.Here, opened.Manifest!.Readings, opened.Manifest.Finals);
+                var preview = new ImportPreviewWindow(plan, opened.Manifest, fileName) { Owner = Window.GetWindow(this) };
+                if (preview.ShowDialog() != true || preview.TickedKeys is not { } ticked) return ("Nothing imported.", "", false);
+
+                // Apply runs synchronously on this (UI) thread, but it writes files and can take a moment; the busy
+                // line said "Reading that file…" until now, which is stale the instant the yes was clicked.
+                StatsTransferLine.Text = "Importing that setup…";
+                // …and the assignment alone never paints it: Apply would run to completion on this same thread
+                // before the render pass ever came round. Background is BELOW Render, so yielding at it hands the
+                // dispatcher back long enough for the new text to reach the screen first.
+                await Dispatcher.Yield(DispatcherPriority.Background);
+                var applied = SetupMerge.Apply(plan, ticked, _services.SetupWriter, DateTimeOffset.Now);
+                if (applied.FailedStep is not null)
+                {
+                    _services.AddTrail($"SETUP NOT IMPORTED AT {applied.FailedStep.ToUpperInvariant()}: {applied.FailureType}");
+                    // A failed step is the page's "something went wrong" case: it belongs on the problem line, not
+                    // the muted said-line, same as every other failure this page reports.
+                    // Redacted on the way out, like every line this window shows: Apply already cut the data
+                    // folder out of the message it carries, and this takes out any saved key value, which is the
+                    // half that only the key store can know about (spec §4: the redacted message on screen).
+                    return ("", _services.Redactor.Redact(ImportPreviewModel.AfterLine(applied, new BookImportOutcome(0, ""))), false);
+                }
+
+                var stats = ticked.Contains("stats")
+                    ? await Task.Run(() => BookImport.Run(opened.Folder, _services))
+                    : new BookImportOutcome(0, "");
+                return (ImportPreviewModel.AfterLine(applied, stats), stats.Problem, stats.Added > 0);
+            }
+            finally
+            {
+                BookPack.Discard(opened);
+            }
         });
     }
 

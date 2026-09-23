@@ -151,6 +151,40 @@ public class FollowingTests
         Assert.Single(Following.Shown(saved, Both()), b => b.Id == "b-starter-alts");
     }
 
+    /// <summary>
+    /// A setup import replacing a pristine PC's boards: what it brought plus every following tab the starters would
+    /// draw here now, so an import never costs you a starter tab (spec §2). The following ones carry no panels — the
+    /// same shape any following entry keeps in <c>boards.json</c>.
+    /// </summary>
+    [Fact]
+    public void KeepFollowingAddsEveryFollowingStarterBesideWhatWasImported()
+    {
+        var starters = Both();
+        IReadOnlyList<BoardDef> imported = [new BoardDef("b-00000001", "Rivals", [])];
+
+        var kept = Following.KeepFollowing(null, starters, imported);
+
+        Assert.Equal(3, kept.Count);
+        Assert.Equal("Rivals", kept[0].Name);
+        Assert.Equal(
+            new (string, string?)[] { ("b-starter-battle", "battle"), ("b-starter-alts", "alts") },
+            kept.Skip(1).Select(b => (b.Id, b.Follows)).ToArray());
+        Assert.All(kept.Skip(1), b => Assert.Empty(b.Panels));
+    }
+
+    /// <summary>A following tab already in <c>boards.json</c> is kept once, not doubled, alongside what the import brought.</summary>
+    [Fact]
+    public void KeepFollowingKeepsAFollowingBoardAlreadySavedWithoutDoublingIt()
+    {
+        var starters = Both();
+        IReadOnlyList<BoardDef> saved = [new BoardDef("b-starter-battle", "Battle", [], Follows: "battle")];
+        IReadOnlyList<BoardDef> imported = [new BoardDef("b-00000001", "Rivals", [])];
+
+        var kept = Following.KeepFollowing(saved, starters, imported);
+
+        Assert.Equal(new[] { "b-00000001", "b-starter-battle" }, kept.Select(b => b.Id).ToArray());
+    }
+
     [Fact]
     public void BoardsSavedBeforeFollowingStayExactlyAsSavedAndNoTabIsAdded()
     {

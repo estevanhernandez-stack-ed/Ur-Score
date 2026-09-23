@@ -48,6 +48,11 @@ public sealed class SourceStore(string path)
 
     public static string DefaultPath => AppPaths.Default.Sources;
 
+    /// <summary>The file's JSON for a list of sources, and back. Public so a stats file can carry a setup's clans in the same shape.</summary>
+    public static string Serialize(IReadOnlyList<Source> sources) => JsonSerializer.Serialize(sources, Options);
+
+    public static IReadOnlyList<Source> Parse(string json) => JsonSerializer.Deserialize<List<Source>>(json, Options) ?? [];
+
     /// <summary>A missing or hand-broken file is no sources. <see cref="LoadResult"/> says which it was.</summary>
     public IReadOnlyList<Source> Load() => LoadResult().Sources;
 
@@ -97,7 +102,7 @@ public sealed class SourceStore(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(sources, Options));
+        File.WriteAllText(temp, Serialize(sources));
         File.Move(temp, path, overwrite: true);
     }
 }

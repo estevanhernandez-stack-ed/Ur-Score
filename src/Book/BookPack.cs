@@ -1,26 +1,39 @@
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
+using Labs626.UrScore.Core;
 
 namespace Labs626.UrScore.Book;
 
 /// <summary>What a stats file says about itself: one line, read before anything in it is trusted.</summary>
-public sealed record BookPackManifest(int V, DateTimeOffset TakenAt, string App, int Readings, int Finals);
+public sealed record BookPackManifest(int V, DateTimeOffset TakenAt, string App, int Readings, int Finals, bool Setup = false);
 
 /// <summary>
-/// A stats file opened for reading: the folder it was unpacked into, and its manifest, or the one sentence that says
-/// why it could not be. <see cref="BookPack.Discard"/> removes the folder when the import is done.
+/// What an export wrote: the file's own manifest and the setup that went into it, or null when none did. The pack
+/// is handed back rather than rebuilt by the caller for its line, so the counts the line says are the counts the
+/// file holds and cannot drift from them.
 /// </summary>
-public sealed record BookPackOpened(string? Folder, BookPackManifest? Manifest, string Problem = "");
+public sealed record BookExport(BookPackManifest Manifest, SetupPack? Setup);
+
+/// <summary>
+/// A stats file opened for reading: the folder it was unpacked into, its manifest, and the setup it carried (or
+/// null for a stats-only file), or the one sentence that says why it could not be opened at all.
+/// <see cref="BookPack.Discard"/> removes the folder when the import is done.
+/// </summary>
+public sealed record BookPackOpened(string? Folder, BookPackManifest? Manifest, SetupPack? Setup, string Problem = "");
 
 /// <summary>
 /// The stats file: Export stats writes one, Import stats reads one (2026-09-22, the owner's second machine).
 /// <para>
 /// It holds the score book — the month files and the recipe texts the book keeps by hash — under a
-/// <c>scorebook</c> folder, and a one-line <see cref="ManifestName"/>. Nothing else goes in. Not the keys, which
-/// are bound to this user on this machine and could not be read anywhere else; not sources, boards or settings,
-/// which are the setup rather than the stats and whose transfer is a design of its own (V3-S.46). So the file is
-/// exactly as private as the book, which holds your own accounts alone by construction (<see cref="LineBuilder"/>).
+/// <c>scorebook</c> folder, and a one-line <see cref="ManifestName"/>. Not the keys, which are bound to this user
+/// on this machine and could not be read anywhere else, and never <c>StartOnOpen</c>, a per-machine choice. So the
+/// file is exactly as private as the book, which holds your own accounts alone by construction
+/// (<see cref="LineBuilder"/>).
+/// </para>
+/// <para>
+/// Since 2026-09-22 it also carries the setup (<see cref="SetupPack"/>) under <c>setup/</c>; <c>v: 2</c>. A
+/// <c>v: 1</c> file is 0.5.5's stats-only file and opens as such.
 /// </para>
 /// <para>
 /// Written through a temp file and one move, like every other writer here, so a save that fails leaves no
@@ -30,7 +43,7 @@ public sealed record BookPackOpened(string? Folder, BookPackManifest? Manifest, 
 /// </summary>
 public static class BookPack
 {
-    public const int Version = 1;
+    public const int Version = 2;
 
     public const string ManifestName = "manifest.json";
 
@@ -43,8 +56,11 @@ public static class BookPack
     /// <summary>The name a save dialog offers: dated, so two exports a week apart are two files.</summary>
     public static string FileName(DateTimeOffset at) => $"ur-score-stats-{at:yyyy-MM-dd}{Extension}";
 
-    /// <summary>Writes the book at <paramref name="bookRoot"/> into a stats file at <paramref name="path"/>. Returns what the manifest says.</summary>
-    public static BookPackManifest Write(string bookRoot, string path, string appVersion, DateTimeOffset now)
+    /// <summary>
+    /// Writes the book at <paramref name="bookRoot"/> into a stats file at <paramref name="path"/>, with
+    /// <paramref name="setup"/> alongside it under <c>setup/</c> when one is given. Returns what the manifest says.
+    /// </summary>
+    public static BookPackManifest Write(string bookRoot, string path, string appVersion, DateTimeOffset now, SetupPack? setup = null)
     {
         var readings = 0;
         var finals = 0;
@@ -57,8 +73,11 @@ public static class BookPack
             }
         }
 
-        var manifest = new BookPackManifest(Version, now, appVersion, readings, finals);
+        var manifest = new BookPackManifest(Version, now, appVersion, readings, finals, setup is not null);
         var temp = path + ".tmp";
+        var staging = setup is not null
+            ? Path.Combine(Path.GetTempPath(), "626labs.ur-score", "export-" + Guid.NewGuid().ToString("N"))
+            : null;
         try
         {
             using (var zip = ZipFile.Open(temp, ZipArchiveMode.Create))
@@ -76,6 +95,17 @@ public static class BookPack
                         zip.CreateEntryFromFile(file, $"{BookFolder}/{relative}", CompressionLevel.Optimal);
                     }
                 }
+
+                if (setup is not null && staging is not null)
+                {
+                    setup.ToFolder(staging);
+                    var setupFolder = Path.Combine(staging, SetupPack.Folder);
+                    foreach (var file in Directory.EnumerateFiles(setupFolder, "*", SearchOption.AllDirectories))
+                    {
+                        var relative = Path.GetRelativePath(setupFolder, file).Replace(Path.DirectorySeparatorChar, '/');
+                        zip.CreateEntryFromFile(file, $"{SetupPack.Folder}/{relative}", CompressionLevel.Optimal);
+                    }
+                }
             }
 
             File.Move(temp, path, overwrite: true);
@@ -83,6 +113,7 @@ public static class BookPack
         finally
         {
             if (File.Exists(temp)) File.Delete(temp);
+            if (staging is not null) Remove(staging);
         }
 
         return manifest;
@@ -114,7 +145,8 @@ public static class BookPack
                 return Refuse(folder, $"That stats file was exported by a newer Ur Score ({manifest.App}). Update this one, then import it.");
             }
 
-            return new BookPackOpened(folder, manifest);
+            var setup = manifest.V >= 2 && manifest.Setup ? SetupPack.FromFolder(folder) : null;
+            return new BookPackOpened(folder, manifest, setup);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or UnauthorizedAccessException)
         {
@@ -131,7 +163,7 @@ public static class BookPack
     private static BookPackOpened Refuse(string folder, string problem)
     {
         Remove(folder);
-        return new BookPackOpened(null, null, problem);
+        return new BookPackOpened(null, null, null, problem);
     }
 
     private static void Remove(string folder)

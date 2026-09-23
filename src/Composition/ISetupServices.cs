@@ -1,3 +1,4 @@
+using Labs626.UrScore.Board;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
 using Labs626.UrScore.Recipes;
@@ -11,6 +12,9 @@ namespace Labs626.UrScore.Composition;
 /// </summary>
 public interface ISetupServices
 {
+    /// <summary>Where every file lives on this machine.</summary>
+    AppPaths Paths { get; }
+
     /// <summary>Installed recipes as last loaded, in file order.</summary>
     IReadOnlyList<InstalledRecipe> Installed { get; }
 
@@ -36,6 +40,12 @@ public interface ISetupServices
 
     IScoreBook Book { get; }
 
+    /// <summary>What boards.json holds — following entries and your own boards — as last loaded; empty while there is no file.</summary>
+    IReadOnlyList<BoardDef> SavedBoards { get; }
+
+    /// <summary>The stores a setup import writes through (<see cref="Core.SetupMerge.Apply"/>).</summary>
+    Core.ISetupWriter SetupWriter { get; }
+
     ScoreBookReader Reader { get; }
 
     bool ReaderLoaded { get; }
@@ -45,10 +55,10 @@ public interface ISetupServices
 
     /// <summary>
     /// Writes the score book to a stats file at <paramref name="path"/> for another PC to import (<see cref="Book.BookPack"/>),
-    /// pending lines flushed first so the file holds every reading taken. Returns what the file's manifest says. Off the UI
-    /// thread: it reads the whole book.
+    /// pending lines flushed first so the file holds every reading taken. Returns what the file's manifest says and the setup
+    /// that went into it, which is null when there was nothing to carry. Off the UI thread: it reads the whole book.
     /// </summary>
-    Book.BookPackManifest ExportStats(string path);
+    Book.BookExport ExportStats(string path);
 
     bool Running { get; }
 
@@ -85,6 +95,9 @@ public interface ISetupServices
 
     /// <summary>Saves <c>sources.json</c>, applies it to the running watches at once, and raises <see cref="Changed"/>.</summary>
     void SaveSources(IReadOnlyList<Source> sources);
+
+    /// <summary>Replaces the saved boards wholesale: sanitized to your own ids, written once, redrawn. The setup import's step 4.</summary>
+    void SaveImportedBoards(IReadOnlyList<BoardDef> saved);
 
     /// <summary>
     /// Writes <c>settings.json</c> and raises <see cref="Changed"/>. Throws when it can't be written, and nothing

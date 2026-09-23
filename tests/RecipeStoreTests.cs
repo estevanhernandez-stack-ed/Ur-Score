@@ -205,4 +205,22 @@ public class RecipeStoreTests : IDisposable
 
     [Fact]
     public void NoDirectoryMeansNoRecipes() => Assert.Empty(new RecipeStore(_dir).LoadAll().Recipes);
+
+    /// <summary>A recipe's state as JSON, callable without a file: what a stats file carries a setup's ticks as.</summary>
+    [Fact]
+    public void AStateRoundTripsThroughItsJson()
+    {
+        var state = new RecipeState(
+            Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") },
+            CounterNames: ["Diamonds"],
+            SentFieldMetrics: ["threat-gap"],
+            ExcludedAccountIds: ["9ad5e605-6b41-478c-add3-b916a31a5ab2"]);
+
+        var back = RecipeStore.ParseState(RecipeStore.SerializeState(state));
+
+        Assert.Equal(state.StatChoices["value"], back.StatChoices["value"]);
+        Assert.Equal(state.SavedCounterNames, back.SavedCounterNames);
+        Assert.Equal(state.FieldMetricKeys, back.FieldMetricKeys);
+        Assert.Equal(state.Excluded, back.Excluded);
+    }
 }

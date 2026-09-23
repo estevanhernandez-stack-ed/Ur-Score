@@ -3,17 +3,21 @@ using System.IO;
 namespace UrScore.Tests;
 
 /// <summary>
-/// The fence around <c>boards.json</c>: one writer, and it writes only what the privacy rule has been through.
+/// The fence around turning boards into JSON: two named writers, and each writes only what the privacy rule
+/// has been through.
 /// <para>
-/// R17 says an account id is kept in <c>boards.json</c> only when it is one of yours, and
-/// <c>BoardDefs.Sanitize</c> is the whole of that rule. A rule enforced at one call site is only worth
-/// something while there is one call site — a second writer added later would not fail a test, would not look
-/// wrong in review, and would put a stranger's id on disk quietly. This is the test that makes adding one
-/// visible (S2-P.11).
+/// R17 says an account id is kept in written boards only when it is one of yours, and <c>BoardDefs.Sanitize</c>
+/// is the whole of that rule. <c>BoardsFile</c> is the score book's one <c>boards.json</c> writer;
+/// <c>BoardJson</c> is the same shape held on its own, so a setup folder's copy of your boards
+/// (<c>SetupPack</c>) can be written without naming <c>BoardsFile</c> at all (setup-transfer design
+/// 2026-09-22, §1). Two ways to name a writer means two places the rule could be skipped, and a third one
+/// added later — naming either type from somewhere new — would not fail a test, would not look wrong in
+/// review, and would put a stranger's id on disk quietly. This is the test that makes adding one visible
+/// (S2-P.11, widened when <c>BoardJson</c> gave boards a second name to write under).
 /// </para>
 /// <para>
 /// WHAT THIS BUYS, stated plainly for the same reason <c>ReportPolicy</c> states it: this catches an ACCIDENT,
-/// a later change that saves boards from somewhere closer to the UI because the single writer was not obvious.
+/// a later change that saves boards from somewhere closer to the UI because a writer's name was not obvious.
 /// It does not stop a determined author, since a name reached through reflection defeats a source scan. The
 /// adversary here is a future refactor, not a hostile contributor.
 /// </para>
@@ -21,22 +25,28 @@ namespace UrScore.Tests;
 public class BoardsFileFenceTests
 {
     [Fact]
-    public void OnlyAppServicesWritesTheBoardsFileAndOnlySanitizedBoards()
+    public void BoardsJsonIsWrittenFromTwoNamedPlacesAndBothSanitize()
     {
         var src = Path.Combine(RepoRoot(), "src");
         var files = Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
             .Select(f => (Relative: Path.GetRelativePath(src, f), Text: Code(File.ReadAllLines(f))))
             .ToList();
 
-        // The type itself, anywhere: its own file, and the one service allowed to hold one.
+        // Either type's name, anywhere: its own file, and the one place each is used to turn boards into JSON.
         Assert.Equal(
-            new[] { Path.Combine("Board", "BoardsFile.cs"), Path.Combine("Composition", "AppServices.cs") },
-            files.Where(f => f.Text.Contains("BoardsFile", StringComparison.Ordinal))
+            new[]
+            {
+                Path.Combine("Board", "BoardJson.cs"), Path.Combine("Board", "BoardsFile.cs"),
+                Path.Combine("Composition", "AppServices.cs"), Path.Combine("Core", "SetupPack.cs"),
+            },
+            files.Where(f => f.Text.Contains("BoardsFile", StringComparison.Ordinal) || f.Text.Contains("BoardJson", StringComparison.Ordinal))
                 .Select(f => f.Relative).Order(StringComparer.Ordinal).ToArray());
 
-        // And the rule itself: where it is declared, and the single place it is applied.
+        // And the rule itself: where it is declared, and the two places it is applied — boards.json's one
+        // writer, and SetupPack, which applies it again on the way into a setup folder rather than trust that
+        // the boards it was handed are already clean.
         Assert.Equal(
-            new[] { Path.Combine("Board", "BoardDefs.cs"), Path.Combine("Composition", "AppServices.cs") },
+            new[] { Path.Combine("Board", "BoardDefs.cs"), Path.Combine("Composition", "AppServices.cs"), Path.Combine("Core", "SetupPack.cs") },
             files.Where(f => f.Text.Contains("Sanitize", StringComparison.Ordinal))
                 .Select(f => f.Relative).Order(StringComparer.Ordinal).ToArray());
 
@@ -46,6 +56,27 @@ public class BoardsFileFenceTests
         var app = files.Single(f => string.Equals(f.Relative, Path.Combine("Composition", "AppServices.cs"), StringComparison.Ordinal)).Text;
         Assert.Contains("var clean = BoardDefs.Sanitize(", app, StringComparison.Ordinal);
         Assert.Contains("_boardsFile.Save(clean,", app, StringComparison.Ordinal);
+
+        // AppServices now has two writers — SaveBoards and SaveImportedBoards — and both Contains checks above
+        // are satisfied the moment EITHER one calls Save(clean,. A second writer that sidesteps Sanitize (saves
+        // the argument it was handed, unsanitized) would still pass both lines above. Every call this file makes
+        // to _boardsFile.Save( must be a call to _boardsFile.Save(clean, — same count, no exceptions.
+        var everyCall = CountOccurrences(app, "_boardsFile.Save(");
+        var sanitizedCall = CountOccurrences(app, "_boardsFile.Save(clean,");
+        Assert.True(everyCall > 0, "expected at least one _boardsFile.Save( call in AppServices.cs");
+        Assert.Equal(everyCall, sanitizedCall);
+    }
+
+    /// <summary>How many times <paramref name="token"/> occurs in <paramref name="text"/>, non-overlapping.</summary>
+    private static int CountOccurrences(string text, string token)
+    {
+        var count = 0;
+        for (var index = text.IndexOf(token, StringComparison.Ordinal); index >= 0; index = text.IndexOf(token, index + token.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     /// <summary>

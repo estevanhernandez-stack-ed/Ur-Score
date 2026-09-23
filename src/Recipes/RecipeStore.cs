@@ -98,6 +98,11 @@ public sealed class RecipeStore(string directory)
         WriteIndented = true,
     };
 
+    /// <summary>A state's JSON, and back, in the shape the state file uses. Public so a stats file can carry a setup's ticks.</summary>
+    public static string SerializeState(RecipeState state) => JsonSerializer.Serialize(state, Options);
+
+    public static RecipeState ParseState(string json) => JsonSerializer.Deserialize<RecipeState>(json, Options) ?? new RecipeState();
+
     public static string DefaultDirectory => AppPaths.Default.Recipes;
 
     public RecipeStoreLoad LoadAll()
