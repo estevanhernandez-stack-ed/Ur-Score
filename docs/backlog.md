@@ -85,6 +85,16 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
   Total 238), confirming no drift since the last entry. The held-apart 0.3.2 section still reconciles to its own 52
   OPEN, 37 FIXED, 2 GONE.
 
+- Recounted 2026-09-23, task 17 of the board-chrome plan (undo's paper and release 0.6.2): V3-S.48 opened for BC4's
+  always-on-drag question, re-asked now that undo exists (spec §5.6) — the owner's call between the two candidates.
+  One row in, none out: OPEN 9 → 10 (you'd notice 5 → 6, V3-S.48 in), FIXED unchanged at 205, GONE unchanged at 25,
+  Total 239 → 240. A script recount over the stated bounds ("## Open, and you'd notice" up to "# 0.3.2", rows
+  matching `^- ` with a `**STATUS` marker, first bold marker per row, this block's own three summary bullets
+  excluded) agreed with the figure stated above before this row (OPEN 9, FIXED 205, GONE 25, Total 239) and again
+  after adding V3-S.48 (OPEN 10, FIXED 205, GONE 25, Total 240). The "Open, and you'd notice" summary list now
+  names exactly the six rows marked "you'd notice" and OPEN. The held-apart 0.3.2 section still reconciles to its
+  own 52 OPEN, 37 FIXED, 2 GONE.
+
 ## Open, and you'd notice
 
 - V3-S.20 Clan membership comes only from battle contributions, so accounts cannot be placed between battles (roster design cycle).
@@ -92,6 +102,7 @@ Line format: status — what it is — where — source. IDs (S1-6.8 and so on) 
 - V3-S.24 Event loadout testing as its own session, not built: events reward different enchants, books and potions, so each is tested on its own.
 - V3-S.41 A held-back number leaves a trace on this machine's screen only, and the phone is the premise.
 - V3-S.36 The clan numbers describe ONE of your clans, the best placed. With alts in two clans you cannot get alerts for both, because each number has one fixed id.
+- V3-S.48 The always-on drag question, re-asked now that undo exists: hold a header to pick it up, or always-on drag with the undo toast.
 
 ## Open, code tidiness or tests only
 
@@ -420,6 +431,13 @@ v0.3.0 installed from the GitHub release into RoRoRo 1.28 (Store) and walked: al
   **The fix separates the two trees.** `Directory.Build.props` sets `BaseIntermediateOutputPath` to `obj/designtime/` when `DesignTimeBuild` is true — the global property design-time builds carry — and excludes `obj/**` from the default compile glob, because with two trees the SDK excludes only the one a given build uses and the other's generated `AssemblyInfo.cs` becomes source (CS0579, seen and fixed). Confirmed live: Dev Kit re-evaluated the moment the props file changed and its next design-time build landed in `obj/designtime/Debug`. **Two routes tried and rejected first:** `-p:BaseIntermediateOutputPath` in the response file moves the command-line side instead, and it stops `dotnet test` after its restore step with no tests run — tried, watched, reverted. And the `obj` exclusion, which the owner ran, is harmless and can stay but does nothing for this. The cleanup target and the rsp stay too; each removes a real path. `BuildFenceTests` now pins the props file the way it pins the rsp. **Still not closed on the strength of an afternoon** — the deal stands: days of ordinary work with no CS5001. But for the first time the cause is a process that was watched, not a theory that fit.
   **Seen twice more the same evening, with the split in place** — both right after an edit to a TEST file. Checked: the split holds for the app project (Dev Kit's 47 design-time files are under `obj/designtime/`, `obj/Debug` untouched for half an hour), but `tests/obj/` has no `designtime` folder, and the WPF temp `*_wpftmp.csproj` is written to the PROJECT ROOT by every build regardless of where its intermediates go — where a project-system file watcher can see a new `.csproj` appear and try to load it. That is the remaining suspect and it is a suspect, not a watched process. The cheap mitigation is a workspace file-watcher exclusion for `**/*_wpftmp.csproj`, and `.vscode/` is gitignored here, so it is a local setting for the owner rather than a commit. — Ur-Score.csproj, Directory.Build.props, Directory.Build.rsp, tests/BuildFenceTests.cs — found 2026-09-20, root-caused twice 2026-09-21, the second time correctly, and still not quiet.
 
+- V3-S.48 **OPEN** — you'd notice: **the always-on drag question, re-asked now that undo exists (BC4, spec §5.6).**
+  A panel can only be dragged or resized inside Arrange; outside it the header carries no drag affordance at all.
+  Two candidates the owner is to choose between: **hold a header about 450 ms to pick it up** without entering
+  Arrange, or **always-on header drag**, with the undo toast (§5.3) as the safety net a stray drag would need
+  either way. Hover-only grips were rejected in 17cbf91 and reopening either candidate needs that ruling reversed.
+  Nothing here is designed yet — docs/2026-09-23-board-chrome-design.md §5.6 — found closing Stage 3 of the
+  board-chrome plan (task 17), 2026-09-23.
 - V3-S.47 **FIXED** 2026-09-23 — you'd notice: two board-editing defects found going into the board-chrome work. **A tall
   panel didn't stay tall:** dragging the corner of a two-row panel and letting go at the height it had made it one row,
   because the drag measured the pointer against a two-row span instead of one. **A keyboard move stopped after one

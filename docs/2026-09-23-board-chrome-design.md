@@ -278,8 +278,13 @@ as it was — a `BoardDef`, an immutable record, so a snapshot is a reference.
 
 - **Arranging:** Ctrl+Z pops the draft's own stack, one step at a time. On **Done**, the whole session collapses to
   **one** entry on the board's stack: the board as it was when Arrange was pressed. Cancel discards the draft stack.
-- **Not arranging:** ⋯ settings and ✕ Remove save at once today (the live branch of `ChangeBoard`); each is now one
+  ✕ Remove only exists while arranging (§4.3: it is drawn in the panel's tools in place of ⧉, which is hidden while
+  editing), so a Remove is covered by this bullet, not the one below.
+- **Not arranging:** ⋯ settings changes save at once today (the live branch of `ChangeBoard`); each is now one
   entry. Ctrl+Z restores the snapshot through the same path, which saves (`SaveBoards`).
+
+  *Corrected 2026-09-23, task 17: this bullet used to also say ✕ Remove saves at once outside Arrange. It doesn't —
+  ✕ Remove is drawn only while arranging (§4.3) and was already covered by the Arranging bullet above.*
 
 ### 5.3 The toast
 

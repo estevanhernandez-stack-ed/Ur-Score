@@ -145,6 +145,31 @@ try {
     $names = @(Get-TabNames (Get-BoardWindow))
     Check '9d ...and the board goes' ($names.Count -eq 2 -and $names -notcontains 'Rivals copy') ($names -join ', ')
 
+    # 12. Undo (BC6): outside Arrange, a Remove from the tools is undone by Ctrl+Z; a whole Arrange is one step.
+    $before = @(Get-PanelIds (Get-BoardWindow))
+    Enter-EditMode (Get-BoardWindow)
+    Move-PanelEarlier (Get-BoardWindow) 'RacePanel1'
+    Move-PanelEarlier (Get-BoardWindow) 'RacePanel1'
+    Complete-EditMode (Get-BoardWindow)
+    $toast = Line (Get-BoardWindow) 'UndoToastText'
+    Check '12 Done says the arrangement can be undone' ($toast -match '^Arranged ') $toast
+    (Get-BoardWindow).SetFocus()
+    [System.Windows.Forms.SendKeys]::SendWait('^z')
+    Start-Sleep -Milliseconds 1000
+    Check '12b Ctrl+Z puts the whole arrangement back' ((@(Get-PanelIds (Get-BoardWindow)) -join ',') -eq ($before -join ',')) "$(@(Get-PanelIds (Get-BoardWindow)) -join ',')"
+
+    # 12c. While arranging, Ctrl+Z steps back through the draft only.
+    Enter-EditMode (Get-BoardWindow)
+    Move-PanelEarlier (Get-BoardWindow) 'RacePanel1'
+    [System.Windows.Forms.SendKeys]::SendWait('^z')
+    Start-Sleep -Milliseconds 800
+    Check '12c Ctrl+Z while arranging undoes the draft move' ((@(Get-PanelIds (Get-BoardWindow)) -join ',') -eq ($before -join ',')) "$(@(Get-PanelIds (Get-BoardWindow)) -join ',')"
+    # DoneButton's AutomationProperties.Name is fixed to "Done" in XAML, so .Current.Name never sees the "(n)"
+    # count; Get-AllTexts reads the TextBlock WPF draws for the button's Content instead (controller ruling).
+    $doneTexts = @(Get-AllTexts (Find-ByAutomationId (Get-BoardWindow) 'DoneButton'))
+    Check '12d ...and Done is back to no changes' ($doneTexts -contains 'Done') ($doneTexts -join ',')
+    Complete-EditMode (Get-BoardWindow)
+
     # 10. A restart keeps it all.
     Stop-UrScoreFromBoard
     $board = Start-UrScore

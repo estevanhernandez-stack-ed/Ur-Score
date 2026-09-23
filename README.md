@@ -191,6 +191,19 @@ keeps you on the board and says why, in the banner. Closing Ur Score while arran
 flow in reading order, so a move or a resize can move the panels after it, and arranging never changes a panel's
 height on the way in or out.
 
+**Undo** is Ctrl+Z, and works any time a board window has focus. Every change to a board — moving or resizing a
+panel, adding or removing one, and a panel's **Settings** — can be undone, per board, for as long as Ur Score
+stays open (the last 20, not saved anywhere). Outside Arrange, each change is its own undo step. While arranging,
+Ctrl+Z steps back through the draft one change at a time, and **Done** counts them ("Done (3)"); pressing Done
+folds the whole arrangement into a single step, so one Ctrl+Z after Done puts the board back exactly as it was
+before you started arranging. A themed toast at the bottom of the board says what an undo is offered or what it
+did — "Arranged Battle · Undo", "Changed Past battles · Undo", "Undid: Removed Battle race" — and shows for about
+six seconds; a new change replaces it. Entering Arrange hides any toast on screen. A save that fails leaves the
+undo history as it was and the toast says so, redacted like every other problem line. Undoing back onto a board a
+starter tab still matches re-follows your clans again; if your sources changed in between, the toast says so
+instead: "Restored, but Battle no longer follows your clans." Pop-outs are never undone, and deleting a board
+clears its history.
+
 **Pop out** puts a panel in its own always-on-top window. It keeps updating with the board, and
 its saved position is restored on the next start. Use the pop-out's **Return to the board** button
 or **Bring back** on its board slot to return it; **Alt+F4** on that pop-out also returns it.
