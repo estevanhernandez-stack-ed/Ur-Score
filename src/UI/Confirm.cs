@@ -16,4 +16,7 @@ public sealed record Confirm(string Title, string Question, string DoText, strin
     /// so a question answered without reading it changes nothing.
     /// </summary>
     public const string CancelText = "Cancel";
+
+    /// <summary>The safe answer's words: "Cancel", unless a question needs them plainer ("Keep running").</summary>
+    public string CancelButton { get; init; } = CancelText;
 }

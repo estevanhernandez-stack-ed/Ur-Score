@@ -158,4 +158,33 @@ public class ConfirmsTests
                 text => Assert.False(text.Any(char.IsSurrogate), text));
         }
     }
+
+    private static InstalledRecipe WithState(Recipe recipe, RecipeState state) => new(recipe, "", state);
+
+    /// <summary>Closing asks only while something reaches RoRoRo: a send tick or a field metric, on a recipe with a clan switched on.</summary>
+    [Fact]
+    public void ClosingAsksOnlyWhileSomethingIsSending()
+    {
+        var sendOn = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") });
+        var showOnly = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: false) });
+        var fieldOn = new RecipeState(SentFieldMetrics: ["points"]);
+        var clan = ClanSource("s-00000001", "CCGP");
+
+        Assert.False(BoardText.Sending([WithState(Clan, showOnly)], [clan]));
+        Assert.True(BoardText.Sending([WithState(Clan, sendOn)], [clan]));
+        Assert.True(BoardText.Sending([WithState(Clan, fieldOn)], [clan]));
+        Assert.False(BoardText.Sending([WithState(Clan, sendOn)], [ClanSource("s-00000001", "CCGP", enabled: false)]));
+        Assert.False(BoardText.Sending([WithState(Clan, sendOn)], []));
+    }
+
+    [Fact]
+    public void TheCloseQuestionSaysAlertsStopAndKeepRunningIsTheSafeAnswer()
+    {
+        var q = BoardText.CloseWhileSending;
+
+        Assert.Equal("Close Ur Score", q.Title);
+        Assert.Equal("Close Ur Score? While it is closed nothing is read or recorded, and nothing reaches RoRoRo, so your phone alerts stop.", q.Question);
+        Assert.Equal(("Close", "Close Ur Score", "Keep running"), (q.DoText, q.DoName, q.CancelButton));
+        Assert.Equal(Confirm.CancelText, BoardText.DeleteBoardQuestion(new BoardDef("b-1", "Rivals", [])).CancelButton);
+    }
 }

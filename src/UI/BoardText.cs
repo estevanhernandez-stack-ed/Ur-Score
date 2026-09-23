@@ -163,6 +163,22 @@ public static class BoardText
         boardsProblem ?? note ?? DetailLine(live, budgetWarning);
 
     /// <summary>What Delete… asks before the board goes, for the themed confirmation to draw.</summary>
+    /// <summary>
+    /// Whether closing would silence something: a recipe with a send tick or a field metric on and at least one of its
+    /// clans switched on. Only then does closing the board ask; with nothing sending it closes as it always has.
+    /// </summary>
+    public static bool Sending(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources) =>
+        installed.Any(i =>
+            (i.State.StatChoices.Values.Any(c => c.Send) || i.State.FieldMetricKeys.Count > 0)
+            && sources.Any(s => s.Enabled && string.Equals(s.Recipe, i.Recipe.Slug, StringComparison.Ordinal)));
+
+    /// <summary>Closing the board ends Ur Score; while something is sending, that silences the phone alerts, so it asks first.</summary>
+    public static Confirm CloseWhileSending { get; } = new(
+        "Close Ur Score",
+        "Close Ur Score? While it is closed nothing is read or recorded, and nothing reaches RoRoRo, so your phone alerts stop.",
+        "Close",
+        "Close Ur Score") { CancelButton = "Keep running" };
+
     public static Confirm DeleteBoardQuestion(BoardDef board) => new(
         "Delete board",
         $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",

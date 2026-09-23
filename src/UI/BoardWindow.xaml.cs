@@ -760,4 +760,22 @@ public partial class BoardWindow : Window
         BoardIcon.Source = image;
         BoardIcon.Visibility = PictureFile.SlotVisibility(icon.HasSlot, image is not null);
     }
+
+    /// <summary>
+    /// Closing the board ends Ur Score. While something is sending, that silences the phone alerts, so it asks first,
+    /// and Keep running cancels the close before edit mode's or the pop-outs' own Closing handlers run. Nothing sending,
+    /// or Windows ending the session: it closes as it always has.
+    /// </summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!App.EndingSession
+            && BoardText.Sending(_services.Installed, _services.Sources)
+            && !ConfirmWindow.Ask(this, BoardText.CloseWhileSending))
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnClosing(e);
+    }
 }
