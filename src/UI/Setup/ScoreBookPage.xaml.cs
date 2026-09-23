@@ -128,7 +128,10 @@ public partial class ScoreBookPage : UserControl, ISetupPage
                     _services.AddTrail($"SETUP NOT IMPORTED AT {applied.FailedStep.ToUpperInvariant()}: {applied.FailureType}");
                     // A failed step is the page's "something went wrong" case: it belongs on the problem line, not
                     // the muted said-line, same as every other failure this page reports.
-                    return ("", ImportPreviewModel.AfterLine(applied, new BookImportOutcome(0, "")), false);
+                    // Redacted on the way out, like every line this window shows: Apply already cut the data
+                    // folder out of the message it carries, and this takes out any saved key value, which is the
+                    // half that only the key store can know about (spec §4: the redacted message on screen).
+                    return ("", _services.Redactor.Redact(ImportPreviewModel.AfterLine(applied, new BookImportOutcome(0, ""))), false);
                 }
 
                 var stats = ticked.Contains("stats")

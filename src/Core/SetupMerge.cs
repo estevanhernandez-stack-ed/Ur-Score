@@ -305,9 +305,9 @@ public static class SetupMerge
     /// <para>
     /// The run is taken up to the next quote rather than the next space, because a BCL file-IO message quotes its
     /// path ("Access to the path 'X' is denied.") and because erring long errs towards saying too little, which is
-    /// the safe direction for a privacy rule. Key VALUES are <see cref="Recipes.Redactor"/>'s job and are not this
-    /// method's: nothing <see cref="Apply"/> calls reads a key, so a message from here carries a path or a name
-    /// from the plan, never a secret.
+    /// the safe direction for a privacy rule. Key VALUES are <see cref="Recipes.Redactor"/>'s job and not this
+    /// method's — it is pure core and cannot reach the key store — so the page runs the line this message ends up
+    /// in through that as well, and the two halves together are what "redacted" means here.
     /// </para>
     /// </summary>
     internal static string Redact(string message, string dataRoot)
