@@ -146,20 +146,23 @@ public class BoardButtonsTests
     }
 
     [Fact]
-    public void WhileEditingOnlyTheDraftsBoardIsReachable()
+    public void WhileArrangingTheTabsStillSwitchAndOnlyTheBoardCommandsWait()
     {
-        // R8: one draft at a time, so the tabs, + Board and the tab menu wait for Done, and Edit board is Done.
+        // BC5 and spec §4.5: a tab click saves the draft and switches, so the tabs stay on; + Board and the tab menu
+        // still wait, and Cancel exists only while arranging.
         var states = BoardButtons.For(loaded: true, running: false, starting: false, testing: false, importing: false, boards: 2, editing: true);
 
         Assert.False(states.EditBoard);
         Assert.True(states.AddPanel);
         Assert.True(states.Done);
-        Assert.False(states.Tabs);
+        Assert.True(states.Cancel);
+        Assert.True(states.Tabs);
         Assert.False(states.AddBoard);
         Assert.False(states.RenameBoard);
         Assert.False(states.DuplicateBoard);
         Assert.False(states.DeleteBoard);
         Assert.False(states.BoardMenu);
+        Assert.False(BoardButtons.For(true, false, false, false, false, editing: false).Cancel);
     }
 
     [Fact]

@@ -15,7 +15,8 @@ public readonly record struct BoardButtonStates(
     bool BoardMenu = true,
     bool EditBoard = true,
     bool AddPanel = false,
-    bool Done = false);
+    bool Done = false,
+    bool Cancel = false);
 
 /// <summary>
 /// The board's buttons are disabled for exactly the time a press would be ignored, and never longer. Stop is
@@ -33,8 +34,9 @@ public static class BoardButtons
     /// only asks about Start/Stop or Test now, and it leaves Delete off; anything that reads DeleteBoard passes the real count.
     /// </param>
     /// <param name="editing">
-    /// Edit mode is on (R8): one draft at a time, so the tabs, + Board and the tab menu wait for Done, and Edit board
-    /// gives way to + Add panel and Done. Reading, Stop and the empty state don't wait.
+    /// Edit mode is on (R8): one draft at a time, so the tab menu and + Board wait for Done, and Edit board gives way
+    /// to + Add panel and Done. The tabs don't, since a tab click saves and switches (BC5). Reading, Stop and the
+    /// empty state don't wait.
     /// </param>
     /// <remarks>
     /// <c>BoardMenu</c> is ⋯ beside the tabs, which opens the tab's own menu (backlog V3-S.8). It takes a press for
@@ -45,14 +47,15 @@ public static class BoardButtons
         TestNow: loaded && !starting && !testing,
         EmptyState: !importing,
         DeleteBoard: boards > 1 && !editing,
-        Tabs: !editing,
+        Tabs: true,
         AddBoard: !editing,
         RenameBoard: !editing,
         DuplicateBoard: !editing && (selectedBoard is null || BoardEdits.CanDuplicate(selectedBoard)),
         BoardMenu: !editing,
         EditBoard: !editing,
         AddPanel: editing,
-        Done: editing);
+        Done: editing,
+        Cancel: editing);
 
     /// <summary>
     /// Whether the board starts reading by itself as it opens (plan A33). Off unless you turned it on, and then only
