@@ -9,6 +9,10 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+    # The tag reaches every script as data through $env:TAG, never pasted into the script's source: a tag
+    # name may contain ' ; $ ( and would otherwise run as code in a job holding a write token.
+    env:
+      TAG: ${{ github.ref_name }}
 
     steps:
       - name: Checkout
@@ -24,7 +28,7 @@ jobs:
       - name: Tag matches manifest and csproj
         shell: pwsh
         run: |
-          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          $tag = $env:TAG.TrimStart('v')
           $manifest = (Get-Content manifest.json -Raw | ConvertFrom-Json).version
           $csproj = ([xml](Get-Content Ur-Score.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
           if ($manifest -ne $tag -or $csproj -ne $tag) { throw "tag $tag, manifest.json $manifest, csproj $csproj must match" }
@@ -42,7 +46,7 @@ jobs:
       # the build because build-plugin.ps1 clears artifacts/.
       - name: Release notes from the CHANGELOG
         shell: pwsh
-        run: ./build/release-notes.ps1 -Version ('${{ github.ref_name }}'.TrimStart('v'))
+        run: ./build/release-notes.ps1 -Version ($env:TAG.TrimStart('v'))
 
       - name: Show artifacts
         shell: pwsh
@@ -61,7 +65,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          $tag = '${{ github.ref_name }}'
+          $tag = $env:TAG
           # Every recipe in recipes/, not a list that goes stale: the setup guide links to
           # releases/latest/download/<recipe>, and a recipe added later must ride the next release by itself.
           $recipes = @(Get-ChildItem 'recipes/*.recipe.json' | ForEach-Object { $_.FullName })

@@ -321,33 +321,46 @@ public class SharedAccountsTests
     /// next caller waited a full spacing for a request that had gone nowhere (S1-4.2). A request that LEFT and
     /// then failed still counts, because it did reach the server and the spacing exists to protect the server.
     /// <para>
-    /// Timing-based, so the numbers are chosen with room: spacing 400 ms, the cancel at 200 ms. Under the old
-    /// code the third request cannot start before 600 ms from the first; under the new one it starts at 400.
-    /// The assertion accepts up to 520, which is 80 ms of slack one way and 80 ms clear of the old answer.
+    /// On the manual clock, so no runner's scheduling can move it: it once ran on the real clock with 80 ms of
+    /// slack, and GitHub's runners broke it both ways on 2026-09-23 (706 ms, then 363 ms). Spacing 400 ms, the
+    /// cancel at 200: the third request must leave at exactly 400, where the old code held it until 600.
     /// </para>
     /// </summary>
     [Fact]
     public async Task ARequestCancelledWhileWaitingItsTurnDoesNotSpaceTheNextOne()
     {
         var inner = new CountingTransport();
-        var spacing = TimeSpan.FromMilliseconds(400);
-        var transport = new SpacedTransport(inner, TimeProvider.System, spacing);
+        var time = new ManualTime(Start);
+        var transport = new SpacedTransport(inner, time, TimeSpan.FromMilliseconds(400));
         var headers = new Dictionary<string, string>();
         var host = new Uri("https://one.example/a");
 
-        await transport.GetAsync(host, headers, "first", CancellationToken.None);
-        var firstDone = Stopwatch.GetTimestamp();
+        async Task Until(Func<bool> condition)
+        {
+            for (var i = 0; i < 500 && !condition(); i++) await Task.Delay(10);
+            Assert.True(condition(), "timed out waiting on the transport");
+        }
 
-        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => transport.GetAsync(host, headers, "cancelled", cancel.Token));
+        await transport.GetAsync(host, headers, "first", CancellationToken.None);
+
+        using var cancel = new CancellationTokenSource();
+        var cancelled = transport.GetAsync(host, headers, "cancelled", cancel.Token);
+        await Until(() => time.Waiting == 1);
+        time.Advance(TimeSpan.FromMilliseconds(200));
+        cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
         Assert.Single(inner.Starts);
 
-        await transport.GetAsync(host, headers, "third", CancellationToken.None);
-        var third = inner.Starts.Last().At;
+        var third = transport.GetAsync(host, headers, "third", CancellationToken.None);
+        await Until(() => time.Waiting == 1);
+        time.Advance(TimeSpan.FromMilliseconds(199));
+        Assert.False(third.IsCompleted, "the third request left before the spacing was up");
+        Assert.Single(inner.Starts);
 
-        var gap = Stopwatch.GetElapsedTime(firstDone, third);
-        Assert.True(gap >= spacing - TimeSpan.FromMilliseconds(30), $"the third request started too soon: {gap.TotalMilliseconds:F0} ms");
-        Assert.True(gap <= TimeSpan.FromMilliseconds(520), $"the cancelled wait still spaced the next request: {gap.TotalMilliseconds:F0} ms");
+        time.Advance(TimeSpan.FromMilliseconds(1));
+        var finished = await Task.WhenAny(third, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.True(finished == third, "the cancelled wait still spaced the next request: it did not leave at 400 ms");
+        Assert.Equal(2, inner.Starts.Count);
     }
 
     [Fact]
