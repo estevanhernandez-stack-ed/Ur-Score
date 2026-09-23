@@ -58,7 +58,7 @@ try {
         Invoke-Element (Get-Button $setup 'Export stats to a file for another PC')
         Complete-FileDialog '^Export stats to a file$' $exportFile
         $exported = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^Exported ' 30
-        Check '4b Export stats writes one file and says what went into it' ((Test-Path $exportFile) -and $exported -match '^Exported \d[\d,]* readings? and \d[\d,]* finished battles? to ur-score-stats-smoke\.zip') "exists=$(Test-Path $exportFile); '$exported'"
+        Check '4b Export stats writes one file and says what went into it' ((Test-Path $exportFile) -and $exported -match '^Exported \d[\d,]* readings? and \d[\d,]* finished battles?, with \d+ recipes?, \d+ clans? and \d+ boards?, to ur-score-stats-smoke\.zip') "exists=$(Test-Path $exportFile); '$exported'"
 
         $setup = Get-SetupWindow
         Invoke-Element (Get-Button $setup 'Import stats from another PC''s file')
@@ -75,8 +75,10 @@ try {
         Invoke-Element (Get-Button $setup 'Export stats to a file for another PC')
         $setupFile = Join-Path $exportDir 'ur-score-everything-smoke.zip'
         Complete-FileDialog '^Export stats to a file$' $setupFile
-        $exportedAll = Wait-Line (Get-SetupWindow) 'StatsTransferLine' 'with 1 recipe' 30
-        Check '4d Export stats counts the setup in its line' ($exportedAll -match 'with 1 recipe, 1 clan and \d+ boards?') "'$exportedAll'"
+        # 'with 1 recipe' alone would risk matching the FIRST export's line (4b), still on screen until this
+        # second export's own line lands; wait for a line that names this export's own file instead.
+        $exportedAll = Wait-Line (Get-SetupWindow) 'StatsTransferLine' 'ur-score-everything-smoke\.zip' 30
+        Check '4d Export stats counts the setup in its line' ($exportedAll -match 'with 1 recipe, 1 clan and \d+ boards?, to ur-score-everything-smoke\.zip') "'$exportedAll'"
 
         Stop-UrScoreFromBoard
         # S1-16.1: Move-UrDataAside refuses a second aside while the first backup exists, so the second, fresh

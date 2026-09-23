@@ -35,9 +35,9 @@ other file an older version left behind, and anything RoRoRo owns — alerts liv
 
 **Versioning, honestly.** The manifest goes to `v: 2`. A 0.5.5 importer refuses it as "exported by a newer
 Ur Score — update this one" rather than silently importing only the stats. A 0.5.5 file (`v: 1`) imports
-into the new version as stats only, and the preview says "This file holds stats and no setup." `setup:
-false` is the same file without the folder, for a stats-only export; the button stays one button and the
-manifest says which the file is.
+into the new version as stats only: no preview opens, and its stats merge runs the way 0.5.5's import
+already does. `setup: false` is the same file without the folder, for a stats-only export; the button
+stays one button and the manifest says which the file is.
 
 **The export line** grows: "Exported 1,204 readings and 12 finished battles, with 3 recipes, 5 clans and
 2 boards, to ur-score-stats-2026-09-22.zip. Import it on the other PC from Setup › Score book."
