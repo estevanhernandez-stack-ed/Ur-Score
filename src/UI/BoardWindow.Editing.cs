@@ -169,26 +169,8 @@ public partial class BoardWindow
     /// (a press that changed nothing, a dialog closed unchanged) keeps it. With no such panel, focus goes to
     /// + Add panel while editing.
     /// </summary>
-    private void FocusToolLater(string? panelId, PanelTool tool, bool tall = false)
-    {
-        var before = ViewOf(panelId);
-        Dispatcher.BeginInvoke(() =>
-        {
-            var view = ViewOf(panelId);
-            if (view is null)
-            {
-                if (Editing) AddPanelButton.Focus();
-                return;
-            }
-
-            if (ReferenceEquals(view, before) && view.IsKeyboardFocusWithin) return;
-
-            // A popped-out panel's slot has no tools of its own, only its buttons (R19).
-            if (view is PoppedOutSlot slot) slot.FocusButton(Editing);
-            else PanelFrame.Of(view)?.FocusTool(tool, tall);
-            view.BringIntoView();
-        }, DispatcherPriority.Loaded);
-    }
+    private void FocusToolLater(string? panelId, PanelTool tool, bool tall = false) =>
+        FocusPanelLater(panelId, frame => frame.FocusTool(tool, tall));
 
     /// <summary>Focus on a top bar button once it shows: Edit board and Done hide themselves when pressed.</summary>
     private void FocusLater(UIElement element) => Dispatcher.BeginInvoke(() => { element.Focus(); }, DispatcherPriority.Loaded);
@@ -304,18 +286,40 @@ public partial class BoardWindow
     /// <summary>
     /// Puts focus back in the moved panel once the grid has redrawn it, on its first tool: every edit rebuilds the
     /// grid and destroys the element that had focus, and the panel itself can't hold it. Found by id, not index, so
-    /// it follows the panel to wherever the move put it.
+    /// it follows the panel to wherever the move put it. Goes through the same guarded plumbing as
+    /// <see cref="FocusToolLater"/> (spec item 2), so a no-op edit — Left on the leftmost panel, a move or resize
+    /// BoardEdits refuses on a popped-out panel — that redraws nothing leaves focus exactly where it was, instead
+    /// of really moving it off whatever tool the user had pressed.
     /// </summary>
-    private void FocusPanelLater(string panelId) => Dispatcher.BeginInvoke(
-        () =>
-        {
-            if (ViewOf(panelId) is not { } view) return;
+    private void FocusPanelLater(string panelId) => FocusPanelLater(panelId, frame => frame.FocusFirstTool());
 
+    /// <summary>
+    /// Shared by <see cref="FocusToolLater"/> and <see cref="FocusPanelLater(string)"/>: once a redraw has laid the
+    /// grid out, focuses the panel <paramref name="panelId"/> — through <paramref name="focus"/> for an ordinary
+    /// panel, or its pop-out slot's own button for a popped-out one (R19) — and brings it into view. A panel that
+    /// wasn't redrawn and still holds focus (a press or edit that changed nothing) keeps it. With no such panel,
+    /// focus goes to + Add panel while editing.
+    /// </summary>
+    private void FocusPanelLater(string? panelId, Func<PanelFrame, bool> focus)
+    {
+        var before = ViewOf(panelId);
+        Dispatcher.BeginInvoke(() =>
+        {
+            var view = ViewOf(panelId);
+            if (view is null)
+            {
+                if (Editing) AddPanelButton.Focus();
+                return;
+            }
+
+            if (ReferenceEquals(view, before) && view.IsKeyboardFocusWithin) return;
+
+            // A popped-out panel's slot has no tools of its own, only its buttons (R19).
             if (view is PoppedOutSlot slot) slot.FocusButton(Editing);
-            else PanelFrame.Of(view)?.FocusFirstTool();
+            else if (PanelFrame.Of(view) is { } frame) focus(frame);
             view.BringIntoView();
-        },
-        DispatcherPriority.Loaded);
+        }, DispatcherPriority.Loaded);
+    }
 
     private void OnBoardMouseDown(object sender, MouseButtonEventArgs e)
     {
