@@ -5,8 +5,22 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
 
 ## 0.6.2 - 2026-09-23
 
+The board's top bar, editing and undo, reworked now that testing is done. 0.5.10, 0.6.0 and 0.6.1 were never
+released on their own; everything since 0.5.9 is here.
+
 ### Added
 
+- **A status chip in the top bar.** **▶ Start reading** starts a board that hasn't read this session; once it has,
+  the chip shows status: **● Live**, **❚❚ Paused** (amber) or **▲ Trouble**. It never pauses by itself.
+- **A status card.** Click the chip and a card opens: the state line, one line per switched-on source (when it
+  last read and when it reads next, or its trouble), whether phone alerts are going out, and **Pause reading** /
+  **Resume reading**. Esc or a click elsewhere closes it; opening it never pauses.
+- **⟳ and F5 read every source now**, paused or not. F5 isn't taken by a popped-out panel, which has no ⟳.
+- **"(Paused)" in the window title** while reading is paused, so a paused board shows on the taskbar or a second
+  screen without hovering over anything.
+- **Arrange gets Cancel and Esc.** With nothing changed either just leaves; with a change, a themed window asks
+  first, naming the board. **Done** counts the changes it will save ("Done (3)"), and shows no count once the
+  draft is back as it was. The panel a keyboard is moving shows a cyan focus ring.
 - **Undo, per board.** Ctrl+Z takes back moving, resizing, adding, removing and changing (**Settings**) a panel,
   the last 20 steps for the session. Outside Arrange each change is its own step; while arranging, Ctrl+Z steps
   back through the draft and **Done** folds the whole arrangement into one step, "Arranged Battle". A themed toast
@@ -16,53 +30,26 @@ All notable changes to RoRoRo Ur Score are documented here. Format roughly follo
   re-follows your clans again if the board an undo restores still matches what the starter draws; otherwise the
   toast says so. Pop-outs are never undone, and deleting a board clears its history.
 
-## 0.6.1 - 2026-09-23
-
-### Added
-
-- **Arrange gets Cancel and Esc.** With nothing changed either just leaves; with a change, a themed
-  window asks first, naming the board. **Done** now counts the changes it will save ("Done (3)"), and shows
-  no count once the draft is back as it was.
-  The panel a keyboard is moving shows a cyan focus ring.
-
 ### Changed
 
-- **Edit board is Arrange.** Panels keep their height going in and out — the drag handle, ✕, and a
-  dashed outline are drawn inside the panel's own header instead of adding a row above it. The tabs
-  stay clickable while arranging (**+ Board** and the tab menu are off until Done or Cancel): a tab
-  click saves the draft first, the same way Done does, then switches, and a save that fails keeps
-  you on the board and says why, in the banner.
-
-## 0.6.0 - 2026-09-23
-
-### Added
-
-- **A status card.** Click the status chip and a card opens: the state line, one line per
-  switched-on source (when it last read and when it reads next, or its trouble), whether phone
-  alerts are going out, and **Pause reading** / **Resume reading**. Esc or a click elsewhere
-  closes it; opening it never pauses.
-- **F5 reads every source, the same as ⟳.** Not on a popped-out panel, which has no ⟳.
-- **"(Paused)" in the window title** while reading is paused, so a paused board shows on the
-  taskbar or a second screen without hovering over anything.
-
-### Changed
-
-- **Reading starts on open, by default.** New installs and existing ones alike; existing
-  installs are switched on once, and a player who unticks it keeps it off from then on. Turn it
-  off in **Setup › Recipes**, under **Start reading when Ur Score opens**. It is asked again
-  when Setup closes and when the first source is switched on, for a board that hasn't started yet.
-- **Start/Stop and Test now became one status chip and ⟳.** **▶ Start reading** starts a board
-  that hasn't read this session; once it has, the chip only shows status — **● Live**, **❚❚
-  Paused** (amber), or **▲ Trouble** — and never pauses by itself. Pause moved into the card.
-- **Closing Ur Score asks only while it is reading and sending.** A paused or never-started
-  board now closes without asking.
-
-## 0.5.10 - 2026-09-23
+- **Reading starts on open, by default.** New installs and existing ones alike; existing installs are switched on
+  once, and a player who unticks it keeps it off from then on. Turn it off in **Setup › Recipes**, under **Start
+  reading when Ur Score opens**. It is asked again when Setup closes and when the first source is switched on, for
+  a board that hasn't started yet.
+- **Start/Stop and Test now became the status chip and ⟳.** Pause moved into the status card.
+- **Closing Ur Score asks only while it is reading and sending.** A paused or never-started board closes without
+  asking.
+- **Edit board is Arrange.** Panels keep their height going in and out: the drag handle, ✕ and a dashed outline
+  are drawn inside the panel's own header instead of adding a row above it. The tabs stay clickable while
+  arranging (**+ Board** and the tab menu are off until Done or Cancel): a tab click saves the draft first, the
+  same way Done does, then switches, and a save that fails keeps you on the board and says why, in the banner.
 
 ### Fixed
 
-- **A tall panel stays tall when you let go of its corner.** Dragging the corner of a two-row panel and letting
-  go at the height it had made it one row; it is measured against one row now.
+- **Test now read nothing after Stop.** Pressing it on a stopped board did nothing until reading was started
+  again; ⟳ and F5 read while paused now.
+- **A tall panel stays tall when you let go of its corner.** Dragging the corner of a two-row panel and letting go
+  at the height it had made it one row; it is measured against one row now.
 - **Moving a panel with the keyboard keeps going.** After the first Left or Right, focus fell out of the board and
   the next key moved nothing. It stays on the moved panel.
 - **Popped-out panels show no resize grips**, since their slot can't be resized.
