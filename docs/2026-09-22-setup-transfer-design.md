@@ -130,7 +130,8 @@ STATS
  [x] 1,204 readings and 12 finished battles — what is already here is skipped
 
 Nothing will be sent from this PC until you tick it in Setup › Stats.
-Your clans, recipes and boards here are copied aside first, dated, in case.
+Resolve names and the active recipe come with the file, whatever you tick.
+Your clans, recipes, boards and settings here are copied aside first, dated, in case.
                                                             [Import ticked]  [Cancel]
 ```
 
