@@ -486,6 +486,57 @@ public class SourceHostTests
     }
 
     /// <summary>
+    /// Pause, then the status card's ⟳ (or F5, or Test now): the read must actually run. Stop cancels the token
+    /// every read links to, so the read in flight stops, and only Start used to replace it, so every read-now after
+    /// a Pause was cancelled before it began and the card's promise that ⟳ reads while paused was false (UIA walk,
+    /// 2026-09-23). Counted in the book by trigger, because a snapshot left over from the Start would pass a
+    /// check of <see cref="SourceHost.Latest"/> whether or not the read-now ran.
+    /// </summary>
+    [Fact]
+    public async Task AfterAPauseReadNowStillReadsEverySource()
+    {
+        var engine = new StubEngine(Reading);
+        var book = new MemoryBook();
+        using var host = new SourceHost(new Factory(engine, book).Create, _ => 180);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SnapshotReady += (_, _) => ready.TrySetResult();
+        host.Apply([SourceNamed("s-1", "CCGP"), SourceNamed("s-2", "K0i2")]);
+
+        host.Start();
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        host.Stop();
+
+        await host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+
+        var manual = book.Lines.Where(line => line.Trigger == BookLine.TriggerManual).Select(line => line.Source);
+        Assert.Equal(new[] { "s-1", "s-2" }, manual.Order(StringComparer.Ordinal));
+        Assert.False(host.Running);
+    }
+
+    /// <summary>
+    /// The other side of the fix above: read-now replaces a cancelled read token only for a Pause, never after
+    /// exit. Exit cancels the same token last of all, and a read-now that revived it would read, record and send
+    /// for a host that is shutting down.
+    /// </summary>
+    [Fact]
+    public async Task AfterExitReadNowReadsNothing()
+    {
+        var engine = new StubEngine(Reading);
+        var book = new MemoryBook();
+        var host = new SourceHost(new Factory(engine, book).Create, _ => 180);
+        host.Apply([SourceNamed("s-1", "CCGP")]);
+        host.Start();
+        host.Stop();
+        host.Dispose();
+        var before = engine.Calls;
+
+        await host.RunAllNowAsync(BookLine.TriggerManual, CancellationToken.None);
+
+        Assert.Equal(before, engine.Calls);
+        Assert.DoesNotContain(book.Lines, line => line.Trigger == BookLine.TriggerManual);
+    }
+
+    /// <summary>
     /// Test now used to run each read under the caller's token alone, so a source removed while its read was in
     /// flight had only its snapshot hidden: the read went on, recorded to the book and sent to RoRoRo for a source
     /// that was gone. The timer loop's reads were always cancelled by a removal; Test now's are now too (S1-8.3).

@@ -36,6 +36,13 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
     private CancellationTokenSource? _run;
     private CancellationTokenSource _reads = new();
 
+    /// <summary>
+    /// Set by exit (<see cref="Dispose"/>) before anything else it does. <see cref="RunAllNowAsync"/> replaces a
+    /// <see cref="_reads"/> that a Stop cancelled, so read-now works while paused; this is what tells it the
+    /// cancellation came from exit instead, and must stay.
+    /// </summary>
+    private bool _exited;
+
     /// <summary>Raised on the thread pool after each read, with the source id.</summary>
     public event Action<string, RecipeSnapshot>? SnapshotReady;
 
@@ -167,10 +174,18 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
     public Task RunAllNowAsync(string trigger, CancellationToken cancellationToken)
     {
         List<Entry> entries;
-        lock (_gate) entries = [.. _entries.Values];
-
         CancellationToken reads;
-        lock (_gate) reads = _reads.Token;
+        lock (_gate)
+        {
+            entries = [.. _entries.Values];
+
+            // A Stop cancelled _reads (so the read in flight stopped) and only Start used to replace it, so every
+            // read-now after a Pause was cancelled before it began: ⟳ and F5 read nothing while paused, which the
+            // status card promises they do (UIA walk, 2026-09-23). A fresh one here, as Start makes, but never
+            // after exit: exit cancels _reads last of all, and reviving it would read for a host shutting down.
+            if (_reads.IsCancellationRequested && !_exited) _reads = new CancellationTokenSource();
+            reads = _reads.Token;
+        }
 
         return Task.WhenAll(entries.Select(async entry =>
         {
@@ -199,6 +214,7 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
         CancellationTokenSource? loops;
         lock (_gate)
         {
+            _exited = true;
             loops = _run;
             _run = null;
         }
