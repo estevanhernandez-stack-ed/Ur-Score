@@ -3,6 +3,15 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Install by hand.** Every release now carries `install.ps1` beside `plugin.zip`: right-click › Run with
+  PowerShell checks the zip against its checksum, refuses while RoRoRo or Ur Score is running, moves the old
+  install aside, and installs where RoRoRo looks. The README's new *Install by hand* section also gives the
+  fully manual route. The same script ships with every RoRoRo plugin.
+
 ## 0.5.8 - 2026-09-22
 
 ### Added

@@ -98,10 +98,30 @@ a recipe reads.
   can sit there reporting and your phone will still never ring. Turn **Metric alerts** on in
   RoRoRo's Settings › Alerts.
 
+## Install by hand
+
+Every RoRoRo plugin installs the same way by hand, with no marketplace needed. Each release on the
+[releases page](https://github.com/estevanhernandez-stack-ed/Ur-Score/releases/latest) carries four files:
+`plugin.zip`, `manifest.json`, `manifest.sha256` and `install.ps1`.
+
+**With the script:** download `plugin.zip`, `manifest.sha256` and `install.ps1` into one folder, quit RoRoRo
+(right-click its tray icon › Quit) and Ur Score, then right-click `install.ps1` › **Run with PowerShell**. It
+checks the zip against `manifest.sha256`, moves any existing install aside to `%TEMP%` (named for its
+version), and installs into `%LOCALAPPDATA%\ROROROblox\plugins\626labs.ur-score\`. It never starts anything.
+If Windows won't run scripts: `powershell -ExecutionPolicy Bypass -File install.ps1`.
+
+**Fully by hand:** quit RoRoRo and Ur Score, right-click `plugin.zip` › Properties › tick **Unblock** › OK, then
+extract it into `%LOCALAPPDATA%\ROROROblox\plugins\626labs.ur-score\` (the files sit at the zip's root; replace
+what is there).
+
+Either way, start RoRoRo and launch Ur Score from its Plugins page: the first launch asks for its permissions,
+exactly as a marketplace install does. Your data lives elsewhere (`%LOCALAPPDATA%\626labs.ur-score\`), so
+reinstalling never touches your recipes, clans, boards or score book.
+
 ## Setup
 
-1. **Install it.** In RoRoRo: **Plugins › Install from URL**, and paste the release URL you were
-   given. Walk the consent screen — it lists `host.metrics.report` and `host.queries.accounts` —
+1. **Install it.** In RoRoRo: **Plugins**, where the marketplace offers Ur Score (or **Install from
+   URL**, pasting the release URL you were given), or by hand (see *Install by hand* below). Walk the consent screen — it lists `host.metrics.report` and `host.queries.accounts` —
    and click Install. Ur Score then runs as its own window, launched from RoRoRo's Plugins page
    (autostart is off by default, so it won't launch itself the next time you boot).
 2. **Import a recipe, then pick what it reads.** Ur Score knows no game on its own — a recipe file
