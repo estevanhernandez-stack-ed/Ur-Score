@@ -4,7 +4,7 @@
         xmlns:ui="clr-namespace:Labs626.UrScore.UI"
         Title="RoRoRo Ur Score" Height="900" Width="1280" MinHeight="560" MinWidth="720"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource WhiteBrush}"
-        FontFamily="{StaticResource BodyFont}" FontSize="13">
+        FontFamily="{StaticResource BodyFont}" FontSize="13" PreviewKeyDown="OnWindowKeyDown">
     <Window.Resources>
         <!-- A tab (the mock's .tab): medium weight, no fill until hovered; the board on screen is a pill in the panel
              colour with a divider edge and a cyan bar inset along its bottom. -->
@@ -55,34 +55,27 @@
         </Style>
     </Window.Resources>
     <DockPanel>
-        <!-- The top bar (spec §8): tabs, ⋯ and + Board, then the period line; Start, Test now, Edit board and Setup on the right. -->
         <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,8">
-            <DockPanel x:Name="TopBar" LastChildFill="True" SizeChanged="OnTopBarSizeChanged">
-                <StackPanel x:Name="TopButtons" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
-                            SizeChanged="OnTopBarSizeChanged">
-                    <Button x:Name="StartStopButton" Content="Start" Style="{StaticResource PrimaryButton}" Click="OnStartStopClick"
-                            AutomationProperties.Name="Start or stop reading" />
-                    <Button x:Name="TestNowButton" Content="Test now" Margin="8,0,0,0" Click="OnTestNowClick"
-                            AutomationProperties.Name="Read every source once now" />
-                    <Button x:Name="EditBoardButton" Content="Edit board" Margin="8,0,0,0" Click="OnEditBoardClick"
-                            AutomationProperties.Name="Edit board" />
-                    <Button x:Name="AddPanelButton" Content="+ Add panel" Margin="8,0,0,0" Visibility="Collapsed" Click="OnAddPanelClick"
-                            AutomationProperties.Name="Add panel" />
-                    <Button x:Name="DoneButton" Content="Done" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Visibility="Collapsed"
-                            Click="OnDoneClick" AutomationProperties.Name="Done" />
-                    <Button x:Name="SetupButton" Margin="8,0,0,0" Click="OnSetupClick" AutomationProperties.Name="Setup">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0" />
-                            <TextBlock Text="Setup" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+            <!-- The top bar (spec §3.1): icon, tabs, ⋯, + Board, the status chip, ⟳, the period line; Arrange and Setup on the
+                 right. A Grid in the order it is seen, so Tab and a screen reader go left to right. The period line is the
+                 star column: it trims first, then the tabs scroll (OnTopBarSizeChanged); the chip and ⟳ never give way. -->
+            <Grid x:Name="TopBar" SizeChanged="OnTopBarSizeChanged">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <!-- The main clan's icon (backlog V3-S.7), from the moment the window opens (V3-S.6). Its name says whose it is, set
                      with the picture in ApplyIcon; its space is kept while the main clan's picture is on its way (A26). -->
-                <Image x:Name="BoardIcon" DockPanel.Dock="Left" Width="22" Height="22" Margin="0,0,10,0" Visibility="Collapsed"
+                <Image x:Name="BoardIcon" Grid.Column="0" Width="22" Height="22" Margin="0,0,10,0" Visibility="Collapsed"
                        VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
                 <!-- Past its share of the bar (OnTopBarSizeChanged) the tabs scroll, so + Board and the period line always show. -->
-                <ListBox x:Name="BoardTabs" DockPanel.Dock="Left" ItemContainerStyle="{StaticResource BoardTab}" DisplayMemberPath="Name"
+                <ListBox x:Name="BoardTabs" Grid.Column="1" ItemContainerStyle="{StaticResource BoardTab}" DisplayMemberPath="Name"
                          Background="Transparent" BorderThickness="0" VerticalAlignment="Center" SelectionChanged="OnTabChanged"
                          ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled"
                          AutomationProperties.Name="Boards">
@@ -104,23 +97,72 @@
                 <!-- The board on screen: ⋯ opens the tab's own menu (Rename…, Duplicate, Delete…), the same one the
                      right-click opens, so the commands are on screen without taking the right-click away. Same ⋯ the
                      panels carry, one step up: it acts on the board, so it sits with its tabs. -->
-                <Button x:Name="BoardMenuButton" DockPanel.Dock="Left" Content="⋯" Style="{StaticResource FlatButton}" Padding="6,2"
+                <Button x:Name="BoardMenuButton" Grid.Column="2" Content="⋯" Style="{StaticResource FlatButton}" Padding="6,2"
                         HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,10,0"
                         Foreground="{DynamicResource MutedTextBrush}" Click="OnBoardMenuClick"
                         AutomationProperties.Name="Rename, duplicate or delete this board" />
-                <Button x:Name="AddBoardButton" DockPanel.Dock="Left" Content="+ Board" Style="{StaticResource AddBoardButtonStyle}"
+                <Button x:Name="AddBoardButton" Grid.Column="3" Content="+ Board" Style="{StaticResource AddBoardButtonStyle}"
                         HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,14,0" Click="OnAddBoardClick"
                         AutomationProperties.Name="Add a board" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Ellipse x:Name="LiveDot" Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource CyanBrush}" Visibility="Collapsed" />
-                    <!-- Ticks between reads (WithClock off: this line is one line wide, and the panel gives the end as a time). -->
-                    <ui:CountdownText x:Name="PeriodLine" WithClock="False" Style="{StaticResource Muted}" VerticalAlignment="Center"
-                                      TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                <!-- BC2: the chip keeps StartStopButton's id so the walks' "ready" check still finds it. A click opens the
+                     status card and never pauses; only "Start reading" acts, because there is no status yet to show. -->
+                <Button x:Name="StartStopButton" Grid.Column="4" Style="{StaticResource ChipButton}" VerticalAlignment="Center"
+                        Margin="0,0,6,0" Click="OnStatusChipClick" SizeChanged="OnTopBarSizeChanged">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="ChipGlyph" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBlock x:Name="ChipWord" VerticalAlignment="Center" FontWeight="Medium" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="TestNowButton" Grid.Column="5" Content="⟳" Style="{StaticResource FlatButton}" Padding="6,2"
+                        VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource MutedTextBrush}"
+                        ToolTip="Read every source now (F5)" AutomationProperties.Name="Read every source now" Click="OnTestNowClick" />
+                <!-- Ticks between reads (WithClock off: this line is one line wide, and the panel gives the end as a time). -->
+                <ui:CountdownText x:Name="PeriodLine" Grid.Column="6" WithClock="False" Style="{StaticResource Muted}"
+                                  VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                <StackPanel x:Name="TopButtons" Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0"
+                            SizeChanged="OnTopBarSizeChanged">
+                    <Button x:Name="EditBoardButton" Content="Edit board" Click="OnEditBoardClick" AutomationProperties.Name="Edit board" />
+                    <Button x:Name="AddPanelButton" Content="+ Add panel" Margin="8,0,0,0" Visibility="Collapsed" Click="OnAddPanelClick"
+                            AutomationProperties.Name="Add panel" />
+                    <Button x:Name="DoneButton" Content="Done" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Visibility="Collapsed"
+                            Click="OnDoneClick" AutomationProperties.Name="Done" />
+                    <Button x:Name="SetupButton" Margin="8,0,0,0" Click="OnSetupClick" AutomationProperties.Name="Setup">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <TextBlock Text="Setup" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
-            </DockPanel>
+                <!-- The status card (spec §3.3): opening it changes nothing (BC2). Themed (V3-S.13). Esc and a click away close it. -->
+                <Popup x:Name="StatusCard" PlacementTarget="{Binding ElementName=StartStopButton}" Placement="Bottom" VerticalOffset="6"
+                       StaysOpen="False" AllowsTransparency="True" Closed="OnStatusCardClosed">
+                    <Border Background="{DynamicResource RowBgBrush}" BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1"
+                            CornerRadius="8" Padding="14" MinWidth="320" MaxWidth="460" PreviewKeyDown="OnStatusCardKeyDown"
+                            KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.AutomationId="StatusCardBody"
+                            AutomationProperties.Name="Reading status">
+                        <StackPanel>
+                            <TextBlock x:Name="CardStateLine" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource WhiteBrush}" />
+                            <!-- A RowList, not a bare ItemsControl (RowListFenceTests): each row reaches a screen reader as its text, not StatusRow's ToString. -->
+                            <ui:RowList x:Name="CardSources" Margin="0,10,0,0" AutomationProperties.Name="Sources">
+                                <ui:RowList.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel Margin="0,2">
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Line}" Style="{StaticResource Muted}" Margin="16,0,0,0" />
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource WhiteBrush}" />
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ui:RowList.ItemTemplate>
+                            </ui:RowList>
+                            <TextBlock x:Name="CardAlertsLine" Style="{StaticResource Muted}" Margin="0,10,0,0" />
+                            <TextBlock x:Name="CardDetailLine" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                            <Button x:Name="PauseResumeButton" HorizontalAlignment="Right" Margin="0,12,0,0" Click="OnPauseResumeClick" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </Grid>
         </Border>
 
-        <StackPanel DockPanel.Dock="Top" Margin="16,8,16,0">
+        <StackPanel x:Name="StateLines" DockPanel.Dock="Top" Margin="16,8,16,0">
             <TextBlock x:Name="StateLine" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.HelpText="What Ur Score is doing" />
             <TextBlock x:Name="DetailLine" Style="{StaticResource Muted}" Margin="0,2,0,0" />
         </StackPanel>

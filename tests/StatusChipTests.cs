@@ -114,4 +114,24 @@ public class StatusChipTests
         Assert.True(BoardText.InTrouble(live));
         Assert.False(BoardText.InTrouble(Live([MainClan], [Installed(Clan, "value")], snaps, running: true)));
     }
+
+    /// <summary>
+    /// RoRoRo down is trouble for the chip though the state line counts it as healthy (reading goes on, nothing reaches the
+    /// phone), and the card still has the source's own line.
+    /// </summary>
+    [Fact]
+    public void RoRoRoDownIsTroubleAndTheCardStillListsTheSource()
+    {
+        var snaps = new Dictionary<string, RecipeSnapshot>
+        {
+            [MainClan.Id] = new RecipeSnapshot(WatchState.HostDown, "RoRoRo is not running.", [], [], 0) { SourceId = MainClan.Id },
+        };
+        var live = Live([MainClan], [Installed(Clan, "value")], snaps, running: true,
+            lastRead: new Dictionary<string, DateTimeOffset> { [MainClan.Id] = Now.AddMinutes(-2) });
+
+        Assert.True(BoardText.InTrouble(live));
+        var row = Assert.Single(BoardText.CardRows(live));
+        Assert.Equal(live.SourceName(MainClan), row.Name);
+        Assert.Equal(ChipState.Trouble, StatusChip.StateOf(live.Running, everStarted: true, starting: false, BoardText.InTrouble(live)));
+    }
 }

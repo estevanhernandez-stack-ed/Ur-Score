@@ -410,7 +410,7 @@ public class BoardTextTests
 
         var (line, detail, button) = BoardText.EmptyState(BoardEmpty.BookUnread, Clan);
         Assert.Equal(
-            ("Start and Test now are off", "They come back once Ur Score can read your score book. The line above says what stopped it.", "Try again"),
+            ("Reading is off", "It comes back once Ur Score can read your score book. The line above says what stopped it.", "Try again"),
             (line, detail, button));
         Assert.DoesNotContain("be read", line, StringComparison.Ordinal);
     }
