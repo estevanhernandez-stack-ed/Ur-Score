@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "626labs.ur-score",
   "name": "RoRoRo Ur Score",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "contractVersion": "1.0",
   "publisher": "626 Labs LLC",
   "description": "Reads your accounts' numbers from wherever a recipe says, keeps them on your scoreboard and in your score book, and hands them to RoRoRo.",
