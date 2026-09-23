@@ -27,6 +27,13 @@ public sealed record SetupPack(
 {
     public const string Folder = "setup";
 
+    /// <summary>
+    /// Nothing to carry: no recipes, no clans, no boards, no key names. A pristine PC's export attaches no setup at
+    /// all rather than a folder holding two settings and four empty lists, so the other side opens it as the
+    /// stats-only file it is and no preview offers a person an empty setup (spec §1).
+    /// </summary>
+    public bool IsEmpty => Recipes.Count == 0 && Sources.Count == 0 && Boards.Count == 0 && Keys.Count == 0;
+
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 
     /// <summary>

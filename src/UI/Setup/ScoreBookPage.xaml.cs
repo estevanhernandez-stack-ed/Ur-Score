@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
@@ -63,11 +64,10 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
         await TransferAsync("Writing the file…", "That file could not be written", async () =>
         {
-            var manifest = await Task.Run(() => _services.ExportStats(dialog.FileName));
-            // The same pack ExportStats just wrote alongside the book, built again here for the line's counts —
-            // recipes, clans and boards — so it matches what the other PC's preview will offer.
-            var setup = SetupPack.FromHere(_services.Installed, _services.Sources, _services.SavedBoards, _services.Settings, _services.KnownAccounts);
-            return (ScoreBookModel.ExportedLine(manifest, Path.GetFileName(dialog.FileName), setup), "", false);
+            // The pack ExportStats wrote comes back with the manifest, so the line's counts — recipes, clans and
+            // boards — are the file's own and match what the other PC's preview will offer.
+            var exported = await Task.Run(() => _services.ExportStats(dialog.FileName));
+            return (ScoreBookModel.ExportedLine(exported.Manifest, Path.GetFileName(dialog.FileName), exported.Setup), "", false);
         });
     }
 
@@ -118,6 +118,10 @@ public partial class ScoreBookPage : UserControl, ISetupPage
                 // Apply runs synchronously on this (UI) thread, but it writes files and can take a moment; the busy
                 // line said "Reading that file…" until now, which is stale the instant the yes was clicked.
                 StatsTransferLine.Text = "Importing that setup…";
+                // …and the assignment alone never paints it: Apply would run to completion on this same thread
+                // before the render pass ever came round. Background is BELOW Render, so yielding at it hands the
+                // dispatcher back long enough for the new text to reach the screen first.
+                await Dispatcher.Yield(DispatcherPriority.Background);
                 var applied = SetupMerge.Apply(plan, ticked, _services.SetupWriter, DateTimeOffset.Now);
                 if (applied.FailedStep is not null)
                 {

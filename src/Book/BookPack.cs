@@ -9,6 +9,13 @@ namespace Labs626.UrScore.Book;
 public sealed record BookPackManifest(int V, DateTimeOffset TakenAt, string App, int Readings, int Finals, bool Setup = false);
 
 /// <summary>
+/// What an export wrote: the file's own manifest and the setup that went into it, or null when none did. The pack
+/// is handed back rather than rebuilt by the caller for its line, so the counts the line says are the counts the
+/// file holds and cannot drift from them.
+/// </summary>
+public sealed record BookExport(BookPackManifest Manifest, SetupPack? Setup);
+
+/// <summary>
 /// A stats file opened for reading: the folder it was unpacked into, its manifest, and the setup it carried (or
 /// null for a stats-only file), or the one sentence that says why it could not be opened at all.
 /// <see cref="BookPack.Discard"/> removes the folder when the import is done.

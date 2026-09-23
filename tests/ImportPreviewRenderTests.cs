@@ -52,6 +52,10 @@ public class ImportPreviewRenderTests
             Assert.Contains("Import ticked", names);
             Assert.Contains("Cancel", names);
             Assert.Contains(ImportPreviewModel.NothingSent, names);
+            // The two settings come with the file whatever is ticked, and the aside copy takes settings.json with
+            // the rest: both are said here, or the preview under-promises what importing does (final review).
+            Assert.Contains(ImportPreviewModel.SettingsNote, names);
+            Assert.Contains(ImportPreviewModel.AsideNote, names);
 
             // The greyed row's own tick, not just its text: found in the VISUAL tree (not the automation peer tree)
             // so this checks the real CheckBox control's real IsEnabled, the thing App.xaml's disabled trigger and

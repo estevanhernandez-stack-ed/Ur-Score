@@ -32,6 +32,8 @@ public partial class ImportPreviewWindow : Window
         // so "holds stats and no setup" can never be true here; a setup file with zero recipes just says nothing.
         ImportNothingSentLine.Text = ImportPreviewModel.NothingSent;
         ImportNothingSentLine.Visibility = plan.File.Recipes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // Always shown, unlike the line above it: the settings step runs on every import, whatever is ticked.
+        ImportSettingsNoteLine.Text = ImportPreviewModel.SettingsNote;
         ImportAsideLine.Text = ImportPreviewModel.AsideNote;
 
         Loaded += (_, _) => ImportCancelButton.Focus();

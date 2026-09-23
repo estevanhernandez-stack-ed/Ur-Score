@@ -46,7 +46,14 @@ public static class ImportPreviewModel
 {
     public const string NothingSent = "Nothing will be sent from this PC until you tick it in Setup › Stats.";
 
-    public const string AsideNote = "Your clans, recipes and boards here are copied aside first, dated, in case.";
+    /// <summary>
+    /// The two settings are not rows and have no tick of their own: they ride with the file whatever is ticked
+    /// (<c>SetupMerge.Apply</c>'s settings step always runs). Said out loud, because a preview whose every line has
+    /// a tick implies that everything importing does has one.
+    /// </summary>
+    public const string SettingsNote = "Resolve names and the active recipe come with the file, whatever you tick.";
+
+    public const string AsideNote = "Your clans, recipes, boards and settings here are copied aside first, dated, in case.";
 
     public static IReadOnlyList<ImportPreviewGroup> Groups(SetupMergePlan plan)
     {
@@ -83,9 +90,14 @@ public static class ImportPreviewModel
         if (applied.FailedStep is { } step)
         {
             var done = Parts(applied.Recipes, applied.Clans, applied.Boards);
+            // Spec §4: the redacted message on screen, the exception's type to the trail. Its own full stop comes
+            // off, because a sentence carries on after it here.
+            var why = applied.FailureMessage?.TrimEnd().TrimEnd('.') is { Length: > 0 } message
+                ? ": " + message
+                : $" ({applied.FailureType})";
             return done.Count == 0
-                ? $"Nothing was imported: the {step} could not be written ({applied.FailureType}).{aside}"
-                : $"Imported {Join(done)}, then the {step} could not be written ({applied.FailureType}); what was imported before that stands.{aside}";
+                ? $"Nothing was imported: the {step} could not be written{why}.{aside}"
+                : $"Imported {Join(done)}, then the {step} could not be written{why}; what was imported before that stands.{aside}";
         }
 
         var changed = Parts(applied.Recipes, applied.Clans, applied.Boards);

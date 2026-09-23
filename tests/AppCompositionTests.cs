@@ -152,10 +152,11 @@ public class AppCompositionTests
     /// and a source for one of the clans, imports it and keeps that clan's readings under its OWN source id while the
     /// other clan is named as not set up.
     /// <para>
-    /// Since 2026-09-22 the file also carries this PC's setup (empty here: <c>first</c> installs no recipe and saves
-    /// no source before exporting), so the zip legitimately holds a <c>setup/</c> folder now — what a setup pack may
-    /// and may never carry is <c>SetupPackTests</c>' job. What still must never happen, from any PC in any state, is
-    /// the real key store reaching the file at all.
+    /// Since 2026-09-22 the file may also carry this PC's setup, so a <c>setup/</c> folder is allowed here — though
+    /// there is none in this one, <c>first</c> installing no recipe and saving no source before exporting
+    /// (<see cref="APristinePcsExportCarriesNoSetupAndOpensAsAStatsOnlyFile"/> pins that). What a setup pack may and
+    /// may never carry is <c>SetupPackTests</c>' job. What still must never happen, from any PC in any state, is the
+    /// real key store reaching the file at all.
     /// </para>
     /// </summary>
     [Fact]
@@ -169,7 +170,7 @@ public class AppCompositionTests
         var file = Path.Combine(first.Path, BookPack.FileName(Start));
         using (var exporter = Compose(first, new StubHost(reachable: false), new FakeTransport()))
         {
-            var manifest = exporter.ExportStats(file);
+            var manifest = exporter.ExportStats(file).Manifest;
             Assert.Equal((written.Lines - written.Finals, written.Finals), (manifest.Readings, manifest.Finals));
         }
 
@@ -199,6 +200,42 @@ public class AppCompositionTests
         Assert.Equal(outcome.Added, lines.Count);
         Assert.All(lines, line => Assert.Equal("s-0000beef", line.Source));
         Assert.All(lines, line => Assert.Equal("Clan0", line.Inputs["clan"]));
+    }
+
+    /// <summary>
+    /// A PC with nothing set up exports nothing to set up: the manifest says <c>setup: false</c>, the zip has no
+    /// <c>setup/</c> folder, and the receiving side opens it as the stats-only file it is — so no preview opens on
+    /// the other PC to offer a person their own empty setup back (spec §1, final review's ruling on finding 3).
+    /// </summary>
+    [Fact]
+    public void APristinePcsExportCarriesNoSetupAndOpensAsAStatsOnlyFile()
+    {
+        using var dir = TempDir.Create("urscore-app-pristine");
+        BookGenerator.Write(new AppPaths(dir.Path).Book, clanSources: 1, days: 1);
+        var file = Path.Combine(dir.Path, BookPack.FileName(Start));
+        using (var exporter = Compose(dir, new StubHost(reachable: false), new FakeTransport()))
+        {
+            var exported = exporter.ExportStats(file);
+
+            Assert.False(exported.Manifest.Setup);
+            Assert.Null(exported.Setup);
+        }
+
+        using (var zip = System.IO.Compression.ZipFile.OpenRead(file))
+        {
+            Assert.DoesNotContain(zip.Entries, entry => entry.FullName.StartsWith("setup/", StringComparison.Ordinal));
+        }
+
+        var opened = BookPack.Open(file);
+        try
+        {
+            Assert.False(opened.Manifest!.Setup);
+            Assert.Null(opened.Setup);
+        }
+        finally
+        {
+            BookPack.Discard(opened);
+        }
     }
 
     /// <summary>
@@ -236,7 +273,7 @@ public class AppCompositionTests
             using (var exporter = Compose(a, new StubHost(reachable: false), new FakeTransport()))
             {
                 exporter.SaveImportedBoards([new BoardDef("b-a1", "Rivals", [new PanelDef("p-1", PanelType.Standing, new PanelSize(6), new PanelSettings(clan.Slug, SourceId: "s-000000a1"))])]);
-                var manifest = exporter.ExportStats(file);
+                var manifest = exporter.ExportStats(file).Manifest;
                 Assert.True(manifest.Setup);
                 Assert.Equal((written.Lines - written.Finals, written.Finals), (manifest.Readings, manifest.Finals));
             }

@@ -218,14 +218,18 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     /// <summary>
     /// Writes the book, with this machine's setup alongside it (<see cref="Core.SetupPack.FromHere"/>) so the other PC's
-    /// import has recipes, clans, boards and the two settings to offer, not stats alone.
+    /// import has recipes, clans, boards and the two settings to offer, not stats alone. A setup with nothing in it
+    /// (<see cref="Core.SetupPack.IsEmpty"/>) is not attached at all: the manifest then says <c>setup: false</c> and the
+    /// other side takes the plain stats merge. Hands back the pack it wrote, so the page's line counts the file's own
+    /// contents rather than building a second pack that could differ.
     /// </summary>
-    public BookPackManifest ExportStats(string path)
+    public BookExport ExportStats(string path)
     {
         _book.Flush();
         var version = typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        var setup = SetupPack.FromHere(Installed, Sources, SavedBoards, Settings, KnownAccounts);
-        return BookPack.Write(_book.Root, path, version, _time.GetUtcNow(), setup);
+        var built = SetupPack.FromHere(Installed, Sources, SavedBoards, Settings, KnownAccounts);
+        var setup = built.IsEmpty ? null : built;
+        return new BookExport(BookPack.Write(_book.Root, path, version, _time.GetUtcNow(), setup), setup);
     }
 
     public ScoreBookReader Reader { get; }

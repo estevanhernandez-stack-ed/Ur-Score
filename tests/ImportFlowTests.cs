@@ -147,7 +147,7 @@ public class ImportFlowTests : IDisposable
 
         public Task ReloadBookAsync() => throw new NotSupportedException();
 
-        public BookPackManifest ExportStats(string path) => throw new NotSupportedException();
+        public BookExport ExportStats(string path) => throw new NotSupportedException();
 
         public bool Running => throw new NotSupportedException();
 

@@ -193,11 +193,12 @@ public class SetupMergeTests
         public int Reloads { get; private set; }
         public List<string> Calls { get; } = [];
         public string? ThrowAt { get; init; }
-        public void SaveRecipe(Recipe recipe, string text, RecipeState state) { if (ThrowAt == "recipes") throw new IOException("disk"); Calls.Add("SaveRecipe"); Recipes.Add((recipe.Slug, state)); }
-        public void SaveSources(IReadOnlyList<Source> sources) { if (ThrowAt == "clans") throw new IOException("disk"); Calls.Add("SaveSources"); Sources = sources; }
-        public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) { if (ThrowAt == "boards") throw new UnauthorizedAccessException("denied"); Calls.Add("SaveImportedBoards"); Boards = saved; }
-        public void SaveSettings(Settings settings) { if (ThrowAt == "settings") throw new IOException("disk"); Calls.Add("SaveSettings"); Settings = settings; }
-        public void ReloadRecipes() { if (ThrowAt == "reload") throw new IOException("disk"); Calls.Add("ReloadRecipes"); Reloads++; }
+        public string? ThrowMessage { get; init; }
+        public void SaveRecipe(Recipe recipe, string text, RecipeState state) { if (ThrowAt == "recipes") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("SaveRecipe"); Recipes.Add((recipe.Slug, state)); }
+        public void SaveSources(IReadOnlyList<Source> sources) { if (ThrowAt == "clans") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("SaveSources"); Sources = sources; }
+        public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) { if (ThrowAt == "boards") throw new UnauthorizedAccessException(ThrowMessage ?? "denied"); Calls.Add("SaveImportedBoards"); Boards = saved; }
+        public void SaveSettings(Settings settings) { if (ThrowAt == "settings") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("SaveSettings"); Settings = settings; }
+        public void ReloadRecipes() { if (ThrowAt == "reload") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("ReloadRecipes"); Reloads++; }
     }
 
     /// <summary>
@@ -361,6 +362,30 @@ public class SetupMergeTests
 
         Assert.Null(applied.FailedStep);
         Assert.Equal((false, Clan.Slug, true), (writer.Settings!.ResolveNames, writer.Settings.ActiveRecipe, writer.Settings.StartOnOpen));
+    }
+
+    /// <summary>
+    /// Spec §4: the screen gets the failure's redacted MESSAGE, the trail gets its type. Redacted means the data
+    /// folder is not in it — a line that says where a person's files live is a line that goes into a screenshot.
+    /// </summary>
+    [Fact]
+    public void AFailuresMessageNamesTheFileAndNeverTheFolderItIsIn()
+    {
+        using var dir = TempDir.Create("urscore-apply-redact");
+        var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
+        var here = new SetupHere([], [], [], [Main, AltOne], Settings.Defaults);
+        var plan = SetupMerge.Plan(new SetupPack([], [], [], Settings.Defaults, []), here, 0, 0);
+        var writer = new FakeSetupWriter(data, here)
+        {
+            ThrowAt = "settings",
+            ThrowMessage = $"Access to the path '{Path.Combine(data, "settings.json")}' is denied.",
+        };
+
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+
+        Assert.Equal(("settings", nameof(IOException)), (applied.FailedStep, applied.FailureType));
+        Assert.Equal("Access to the path 'settings.json' is denied.", applied.FailureMessage);
+        Assert.DoesNotContain(data, applied.FailureMessage!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

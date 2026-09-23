@@ -13,6 +13,7 @@
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
             <TextBlock x:Name="ImportNothingSentLine" Style="{StaticResource Muted}" TextWrapping="Wrap" />
+            <TextBlock x:Name="ImportSettingsNoteLine" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
             <TextBlock x:Name="ImportAsideLine" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
             <!-- Cancel is both IsCancel and IsDefault, ConfirmWindow's own pattern: Enter must never import,
                  whatever has focus, only a deliberate click on the button that acts does. -->

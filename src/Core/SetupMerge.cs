@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
@@ -65,11 +66,12 @@ public interface ISetupWriter
 /// <summary>
 /// What Apply did, for the line the page says. <see cref="FailedStep"/> names the step that threw, or null.
 /// <see cref="SkippedRecipes"/> names a recipe that parsed on the sending PC but not here (a version gap), so it
-/// was counted by not counting it (spec §4.2) — null when nothing was skipped.
+/// was counted by not counting it (spec §4.2) — null when nothing was skipped. <see cref="FailureType"/> is for
+/// the trail; <see cref="FailureMessage"/> is what the failure said, redacted, for the screen (spec §4).
 /// </summary>
 public sealed record SetupApplied(
     int Recipes, int Clans, int Boards, int KeptClans, int Keys, int DroppedExclusions, string? AsideFolder, string? FailedStep, string? FailureType,
-    IReadOnlyList<string>? SkippedRecipes = null);
+    IReadOnlyList<string>? SkippedRecipes = null, string? FailureMessage = null);
 
 /// <summary>
 /// Importing a setup: the plan, pure (spec §2), and the apply (spec §4, Task 6). Identity: a recipe by slug, a clan by
@@ -289,11 +291,37 @@ public static class SetupMerge
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, step, ex.GetType().Name,
-                skippedRecipes.Count == 0 ? null : skippedRecipes);
+                skippedRecipes.Count == 0 ? null : skippedRecipes, Redact(ex.Message, writer.DataRoot));
         }
 
         return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, null, null,
             skippedRecipes.Count == 0 ? null : skippedRecipes);
+    }
+
+    /// <summary>
+    /// A failure's own words with every path at or beside the data folder cut back to its file name, so the line on
+    /// screen says WHAT could not be written without saying where a person's files live. The aside folder matches
+    /// too: it is the data folder's own name plus a stamp, so it shares the prefix.
+    /// <para>
+    /// The run is taken up to the next quote rather than the next space, because a BCL file-IO message quotes its
+    /// path ("Access to the path 'X' is denied.") and because erring long errs towards saying too little, which is
+    /// the safe direction for a privacy rule. Key VALUES are <see cref="Recipes.Redactor"/>'s job; the page runs
+    /// every line it shows through that as well.
+    /// </para>
+    /// </summary>
+    internal static string Redact(string message, string dataRoot)
+    {
+        var root = dataRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (root.Length == 0 || message.Length == 0) return message;
+
+        return Regex.Replace(
+            message,
+            Regex.Escape(root) + "[^'\"\r\n]*",
+            found => Path.GetFileName(found.Value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) is { Length: > 0 } name
+                ? name
+                : "the data folder",
+            RegexOptions.IgnoreCase,
+            TimeSpan.FromSeconds(1));
     }
 
     private static int KeptClans(SetupMergePlan plan) => plan.Items.Count(i => i.Kind == SetupKind.Clan && i.Outcome == SetupOutcome.Kept);

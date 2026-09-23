@@ -55,10 +55,10 @@ public interface ISetupServices
 
     /// <summary>
     /// Writes the score book to a stats file at <paramref name="path"/> for another PC to import (<see cref="Book.BookPack"/>),
-    /// pending lines flushed first so the file holds every reading taken. Returns what the file's manifest says. Off the UI
-    /// thread: it reads the whole book.
+    /// pending lines flushed first so the file holds every reading taken. Returns what the file's manifest says and the setup
+    /// that went into it, which is null when there was nothing to carry. Off the UI thread: it reads the whole book.
     /// </summary>
-    Book.BookPackManifest ExportStats(string path);
+    Book.BookExport ExportStats(string path);
 
     bool Running { get; }
 

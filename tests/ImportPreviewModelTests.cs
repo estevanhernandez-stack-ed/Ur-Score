@@ -74,10 +74,18 @@ public class ImportPreviewModelTests
             + "Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
             ImportPreviewModel.AfterLine(skipped, stats));
 
+        // No message of its own: the type in brackets, as the line read before there was one.
         var failed = applied with { Boards = 0, FailedStep = "boards", FailureType = "UnauthorizedAccessException" };
         Assert.Equal(
             "Imported 2 recipes and 3 clans, then the boards could not be written (UnauthorizedAccessException); what was imported before that stands. Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
             ImportPreviewModel.AfterLine(failed, new BookImportOutcome(0, "")));
+
+        // Spec §4: the redacted MESSAGE on screen (the type goes to the trail). Its own full stop is dropped, so
+        // the sentence that carries on after it reads as one sentence and not two run together.
+        var said = failed with { FailureMessage = "Access to the path 'boards.json' is denied." };
+        Assert.Equal(
+            "Imported 2 recipes and 3 clans, then the boards could not be written: Access to the path 'boards.json' is denied; what was imported before that stands. Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
+            ImportPreviewModel.AfterLine(said, new BookImportOutcome(0, "")));
 
         // Nothing at all got written (the very first step, the aside copy, failed): its own arm, since "Imported
         // nothing, then ..." reads as nonsense and "what was imported before that stands" is vacuous when nothing was.
