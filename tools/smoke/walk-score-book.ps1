@@ -145,8 +145,9 @@ try {
     Check '5 Copied diagnostics count the book but carry none of it' (($diag -match 'pending=\d+ dropped=\d+ \(no book content is included\)') -and ($diag -notmatch '"accounts":')) 'checked clipboard'
 
     # Exit 2 means there was nothing to check (RoRoRo never listed accounts); the live walk runs it with RoRoRo up.
-    & (Join-Path $PSScriptRoot 'check-book-privacy.ps1') -DataFolder $UrData
-    Check '6 Every account in the book is one of yours' ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 2) "check-book-privacy exit $LASTEXITCODE"
+    & (Join-Path $PSScriptRoot 'check-book-privacy.ps1') -DataFolder $UrData | Out-Host
+    $privacy = $LASTEXITCODE
+    Check '6 Every account in the book is one of yours' ($privacy -eq 0 -or $privacy -eq 2) "check-book-privacy exit $privacy$(if ($privacy -eq 2) { ' (nothing to check: RoRoRo never listed your accounts)' })"
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }

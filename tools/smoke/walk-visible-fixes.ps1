@@ -491,7 +491,8 @@ try {
 
     & (Join-Path $PSScriptRoot 'check-boards-privacy.ps1') | Out-Host
     $privacy = $LASTEXITCODE
-    Check '10 boards.json holds no other player' ($privacy -eq 0) "exit=$privacy"
+    # Exit 2 is "nothing to check" (no accounts.json: RoRoRo quit), as the board-editing, pop-out and score-book walks read it.
+    Check '10 boards.json holds no other player' ($privacy -eq 0 -or $privacy -eq 2) "check-boards-privacy exit $privacy$(if ($privacy -eq 2) { ' (nothing to check: RoRoRo never listed your accounts)' })"
 }
 finally {
     [UrPointer]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
