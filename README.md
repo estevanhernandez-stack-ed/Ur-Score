@@ -157,10 +157,11 @@ right-clicking its tab or pressing **Shift+F10** opens the same menu.
 asks for. Each panel's **Settings** button changes those choices later. A panel whose source or
 stat was removed says so and offers **Choose another**.
 
-**Edit board** opens a draft: drag the grip or use **Move earlier** and **Move later** to reorder,
-choose a size, tick **Tall**, or remove a panel. **Done** saves the draft. Panels currently flow in
-reading order; resizing can move the panels after them. Free placement and corner resizing are
-not available yet.
+**Edit board** opens a draft of the board on screen. Drag a panel by its header to move it; drag its right edge
+to change its width, or its bottom-right corner to change its width and make it one or two rows tall. With the
+keyboard, focus one of a panel's buttons and use Left and Right to move it, Ctrl+Left and Ctrl+Right to change its
+width, and Ctrl+Up and Ctrl+Down for one or two rows. **✕** removes a panel. **Done** saves the draft; closing Ur
+Score while editing saves it too. Panels flow in reading order, so a move or a resize can move the panels after it.
 
 **Pop out** puts a panel in its own always-on-top window. It keeps updating with the board, and
 its saved position is restored on the next start. Use the pop-out's **Return to the board** button

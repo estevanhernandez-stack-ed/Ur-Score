@@ -3,6 +3,17 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.5.10 - 2026-09-23
+
+### Fixed
+
+- **A tall panel stays tall when you let go of its corner.** Dragging the corner of a two-row panel and letting
+  go at the height it had made it one row; it is measured against one row now.
+- **Moving a panel with the keyboard keeps going.** After the first Left or Right, focus fell out of the board and
+  the next key moved nothing. It stays on the moved panel.
+- **Popped-out panels show no resize grips**, since their slot can't be resized.
+- **✕ says which panel it removes**, for screen readers.
+
 ## 0.5.9 - 2026-09-22
 
 ### Added

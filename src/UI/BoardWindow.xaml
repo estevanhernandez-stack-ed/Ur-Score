@@ -55,7 +55,7 @@
         </Style>
     </Window.Resources>
     <DockPanel>
-        <!-- The top bar (spec §8): tabs and the period line on the left; Start, Test now and Setup on the right. -->
+        <!-- The top bar (spec §8): tabs, ⋯ and + Board, then the period line; Start, Test now, Edit board and Setup on the right. -->
         <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="16,8">
             <DockPanel x:Name="TopBar" LastChildFill="True" SizeChanged="OnTopBarSizeChanged">
                 <StackPanel x:Name="TopButtons" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
