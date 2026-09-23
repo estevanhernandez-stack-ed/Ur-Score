@@ -404,6 +404,9 @@ One page per recipe.
 
 ## §8 Starter boards (stage 1)
 
+Superseded by the board-chrome spec, 2026-09-23 (`docs/2026-09-23-board-chrome-design.md` §3): the top bar below
+still names **Start**/**Stop** and **Test now** as buttons; they are now one status chip and ⟳.
+
 In stage 1 the window shows one fixed board: the **Battle** starter board below, or **Grind** when no recipe
 with a `period` is installed. Its panels are the §9.4 panels with fixed settings. Stage 2 makes them editable
 and adds tabs.

@@ -13,7 +13,7 @@ namespace UrScore.Tests;
 public class DragHandleTests
 {
     [Fact]
-    public void GripIsDrawnNamedAndKeepsItsMouseHandlerWithoutAKeyboardStop()
+    public void GripIsDrawnNamedInsideTheHeaderAndDragsThroughIt()
     {
         Exception? failure = null;
         var thread = new Thread(() =>
@@ -28,17 +28,20 @@ public class DragHandleTests
                 var panel = XDocument.Load(System.IO.Path.Combine(directory.FullName, "src", "UI", "Panels", "PanelFrame.xaml"));
                 var grip = panel.Descendants().Single(element => (string?)element.Attribute(xaml + "Name") == "DragHandle");
                 Assert.Equal(presentation + "Label", grip.Name);
-                Assert.Equal("OnDragHandleDown", (string?)grip.Attribute("MouseLeftButtonDown"));
-                grip.Attribute("MouseLeftButtonDown")!.Remove();
+                Assert.Contains(grip.Ancestors(), a => (string?)a.Attribute(xaml + "Name") == "TitleRow");
+                Assert.Null(grip.Attribute("MouseLeftButtonDown"));
                 var label = (Label)XamlReader.Parse(grip.ToString());
                 var peer = Assert.IsType<LabelAutomationPeer>(UIElementAutomationPeer.CreatePeerForElement(label));
                 Assert.Equal("DragHandle", peer.GetAutomationId());
                 Assert.Equal("Drag to move", peer.GetName());
                 Assert.Equal("Drag to move", label.ToolTip);
                 Assert.False(label.Focusable);
+                // The grip starts Collapsed outside Arrange; measure it as shown, since a Collapsed element always
+                // desired-sizes to zero regardless of content.
+                label.Visibility = Visibility.Visible;
                 label.Measure(new Size(100, 100));
-                Assert.InRange(label.DesiredSize.Width, 24, 40);
-                Assert.InRange(label.DesiredSize.Height, 24, 40);
+                Assert.InRange(label.DesiredSize.Height, 8, 20);
+                Assert.InRange(label.DesiredSize.Width, 12, 30);
                 var dots = Assert.IsType<UniformGrid>(label.Content);
                 Assert.Equal((3, 2, 8d, 12d), (dots.Rows, dots.Columns, dots.Width, dots.Height));
                 Assert.False(dots.IsHitTestVisible);
@@ -68,6 +71,21 @@ public class DragHandleTests
         Assert.True(thread.Join(UiThread.Longest), $"the UI thread did not finish within {UiThread.Longest}");
         if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
+
+    /// <summary>Spec §4.3: nothing is inserted above the title while arranging, so no panel changes height on the way in.</summary>
+    [Fact]
+    public void ArrangingAddsNoRowAboveTheTitle()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(System.IO.Path.Combine(directory.FullName, "Ur-Score.csproj"))) directory = directory.Parent;
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var panel = XDocument.Load(System.IO.Path.Combine(directory!.FullName, "src", "UI", "Panels", "PanelFrame.xaml"));
+
+        Assert.DoesNotContain(panel.Descendants(), e => (string?)e.Attribute(xaml + "Name") == "EditTools");
+        var remove = panel.Descendants().Single(e => (string?)e.Attribute(xaml + "Name") == "RemovePanelButton");
+        Assert.Contains(remove.Ancestors(), a => (string?)a.Attribute(xaml + "Name") == "PanelTools");
+    }
+
     /// <summary>
     /// The whole title line drags the panel while editing, not the six-dot grip alone. Two things have to hold in
     /// the XAML for that to work at all, and neither is visible by looking at the running app:
@@ -94,8 +112,46 @@ public class DragHandleTests
         Assert.Equal("OnTitleRowDown", (string?)row.Attribute("MouseLeftButtonDown"));
         Assert.Equal("OnTitleRowMove", (string?)row.Attribute("MouseMove"));
         Assert.Equal("OnTitleRowUp", (string?)row.Attribute("MouseLeftButtonUp"));
+        Assert.Equal("OnTitleRowLostCapture", (string?)row.Attribute("LostMouseCapture"));
 
         var background = (string?)row.Attribute("Background");
         Assert.False(string.IsNullOrWhiteSpace(background), "the title row needs a Background or its empty space is hit-test invisible");
+    }
+
+    /// <summary>
+    /// A press on the header captures the mouse while arranging, and the drag lets it go before it starts. Without
+    /// the capture a pointer that left the ~20px title row before crossing the drag threshold (a quick diagonal
+    /// move, which is how a real hand drags a panel to the one below) never raised TitleRow's MouseMove again, and
+    /// nothing dragged; the UIA walk's real-pointer drag from the grip failed exactly this way (2026-09-23). The
+    /// release has to come BEFORE DragStart is raised, because DoDragDrop runs inside that event and needs the
+    /// mouse. Read from source: capture needs a real window and a real pointer, which no unit test here has.
+    /// </summary>
+    [Fact]
+    public void AHeaderPressCapturesTheMouseAndTheDragReleasesItFirst()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(System.IO.Path.Combine(directory.FullName, "Ur-Score.csproj"))) directory = directory.Parent;
+        Assert.NotNull(directory);
+        var source = File.ReadAllText(System.IO.Path.Combine(directory!.FullName, "src", "UI", "Panels", "PanelFrame.xaml.cs"));
+
+        string Body(string signature, string next)
+        {
+            var start = source.IndexOf(signature, StringComparison.Ordinal);
+            var end = source.IndexOf(next, start + 1, StringComparison.Ordinal);
+            Assert.True(start >= 0 && end > start, $"{signature} has moved or been renamed; this fence is looking in the wrong place.");
+            return source[start..end];
+        }
+
+        var down = Body("private void OnTitleRowDown(", "private void OnTitleRowMove(");
+        Assert.Contains("TitleRow.CaptureMouse()", down, StringComparison.Ordinal);
+
+        var move = Body("private void OnTitleRowMove(", "private void OnTitleRowUp(");
+        var release = move.LastIndexOf("TitleRow.ReleaseMouseCapture()", StringComparison.Ordinal);
+        var drag = move.IndexOf("PanelTool.DragStart", StringComparison.Ordinal);
+        Assert.True(release >= 0 && drag > release, "the drag must release the capture before it raises DragStart");
+
+        var up = Body("private void OnTitleRowUp(", "private void OnTitleRowLostCapture(");
+        Assert.Contains("TitleRow.ReleaseMouseCapture()", up, StringComparison.Ordinal);
+        Assert.Contains("_pressedAt = null", source[source.IndexOf("private void OnTitleRowLostCapture(", StringComparison.Ordinal)..], StringComparison.Ordinal);
     }
 }

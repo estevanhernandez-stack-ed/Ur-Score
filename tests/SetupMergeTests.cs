@@ -359,7 +359,7 @@ public class SetupMergeTests
     /// Spec §1/§7: the file carries exactly two settings, and <c>StartOnOpen</c> is this machine's own. The settings
     /// step must therefore write THIS PC's record with the file's two laid over it — never the file's whole record,
     /// which <see cref="SetupPack.FromFolder"/> rebuilds with <c>StartOnOpen</c> at the record default, so every
-    /// import would quietly turn "Start reading as soon as Ur Score opens" back off (final review, 2026-09-22).
+    /// import would quietly turn "Start reading when Ur Score opens" back off (final review, 2026-09-22).
     /// </summary>
     [Fact]
     public void TheSettingsStepTakesTheFilesTwoAndKeepsThisPcsStartOnOpen()

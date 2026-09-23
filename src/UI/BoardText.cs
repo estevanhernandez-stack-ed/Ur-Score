@@ -33,6 +33,9 @@ public static class BoardText
 
     public const string ReadingOnce = "Reading every source once…";
 
+    /// <summary>The state line while paused (BC2): the one sentence that says what pausing costs.</summary>
+    public const string Paused = "Paused. Nothing is read or sent, so phone alerts are off.";
+
     public const string Unexpected = "Something unexpected went wrong.";
 
     /// <summary>The detail under <see cref="Unexpected"/>. The exception itself goes to the trail, never onto the board.</summary>
@@ -74,7 +77,7 @@ public static class BoardText
         if (activity.Starting) return Starting + remembered;
         if (activity.Testing) return ReadingOnce + remembered;
 
-        if (!live.Running) return (everStarted ? "Stopped." : "Not started.") + LastReadNews(live, activity) + remembered;
+        if (!live.Running) return (everStarted ? Paused : "Not started.") + LastReadNews(live, activity) + remembered;
 
         var enabled = live.Sources.Where(s => s.Enabled).ToList();
         if (enabled.Count == 0) return "Running, with nothing to read yet." + remembered;
@@ -94,10 +97,10 @@ public static class BoardText
     }
 
     /// <summary>
-    /// Backlog S1-14.5: what the read you asked for while reading was stopped found, after "Not started." or "Stopped.". Only a
-    /// read asked for since the last Stop, and only the sources it read, so pressing Stop still says "Stopped." alone and a timed
-    /// read that lands just after it isn't mistaken for an answer. A source in trouble is named first, as the running line does;
-    /// else what every source found, when they found the same; else how many answered.
+    /// Backlog S1-14.5: what the read you asked for while reading was stopped found, after "Not started." or <see cref="Paused"/>.
+    /// Only a read asked for since the last Stop, and only the sources it read, so pausing still says <see cref="Paused"/> alone
+    /// and a timed read that lands just after it isn't mistaken for an answer. A source in trouble is named first, as the
+    /// running line does; else what every source found, when they found the same; else how many answered.
     /// </summary>
     private static string LastReadNews(LiveBoard live, BoardActivity activity)
     {
@@ -162,6 +165,55 @@ public static class BoardText
     public static string DetailLine(LiveBoard live, string? budgetWarning, string? boardsProblem, string? note = null) =>
         boardsProblem ?? note ?? DetailLine(live, budgetWarning);
 
+    /// <summary>
+    /// Whether reading is in trouble, for the chip: a source this session reads that isn't healthy, or RoRoRo down
+    /// (which the state line counts as healthy, since reading goes on, but nothing reaches the phone).
+    /// </summary>
+    public static bool InTrouble(LiveBoard live) =>
+        live.Snapshots.Values.Any(s => s.State == WatchState.HostDown)
+        || live.Sources.Where(s => s.Enabled).Any(s => live.LiveOf(s.Id) is { } snapshot && !Healthy(snapshot.State));
+
+    /// <summary>One line per switched-on source on the status card: its trouble, else when it was read and when it reads next.</summary>
+    public static IReadOnlyList<StatusRow> CardRows(LiveBoard live)
+    {
+        var rows = new List<StatusRow>();
+        foreach (var source in live.Sources.Where(s => s.Enabled))
+        {
+            if (live.LiveOf(source.Id) is { } snapshot && !Healthy(snapshot.State))
+            {
+                rows.Add(new StatusRow(live.SourceName(source), DiagnosticsModel.StateText(snapshot.State)));
+                continue;
+            }
+
+            if (!live.LastRead.TryGetValue(source.Id, out var last))
+            {
+                rows.Add(new StatusRow(live.SourceName(source), "not read yet"));
+                continue;
+            }
+
+            var line = $"read {StatText.Span(live.Now - last)} ago";
+            if (live.Running && live.FindRecipe(source.Recipe)?.Recipe is { } recipe)
+            {
+                var due = last.AddSeconds(recipe.EffectiveEverySeconds);
+                line += due > live.Now ? $" · next in {StatText.Span(due - live.Now)}" : " · next read due";
+            }
+
+            rows.Add(new StatusRow(live.SourceName(source), line));
+        }
+
+        return rows;
+    }
+
+    /// <summary>Whether the phone is hearing anything, on the status card.</summary>
+    public static string AlertsLine(bool running, bool sending, bool hostDown) =>
+        !sending ? "Phone alerts: nothing is set to send."
+        : !running ? "Phone alerts: off while reading is paused."
+        : hostDown ? "Phone alerts: RoRoRo is not running, so nothing is sent."
+        : "Phone alerts: sending.";
+
+    /// <summary>BC8: closing asks only while something is being read AND sent; a paused board closes silencing nothing.</summary>
+    public static bool AsksBeforeClose(bool running, bool sending) => running && sending;
+
     /// <summary>What Delete… asks before the board goes, for the themed confirmation to draw.</summary>
     /// <summary>
     /// Whether closing would silence something: a recipe with a send tick or a field metric on and at least one of its
@@ -184,6 +236,46 @@ public static class BoardText
         $"Delete the {board.Name} board? Its panels go with it. Your score book isn't touched.",
         "Delete",
         $"Delete the {board.Name} board");
+
+    /// <summary>The Arrange banner (spec §4.2): what arranging this board is, and how to do it.</summary>
+    public static string ArrangingLine(string boardName) =>
+        $"Arranging \"{boardName}\" · drag a header to move · drag an edge or corner to resize · ←/→ move";
+
+    /// <summary>Done, with how many changes it will save (spec §4.2).</summary>
+    public static string DoneLabel(int changes) => changes == 0 ? "Done" : $"Done ({changes})";
+
+    /// <summary>
+    /// R8 (task 14): the banner while a save has failed. It still names the board, the same as
+    /// <see cref="ArrangingLine"/>, rather than showing the note on its own — arranging hasn't stopped, only saving
+    /// it has (V3-S.10: a failed save is never silent).
+    /// </summary>
+    public static string ArrangingNote(string boardName, string note) => $"Arranging \"{boardName}\" · {note}";
+
+    /// <summary>What a board change was, for the undo toast: "Removed Battle race" (BC6, spec §5.3).</summary>
+    public static string Changed(string verb, string title) => $"{verb} {title}";
+
+    /// <summary>A whole arranging session, which Done makes one undo step (spec §5.2).</summary>
+    public static string Arranged(string boardName) => $"Arranged {boardName}";
+
+    /// <summary>
+    /// What an undo did. A starter tab re-follows only when the restored board matches what its starter draws now
+    /// (Following.cs); when the sources changed in between it can't, and the toast says so (spec §5.4).
+    /// </summary>
+    public static string Undone(UndoStep step, bool unfollowed) =>
+        unfollowed ? $"Restored, but {step.Before.Name} no longer follows your clans." : $"Undid: {step.What}";
+
+    /// <summary>
+    /// A failed undo leaves the history as it was (spec §5.5); the detail line already carries the redacted reason
+    /// (<see cref="BoardsNotSaved"/>), so the toast points at it rather than repeating it.
+    /// </summary>
+    public const string UndoNotSaved = "That undo wasn't saved; the line above says why.";
+
+    /// <summary>BC5: asked only when something changed; "your changes", since ⋯ settings changed while arranging are in the draft.</summary>
+    public static Confirm CancelArrangeQuestion(BoardDef board) => new(
+        "Cancel arranging",
+        $"Throw away your changes to the {board.Name} board?",
+        "Throw away",
+        $"Throw away your changes to {board.Name}") { CancelButton = "Keep arranging" };
 
     /// <summary>
     /// A board change that couldn't be written, in plain words. No stack; an unknown IO reason is Windows' own
@@ -240,6 +332,10 @@ public static class BoardText
     public static string ChooseAnotherName(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "Choose another" : $"Choose another for {title.Trim()}";
 
+    /// <summary>As <see cref="PopOutName"/>, for ✕ in edit mode: five panels gave five buttons called "Remove panel".</summary>
+    public static string RemovePanelName(string? title) =>
+        string.IsNullOrWhiteSpace(title) ? "Remove panel" : $"Remove {title.Trim()}";
+
     /// <summary>
     /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
     /// (D4); a board with no panels, including a following tab being edited; else none.
@@ -252,7 +348,7 @@ public static class BoardText
         : board.Panels.Count == 0 ? BoardEmpty.NoPanels
         : BoardEmpty.None;
 
-    /// <param name="editing">In edit mode an empty board is told to press Done, not Edit board, which is where you are.</param>
+    /// <param name="editing">While arranging, an empty board is told to press Done, not Arrange, which is where you are.</param>
     public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe, bool editing = false)
     {
         var group = recipe is null ? "source" : RecipeWords.Group(recipe);
@@ -268,11 +364,11 @@ public static class BoardText
                 "Type a few letters of its name in Setup, and Ur Score finds which of your accounts are in it.",
                 $"Choose your main {group}"),
             // The state line above already says the book couldn't be read, and why: the board says what that stops (V3-S.21).
-            BoardEmpty.BookUnread => ("Start and Test now are off",
-                "They come back once Ur Score can read your score book. The line above says what stopped it.",
+            BoardEmpty.BookUnread => ("Reading is off",
+                "It comes back once Ur Score can read your score book. The line above says what stopped it.",
                 "Try again"),
             BoardEmpty.NoPanels => ("This board has no panels yet",
-                editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Edit board.",
+                editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Arrange.",
                 "Add panel"),
             _ => ("", "", ""),
         };
@@ -281,3 +377,6 @@ public static class BoardText
     private static bool Healthy(WatchState state) =>
         state is WatchState.Reporting or WatchState.Showing or WatchState.NoMatches or WatchState.HostDown or WatchState.SourceIdle;
 }
+
+/// <summary>One source's line on the status card.</summary>
+public sealed record StatusRow(string Name, string Line);

@@ -1,7 +1,7 @@
 # The starter boards on a clean data folder: a main clan, a clan your accounts are in, a watched clan, (when
 # the fixture exists) the top list and the profile recipe with its suggestions, then two tabs, Battle first, and
 # every Battle panel with its title and no account card or table on it, Alts as its own tab, Start, Test now and
-# Stop, and a change to Alts that leaves Battle following.
+# Pause through the status card, and a change to Alts that leaves Battle following.
 param(
     [string]$Main = 'CCGP',
     [string]$Alt = 'K0i2'
@@ -132,9 +132,9 @@ try {
     Select-Tab (Get-BoardWindow) 'Battle'
     Check '6c Battle still shows its panels' ([bool](Find-ByAutomationId (Get-BoardWindow) 'RacePanel1')) (@(Get-PanelIds (Get-BoardWindow)) -join ',')
 
-    Invoke-Element (Find-ByAutomationId $board 'StartStopButton')
-    $stopped = Wait-Line $board 'StateLine' '^Stopped\.$' 20
-    Check '4 Stop stops' ($stopped -eq 'Stopped.') $stopped
+    Invoke-PauseResume | Out-Null
+    $stopped = Wait-Line (Get-BoardWindow) 'StateLine' '^Paused\.' 20
+    Check '4 Pause pauses' ($stopped -match '^Paused\.') $stopped
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }

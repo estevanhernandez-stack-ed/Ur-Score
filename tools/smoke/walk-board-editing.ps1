@@ -27,9 +27,46 @@ try {
     # 2. Edit mode with no change writes nothing (R8).
     Enter-EditMode $board
     Check '2 Edit mode shows the panel tools' ([bool](Find-ByAutomationId (Find-ByAutomationId $board 'RacePanel1') 'DragHandle')) 'DragHandle'
-    Check '2b The tabs are off while editing' (-not (Find-ByAutomationId $board 'BoardTabs').Current.IsEnabled) 'BoardTabs disabled'
+    Check '2b The tabs stay on while arranging' ((Find-ByAutomationId $board 'BoardTabs').Current.IsEnabled) 'BoardTabs enabled'
     Complete-EditMode $board
     Check '2c Done with no change writes nothing' (-not (Test-Path $boardsFile)) "exists=$(Test-Path $boardsFile)"
+
+    # 2d. Cancel with a change asks, and throws the change away (BC5).
+    $before = @(Get-PanelIds (Get-BoardWindow))
+    Enter-EditMode (Get-BoardWindow)
+    Move-PanelEarlier (Get-BoardWindow) 'RacePanel1'
+    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'CancelArrangeButton')
+    $ask = Wait-UrConfirm '^Cancel arranging$' 10
+    Check '2d Cancel with a change asks first' ([bool]$ask) "confirm=$([bool]$ask)"
+    Invoke-UrConfirm $ask 'Throw away your changes to Battle'
+    Start-Sleep -Milliseconds 800
+    Check '2e ...and the order is as it was' ((@(Get-PanelIds (Get-BoardWindow)) -join ',') -eq ($before -join ',')) "$(@(Get-PanelIds (Get-BoardWindow)) -join ',')"
+    Check '2f ...and nothing was written' (-not (Test-Path $boardsFile)) "exists=$(Test-Path $boardsFile)"
+
+    # The chip is "Start reading" on a fresh walk folder: press it once so reading has run, then 2g's own press
+    # opens the status card instead of starting it again (BC2). Wait for the chip's name to say reading is live
+    # or in trouble before going on.
+    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'StartStopButton')
+    Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'StartStopButton').Current.Name -match '^Reading (is on|has a problem)' } 30 | Out-Null
+
+    # 2g. Esc with the status card open closes the card, not the arrangement (Review Focus 4).
+    Enter-EditMode (Get-BoardWindow)
+    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'StartStopButton')
+    Start-Sleep -Milliseconds 500
+    [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+    Start-Sleep -Milliseconds 500
+    # ArrangeBanner is a Border, which has no UIA peer, so it is never found; Cancel is a Button that is enabled
+    # only while arranging (ApplyButtons), so it stands in for "arranging is still on".
+    $arranging = (Find-ByAutomationId (Get-BoardWindow) 'CancelArrangeButton').Current.IsEnabled
+    Check '2g Esc on the status card leaves arranging on' ($arranging -eq $true) "CancelArrangeButton enabled=$arranging"
+    Complete-EditMode (Get-BoardWindow)
+
+    # Reading started above sends Points; pause it so the rest of the walk sends nothing live and step 10's
+    # Stop-UrScoreFromBoard doesn't meet the close prompt that reading raises (it doesn't answer one).
+    $paused = Invoke-PauseResume
+    Check '2h Pause from the card' ($paused -eq 'Resume reading') "button='$paused'"
+    [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+    Start-Sleep -Milliseconds 500
 
     # 3. Move earlier; Done saves the order.
     $before = @(Get-PanelIds $board)
@@ -117,6 +154,39 @@ try {
     Start-Sleep -Seconds 1
     $names = @(Get-TabNames (Get-BoardWindow))
     Check '9d ...and the board goes' ($names.Count -eq 2 -and $names -notcontains 'Rivals copy') ($names -join ', ')
+
+    # 12. Undo (BC6): a whole Arrange is one step, undone by one Ctrl+Z outside Arrange. Two real draft edits: the
+    # race (second on Battle since step 3) moves to first, and the live leaderboard (last, since step 6) moves up one.
+    $before = @(Get-PanelIds (Get-BoardWindow))
+    Enter-EditMode (Get-BoardWindow)
+    Move-PanelEarlier (Get-BoardWindow) 'RacePanel1'
+    Move-PanelEarlier (Get-BoardWindow) 'LiveLeaderboardPanel1'
+    $toast = Line (Get-BoardWindow) 'UndoToastText'
+    Check '12a A draft change shows its toast while arranging (R10)' ($toast -match '^Moved ') $toast
+    Complete-EditMode (Get-BoardWindow)
+    $arranged = @(Get-PanelIds (Get-BoardWindow))
+    $raceAt = [array]::IndexOf($arranged, 'RacePanel1')
+    $liveWas = [array]::IndexOf($before, 'LiveLeaderboardPanel1')
+    $liveAt = [array]::IndexOf($arranged, 'LiveLeaderboardPanel1')
+    Check '12b Both draft edits were saved' ($raceAt -eq 0 -and $liveWas -gt 0 -and $liveAt -eq $liveWas - 1) "before: $($before -join ','); after: $($arranged -join ',')"
+    $toast = Line (Get-BoardWindow) 'UndoToastText'
+    Check '12c Done says the arrangement can be undone' ($toast -match '^Arranged ') $toast
+    (Get-BoardWindow).SetFocus()
+    [System.Windows.Forms.SendKeys]::SendWait('^z')
+    Start-Sleep -Milliseconds 1000
+    Check '12d Ctrl+Z puts the whole arrangement back, both edits in one step' ((@(Get-PanelIds (Get-BoardWindow)) -join ',') -eq ($before -join ',')) "$(@(Get-PanelIds (Get-BoardWindow)) -join ',')"
+
+    # 12e. While arranging, Ctrl+Z steps back through the draft only.
+    Enter-EditMode (Get-BoardWindow)
+    Move-PanelEarlier (Get-BoardWindow) 'RacePanel1'
+    [System.Windows.Forms.SendKeys]::SendWait('^z')
+    Start-Sleep -Milliseconds 800
+    Check '12e Ctrl+Z while arranging undoes the draft move' ((@(Get-PanelIds (Get-BoardWindow)) -join ',') -eq ($before -join ',')) "$(@(Get-PanelIds (Get-BoardWindow)) -join ',')"
+    # DoneButton's AutomationProperties.Name is fixed to "Done" in XAML, so .Current.Name never sees the "(n)"
+    # count; Get-AllTexts reads the TextBlock WPF draws for the button's Content instead (controller ruling).
+    $doneTexts = @(Get-AllTexts (Find-ByAutomationId (Get-BoardWindow) 'DoneButton'))
+    Check '12f ...and Done is back to no changes' ($doneTexts -contains 'Done') ($doneTexts -join ',')
+    Complete-EditMode (Get-BoardWindow)
 
     # 10. A restart keeps it all.
     Stop-UrScoreFromBoard

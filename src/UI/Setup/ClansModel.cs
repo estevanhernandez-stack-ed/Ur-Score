@@ -79,7 +79,7 @@ public static class ClansModel
     /// <summary>The sentence after the one read that follows a pick (spec §7.1).</summary>
     public static ClanProbe Probe(string name, RecipeSnapshot? snapshot, IReadOnlyList<HostAccount> accounts)
     {
-        if (snapshot is null) return new ClanProbe($"Added {name}. It's read when you press Start.", false);
+        if (snapshot is null) return new ClanProbe($"Added {name}. It's read once reading starts, when Ur Score opens or from ▶ Start reading on the board.", false);
 
         if (snapshot.Rows is null)
         {

@@ -7,6 +7,8 @@ param([string]$Main = 'CCGP')
 $ErrorActionPreference = 'Stop'
 $clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
 $backup = $null
+# The owner's own import asides, taken before anything here imports, so cleanup removes only the walk's (4c2, 4f).
+$ownersAsides = Get-UrBeforeImportFolders
 
 try {
     $backup = Move-UrDataAside
@@ -37,8 +39,10 @@ try {
     Check '2 Per recipe: readings, first reading, finals and size' (
         ($recipes -contains 'Pet Sim 99 clan battle points') -and (@($recipes -match '^\d[\d,]* readings? kept .+ (bytes|KB|MB)$').Count -eq 1)) ($recipes -join ' | ')
 
+    # This walk never presses Start or Pause/Resume, only Test now (line 21), so the board has never started this
+    # session (AppServices.EverStarted is false): "Not started. ...", not "Paused. ..." (2026-09-23 review).
     $notRecording = @(Get-AllTexts (Find-ByAutomationId $setup 'NotRecordingList'))
-    Check '3 A stopped source says it is stopped' (@($notRecording -like '*Stopped. Press Start on the board.*').Count -gt 0) ($notRecording -join ' | ')
+    Check '3 A never-started source says so' (@($notRecording -like '*Not started. Start reading from the status chip on the board.*').Count -gt 0) ($notRecording -join ' | ')
 
     $slugDir = Join-Path $UrData 'scorebook\pet-sim-99-clan-battle-points'
     $months = @(Get-ChildItem $slugDir -Filter *.jsonl -ErrorAction SilentlyContinue)
@@ -92,6 +96,11 @@ try {
         $second = "$UrData.smoke-second-$(Get-Date -Format 'HHmmss')"
         Rename-Item $UrData (Split-Path $second -Leaf)
         New-Item -ItemType Directory -Force $UrData | Out-Null
+        # This fresh folder is built by hand, not through Move-UrDataAside or Copy-UrControlData, so it needs the
+        # same guard those give theirs: seeded with reading off before anything launches against it, then proven
+        # (2026-09-23 review: without this a bare Settings.Load would write Defaults here, startOnOpen true).
+        Initialize-UrSettingsOff
+        Assert-UrDataSendsNothing
         try {
             Start-UrScore | Out-Null
             $setup = Open-SetupPage 'Score book'
@@ -107,7 +116,7 @@ try {
             $sourcesOk = (-not (Test-Path $sourcesPath)) -or ((Get-Content $sourcesPath -Raw) -notmatch $Main)
             Check '4g The unticked clan never reaches sources.json' $sourcesOk "exists=$(Test-Path $sourcesPath)"
             $recipeState = Get-Content (Join-Path $UrData 'recipes\pet-sim-99-clan-battle-points.state.json') -Raw
-            # BOTH send lists: the per-stat "send" tick, and sentFieldMetrics — a clans list's clan-and-field
+            # BOTH send lists: the per-stat "send" tick, and sentFieldMetrics - a clans list's clan-and-field
             # numbers, which go out under fixed ids whatever the clan's role (final review, 2026-09-22).
             $sendOff = ($recipeState -notmatch '"send":\s*true') -and ($recipeState -notmatch '"sentFieldMetrics":\s*\[\s*"')
             Check '4h Nothing arrived set to send, on either send list' $sendOff 'state file read'
@@ -116,7 +125,8 @@ try {
         finally {
             Stop-UrScore
             if ($second) { Remove-Item $UrData -Recurse -Force -ErrorAction SilentlyContinue; Rename-Item $second (Split-Path $UrData -Leaf) }
-            Get-ChildItem (Split-Path $UrData -Parent) -Directory -Filter '626labs.ur-score.before-import-*' | Remove-Item -Recurse -Force
+            # Only the asides this walk's imports made (4c2 and 4f); one that was here before the walk is the owner's.
+            Remove-UrBeforeImportFoldersExcept $ownersAsides | Out-Host
         }
         # The walk's remaining steps (Diagnostics, the privacy check) run against the folder just restored above,
         # so Ur Score comes back up here rather than leaving the walk stopped mid-way.
@@ -135,11 +145,14 @@ try {
     Check '5 Copied diagnostics count the book but carry none of it' (($diag -match 'pending=\d+ dropped=\d+ \(no book content is included\)') -and ($diag -notmatch '"accounts":')) 'checked clipboard'
 
     # Exit 2 means there was nothing to check (RoRoRo never listed accounts); the live walk runs it with RoRoRo up.
-    & (Join-Path $PSScriptRoot 'check-book-privacy.ps1') -DataFolder $UrData
-    Check '6 Every account in the book is one of yours' ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 2) "check-book-privacy exit $LASTEXITCODE"
+    & (Join-Path $PSScriptRoot 'check-book-privacy.ps1') -DataFolder $UrData | Out-Host
+    $privacy = $LASTEXITCODE
+    Check '6 Every account in the book is one of yours' ($privacy -eq 0 -or $privacy -eq 2) "check-book-privacy exit $privacy$(if ($privacy -eq 2) { ' (nothing to check: RoRoRo never listed your accounts)' })"
 }
 finally {
     if ($null -ne $backup) { Restore-UrData $backup }
+    # Again here: a step that throws between 4c2's import and the inner finally would otherwise leave 4c2's aside.
+    Remove-UrBeforeImportFoldersExcept $ownersAsides | Out-Host
     Note-RoRoRo 'after'
     Show-Results
 }

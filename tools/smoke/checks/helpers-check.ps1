@@ -42,6 +42,15 @@ try {
     Note-RoRoRo 'after'
     $last = $script:Results[$script:Results.Count - 1]
     Check '4 RoRoRo after the walk is a FAIL only when it came up during it' (($up -and $last.Result -eq 'FAIL') -or (-not $up -and $last.Result -eq 'PASS')) "RoRoRo up now=$up; recorded $($last.Result): $($last.Seen)"
+
+    # 5. Import asides: one that was there before the walk is the owner's and survives; the walk's own goes.
+    $owners = "$UrData.before-import-20260922-1200"
+    New-Item -ItemType Directory -Force $owners | Out-Null
+    $kept = Get-UrBeforeImportFolders
+    $walks = "$UrData.before-import-20260923-0900"
+    New-Item -ItemType Directory -Force $walks | Out-Null
+    Remove-UrBeforeImportFoldersExcept $kept | Out-Null
+    Check '5 Cleanup removes the walk''s import aside and keeps the owner''s' ((Test-Path $owners) -and -not (Test-Path $walks)) "owner's kept=$(Test-Path $owners); walk's left=$(Test-Path $walks)"
 }
 finally {
     if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }

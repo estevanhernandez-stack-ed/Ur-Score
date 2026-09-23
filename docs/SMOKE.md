@@ -81,6 +81,25 @@ this repo's.
       any other account secret. (There should be none to find — Ur Score never holds one — but the
       point of this row is checking, not assuming.)
 
+## Needs a first walk-top-bar session (new automation, unverified)
+
+Task 9 (2026-09-23) wrote `walk-top-bar.ps1` and its `Invoke-PauseResume` helper without running either — the
+controller ruling for that task forbade launching the app or touching a live data folder, so both rows below are
+this walk's own acceptance check (spec 3.8), not a real-battle or real-host row, and still need a person to run it
+once before its checks are trusted.
+
+- [ ] **`Find-InUrWindows 'PauseResumeButton'` actually finds the status card's button.** The status card is a
+      WPF Popup, its own top-level HWND, and `Invoke-PauseResume` (`tools/smoke/uia-board.ps1`) assumes
+      `Find-InUrWindows` reaches into it the same way it reaches a menu or a pop-out window. Run `walk-top-bar.ps1`
+      once and confirm step 3 ("A click opens the card") passes rather than timing out into the helper's
+      `'the status card never opened'` throw. If it doesn't, give the Popup's Border an AutomationId and walk
+      `$AE::RootElement` children by process id for it instead, and update the helper's comment with whichever one
+      worked.
+- [ ] **`walk-top-bar`, `walk-starter-board`, `walk-alts`, `walk-score-book`, `walk-pop-outs` and `window-smoke` all
+      run 0 failed.** The five Test-now walks besides `walk-top-bar` are meant to pass with no edits beyond Step 1's
+      window-title widen (`Get-BoardWindow` now matches `RoRoRo Ur Score` with or without `" (Paused)"`) — that is
+      this PR's acceptance check (spec 3.8). Record each result line.
+
 ## Notes for whoever runs this list
 
 - Every row above traces to a specific behavior in the code, named in parentheses or by class —

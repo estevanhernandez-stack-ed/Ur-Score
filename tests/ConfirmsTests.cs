@@ -142,6 +142,7 @@ public class ConfirmsTests
             RecipesModel.RemoveQuestion(Clan),
             RecipesModel.RemoveQuestion(Profile),
             BoardText.DeleteBoardQuestion(new BoardDef("b-00000002", "Rivals copy", [])),
+            BoardText.CancelArrangeQuestion(new BoardDef("b-00000002", "Rivals copy", [])),
             ClansModel.AddQuestion(five, change, Clan, Installed(Clan), accountCount: 2, "Clan6")!,
         ];
 

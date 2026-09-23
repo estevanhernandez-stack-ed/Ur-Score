@@ -29,6 +29,8 @@
             <SolidColorBrush x:Key="Series6Brush" Color="#FF7A45" />
             <SolidColorBrush x:Key="Series7Brush" Color="#6C8BFF" />
             <SolidColorBrush x:Key="Series8Brush" Color="#E8E8F0" />
+            <!-- Paused (BC2): not a host palette slot, so it stays this colour in every theme; the chip's glyph and word carry the meaning too. -->
+            <SolidColorBrush x:Key="AmberBrush" Color="#FFB020" />
 
             <FontFamily x:Key="DisplayFont">Segoe UI Variable Display, Segoe UI</FontFamily>
             <FontFamily x:Key="BodyFont">Segoe UI Variable Text, Segoe UI</FontFamily>
@@ -223,6 +225,29 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+            <!-- The status chip (BC2): a flat pill that reads as a control, with a hover and pressed state. -->
+            <Style x:Key="ChipButton" TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                <Setter Property="Padding" Value="10,4" />
+                <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid>
+                                <Border x:Name="Fill" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="1" CornerRadius="999" />
+                                <Border x:Name="Sheen" Background="{DynamicResource WhiteBrush}" CornerRadius="999" Opacity="0" IsHitTestVisible="False" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Sheen" Property="Opacity" Value="0.08" /></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Sheen" Property="Opacity" Value="0.16" /></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" /></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
             <!-- Board panels (spec §9.4 and the mock): a card, big numbers, key-value lines, column headers, notes. -->
             <Style x:Key="PanelCard" TargetType="Border">
@@ -231,6 +256,16 @@
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="14,12,14,14" />
+                <!-- Spec §4.6: while arranging, the panel a keyboard is moving shows which one it is. -->
+                <Style.Triggers>
+                    <MultiTrigger>
+                        <MultiTrigger.Conditions>
+                            <Condition Property="IsKeyboardFocusWithin" Value="True" />
+                            <Condition Property="ui:PanelFrame.ShowEditTools" Value="True" />
+                        </MultiTrigger.Conditions>
+                        <Setter Property="BorderBrush" Value="{DynamicResource CyanBrush}" />
+                    </MultiTrigger>
+                </Style.Triggers>
             </Style>
             <!-- The mock's .big (30 px, line height 1). WPF gives the line a third more height than CSS does, split evenly
                  here by the negative margins, so the figures sit in a 30 px box as the mock's do and a 12 px word beside

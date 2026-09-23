@@ -81,7 +81,7 @@ public static class DiagnosticsModel
 
             string next;
             if (!source.Enabled || recipe is null) next = StatText.Dash;
-            else if (!running) next = "when you press Start";
+            else if (!running) next = "once reading starts";
             else if (last is null) next = "soon";
             else
             {

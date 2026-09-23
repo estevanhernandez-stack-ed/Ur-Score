@@ -65,7 +65,7 @@ public class DiagnosticsModelTests
         Assert.DoesNotContain(FakeKey, justRead.Detail);
         Assert.Equal("due now", late.NextRead);
         Assert.Equal("never", stopped.LastRead);
-        Assert.Equal("when you press Start", stopped.NextRead);
+        Assert.Equal("once reading starts", stopped.NextRead);
     }
 
     [Fact]

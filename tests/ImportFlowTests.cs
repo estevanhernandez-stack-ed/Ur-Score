@@ -151,6 +151,8 @@ public class ImportFlowTests : IDisposable
 
         public bool Running => throw new NotSupportedException();
 
+        public bool EverStarted => throw new NotSupportedException();
+
         public IReadOnlyDictionary<string, RecipeSnapshot> Latest => throw new NotSupportedException();
 
         public string? BudgetWarning => throw new NotSupportedException();

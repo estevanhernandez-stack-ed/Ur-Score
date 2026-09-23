@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Composition;
@@ -27,6 +29,16 @@ public partial class BoardWindow : Window
 
     private readonly AppServices _services;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(20) };
+
+    /// <summary>How long the undo toast shows (spec §5.3: about six seconds).</summary>
+    private readonly DispatcherTimer _toastClock = new() { Interval = TimeSpan.FromSeconds(6) };
+
+    /// <summary>
+    /// The board the undo toast speaks for, and whether it offers Undo. Its Undo shows only while that board is on
+    /// screen, so a toast carried over a tab switch (Done by tab click) can't undo a different board (BC6).
+    /// </summary>
+    private string? _toastBoardId;
+    private bool _toastCanUndo;
 
     /// <summary>What is on the grid now, in order: each panel's definition, its view and its automation id.</summary>
     private readonly List<(PanelDef Def, FrameworkElement View, string AutomationId)> _panels = [];
@@ -77,11 +89,18 @@ public partial class BoardWindow : Window
     /// <summary>Start is asking RoRoRo for accounts before the loops begin.</summary>
     private bool _starting;
 
-    /// <summary>A Test now read is in flight. Stop still works; see <see cref="BoardButtons"/>.</summary>
+    /// <summary>A Test now read is in flight. Pausing still works; see <see cref="BoardButtons"/>.</summary>
     private bool _testing;
 
     /// <summary>The empty state's Import recipe… is in flight.</summary>
     private bool _importing;
+
+    /// <summary>
+    /// Whether any source was switched on at the last draw, so the first one to come on asks start-on-open again (§3.6).
+    /// Null until opening has made its own start-on-open decision: the book's load redraws before that decision, and a
+    /// redraw asking first would start reading ahead of it (and again from it, or past its first-run skip).
+    /// </summary>
+    private bool? _hadSources;
 
     public BoardWindow(AppServices services)
     {
@@ -101,10 +120,16 @@ public partial class BoardWindow : Window
         // At open, from last session's pictures (V3-S.6): the icon doesn't wait for the first read.
         ApplyIcon(_services.WindowIcon);
         _clock.Tick += (_, _) => RenderLines();
+        _toastClock.Tick += (_, _) =>
+        {
+            _toastClock.Stop();
+            UndoToast.Visibility = Visibility.Collapsed;
+        };
         Loaded += OnLoaded;
         Closed += (_, _) =>
         {
             _clock.Stop();
+            _toastClock.Stop();
             _services.Changed -= Render;
             _services.IconChanged -= ApplyIcon;
         };
@@ -133,8 +158,11 @@ public partial class BoardWindow : Window
         var firstRun = SetupPages.FirstRunPage(_services.Installed, _services.Sources);
         if (firstRun is not null) OpenSetup(firstRun);
 
-        // Plan A33: with "Start reading as soon as Ur Score opens" ticked, the board does once what pressing Start
-        // does — after the book is read, and never while Setup has just opened on a recipe that has no source yet.
+        // Sources already on at open are not "the first one came on" (§3.6); RenderBoard asks again only on none-to-some.
+        _hadSources = _services.Sources.Any(s => s.Enabled);
+
+        // Plan A33: with "Start reading when Ur Score opens" ticked, the board starts reading itself — after
+        // the book is read, and never while Setup has just opened on a recipe that has no source yet.
         if (!BoardButtons.StartsOnOpen(
                 _services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
                 _services.Installed.Count, _services.Sources.Any(s => s.Enabled), firstRun is not null))
@@ -195,6 +223,7 @@ public partial class BoardWindow : Window
         var boards = _services.Boards;
         var board = ShownBoard(boards);
         _boardId = board.Id;
+        ShowToastUndo();
 
         RenderTabs(boards, board);
         RenderEmpty(board);
@@ -223,6 +252,19 @@ public partial class BoardWindow : Window
         // handler; its type goes to the trail now (S1-14.6).
         Unawaited.TrailFailures(ResolveNamesAsync(live), _services.AddTrail, "NAMES NOT RESOLVED");
         RenderLines(live);
+
+        // §3.6: the first source switched on asks start-on-open again, for a board that never started. Only once opening
+        // has decided for itself (_hadSources is set there).
+        if (_hadSources is { } had)
+        {
+            var hasSources = _services.Sources.Any(s => s.Enabled);
+            // Recorded before starting, so a redraw from inside the start never sees none-to-some a second time.
+            _hadSources = hasSources;
+            if (hasSources && !had && _services.ReaderLoaded)
+            {
+                Unawaited.TrailFailures(StartIfOpenWouldHaveAsync("when the first clan was switched on"), _services.AddTrail, "START ON OPEN FAILED");
+            }
+        }
     }
 
     /// <summary>The board on screen: the draft while editing, else the selected tab's, else the first (R12).</summary>
@@ -248,6 +290,8 @@ public partial class BoardWindow : Window
             BoardPanels.Children.Add(view);
             _panels.Add((def, view, ids[i]));
         }
+
+        BoardPanels.NoGrips = board.Panels.Select((p, i) => (p, i)).Where(x => x.p.PopOut is not null).Select(x => x.i).ToHashSet();
     }
 
     /// <summary>The control for one panel on the board, named by its automation id; a popped-out panel's slot holds a placeholder (R19).</summary>
@@ -329,9 +373,11 @@ public partial class BoardWindow : Window
     {
         PeriodLine.Lead = BoardText.TopLine(live, _anchorSourceId);
         PeriodLine.Ends = BoardText.TopEnds(live, _anchorSourceId);
-        LiveDot.Visibility = live.Running ? Visibility.Visible : Visibility.Collapsed;
-        StartStopButton.Content = live.Running ? "Stop" : "Start";
         AttributionLine.Text = BoardText.Attribution(live);
+        ArrangeLine.Text = ArrangeBannerText();
+
+        var chip = StatusChip.StateOf(live.Running, _services.EverStarted, _starting, BoardText.InTrouble(live));
+        RenderChip(chip);
 
         var boardsProblem = _boardsNote ?? _services.BoardsProblem;
         if (!_services.ReaderLoaded)
@@ -340,6 +386,8 @@ public partial class BoardWindow : Window
             // draw (R3).
             StateLine.Text = BoardText.BookStateLine(unread: _bookProblem is not null);
             DetailLine.Text = _bookProblem ?? boardsProblem ?? _importNote ?? "";
+            // Arranging keeps the banner in the lines' place (spec §4.2).
+            StateLines.Visibility = Editing ? Visibility.Collapsed : Visibility.Visible;
             return;
         }
 
@@ -347,6 +395,41 @@ public partial class BoardWindow : Window
         var activity = new BoardActivity(_starting, _testing, _services.AskedReadAt, _services.StoppedAt, _failed);
         StateLine.Text = BoardText.StateLine(live, _services.EverStarted, activity);
         DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem, _failed ? BoardText.UnexpectedDetail : _importNote);
+
+        // BC3: the pair shows only when it has something to say; the card always has the lot. While arranging the
+        // banner holds their slot (spec §4.2).
+        StateLines.Visibility = StatusChip.ShowsLines(true, chip, _failed, DetailLine.Text, live.OldestRemembered is not null) && !Editing
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (StatusCard.IsOpen) RenderCard(live);
+    }
+
+    /// <summary>The chip, its name and the window title, from one state (BC2). Enabled-ness is ApplyButtons'.</summary>
+    private void RenderChip(ChipState chip)
+    {
+        ChipGlyph.Text = StatusChip.Glyph(chip);
+        ChipWord.Text = StatusChip.Word(chip);
+        if (StatusChip.BrushKey(chip) is { } key) ChipGlyph.SetResourceReference(TextBlock.ForegroundProperty, key);
+        else ChipGlyph.ClearValue(TextBlock.ForegroundProperty);
+
+        StartStopButton.Style = (Style)FindResource(chip == ChipState.StartReading ? "PrimaryButton" : "ChipButton");
+        AutomationProperties.SetName(StartStopButton, StatusChip.Name(chip));
+        StartStopButton.ToolTip = StatusChip.Name(chip);
+        Title = StatusChip.Title(chip);
+    }
+
+    /// <summary>The status card (spec §3.3): the state line, a line per source, whether alerts go out, and Pause.</summary>
+    private void RenderCard(LiveBoard live)
+    {
+        CardStateLine.Text = StateLine.Text;
+        CardSources.ItemsSource = BoardText.CardRows(live);
+        var hostDown = live.Snapshots.Values.Any(s => s.State == WatchState.HostDown);
+        CardAlertsLine.Text = BoardText.AlertsLine(live.Running, BoardText.Sending(_services.Installed, _services.Sources), hostDown);
+        CardDetailLine.Text = DetailLine.Text;
+        CardDetailLine.Visibility = DetailLine.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        PauseResumeButton.Content = live.Running ? "Pause reading" : "Resume reading";
+        AutomationProperties.SetName(PauseResumeButton, live.Running ? "Pause reading" : "Resume reading");
     }
 
     private void RenderEmpty(BoardDef board)
@@ -377,6 +460,18 @@ public partial class BoardWindow : Window
     private void OnTabChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_selectingTab || !ButtonStates().Tabs || BoardTabs.SelectedItem is not BoardTabItem tab || tab.Id == _boardId) return;
+
+        // Spec §4.5: a tab click while arranging saves the draft the way Done does, then switches. A save that fails keeps
+        // arranging on this board, and the redraw puts the tab selection back where it was.
+        if (Editing)
+        {
+            FinishEditing();
+            if (Editing)
+            {
+                Render();
+                return;
+            }
+        }
 
         ShowBoard(tab.Id);
     }
@@ -465,6 +560,10 @@ public partial class BoardWindow : Window
         var remaining = BoardEdits.Delete(boards, board.Id);
         if (ReferenceEquals(remaining, boards) || !SaveBoards(remaining)) return;
 
+        // Its history goes with it (spec §5.1); the delete itself isn't undoable, it asked first.
+        _undo.Clear(board.Id);
+        if (_toastBoardId == board.Id) HideToast();
+
         ShowBoard(remaining[0].Id);
         FocusShownTab();
     }
@@ -513,9 +612,17 @@ public partial class BoardWindow : Window
         }
     }
 
-    /// <summary>The tabs never take more than their share of what the top bar's buttons leave (<see cref="TabStripShare"/>).</summary>
-    private void OnTopBarSizeChanged(object sender, SizeChangedEventArgs e) =>
-        BoardTabs.MaxWidth = Math.Max(0, (TopBar.ActualWidth - TopButtons.ActualWidth) * TabStripShare);
+    /// <summary>
+    /// The tabs never take more than their share of what the rest of the bar leaves (<see cref="TabStripShare"/>). The period
+    /// line is the star column and trims first; the chip and ⟳ are counted as fixed, so they never give way (spec §3.1).
+    /// </summary>
+    private void OnTopBarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // 40: the margins between those elements, as the plan works it out. Unmeasured (R1): checked in the walk session.
+        var fixedWidth = BoardIcon.ActualWidth + BoardMenuButton.ActualWidth + AddBoardButton.ActualWidth
+            + StartStopButton.ActualWidth + TestNowButton.ActualWidth + TopButtons.ActualWidth + 40;
+        BoardTabs.MaxWidth = StatusChip.TabBudget(TopBar.ActualWidth, fixedWidth, TabStripShare);
+    }
 
     // ---- names, the top bar, Setup ----
 
@@ -540,7 +647,126 @@ public partial class BoardWindow : Window
         if (resolved.Count > 0) Render();
     }
 
-    private async void OnStartStopClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// BC2: a click on the chip opens the status card and never pauses. "Start reading" is the exception, because a
+    /// board that has never read has no status to show and starting is what that press means.
+    /// </summary>
+    private async void OnStatusChipClick(object sender, RoutedEventArgs e)
+    {
+        var chip = StatusChip.StateOf(_services.Running, _services.EverStarted, _starting, trouble: false);
+        if (chip == ChipState.Starting) return;
+
+        if (StatusChip.ClickStarts(chip))
+        {
+            if (ButtonStates().StartStop) await StartReadingAsync();
+            return;
+        }
+
+        StatusCard.IsOpen = !StatusCard.IsOpen;
+        if (!StatusCard.IsOpen) return;
+
+        // R6c: a throw here must not escape this async void (which would crash the process); it goes to the trail
+        // by type only, the way RenderLines already does for the lines under the bar.
+        try
+        {
+            RenderCard(_services.CurrentBoard());
+        }
+        catch (Exception ex)
+        {
+            _services.AddTrail($"LINES NOT DRAWN: {ex.GetType().Name}");
+        }
+
+        // While the card is open a press on the chip only closes it (StaysOpen="False"): the chip takes no hit until the
+        // card has closed, so that same press can't land on it and open the card again.
+        StartStopButton.IsHitTestVisible = false;
+        // R6d: Pause disabled (e.g. a Test now read in flight) leaves nothing in the card to take focus, so a
+        // keyboard user tabbing to it would land back on the page behind the popup and Esc would never reach
+        // OnStatusCardKeyDown. The card's own Border is Focusable for exactly that case.
+        FocusLater(PauseResumeButton.IsEnabled ? PauseResumeButton : CardBorder);
+    }
+
+    /// <summary>Esc closes the card and nothing else: marked handled so Arrange's Cancel (IsCancel) never sees it (Review Focus 4).</summary>
+    private void OnStatusCardKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+        StatusCard.IsOpen = false;
+        e.Handled = true;
+    }
+
+    /// <summary>Focus goes back to the chip (spec §3.3); the chip takes presses again once the press that closed the card is done.</summary>
+    private void OnStatusCardClosed(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => { StartStopButton.IsHitTestVisible = true; }, DispatcherPriority.Background);
+        FocusLater(StartStopButton);
+    }
+
+    /// <summary>
+    /// F5 is ⟳, through the same gate (spec §3.5). Pop-outs have no ⟳ and don't take it. Ctrl+Z is undo on the board
+    /// on screen, toast or not (BC6, spec §5.3). Esc mid-resize ends the resize, keeping nothing.
+    /// </summary>
+    private void OnWindowKeyDown(object sender, KeyEventArgs e)
+    {
+        // Esc during a grip drag cancels the drag, not Arrange: handled here, so Cancel (IsCancel) never sees it.
+        if (e.Key == Key.Escape && _resizing is not null)
+        {
+            e.Handled = true;
+            EndResize(commit: false);
+            return;
+        }
+
+        if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            e.Handled = true;
+            UndoLast();
+            return;
+        }
+
+        if (e.Key != Key.F5 || Keyboard.Modifiers != ModifierKeys.None) return;
+        e.Handled = true;
+        OnTestNowClick(TestNowButton, new RoutedEventArgs());
+    }
+
+    /// <summary>
+    /// Shows the undo toast for the board on screen, replacing any other (spec §5.3); a live region raises its change
+    /// for a screen reader. The clock restarts, so each toast gets its full six seconds.
+    /// </summary>
+    private void ShowToast(string text, bool canUndo)
+    {
+        _toastBoardId = _boardId;
+        _toastCanUndo = canUndo;
+        UndoToastText.Text = text;
+        ShowToastUndo();
+        UndoToast.Visibility = Visibility.Visible;
+        var peer = UIElementAutomationPeer.FromElement(UndoToastText) ?? UIElementAutomationPeer.CreatePeerForElement(UndoToastText);
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+
+        _toastClock.Stop();
+        _toastClock.Start();
+    }
+
+    private void HideToast()
+    {
+        _toastClock.Stop();
+        _toastCanUndo = false;
+        UndoToast.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>The toast's Undo shows only while the board it speaks for is on screen (BC6).</summary>
+    private void ShowToastUndo() =>
+        UndoToastButton.Visibility = _toastCanUndo && _toastBoardId == _boardId ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>The toast's Undo is Ctrl+Z, for the board it named; on any other board it does nothing (BC6).</summary>
+    private void OnUndoToastClick(object sender, RoutedEventArgs e)
+    {
+        if (!_toastCanUndo || _toastBoardId != _boardId) return;
+        UndoLast();
+
+        // The pressed Undo collapses with the toast that follows; focus goes somewhere that stays.
+        FocusLater(Editing ? DoneButton : EditBoardButton);
+    }
+
+    /// <summary>Pause or Resume, from the status card (BC2); Pause lasts until Ur Score closes (BC7).</summary>
+    private async void OnPauseResumeClick(object sender, RoutedEventArgs e)
     {
         if (_services.Running)
         {
@@ -563,6 +789,24 @@ public partial class BoardWindow : Window
         // The button is disabled for these; this only catches a press already on its way.
         if (!BoardButtons.For(_services.ReaderLoaded, running: false, _starting, _testing, _importing).StartStop) return;
 
+        await StartReadingAsync();
+    }
+
+    /// <summary>
+    /// Start on open, asked again once there is something to read (spec §3.6): the one gate is BoardButtons.StartsLater,
+    /// so a board that was paused, or is already starting, is left alone. Never while Ur Score is closing: Setup is an
+    /// owned window, so closing the board closes it too, and its Closed must not start reading on the way out.
+    /// </summary>
+    private async Task StartIfOpenWouldHaveAsync(string when)
+    {
+        if (_popOutLifecycle.ClosingApp) return;
+        if (!BoardButtons.StartsLater(_services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
+                _services.EverStarted, _starting, _testing, _services.Installed.Count, _services.Sources.Any(s => s.Enabled)))
+        {
+            return;
+        }
+
+        _services.AddTrail($"START ON OPEN: reading started {when}.");
         await StartReadingAsync();
     }
 
@@ -633,7 +877,9 @@ public partial class BoardWindow : Window
     private void ApplyButtons()
     {
         var states = ButtonStates();
-        StartStopButton.IsEnabled = states.StartStop;
+        var chip = StatusChip.StateOf(_services.Running, _services.EverStarted, _starting, trouble: false);
+        StartStopButton.IsEnabled = StatusChip.Enabled(chip, _services.ReaderLoaded, states.StartStop);
+        PauseResumeButton.IsEnabled = states.StartStop;
         TestNowButton.IsEnabled = states.TestNow;
         EmptyStateButton.IsEnabled = states.EmptyState;
         BoardTabs.IsEnabled = states.Tabs;
@@ -645,6 +891,9 @@ public partial class BoardWindow : Window
         EditBoardButton.IsEnabled = states.EditBoard;
         AddPanelButton.IsEnabled = states.AddPanel;
         DoneButton.IsEnabled = states.Done;
+
+        // A disabled IsCancel button ignores Esc, so Esc outside arranging does nothing here (BC5).
+        CancelArrangeButton.IsEnabled = states.Cancel;
     }
 
     /// <summary>What every button, tab and tab menu item takes right now, for <see cref="ApplyButtons"/> and the press guards.</summary>
@@ -720,7 +969,11 @@ public partial class BoardWindow : Window
         }
 
         _setup = new SetupWindow(_services, page, note) { Owner = this };
-        _setup.Closed += (_, _) => _setup = null;
+        _setup.Closed += async (_, _) =>
+        {
+            _setup = null;
+            await StartIfOpenWouldHaveAsync("after Setup closed");
+        };
         _setup.Show();
     }
 
@@ -762,14 +1015,14 @@ public partial class BoardWindow : Window
     }
 
     /// <summary>
-    /// Closing the board ends Ur Score. While something is sending, that silences the phone alerts, so it asks first,
-    /// and Keep running cancels the close before edit mode's or the pop-outs' own Closing handlers run. Nothing sending,
-    /// or Windows ending the session: it closes as it always has.
+    /// Closing the board ends Ur Score. While something is being read and sent, that silences the phone alerts, so it
+    /// asks first (BC8), and Keep running cancels the close before edit mode's or the pop-outs' own Closing handlers run;
+    /// a paused board closes silencing nothing. Nothing sending, or Windows ending the session: it closes as it always has.
     /// </summary>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         if (!App.EndingSession
-            && BoardText.Sending(_services.Installed, _services.Sources)
+            && BoardText.AsksBeforeClose(_services.Running, BoardText.Sending(_services.Installed, _services.Sources))
             && !ConfirmWindow.Ask(this, BoardText.CloseWhileSending))
         {
             e.Cancel = true;

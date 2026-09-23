@@ -72,7 +72,8 @@ function Wait-UrWindow([string]$titlePattern, [int]$seconds = 15) {
     return $null
 }
 
-function Get-BoardWindow { Get-UrWindows | Where-Object { $_.Current.Name -eq 'RoRoRo Ur Score' } | Select-Object -First 1 }
+# The board's title gains " (Paused)" while reading is paused (BC2), so it is matched by pattern, not equality.
+function Get-BoardWindow { Get-UrWindows | Where-Object { $_.Current.Name -match '^RoRoRo Ur Score( \(Paused\))?$' } | Select-Object -First 1 }
 
 # ---- Ur Score's own confirmation ----
 # Ur Score raises no stock Windows message box any more (owner rule, backlog V3-S.10): a question opens
@@ -309,7 +310,7 @@ function Select-FirstSearchMatch($root, [string]$searchLabel, [string]$query, [s
 # signature, so a dev build is indistinguishable from the installed plugin. Every walk must assume it connects.
 #
 # The cure is at the source rather than at the host: a folder with nothing set to send cannot send, whether the
-# host is up, down, 1.29 or 1.30. Quitting RoRoRo for the duration is the second layer and is the caller's call —
+# host is up, down, 1.29 or 1.30. Quitting RoRoRo for the duration is the second layer and is the caller's call:
 # it is the owner's notification host, not a walk's to close on a whim.
 #
 # Scrubbed, not trusted: the rewrite is verified afterwards and throws rather than returning, because a scrub that
@@ -323,7 +324,11 @@ function Copy-UrControlData([string]$control) {
     if (Test-Path $settingsPath) {
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
         $settings | Add-Member -NotePropertyName 'startOnOpen' -NotePropertyValue $false -Force
+        $settings | Add-Member -NotePropertyName 'settingsVersion' -NotePropertyValue 2 -Force
         $settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
+    } else {
+        # A control folder with no settings.json of its own still needs one seeded off, same as a fresh folder.
+        Initialize-UrSettingsOff
     }
 
     foreach ($file in Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue) {
@@ -349,6 +354,9 @@ function Assert-UrDataSendsNothing {
     if (Test-Path $settingsPath) {
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
         if ($settings.startOnOpen) { $problems += 'settings.json still has startOnOpen true' }
+        if (-not $settings.settingsVersion -or $settings.settingsVersion -lt 2) { $problems += 'settings.json has no settingsVersion 2, so opening would switch startOnOpen on' }
+    } else {
+        $problems += 'no settings.json, so opening would write one with startOnOpen on'
     }
 
     foreach ($file in Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue) {
@@ -366,6 +374,15 @@ function Assert-UrDataSendsNothing {
     if ($problems.Count -gt 0) {
         throw "the seeded data folder can still report to RoRoRo:`n  " + ($problems -join "`n  ")
     }
+}
+
+# 0.6 reads on open by default and migrates any settings file without a version to on (BC1). Any walk that hands
+# Start-UrScore a folder of its own (fresh from New-Item, not seeded by Copy-UrControlData) must write this exact
+# line first, or a bare Settings.Load sees no file, writes its defaults, and startOnOpen comes back true under it.
+# One function so every caller writes the identical line rather than each keeping its own copy to drift out of
+# sync (2026-09-23 review: walk-score-book.ps1 built a second $UrData by hand and skipped this).
+function Initialize-UrSettingsOff {
+    Set-Content (Join-Path $UrData 'settings.json') -Encoding UTF8 -Value '{ "resolveNames": true, "activeRecipe": null, "startOnOpen": false, "settingsVersion": 2 }'
 }
 
 # The .smoke-backup-* folders beside the data folder, oldest first: a walk that was killed mid-run leaves one
@@ -393,6 +410,8 @@ function Move-UrDataAside {
     }
     try {
         New-Item -ItemType Directory -Force $UrData | Out-Null
+        # A walk decides when reading starts, so its folder is born with start-on-open off and already migrated.
+        Initialize-UrSettingsOff
     } catch {
         if ($backup) { Rename-Item $backup (Split-Path $UrData -Leaf) }
         throw
@@ -407,6 +426,29 @@ function Restore-UrData([string]$backup) {
     if (Test-Path $UrData) { Remove-Item $UrData -Recurse -Force }
     if ($backup -and (Test-Path $backup)) { Rename-Item $backup (Split-Path $UrData -Leaf) }
     "Your data folder is back: $(Test-Path $UrData)"
+}
+
+# The <data folder>.before-import-* folders beside the data folder, as full paths. An import sets the old setup
+# aside in one of these (SetupMerge.AsideFolder), and the owner's REAL imports make them too, with the same name
+# pattern in the same place: they are the only copy of the setup that import replaced. A walk that imports takes
+# this snapshot at its start, before anything imports, and its cleanup removes only folders not in it
+# (2026-09-23: a cleanup that removed every before-import-* folder destroyed one of the owner's from 2026-09-22).
+function Get-UrBeforeImportFolders {
+    $parent = Split-Path $UrData -Parent
+    $leaf = Split-Path $UrData -Leaf
+    return @(Get-ChildItem -Path $parent -Directory -Filter "$leaf.before-import-*" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+}
+
+# Removes the before-import-* folders the walk made: every one beside the data folder that is not in $keep (the
+# snapshot Get-UrBeforeImportFolders took at the walk's start). A folder that was there before the walk is the
+# owner's, and stays whatever else happens. Says what it removed, so a walk's log shows it touched nothing else.
+function Remove-UrBeforeImportFoldersExcept([string[]]$keep) {
+    $keep = @($keep)
+    foreach ($folder in Get-UrBeforeImportFolders) {
+        if ($keep -contains $folder) { continue }
+        Remove-Item $folder -Recurse -Force -ErrorAction SilentlyContinue
+        "Removed the walk's own import aside: $(Split-Path $folder -Leaf)"
+    }
 }
 
 # Whether RoRoRo's host process is up. Quitting RoRoRo for a walk is the owner's call (README), and a check before

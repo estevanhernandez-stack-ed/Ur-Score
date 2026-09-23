@@ -148,6 +148,29 @@ function Complete-EditMode($board) {
     Start-Sleep -Milliseconds 1000
 }
 
+# BC2: the chip opens the status card; Pause and Resume are inside it. The card is a popup, a top-level window of its
+# own, so its button is found across the process's windows. Returns the button's new name.
+# Unverified as of Task 9 (2026-09-23): the controller ruling for that task forbade launching the app or running a
+# walk, so nobody has confirmed by hand yet that Find-InUrWindows (which walks Get-UrWindows) actually reaches into
+# a WPF Popup's own HWND the way it reaches a menu or a pop-out window. Treat this as unproven until the first real
+# walk-top-bar run: if step 3 ("A click opens the card") times out into the throw below instead of passing, walk
+# $AE::RootElement children by process id for PauseResumeButton itself (a Button, so it has a UIA peer; a Border has
+# none and is never found by id), and update this comment with whichever one worked.
+function Invoke-PauseResume([int]$seconds = 10) {
+    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'StartStopButton')
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do {
+        $button = Find-InUrWindows 'PauseResumeButton'
+        if ($button) {
+            Invoke-Element $button
+            Start-Sleep -Milliseconds 600
+            return (Find-InUrWindows 'PauseResumeButton').Current.Name
+        }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    throw 'the status card never opened'
+}
+
 # Invokes a tool button inside one panel, found by the panel's automation id.
 function Invoke-PanelTool($root, [string]$panelId, [string]$toolId) {
     $panel = Find-ByAutomationId $root $panelId
@@ -176,10 +199,15 @@ function Select-ComboItem($box, [string]$like) {
 # Moving and sizing lost their buttons when the header became the drag target and the edges became the grips,
 # so a walk drives them the way a person without a mouse does: focus the panel, then the keys. Focus is taken
 # again before every press because each change rebuilds the grid and the element that had focus is destroyed.
+# The panel is a UserControl and takes no focus; its first tool does, which is also where the app puts focus back
+# after a keyboard move. So the walk focuses that tool and the arrow keys reach the board's handler from there.
 function Focus-Panel($board, [string]$panelId) {
     $panel = Find-ByAutomationId $board $panelId
     if (-not $panel) { throw "no panel '$panelId' to focus" }
-    $panel.SetFocus()
+    $tool = @('PanelSettingsButton', 'RemovePanelButton') | ForEach-Object { Find-ByAutomationId $panel $_ } |
+        Where-Object { $_ -and $_.Current.IsKeyboardFocusable } | Select-Object -First 1
+    if (-not $tool) { throw "panel '$panelId' shows no tool that takes focus" }
+    $tool.SetFocus()
     Start-Sleep -Milliseconds 250
 }
 

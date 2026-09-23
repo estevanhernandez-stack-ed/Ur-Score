@@ -3860,6 +3860,9 @@ They continue the plan's A-numbering.
   new key in 0.3.2. *Why:* the owner was explicit that this is something a user enables after setting up, not a
   behaviour change everyone gets; an opt-in that defaults on is a different feature. *Cost if wrong:* someone who
   wants it on has to tick one box once.
+
+  Superseded by BC1, 2026-09-23: reading now starts on open by default, on new and existing installs alike
+  (`docs/2026-09-23-board-chrome-design.md` §1, §3.6).
 - **A32. The control lives on Setup › Recipes, and settings get a save path.** A checkbox, "Start reading as soon as
   Ur Score opens", in a `WHEN UR SCORE OPENS` section at the bottom of `RecipesPage`, under the Import recipe… row.
   `ISetupServices` gains `SaveSettings`, `AppServices.Settings` gains a private setter, and no page edits

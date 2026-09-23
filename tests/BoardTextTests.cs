@@ -53,7 +53,7 @@ public class BoardTextTests
         LiveBoard Board(bool running, params Source[] sources) => Live(sources, [Installed(Clan, "value")], snaps, running);
 
         Assert.Equal("Not started.", BoardText.StateLine(Board(false, MainClan, AltClan), everStarted: false));
-        Assert.Equal("Stopped.", BoardText.StateLine(Board(false, MainClan, AltClan), everStarted: true));
+        Assert.Equal(BoardText.Paused, BoardText.StateLine(Board(false, MainClan, AltClan), everStarted: true));
         Assert.Equal("K0i2: Could not reach the data.", BoardText.StateLine(Board(true, MainClan, AltClan), everStarted: true));
         Assert.Equal("Reading 1 source.", BoardText.StateLine(Board(true, MainClan), everStarted: true));
     }
@@ -162,7 +162,7 @@ public class BoardTextTests
     [Fact]
     public void ASavedBoardWithNoPanelsSaysSo() =>
         Assert.Equal(
-            ("This board has no panels yet", "Add panels from the gallery, then arrange them with Edit board.", "Add panel"),
+            ("This board has no panels yet", "Add panels from the gallery, then arrange them with Arrange.", "Add panel"),
             BoardText.EmptyState(BoardEmpty.NoPanels, Clan));
 
     [Fact]
@@ -285,9 +285,9 @@ public class BoardTextTests
     }
 
     /// <summary>
-    /// Backlog S1-14.5. While stopped the line only ever said "Not started." or "Stopped.", so what a Test now found was never said
-    /// where you pressed it. It now says what the read you asked for found: a source in trouble by name, else what they all found,
-    /// else how many answered.
+    /// Backlog S1-14.5. While stopped the line only ever said "Not started." or BoardText.Paused, so what a Test now found was never
+    /// said where you pressed it. It now says what the read you asked for found: a source in trouble by name, else what they all
+    /// found, else how many answered.
     /// </summary>
     [Fact]
     public void StoppedTheLineSaysWhatTheReadYouAskedForFound()
@@ -315,7 +315,7 @@ public class BoardTextTests
     }
 
     /// <summary>
-    /// The news is only for a read you asked for since reading stopped. Pressing Stop still says "Stopped." and nothing else, a
+    /// The news is only for a read you asked for since reading stopped. Pausing still says only BoardText.Paused and nothing else, a
     /// timed read that lands just after Stop isn't news you asked for, and a source read before the ask isn't part of its answer.
     /// </summary>
     [Fact]
@@ -328,13 +328,13 @@ public class BoardTextTests
             lastRead: new Dictionary<string, DateTimeOffset> { [MainClan.Id] = mainAt, [AltClan.Id] = altAt });
 
         var testedWhileRunning = new BoardActivity(AskedReadAt: Now.AddMinutes(-5), StoppedAt: Now.AddMinutes(-1));
-        Assert.Equal("Stopped.", BoardText.StateLine(Board(Now.AddMinutes(-4), Now.AddMinutes(-4)), everStarted: true, testedWhileRunning));
-        Assert.Equal("Stopped.", BoardText.StateLine(Board(Now.AddSeconds(-30), Now.AddSeconds(-30)), everStarted: true, testedWhileRunning));
+        Assert.Equal(BoardText.Paused, BoardText.StateLine(Board(Now.AddMinutes(-4), Now.AddMinutes(-4)), everStarted: true, testedWhileRunning));
+        Assert.Equal(BoardText.Paused, BoardText.StateLine(Board(Now.AddSeconds(-30), Now.AddSeconds(-30)), everStarted: true, testedWhileRunning));
 
         var testedSinceStop = new BoardActivity(AskedReadAt: Now.AddSeconds(-20), StoppedAt: Now.AddMinutes(-1));
-        Assert.Equal("Stopped. Last read: Reported to RoRoRo.",
+        Assert.Equal(BoardText.Paused + " Last read: Reported to RoRoRo.",
             BoardText.StateLine(Board(Now.AddSeconds(-10), Now.AddMinutes(-4)), everStarted: true, testedSinceStop));
-        Assert.Equal("Stopped. Last read of K0i2: Could not reach the data.",
+        Assert.Equal(BoardText.Paused + " Last read of K0i2: Could not reach the data.",
             BoardText.StateLine(Board(Now.AddSeconds(-10), Now.AddSeconds(-10)), everStarted: true, testedSinceStop));
     }
 
@@ -410,7 +410,7 @@ public class BoardTextTests
 
         var (line, detail, button) = BoardText.EmptyState(BoardEmpty.BookUnread, Clan);
         Assert.Equal(
-            ("Start and Test now are off", "They come back once Ur Score can read your score book. The line above says what stopped it.", "Try again"),
+            ("Reading is off", "It comes back once Ur Score can read your score book. The line above says what stopped it.", "Try again"),
             (line, detail, button));
         Assert.DoesNotContain("be read", line, StringComparison.Ordinal);
     }
@@ -425,5 +425,52 @@ public class BoardTextTests
         Assert.Equal(BoardEmpty.BookUnread, BoardText.EmptyFor(starters, withPanel, bookUnread: true));
         Assert.Equal(BoardEmpty.BookUnread, BoardText.EmptyFor(StarterBoards.All([], []), withPanel, editing: true, bookUnread: true));
         Assert.Equal(BoardEmpty.None, BoardText.EmptyFor(starters, withPanel, bookUnread: false));
+    }
+
+    [Fact]
+    public void TheArrangeBannerTeachesTheGestures()
+    {
+        Assert.Equal("Arranging \"Battle\" · drag a header to move · drag an edge or corner to resize · ←/→ move",
+            BoardText.ArrangingLine("Battle"));
+    }
+
+    /// <summary>R8 (task 14): a save that fails while arranging keeps saying which board, rather than losing
+    /// "Arranging" to the note alone (V3-S.10: a failed save is never silent).</summary>
+    [Fact]
+    public void ArrangingNoteKeepsTheBoardNameAlongsideAFailedSave()
+    {
+        Assert.Equal("Arranging \"Battle\" · not saved: the disk is full",
+            BoardText.ArrangingNote("Battle", "not saved: the disk is full"));
+    }
+
+    [Fact]
+    public void DoneCountsTheChanges()
+    {
+        Assert.Equal("Done", BoardText.DoneLabel(0));
+        Assert.Equal("Done (3)", BoardText.DoneLabel(3));
+    }
+
+    /// <summary>BC5: "your changes", because ⋯ settings changed while arranging are in the draft too.</summary>
+    [Fact]
+    public void CancelAsksAboutAllTheChangesToTheBoard()
+    {
+        var question = BoardText.CancelArrangeQuestion(new BoardDef("b-1", "Battle", []));
+
+        Assert.Equal("Throw away your changes to the Battle board?", question.Question);
+        Assert.Equal("Throw away", question.DoText);
+        Assert.Equal("Keep arranging", question.CancelButton);
+    }
+
+    [Fact]
+    public void TheUndoToastSaysWhatWasDoneAndWhatUndoingDid()
+    {
+        var board = new BoardDef("b-starter-battle", "Battle", [], Follows: "battle");
+
+        Assert.Equal("Removed Battle race", BoardText.Changed("Removed", "Battle race"));
+        Assert.Equal("Arranged Battle", BoardText.Arranged("Battle"));
+        Assert.Equal("Undid: Removed Battle race", BoardText.Undone(new UndoStep(board, "Removed Battle race"), unfollowed: false));
+
+        // Spec §5.4: an undo that can't make a starter tab follow again says so.
+        Assert.Equal("Restored, but Battle no longer follows your clans.", BoardText.Undone(new UndoStep(board, "Moved Race"), unfollowed: true));
     }
 }

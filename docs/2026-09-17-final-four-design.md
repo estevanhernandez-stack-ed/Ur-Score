@@ -177,6 +177,12 @@ The owner selected grouping and explanations only for now. Current-clan priority
 
 ## Fixed board canvas
 
+Superseded by V3-S.9's rulings, closed 2026-09-21, and the board-chrome spec, 2026-09-23
+(`docs/2026-09-23-board-chrome-design.md` §4): the owner chose **push, not stay-put** and **reflow as today plus
+drag, not free placement**, both the other way from the independent column/row/span coordinates this section
+proposes. The board stays a 12-column grid in reading order; a drag or a resize reflows the panels after it,
+there is no free positioning, and dragging is header-only (`docs/backlog.md`, V3-S.9).
+
 ### Geometry and interaction
 
 Today [BoardLayout](../src/Board/BoardLayout.cs) derives placement from list order, changes spans at width thresholds, and computes row heights from content. Ordinary cards can stop short of their slot. Proposed geometry stores each panel's column, row, width span and height span independently of logical reading order.

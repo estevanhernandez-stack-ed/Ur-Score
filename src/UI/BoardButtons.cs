@@ -15,7 +15,8 @@ public readonly record struct BoardButtonStates(
     bool BoardMenu = true,
     bool EditBoard = true,
     bool AddPanel = false,
-    bool Done = false);
+    bool Done = false,
+    bool Cancel = false);
 
 /// <summary>
 /// The board's buttons are disabled for exactly the time a press would be ignored, and never longer. Stop is
@@ -33,8 +34,9 @@ public static class BoardButtons
     /// only asks about Start/Stop or Test now, and it leaves Delete off; anything that reads DeleteBoard passes the real count.
     /// </param>
     /// <param name="editing">
-    /// Edit mode is on (R8): one draft at a time, so the tabs, + Board and the tab menu wait for Done, and Edit board
-    /// gives way to + Add panel and Done. Reading, Stop and the empty state don't wait.
+    /// Arranging is on (R8): one draft at a time, so the tab menu and + Board wait for Done, and Arrange gives way
+    /// to + Add panel and Done. The tabs don't, since a tab click saves and switches (BC5). Reading, Stop and the
+    /// empty state don't wait.
     /// </param>
     /// <remarks>
     /// <c>BoardMenu</c> is ⋯ beside the tabs, which opens the tab's own menu (backlog V3-S.8). It takes a press for
@@ -45,14 +47,15 @@ public static class BoardButtons
         TestNow: loaded && !starting && !testing,
         EmptyState: !importing,
         DeleteBoard: boards > 1 && !editing,
-        Tabs: !editing,
+        Tabs: true,
         AddBoard: !editing,
         RenameBoard: !editing,
         DuplicateBoard: !editing && (selectedBoard is null || BoardEdits.CanDuplicate(selectedBoard)),
         BoardMenu: !editing,
         EditBoard: !editing,
         AddPanel: editing,
-        Done: editing);
+        Done: editing,
+        Cancel: editing);
 
     /// <summary>
     /// Whether the board starts reading by itself as it opens (plan A33). Off unless you turned it on, and then only
@@ -66,4 +69,14 @@ public static class BoardButtons
     public static bool StartsOnOpen(bool startOnOpen, bool loaded, bool running, int installed, bool anySourceOn, bool firstRunPage) =>
         startOnOpen && !running && installed > 0 && anySourceOn && !firstRunPage
         && For(loaded, running, starting: false, testing: false, importing: false).StartStop;
+
+    /// <summary>
+    /// Start on open, asked again after opening (spec §3.6): when Setup closes, and when the switched-on sources go from
+    /// none to some. Only for a session that has never started — a pause lasts until Ur Score closes (BC7) — and
+    /// through <see cref="StartsOnOpen"/> itself, so the two can't disagree. Also never while a read-now is in flight
+    /// (<paramref name="testing"/>, R6a): without this, start-on-open could start reading while the "▶ Start reading"
+    /// chip itself sits disabled for the same read.
+    /// </summary>
+    public static bool StartsLater(bool startOnOpen, bool loaded, bool running, bool everStarted, bool starting, bool testing, int installed, bool anySourceOn) =>
+        !everStarted && !starting && !testing && StartsOnOpen(startOnOpen, loaded, running, installed, anySourceOn, firstRunPage: false);
 }

@@ -8,6 +8,12 @@ namespace Labs626.UrScore.UI;
 /// <summary>Panel settings and the gallery on the board (spec §9.4).</summary>
 public partial class BoardWindow
 {
+    /// <summary>The saved boards' history, per board, for this session (BC6, spec §5.1).</summary>
+    private readonly BoardUndo _undo = new();
+
+    /// <summary>The draft's own history while arranging; Done folds it into one step on <see cref="_undo"/> (spec §5.2).</summary>
+    private readonly BoardUndo _draftUndo = new();
+
     private void OnSettingsTool(object? sender, PanelToolEventArgs e)
     {
         if (e.Tool is not (PanelTool.Settings or PanelTool.ChooseAnother) || PanelAt(e.OriginalSource) is not { } def) return;
@@ -40,7 +46,7 @@ public partial class BoardWindow
         var form = new PanelSettingsWindow(def.Type, PanelGallery.TitleOf(def, live), live, def.Settings, adding: false) { Owner = this };
         if (form.ShowDialog() != true || form.Result is not { } settings) return;
 
-        ChangeBoard(board => BoardEdits.SetSettings(board, def.Id, def.Type, settings));
+        ChangeBoard(board => BoardEdits.SetSettings(board, def.Id, def.Type, settings), BoardText.Changed("Changed", PanelGallery.TitleOf(def, live)));
     }
 
     /// <summary>+ Add panel: the gallery, then the form asking only for what that panel needs (R14).</summary>
@@ -55,23 +61,31 @@ public partial class BoardWindow
         var form = new PanelSettingsWindow(type, PanelGallery.Title(type, live), live, null, adding: true) { Owner = this };
         if (form.ShowDialog() != true || form.Result is not { } settings) return;
 
-        ChangeBoard(board => BoardEdits.AddPanel(board, type, settings));
+        ChangeBoard(board => BoardEdits.AddPanel(board, type, settings), BoardText.Changed("Added", PanelGallery.Title(type, live)));
     }
 
     /// <summary>
     /// Applies one edit to the board on screen: into the draft while editing (R8, R10), else, as the boards are once
     /// the dialog that asked for it has closed, saved at once. Either way the board is redrawn before this returns.
-    /// An edit that changes nothing does nothing.
+    /// An edit that changes nothing does nothing. <paramref name="what"/> names the change for undo ("Removed Battle
+    /// race"), and the board as it was is pushed on the draft's history or the saved one (BC6); null is a change undo
+    /// doesn't cover, such as a pop-out (spec §5.1).
     /// </summary>
-    private void ChangeBoard(Func<BoardDef, BoardDef> edit)
+    private void ChangeBoard(Func<BoardDef, BoardDef> edit, string? what)
     {
         if (_draft is { } draft)
         {
             var edited = edit(draft);
             if (ReferenceEquals(edited, draft)) return;
 
+            if (what is not null) _draftUndo.Push(draft, what);
             _draft = edited;
+            DoneButton.Content = DoneLabel();
             Render();
+
+            // R10: the toast shows while arranging too. Its Undo is UndoLast, which only steps back through the draft, and
+            // ShowToast ties it to _boardId, the draft's own board, so a tab click that saves and switches hides its Undo.
+            if (what is not null) ShowToast(what, canUndo: true);
 
             // Every panel's cell may have moved, so the grips drawn over them are stale until the grid re-arranges.
             Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
@@ -84,6 +98,63 @@ public partial class BoardWindow
         if (ReferenceEquals(changed, board)) return;
 
         // Redrawn now, not when Changed's posted redraw comes: a focus hand-off queued after this must find the new panel.
-        if (SaveBoards(BoardEdits.Replace(boards, changed))) Render();
+        if (!SaveBoards(BoardEdits.Replace(boards, changed))) return;
+
+        // Pushed only once saved: a change that didn't happen has nothing to take back (spec §5.5).
+        if (what is not null)
+        {
+            _undo.Push(board, what);
+            ShowToast(what, canUndo: true);
+        }
+
+        Render();
+    }
+
+    /// <summary>
+    /// Ctrl+Z and the toast's Undo (BC6). While arranging it only ever steps back through the draft — never past it into
+    /// the saved history, which would save a change behind Arrange's back (Review Focus 5). Otherwise it restores the
+    /// shown board's last snapshot through the same save every change uses; a save that fails leaves the history as it
+    /// was (spec §5.5). The snapshot takes each panel's pop-out as the board has it now: a pop-out is not an undoable
+    /// change (spec §5.1), so undoing an earlier change must not also bring a panel back or send one out.
+    /// </summary>
+    private void UndoLast()
+    {
+        // Not mid-resize: swapping the draft under a held grip would land its size on whichever panel now has that index.
+        if (_resizing is not null) return;
+
+        // The one place the choice is made, and it is BoardUndo.Target's, which a unit test pins (Review Focus 5).
+        var history = BoardUndo.Target(Editing, _draftUndo, _undo);
+
+        if (_draft is { } draft)
+        {
+            if (history.Pop(draft.Id) is not { } draftStep) return;
+
+            // The snapshot's pop-outs may be stale: Bring back while arranging saves and patches the draft, not its history.
+            _draft = BoardEdits.CarryPopOuts(draftStep.Before, _services.Boards);
+            DoneButton.Content = DoneLabel();
+            Render();
+            Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
+            ShowToast(BoardText.Undone(draftStep, unfollowed: false), canUndo: false);
+            return;
+        }
+
+        var boards = _services.Boards;
+        var board = ShownBoard(boards);
+        if (history.Peek(board.Id) is not { } step) return;
+
+        // The name stays as it is now: a rename isn't undoable, and the toast names only the panel change (spec §5.1).
+        if (!SaveBoards(BoardEdits.Replace(boards, BoardUndo.Restorable(step, board, boards))))
+        {
+            ShowToast(BoardText.UndoNotSaved, canUndo: false);
+            return;
+        }
+
+        history.Pop(board.Id);
+        Render();
+
+        // Following.ToSave re-follows the tab only if the snapshot is what its starter draws now (spec §5.4).
+        // A re-followed tab whose starter draws nothing now isn't shown at all; that is still following, not unfollowed.
+        var now = _services.Boards.FirstOrDefault(b => b.Id == board.Id);
+        ShowToast(BoardText.Undone(step, unfollowed: step.Before.Follows is not null && now is not null && now.Follows is null), canUndo: false);
     }
 }

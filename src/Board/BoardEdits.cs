@@ -125,9 +125,6 @@ public static class BoardEdits
         return (later ?? earlier)?.Id;
     }
 
-    /// <summary>Which tool a resize came from, so focus goes back to it: Tall keeps the span and flips Tall; the size box picks a span.</summary>
-    public static bool IsTallTick(PanelSize before, PanelSize after) => before.Span == after.Span && before.Tall != after.Tall;
-
     /// <summary>A new board goes last.</summary>
     public static IReadOnlyList<BoardDef> Add(IReadOnlyList<BoardDef> boards, BoardDef board) => [.. boards, board];
 

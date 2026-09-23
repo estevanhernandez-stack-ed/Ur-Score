@@ -31,8 +31,8 @@ Roblox's username and picture services, and a test (`NoHostnameFenceTests`) keep
 its recipe's own schedule — never faster than once a minute, whatever the recipe asks for — and
 draws the answer as panels you arrange yourself: standing, a race between groups, your accounts by
 a stat, a promotion check, an account card, past periods, records, the top of the period, a profile
-stat, an accounts table, and the live leaderboard. The tabs across the top are boards; **Edit
-board** and **+ Add panel** arrange them, and any panel pops out into a window of its own. Each of
+stat, an accounts table, and the live leaderboard. The tabs across the top are boards; **Arrange**
+and **+ Add panel** arrange them, and any panel pops out into a window of its own. Each of
 your own accounts shows its Roblox avatar; no other player's picture is ever asked for or kept.
 When a recipe reads a group's icon, that group's standing panel shows it, and your main group's icon
 is the window and taskbar icon. After its first read, it's there as soon as Ur Score opens.
@@ -136,15 +136,35 @@ reinstalling never touches your recipes, clans, boards or score book.
    your score book, and **Send** to also report it to RoRoRo. The **Name RoRoRo uses** box beside
    each stat is the metric id RoRoRo will see; a recipe suggests one, and you can change it. Press
    **Save stats**.
-4. **Press "Start."** The board fills in within a few seconds of the first read — its panels, the
-   state line above them, and the line along the top naming the period being read (or how often
-   this reads) and when the next read is due. If nothing fills in, press **Test now**: it reads
-   every source once, and **Setup › Diagnostics** then says per source what happened, when it last
-   read, when it reads next, and which of your accounts a source couldn't read and why.
+4. **Reading starts on its own.** Ur Score starts reading as soon as it opens (turn that off in
+   **Setup › Recipes**, under **Start reading when Ur Score opens**); if it hasn't, click the status
+   chip's **▶ Start reading**. The board fills in within a few seconds of the first read — its
+   panels, the state line above them, and the line along the top naming the period being read (or
+   how often this reads) and when the next read is due. If nothing fills in, press **⟳** (or
+   **F5**): it reads every source once, and **Setup › Diagnostics** then says per source what
+   happened, when it last read, when it reads next, and which of your accounts a source couldn't
+   read and why.
 5. **Pick which accounts actually send.** The **Send** checkbox on each row in **Setup › Your
    accounts** controls whether that account's numbers go to RoRoRo, one checkbox per recipe. Every
    account starts on; untick one and it keeps being read, kept and shown, but stops sending — and
    the choice survives a restart.
+
+### The status chip
+
+The top bar carries one control for reading, where Start/Stop and Test now used to sit side by
+side. Before reading has run this session it shows **▶ Start reading**, filled cyan — click it and
+it starts. From then on the chip only shows status and never pauses by itself: **● Live** (cyan),
+**❚❚ Paused** (amber — the loudest state, since paused silences your phone alerts), or **▲ Trouble**
+(a source is unhealthy, or RoRoRo isn't running). Clicking it opens a card: the state line, one
+line per switched-on source (when it last read and when it reads next, or its trouble), whether
+phone alerts are going out, and **Pause reading** / **Resume reading**. Esc or a click elsewhere
+closes the card. While paused, the window title also carries "(Paused)", so it shows on the
+taskbar or a second screen without hovering over anything.
+
+**⟳**, beside the chip, reads every source once — the same as **F5** anywhere on the board window
+(a popped-out panel doesn't take it). The state and detail lines under the bar show only when
+there's something worth saying: paused, trouble, not yet started, a problem, or numbers the board
+is still showing from an earlier read.
 
 ### Boards and panels
 
@@ -157,10 +177,35 @@ right-clicking its tab or pressing **Shift+F10** opens the same menu.
 asks for. Each panel's **Settings** button changes those choices later. A panel whose source or
 stat was removed says so and offers **Choose another**.
 
-**Edit board** opens a draft: drag the grip or use **Move earlier** and **Move later** to reorder,
-choose a size, tick **Tall**, or remove a panel. **Done** saves the draft. Panels currently flow in
-reading order; resizing can move the panels after them. Free placement and corner resizing are
-not available yet.
+**Arrange** opens a draft of the board on screen, in a banner where the state and detail lines usually sit:
+`Arranging "Battle" · drag a header to move · drag an edge or corner to resize · ←/→ move`. Drag a panel by its
+header to move it; drag its right edge to change its width, or its bottom-right corner to change its width and
+make it one or two rows tall. With the keyboard, focus one of a panel's buttons and use Left and Right to move it,
+Ctrl+Left and Ctrl+Right to change its width, and Ctrl+Up and Ctrl+Down for one or two rows; the panel a keyboard
+is moving shows a cyan focus ring. **✕**, in each panel's header, removes that panel, and **+ Add panel**, in the
+banner, opens the gallery. The banner's **Done** saves the draft, counting the changes it will save ("Done (3)";
+no count once the draft is back as it was); **Cancel**, or Esc
+from anywhere in the window, leaves arranging instead — with nothing changed it just leaves, with a change it
+asks first, in Ur Score's own themed window. The tabs stay clickable while arranging (**+ Board** and the tab
+menu are off until Done or Cancel): clicking another tab saves the draft the same way Done does, then switches, and a save that fails
+keeps you on the board and says why, in the banner. Closing Ur Score while arranging saves the draft too. Panels
+flow in reading order, so a move or a resize can move the panels after it, and arranging never changes a panel's
+height on the way in or out.
+
+**Undo** is Ctrl+Z, and works any time the board window has focus (a popped-out panel doesn't take it). Every
+change to a board — moving or resizing a panel, adding or removing one, and a panel's **Settings** — can be undone,
+per board, for as long as Ur Score stays open (the last 20, not saved anywhere). Outside Arrange, each change is
+its own undo step. While arranging, Ctrl+Z steps back through the draft one change at a time, and **Done** counts
+them ("Done (3)"); pressing Done folds the whole arrangement into a single step, so one Ctrl+Z after Done puts the
+board back exactly as it was before you started arranging. A themed toast at the bottom of the board says what an
+undo is offered or what it did — "Arranged Battle · Undo", "Changed Past battles · Undo", "Undid: Removed Battle
+race" — and shows for about six seconds; a new change replaces it. It shows while arranging too, where its Undo
+steps back through the draft; entering Arrange hides any toast from before, and Cancel hides the draft's, and so
+does Done when arranging ends without saving a change. A rename is never undone. A save that fails leaves the undo
+history as it was and the toast says so, redacted like every other problem line. Undoing back onto a board a
+starter tab still matches re-follows your clans again; if your sources changed in between, the toast says so
+instead: "Restored, but Battle no longer follows your clans." Pop-outs are never undone, and deleting a board
+clears its history.
 
 **Pop out** puts a panel in its own always-on-top window. It keeps updating with the board, and
 its saved position is restored on the next start. Use the pop-out's **Return to the board** button
@@ -222,7 +267,7 @@ touching by hand:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. There is no checkbox for this. |
-| `startOnOpen` | `false` | Whether Ur Score does what pressing Start does as its window opens. Ticked as **Start reading as soon as Ur Score opens** under **Setup › Recipes**; no reason to edit it by hand. It takes effect the next time you open Ur Score, and reading still happens only while the window is open. |
+| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Recipes**; no reason to edit it by hand. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet, and reading still happens only while the window is open. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
 | `activeRecipe` | *(none)* | Nothing reads it. It is left over from before recipes had sources of their own; which sources are on lives in `sources.json`. Leave it alone. |
 
 Beside those, in the same folder: `recipes\` (the recipe files you imported and their state),
@@ -241,23 +286,23 @@ copies.
 - **Touch Roblox itself.** Ur Score reads https and writes to a local pipe. It cannot click, type,
   or otherwise act inside a Roblox client.
 - **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur
-  Score reads only while its own window is open. Once you're set up you can tick **Start reading as
-  soon as Ur Score opens** in **Setup › Recipes** so you don't have to press Start; it still won't
-  watch anything you never opened it for.
+  Score reads only while its own window is open. Ur Score starts reading as soon as it opens;
+  untick **Start reading when Ur Score opens** in **Setup › Recipes** if you'd rather start it
+  yourself from the status chip. Either way, it never watches anything you haven't opened it for.
 
 ## Troubleshooting
 
 **The state line**, above the board, answers "what is it doing right now" in one sentence. Before
-the first Start it reads "Not started."; after one, "Stopped."; with no source switched on,
-"Running, with nothing to read yet."; and while all is well, "Reading 1 source." or "Reading 3
-sources." If a source is in trouble, its name and its reason replace that — a source is named by
-the input you typed for it, so the line reads "Nebula: Could not reach the data." While Start waits
-for RoRoRo's list of your accounts (up to 20 seconds) it reads "Starting. Asking RoRoRo for your
-accounts…", and while Test now reads, "Reading every source once…". A read you ask for while
-stopped says what it found after "Not started." or "Stopped.": "Stopped. Last read: Reported to
-RoRoRo.", or the source in trouble by name. If the score book itself can't be read, the line says
-"Your score book couldn't be read.", the line under it says why, and the board says Start and Test
-now are off until it can be, with Try again.
+reading has run this session it reads "Not started."; once paused, "Paused. Nothing is read or
+sent, so phone alerts are off."; with no source switched on, "Running, with nothing to read yet.";
+and while all is well, "Reading 1 source." or "Reading 3 sources." If a source is in trouble, its
+name and its reason replace that — a source is named by the input you typed for it, so the line
+reads "Nebula: Could not reach the data." While reading waits for RoRoRo's list of your accounts
+(up to 20 seconds) it reads "Starting. Asking RoRoRo for your accounts…", and while ⟳ reads,
+"Reading every source once…". A read you ask for while paused says what it found after "Not
+started." or "Paused. …": "Last read: Reported to RoRoRo.", or the source in trouble by name. If
+the score book itself can't be read, the line says "Your score book couldn't be read.", the line
+under it says why, and the board offers Try again until it can be.
 And whenever any panel is drawing numbers from the score book rather than from this session, the
 sentence about their age is appended to whatever else the line says.
 

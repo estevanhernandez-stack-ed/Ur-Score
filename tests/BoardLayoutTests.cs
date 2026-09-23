@@ -195,6 +195,48 @@ public class BoardLayoutTests
             $"{grips.Edge} reaches further than half a grip past {cell}");
     }
 
+    /// <summary>
+    /// A corner drag on a tall panel, let go at the height it already had, kept it tall only if the comparison is
+    /// with ONE row. EndResize compared it with the whole two-row slot, and RowsFor answers two only at 1.5 times
+    /// its row argument, so the same height came back short. Rows of unequal height, because they are unequal on
+    /// every real board and an average of the two would hide the mistake.
+    /// </summary>
+    [Fact]
+    public void ACornerDragOnATallPanelLetGoAtItsOwnHeightStaysTall()
+    {
+        const double gap = 12;
+        var placed = BoardLayout.Flow([new PanelSize(6, Tall: true), new PanelSize(6), new PanelSize(6)], 1400);
+        var rows = BoardLayout.RowHeights(placed, [100, 180, 90], gap);
+        var tall = placed[0];
+        var slot = BoardLayout.CellHeight(tall, rows, gap);
 
+        Assert.Equal(2, BoardLayout.RowsFor(slot, BoardLayout.FirstRowHeight(tall, rows)));
 
+        // What the old code asked, which is the defect: the slot measured against itself is "one row".
+        Assert.Equal(1, BoardLayout.RowsFor(slot, slot));
+
+        // A one-row panel let go at its own height stays one row.
+        var single = placed[1];
+        Assert.Equal(1, BoardLayout.RowsFor(BoardLayout.CellHeight(single, rows, gap), BoardLayout.FirstRowHeight(single, rows)));
+    }
+
+    [Fact]
+    public void APlacementPastTheRowsHasNoFirstRow() =>
+        Assert.Equal(0, BoardLayout.FirstRowHeight(new PanelPlacement(0, 3, 0, 6), [120, 80]));
+
+    /// <summary>
+    /// A popped-out panel's slot is a short card that refuses a resize (R19), so it shows no grips and a press over
+    /// where they would be falls through to whatever is under it.
+    /// </summary>
+    [Fact]
+    public void ASkippedCellOffersNoGrip()
+    {
+        CellRect[] cells = [new(0, 0, 200, 100), new(212, 0, 200, 100)];
+        var corner0 = BoardLayout.HandlesFor(cells[0]).Corner;
+        var corner1 = BoardLayout.HandlesFor(cells[1]).Corner;
+
+        Assert.Null(BoardLayout.GripAt(cells, corner0.Left + 2, corner0.Top + 2, new HashSet<int> { 0 }));
+        Assert.Equal((1, true), BoardLayout.GripAt(cells, corner1.Left + 2, corner1.Top + 2, new HashSet<int> { 0 }));
+        Assert.Equal((0, true), BoardLayout.GripAt(cells, corner0.Left + 2, corner0.Top + 2, new HashSet<int>()));
+    }
 }

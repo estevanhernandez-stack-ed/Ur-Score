@@ -23,8 +23,8 @@ public partial class BoardWindow
 
     private EditHintAdorner? _hints;
 
-    /// <summary>The panel being resized by its grip, which grip, and the cell it started from. Null when not.</summary>
-    private (int Index, bool Corner, CellRect From)? _resizing;
+    /// <summary>The panel being resized by its grip, which grip, the cell it started from and the height of its first row. Null when not.</summary>
+    private (int Index, bool Corner, CellRect From, double RowHeight)? _resizing;
 
     private bool Editing => _draft is not null;
 
@@ -50,14 +50,18 @@ public partial class BoardWindow
 
     private void OnEditBoardClick(object sender, RoutedEventArgs e)
     {
-        // The button is collapsed and disabled while editing; this only catches a press already on its way.
+        // The button is disabled while arranging; this only catches a press already on its way.
         if (!ButtonStates().EditBoard) return;
 
         _draft = _draftBase = ShownBoard(_services.Boards);
+        _draftUndo.ClearAll();
+
+        // A toast from before Arrange names a saved change; its Undo would now pop the draft's history instead (BC6).
+        HideToast();
         ShowEditMode();
         Render();
 
-        // Edit board has just hidden itself; focus goes to what replaced it.
+        // Arrange is disabled now; focus goes to Done in the banner that opened in the lines' place.
         FocusLater(DoneButton);
     }
 
@@ -70,8 +74,27 @@ public partial class BoardWindow
     {
         FinishEditing();
 
-        // Done has hidden itself, unless the save failed and edit mode stays.
+        // Done has hidden itself with the banner, unless the save failed and arranging stays.
         if (!Editing) FocusLater(EditBoardButton);
+    }
+
+    /// <summary>
+    /// BC5: Cancel and Esc (IsCancel) leave arranging. With nothing changed they just leave; with changes they ask first,
+    /// in the theme. Closing the window still saves the draft (R8).
+    /// </summary>
+    private void OnCancelArrangeClick(object sender, RoutedEventArgs e)
+    {
+        if (!Editing || _draft is not { } draft) return;
+        if (_draftBase is { } atEdit && BoardEdits.Changed(atEdit, draft) && !ConfirmWindow.Ask(this, BoardText.CancelArrangeQuestion(atEdit))) return;
+
+        // Cancel discards the draft's history with the draft (spec §5.2); nothing reaches the saved one, and a draft
+        // change's toast (R10) goes with it, its Undo having nothing left to take back.
+        _draft = _draftBase = null;
+        _draftUndo.ClearAll();
+        HideToast();
+        ShowEditMode();
+        Render();
+        FocusLater(EditBoardButton);
     }
 
     /// <summary>
@@ -79,38 +102,76 @@ public partial class BoardWindow
     /// <see cref="SaveBoards"/> (<see cref="BoardEdits.Finish"/>), with every pop-out as the saved boards have it now.
     /// A changed draft of a tab whose starter went empty meanwhile is saved as a board of its own. One that isn't
     /// changed writes nothing. A save that fails stays in edit mode, so the arrangement isn't lost.
+    /// <para>
+    /// BC6: a save that changed something folds the whole session into one step on the saved history, "Arranged
+    /// Battle" (spec §5.2). The step holds the board as saved just before the draft replaced it (R3) — not
+    /// <see cref="ShownBoard"/>, which is the draft itself while arranging. A draft kept as a board of its own, its
+    /// starter gone empty meanwhile, had no saved board to go back to and pushes nothing.
+    /// </para>
+    /// <para>
+    /// Once arranging has actually ended, an "Arranged" toast here replaces whatever toast is up; with none to
+    /// replace it, that toast is hidden — it named a draft change (R10), and left up, its Undo would reach past
+    /// the ended draft into the saved history and pop an unrelated step (final review).
+    /// </para>
     /// </summary>
     private void FinishEditing()
     {
         if (_draft is not { } draft) return;
 
         var boards = _services.Boards;
+        var before = boards.FirstOrDefault(b => b.Id == draft.Id);
         var finished = _draftBase is { } atEdit
             ? BoardEdits.Finish(boards, atEdit, draft)
             : BoardEdits.Replace(boards, BoardEdits.CarryPopOuts(draft, boards));
-        if (!ReferenceEquals(finished, boards) && !SaveBoards(finished)) return;
+        var changed = !ReferenceEquals(finished, boards);
+        if (changed && !SaveBoards(finished)) return;
 
         _draft = _draftBase = null;
+        _draftUndo.ClearAll();
+        if (changed && before is not null)
+        {
+            _undo.Push(before, BoardText.Arranged(before.Name));
+            ShowToast(BoardText.Arranged(before.Name), canUndo: true);
+        }
+        else HideToast();
+
         ShowEditMode();
         Render();
     }
 
-    /// <summary>What shows in edit mode. Which buttons take a press is <see cref="ApplyButtons"/>'s, as always.</summary>
+    /// <summary>Done's label, counting the draft's steps only while the draft differs from the board as arranging began (<see cref="BoardUndo.DoneCount"/>).</summary>
+    private string DoneLabel() => BoardText.DoneLabel(BoardUndo.DoneCount(_draftBase, _draft, _draftUndo));
+
+    /// <summary>
+    /// What shows while arranging: the banner in the status lines' place (spec §4.2), naming the board and counting
+    /// Done's changes. Which buttons take a press is <see cref="ApplyButtons"/>'s, as always; the lines come back
+    /// through <see cref="RenderLines"/> once arranging ends.
+    /// </summary>
     private void ShowEditMode()
     {
         var editing = Editing;
         PanelFrame.SetShowEditTools(BoardPanels, editing);
 
-        EditBoardButton.Visibility = editing ? Visibility.Collapsed : Visibility.Visible;
-        AddPanelButton.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
-        DoneButton.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        ArrangeBanner.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        if (editing) StateLines.Visibility = Visibility.Collapsed;
+        ArrangeLine.Text = ArrangeBannerText();
+        DoneButton.Content = DoneLabel();
 
         ApplyButtons();
+        RenderLines();
 
-        // After the grid has arranged, not now: a cell has no rectangle until it has been placed, and entering edit
-        // mode changes every panel's height by adding the tools row above it.
+        // After the grid has arranged, not now: a cell has no rectangle until it has been placed.
         Dispatcher.BeginInvoke(ShowGrips, DispatcherPriority.Loaded);
     }
+
+    /// <summary>
+    /// The banner's line: how to arrange this board, or, after a Done or tab-click save that failed, why it wasn't
+    /// saved — still naming the board (<see cref="BoardText.ArrangingNote"/>, task 14 R8), since arranging hasn't
+    /// stopped, only saving it has. The banner covers the detail line that would otherwise say so, and a failed save
+    /// is never silent (V3-S.10).
+    /// </summary>
+    private string ArrangeBannerText() =>
+        _draft is not { } draft ? "" : _boardsNote is { } note ? BoardText.ArrangingNote(draft.Name, note) : BoardText.ArrangingLine(draft.Name);
 
     private void OnEditTool(object? sender, PanelToolEventArgs e)
     {
@@ -124,34 +185,10 @@ public partial class BoardWindow
         // same tool on the redrawn panel (R7), so a keyboard user can press it again.
         switch (e.Tool)
         {
-            case PanelTool.MoveEarlier:
-                e.Handled = true;
-                ChangeBoard(board => BoardEdits.MoveBy(board, def.Id, -1));
-                FocusToolLater(def.Id, PanelTool.MoveEarlier);
-                break;
-            case PanelTool.MoveLater:
-                e.Handled = true;
-                ChangeBoard(board => BoardEdits.MoveBy(board, def.Id, 1));
-                FocusToolLater(def.Id, PanelTool.MoveLater);
-                break;
-            case PanelTool.Resize when e.Size is { } size:
-                e.Handled = true;
-                var tall = BoardEdits.IsTallTick(def.Size, size);
-
-                // After the size box's SelectionChanged (or Tall's Checked) returns, as the drop waits for its drag:
-                // the redraw tears that control down.
-                Dispatcher.BeginInvoke(() =>
-                {
-                    if (!Editing) return;
-
-                    ChangeBoard(board => BoardEdits.Resize(board, def.Id, size));
-                    FocusToolLater(def.Id, PanelTool.Resize, tall);
-                }, DispatcherPriority.Background);
-                break;
             case PanelTool.Remove:
                 e.Handled = true;
                 var next = _draft is { } shown ? BoardEdits.FocusAfterRemove(shown, def.Id) : null;
-                ChangeBoard(board => BoardEdits.RemovePanel(board, def.Id));
+                ChangeBoard(board => BoardEdits.RemovePanel(board, def.Id), BoardText.Changed("Removed", PanelTitle(def)));
 
                 // A neighbour's ⋯, never its Remove: a button clicks on every repeated Enter, and the draft is saved on close (R8).
                 FocusToolLater(next, PanelTool.Settings);
@@ -169,28 +206,10 @@ public partial class BoardWindow
     /// (a press that changed nothing, a dialog closed unchanged) keeps it. With no such panel, focus goes to
     /// + Add panel while editing.
     /// </summary>
-    private void FocusToolLater(string? panelId, PanelTool tool, bool tall = false)
-    {
-        var before = ViewOf(panelId);
-        Dispatcher.BeginInvoke(() =>
-        {
-            var view = ViewOf(panelId);
-            if (view is null)
-            {
-                if (Editing) AddPanelButton.Focus();
-                return;
-            }
+    private void FocusToolLater(string? panelId, PanelTool tool) =>
+        FocusPanelLater(panelId, frame => frame.FocusTool(tool));
 
-            if (ReferenceEquals(view, before) && view.IsKeyboardFocusWithin) return;
-
-            // A popped-out panel's slot has no tools of its own, only its buttons (R19).
-            if (view is PoppedOutSlot slot) slot.FocusButton(Editing);
-            else PanelFrame.Of(view)?.FocusTool(tool, tall);
-            view.BringIntoView();
-        }, DispatcherPriority.Loaded);
-    }
-
-    /// <summary>Focus on a top bar button once it shows: Edit board and Done hide themselves when pressed.</summary>
+    /// <summary>Focus on a button once the layout has settled: Done and Cancel hide with the banner, and Arrange is disabled while it shows.</summary>
     private void FocusLater(UIElement element) => Dispatcher.BeginInvoke(() => { element.Focus(); }, DispatcherPriority.Loaded);
 
     private FrameworkElement? ViewOf(string? panelId) =>
@@ -235,7 +254,12 @@ public partial class BoardWindow
     private void ShowGrips()
     {
         ShowDropCaret(null);
-        if (_hints is not null) _hints.Grips = Editing ? [.. BoardPanels.Cells.Select(BoardLayout.HandlesFor)] : [];
+        if (_hints is not null)
+        {
+            _hints.Grips = Editing
+                ? [.. BoardPanels.Cells.Where((_, i) => !BoardPanels.NoGrips.Contains(i)).Select(BoardLayout.HandlesFor)]
+                : [];
+        }
     }
 
     /// <summary>The sizes a keyboard walks through, narrowest first, so Ctrl+Left and Ctrl+Right step along them.</summary>
@@ -277,8 +301,8 @@ public partial class BoardWindow
 
         if (step != 0 && !control)
         {
-            ChangeBoard(board => BoardEdits.MoveBy(board, panel.Id, step));
-            FocusPanelLater(index + step);
+            ChangeBoard(board => BoardEdits.MoveBy(board, panel.Id, step), BoardText.Changed("Moved", PanelTitle(panel)));
+            FocusPanelLater(panel.Id);
             e.Handled = true;
             return;
         }
@@ -287,37 +311,64 @@ public partial class BoardWindow
         {
             var at = Array.IndexOf(Sizes, panel.Size.Span);
             var wanted = Sizes[Math.Clamp((at < 0 ? 1 : at) + step, 0, Sizes.Length - 1)];
-            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Span = wanted }));
-            FocusPanelLater(index);
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Span = wanted }), BoardText.Changed("Resized", PanelTitle(panel)));
+            FocusPanelLater(panel.Id);
             e.Handled = true;
             return;
         }
 
         if (control && e.Key is Key.Up or Key.Down)
         {
-            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Tall = e.Key == Key.Down }));
-            FocusPanelLater(index);
+            ChangeBoard(board => BoardEdits.Resize(board, panel.Id, panel.Size with { Tall = e.Key == Key.Down }), BoardText.Changed("Resized", PanelTitle(panel)));
+            FocusPanelLater(panel.Id);
             e.Handled = true;
         }
     }
 
     /// <summary>
-    /// Puts focus back on the panel after the change, because every edit rebuilds the grid and destroys the element
-    /// that had it — the same hand-off <see cref="OnEditTool"/> has always had to make, for the same reason.
+    /// Puts focus back in the moved panel once the grid has redrawn it, on its first tool: every edit rebuilds the
+    /// grid and destroys the element that had focus, and the panel itself can't hold it. Found by id, not index, so
+    /// it follows the panel to wherever the move put it. Goes through the same guarded plumbing as
+    /// <see cref="FocusToolLater"/> (spec item 2), so a no-op edit — Left on the leftmost panel, a move or resize
+    /// BoardEdits refuses on a popped-out panel — that redraws nothing leaves focus exactly where it was, instead
+    /// of really moving it off whatever tool the user had pressed.
     /// </summary>
-    private void FocusPanelLater(int index) => Dispatcher.BeginInvoke(
-        () =>
+    private void FocusPanelLater(string panelId) => FocusPanelLater(panelId, frame => frame.FocusFirstTool());
+
+    /// <summary>
+    /// Shared by <see cref="FocusToolLater"/> and <see cref="FocusPanelLater(string)"/>: once a redraw has laid the
+    /// grid out, focuses the panel <paramref name="panelId"/> — through <paramref name="focus"/> for an ordinary
+    /// panel, or its pop-out slot's own button for a popped-out one (R19) — and brings it into view. A panel that
+    /// wasn't redrawn and still holds focus (a press or edit that changed nothing) keeps it. With no such panel,
+    /// focus goes to + Add panel while editing.
+    /// </summary>
+    private void FocusPanelLater(string? panelId, Func<PanelFrame, bool> focus)
+    {
+        var before = ViewOf(panelId);
+        Dispatcher.BeginInvoke(() =>
         {
-            if (index >= 0 && index < BoardPanels.Children.Count && BoardPanels.Children[index] is FrameworkElement panel) panel.Focus();
-        },
-        DispatcherPriority.Loaded);
+            var view = ViewOf(panelId);
+            if (view is null)
+            {
+                if (Editing) AddPanelButton.Focus();
+                return;
+            }
+
+            if (ReferenceEquals(view, before) && view.IsKeyboardFocusWithin) return;
+
+            // A popped-out panel's slot has no tools of its own, only its buttons (R19).
+            if (view is PoppedOutSlot slot) slot.FocusButton(Editing);
+            else if (PanelFrame.Of(view) is { } frame) focus(frame);
+            view.BringIntoView();
+        }, DispatcherPriority.Loaded);
+    }
 
     private void OnBoardMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (!Editing || BoardPanels.GripAt(e.GetPosition(BoardPanels)) is not { } grip) return;
         if (grip.Index >= BoardPanels.Cells.Count) return;
 
-        _resizing = (grip.Index, grip.Corner, BoardPanels.Cells[grip.Index]);
+        _resizing = (grip.Index, grip.Corner, BoardPanels.Cells[grip.Index], BoardPanels.FirstRowHeightAt(grip.Index));
         BoardPanels.CaptureMouse();
         e.Handled = true;
     }
@@ -361,10 +412,10 @@ public partial class BoardWindow
         if (_draft is not { } draft || grip.Index >= draft.Panels.Count) return;
 
         var span = BoardLayout.SpanFor(shown.Width, BoardPanels.ActualWidth, BoardPanels.Gap);
-        var rows = grip.Corner ? BoardLayout.RowsFor(shown.Height, grip.From.Height) : (PanelGrid.GetTall(BoardPanels.Children[grip.Index]) ? 2 : 1);
-        var panelId = draft.Panels[grip.Index].Id;
+        var rows = grip.Corner ? BoardLayout.RowsFor(shown.Height, grip.RowHeight) : (PanelGrid.GetTall(BoardPanels.Children[grip.Index]) ? 2 : 1);
+        var panel = draft.Panels[grip.Index];
 
-        ChangeBoard(board => BoardEdits.Resize(board, panelId, new PanelSize(span, rows > 1)));
+        ChangeBoard(board => BoardEdits.Resize(board, panel.Id, new PanelSize(span, rows > 1)), BoardText.Changed("Resized", PanelTitle(panel)));
     }
 
     private void OnBoardDragOver(object sender, DragEventArgs e)
@@ -393,7 +444,11 @@ public partial class BoardWindow
         // Still editing by then, or the move would be saved straight to the board.
         Dispatcher.BeginInvoke(() =>
         {
-            if (Editing) ChangeBoard(board => BoardEdits.MoveTo(board, panelId, index));
+            if (_draft?.Panels.FirstOrDefault(p => p.Id == panelId) is not { } panel) return;
+            ChangeBoard(board => BoardEdits.MoveTo(board, panelId, index), BoardText.Changed("Moved", PanelTitle(panel)));
         }, DispatcherPriority.Background);
     }
+
+    /// <summary>A panel's title as its header shows it, naming the change in the undo toast (BC6, spec §5.3).</summary>
+    private string PanelTitle(PanelDef panel) => PanelGallery.TitleOf(panel, _services.CurrentBoard());
 }

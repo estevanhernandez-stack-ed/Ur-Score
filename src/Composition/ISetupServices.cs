@@ -62,6 +62,9 @@ public interface ISetupServices
 
     bool Running { get; }
 
+    /// <summary>Whether reading has run this session at all (set once <c>StartAsync</c> has run; a Test now read doesn't count).</summary>
+    bool EverStarted { get; }
+
     /// <summary>The newest snapshot per source id, from a timed read, Test now, or a Setup read-once.</summary>
     IReadOnlyDictionary<string, RecipeSnapshot> Latest { get; }
 
