@@ -48,3 +48,7 @@ secrets/
 # Test run leftovers: blame-hang dumps and sequence files.
 tests/TestResults/
 *_wpftmp.csproj
+
+# Agent workspaces: worktrees and plan ledgers, never committed
+.claude/worktrees/
+.superpowers/
