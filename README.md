@@ -136,15 +136,35 @@ reinstalling never touches your recipes, clans, boards or score book.
    your score book, and **Send** to also report it to RoRoRo. The **Name RoRoRo uses** box beside
    each stat is the metric id RoRoRo will see; a recipe suggests one, and you can change it. Press
    **Save stats**.
-4. **Press "Start."** The board fills in within a few seconds of the first read — its panels, the
-   state line above them, and the line along the top naming the period being read (or how often
-   this reads) and when the next read is due. If nothing fills in, press **Test now**: it reads
-   every source once, and **Setup › Diagnostics** then says per source what happened, when it last
-   read, when it reads next, and which of your accounts a source couldn't read and why.
+4. **Reading starts on its own.** Ur Score starts reading as soon as it opens (turn that off in
+   **Setup › Recipes**, under **Start reading when Ur Score opens**); if it hasn't, click the status
+   chip's **▶ Start reading**. The board fills in within a few seconds of the first read — its
+   panels, the state line above them, and the line along the top naming the period being read (or
+   how often this reads) and when the next read is due. If nothing fills in, press **⟳** (or
+   **F5**): it reads every source once, and **Setup › Diagnostics** then says per source what
+   happened, when it last read, when it reads next, and which of your accounts a source couldn't
+   read and why.
 5. **Pick which accounts actually send.** The **Send** checkbox on each row in **Setup › Your
    accounts** controls whether that account's numbers go to RoRoRo, one checkbox per recipe. Every
    account starts on; untick one and it keeps being read, kept and shown, but stops sending — and
    the choice survives a restart.
+
+### The status chip
+
+The top bar carries one control for reading, where Start/Stop and Test now used to sit side by
+side. Before reading has run this session it shows **▶ Start reading**, filled cyan — click it and
+it starts. From then on the chip only shows status and never pauses by itself: **● Live** (cyan),
+**❚❚ Paused** (amber — the loudest state, since paused silences your phone alerts), or **▲ Trouble**
+(a source is unhealthy, or RoRoRo isn't running). Clicking it opens a card: the state line, one
+line per switched-on source (when it last read and when it reads next, or its trouble), whether
+phone alerts are going out, and **Pause reading** / **Resume reading**. Esc or a click elsewhere
+closes the card. While paused, the window title also carries "(Paused)", so it shows on the
+taskbar or a second screen without hovering over anything.
+
+**⟳**, beside the chip, reads every source once — the same as **F5** anywhere on the board window
+(a popped-out panel doesn't take it). The state and detail lines under the bar show only when
+there's something worth saying: paused, trouble, not yet started, a problem, or numbers the board
+is still showing from an earlier read.
 
 ### Boards and panels
 
@@ -223,7 +243,7 @@ touching by hand:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. There is no checkbox for this. |
-| `startOnOpen` | `false` | Whether Ur Score does what pressing Start does as its window opens. Ticked as **Start reading as soon as Ur Score opens** under **Setup › Recipes**; no reason to edit it by hand. It takes effect the next time you open Ur Score, and reading still happens only while the window is open. |
+| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Recipes**; no reason to edit it by hand. It takes effect the next time you open Ur Score, and reading still happens only while the window is open. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
 | `activeRecipe` | *(none)* | Nothing reads it. It is left over from before recipes had sources of their own; which sources are on lives in `sources.json`. Leave it alone. |
 
 Beside those, in the same folder: `recipes\` (the recipe files you imported and their state),
@@ -242,23 +262,23 @@ copies.
 - **Touch Roblox itself.** Ur Score reads https and writes to a local pipe. It cannot click, type,
   or otherwise act inside a Roblox client.
 - **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur
-  Score reads only while its own window is open. Once you're set up you can tick **Start reading as
-  soon as Ur Score opens** in **Setup › Recipes** so you don't have to press Start; it still won't
-  watch anything you never opened it for.
+  Score reads only while its own window is open. Ur Score starts reading as soon as it opens;
+  untick **Start reading when Ur Score opens** in **Setup › Recipes** if you'd rather start it
+  yourself from the status chip. Either way, it never watches anything you haven't opened it for.
 
 ## Troubleshooting
 
 **The state line**, above the board, answers "what is it doing right now" in one sentence. Before
-the first Start it reads "Not started."; after one, "Stopped."; with no source switched on,
-"Running, with nothing to read yet."; and while all is well, "Reading 1 source." or "Reading 3
-sources." If a source is in trouble, its name and its reason replace that — a source is named by
-the input you typed for it, so the line reads "Nebula: Could not reach the data." While Start waits
-for RoRoRo's list of your accounts (up to 20 seconds) it reads "Starting. Asking RoRoRo for your
-accounts…", and while Test now reads, "Reading every source once…". A read you ask for while
-stopped says what it found after "Not started." or "Stopped.": "Stopped. Last read: Reported to
-RoRoRo.", or the source in trouble by name. If the score book itself can't be read, the line says
-"Your score book couldn't be read.", the line under it says why, and the board says Start and Test
-now are off until it can be, with Try again.
+reading has run this session it reads "Not started."; once paused, "Paused. Nothing is read or
+sent, so phone alerts are off."; with no source switched on, "Running, with nothing to read yet.";
+and while all is well, "Reading 1 source." or "Reading 3 sources." If a source is in trouble, its
+name and its reason replace that — a source is named by the input you typed for it, so the line
+reads "Nebula: Could not reach the data." While reading waits for RoRoRo's list of your accounts
+(up to 20 seconds) it reads "Starting. Asking RoRoRo for your accounts…", and while ⟳ reads,
+"Reading every source once…". A read you ask for while paused says what it found after "Not
+started." or "Paused. …": "Last read: Reported to RoRoRo.", or the source in trouble by name. If
+the score book itself can't be read, the line says "Your score book couldn't be read.", the line
+under it says why, and the board offers Try again until it can be.
 And whenever any panel is drawing numbers from the score book rather than from this session, the
 sentence about their age is appended to whatever else the line says.
 

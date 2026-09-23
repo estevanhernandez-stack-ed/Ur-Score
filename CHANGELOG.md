@@ -3,6 +3,30 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.6.0 - 2026-09-23
+
+### Added
+
+- **A status card.** Click the status chip and a card opens: the state line, one line per
+  switched-on source (when it last read and when it reads next, or its trouble), whether phone
+  alerts are going out, and **Pause reading** / **Resume reading**. Esc or a click elsewhere
+  closes it; opening it never pauses.
+- **F5 reads every source, the same as ⟳.** Not on a popped-out panel, which has no ⟳.
+- **"(Paused)" in the window title** while reading is paused, so a paused board shows on the
+  taskbar or a second screen without hovering over anything.
+
+### Changed
+
+- **Reading starts on open, by default.** New installs and existing ones alike; existing
+  installs are switched on once, and a player who unticks it keeps it off from then on. Turn it
+  off in **Setup › Recipes**, under **Start reading when Ur Score opens**. It is asked again
+  when Setup closes and when the first source is switched on, for a board that hasn't started yet.
+- **Start/Stop and Test now became one status chip and ⟳.** **▶ Start reading** starts a board
+  that hasn't read this session; once it has, the chip only shows status — **● Live**, **❚❚
+  Paused** (amber), or **▲ Trouble** — and never pauses by itself. Pause moved into the card.
+- **Closing Ur Score asks only while it is reading and sending.** A paused or never-started
+  board now closes without asking.
+
 ## 0.5.10 - 2026-09-23
 
 ### Fixed
