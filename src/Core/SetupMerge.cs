@@ -110,11 +110,16 @@ public static class SetupMerge
             items.Add(new SetupItem(SetupKind.Recipe, "recipe:" + installed.Recipe.Slug, installed.Recipe.Name, SetupOutcome.Kept, "only this PC has it", Ticked: false));
         }
 
+        // A clan with no inputs (a profile, a clans list) is named by its recipe: the file's name first, then this PC's.
+        var recipeNames = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var recipe in file.Recipes) recipeNames.TryAdd(recipe.Slug, recipe.Name);
+        foreach (var installed in here.Installed) recipeNames.TryAdd(installed.Recipe.Slug, installed.Recipe.Name);
+
         var fileNames = file.Sources.Select(s => s.Recipe + "|" + s.InputsKey).ToHashSet(StringComparer.Ordinal);
         foreach (var source in file.Sources)
         {
             var identity = source.Recipe + "|" + source.InputsKey;
-            var name = ClanName(source);
+            var name = ClanName(source, recipeNames);
             var local = here.Sources.FirstOrDefault(s => string.Equals(s.Recipe + "|" + s.InputsKey, identity, StringComparison.Ordinal));
             if (local is null)
             {
@@ -135,7 +140,7 @@ public static class SetupMerge
 
         foreach (var local in here.Sources.Where(s => !fileNames.Contains(s.Recipe + "|" + s.InputsKey)))
         {
-            items.Add(new SetupItem(SetupKind.Clan, "clan:" + local.Recipe + "|" + local.InputsKey, ClanName(local), SetupOutcome.Kept, "only this PC has it", Ticked: false, LocalId: local.Id));
+            items.Add(new SetupItem(SetupKind.Clan, "clan:" + local.Recipe + "|" + local.InputsKey, ClanName(local, recipeNames), SetupOutcome.Kept, "only this PC has it", Ticked: false, LocalId: local.Id));
         }
 
         // First-wins rather than throwing: the Rename window only checks a board against its own old name, so two
@@ -408,7 +413,10 @@ public static class SetupMerge
         $"{(readings == 1 ? "1 reading" : readings.ToString("N0", CultureInfo.InvariantCulture) + " readings")} and "
         + (finals == 1 ? "1 finished battle" : finals.ToString("N0", CultureInfo.InvariantCulture) + " finished battles");
 
-    private static string ClanName(Source source) => source.Inputs.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim() ?? source.Recipe;
+    private static string ClanName(Source source, IReadOnlyDictionary<string, string> recipeNames) =>
+        source.Inputs.Values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim()
+        ?? recipeNames.GetValueOrDefault(source.Recipe)
+        ?? source.Recipe;
 
     private static string RoleWord(Source source) => source.Role switch { SourceRole.Main => "main", SourceRole.Mine => "yours", _ => "watched" };
 

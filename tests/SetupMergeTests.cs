@@ -28,6 +28,19 @@ public class SetupMergeTests
 
     private static SetupItem Item(SetupMergePlan plan, SetupKind kind, string name) => Assert.Single(plan.Items, i => i.Kind == kind && i.Name == name);
 
+    /// <summary>A clan with no inputs (a profile, a clans list) is named by its recipe, not its slug; one whose recipe is nowhere keeps the slug.</summary>
+    [Fact]
+    public void AClanWithNoInputsIsNamedByItsRecipe()
+    {
+        var inputless = new Source("s-file0003", Profile.Slug, new Dictionary<string, string>(), SourceRole.Mine);
+        var orphan = new Source("s-local009", "gone-recipe", new Dictionary<string, string>(), SourceRole.Watch);
+
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Profile, ProfileText)], [inputless]), Here(sources: [orphan]), 0, 0);
+
+        Assert.Equal(SetupOutcome.Add, Item(plan, SetupKind.Clan, Profile.Name).Outcome);
+        Assert.Equal(SetupOutcome.Kept, Item(plan, SetupKind.Clan, "gone-recipe").Outcome);
+    }
+
     [Fact]
     public void ARecipeIsAddedUpdatedOrSameBySlugAndText()
     {
