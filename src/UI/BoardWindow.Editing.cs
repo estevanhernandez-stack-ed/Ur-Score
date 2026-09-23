@@ -124,30 +124,6 @@ public partial class BoardWindow
         // same tool on the redrawn panel (R7), so a keyboard user can press it again.
         switch (e.Tool)
         {
-            case PanelTool.MoveEarlier:
-                e.Handled = true;
-                ChangeBoard(board => BoardEdits.MoveBy(board, def.Id, -1));
-                FocusToolLater(def.Id, PanelTool.MoveEarlier);
-                break;
-            case PanelTool.MoveLater:
-                e.Handled = true;
-                ChangeBoard(board => BoardEdits.MoveBy(board, def.Id, 1));
-                FocusToolLater(def.Id, PanelTool.MoveLater);
-                break;
-            case PanelTool.Resize when e.Size is { } size:
-                e.Handled = true;
-                var tall = BoardEdits.IsTallTick(def.Size, size);
-
-                // After the size box's SelectionChanged (or Tall's Checked) returns, as the drop waits for its drag:
-                // the redraw tears that control down.
-                Dispatcher.BeginInvoke(() =>
-                {
-                    if (!Editing) return;
-
-                    ChangeBoard(board => BoardEdits.Resize(board, def.Id, size));
-                    FocusToolLater(def.Id, PanelTool.Resize, tall);
-                }, DispatcherPriority.Background);
-                break;
             case PanelTool.Remove:
                 e.Handled = true;
                 var next = _draft is { } shown ? BoardEdits.FocusAfterRemove(shown, def.Id) : null;
@@ -169,8 +145,8 @@ public partial class BoardWindow
     /// (a press that changed nothing, a dialog closed unchanged) keeps it. With no such panel, focus goes to
     /// + Add panel while editing.
     /// </summary>
-    private void FocusToolLater(string? panelId, PanelTool tool, bool tall = false) =>
-        FocusPanelLater(panelId, frame => frame.FocusTool(tool, tall));
+    private void FocusToolLater(string? panelId, PanelTool tool) =>
+        FocusPanelLater(panelId, frame => frame.FocusTool(tool));
 
     /// <summary>Focus on a top bar button once it shows: Edit board and Done hide themselves when pressed.</summary>
     private void FocusLater(UIElement element) => Dispatcher.BeginInvoke(() => { element.Focus(); }, DispatcherPriority.Loaded);
@@ -217,7 +193,12 @@ public partial class BoardWindow
     private void ShowGrips()
     {
         ShowDropCaret(null);
-        if (_hints is not null) _hints.Grips = Editing ? [.. BoardPanels.Cells.Select(BoardLayout.HandlesFor)] : [];
+        if (_hints is not null)
+        {
+            _hints.Grips = Editing
+                ? [.. BoardPanels.Cells.Where((_, i) => !BoardPanels.NoGrips.Contains(i)).Select(BoardLayout.HandlesFor)]
+                : [];
+        }
     }
 
     /// <summary>The sizes a keyboard walks through, narrowest first, so Ctrl+Left and Ctrl+Right step along them.</summary>

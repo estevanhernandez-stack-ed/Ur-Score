@@ -48,26 +48,11 @@ public sealed class PanelGrid : Panel
     /// <summary>The height of the first row the panel at <paramref name="index"/> sits in, for a corner drag; 0 when there is none.</summary>
     public double FirstRowHeightAt(int index) => index >= 0 && index < _firstRows.Count ? _firstRows[index] : 0;
 
-    /// <summary>
-    /// The panel whose resize grip is under <paramref name="point"/>, and which grip, or null for neither. The
-    /// corner is tried before the edge because it sits inside the edge grip's span and would otherwise be
-    /// unreachable.
-    /// </summary>
-    public (int Index, bool Corner)? GripAt(Point point)
-    {
-        for (var i = 0; i < _cells.Count; i++)
-        {
-            var grips = BoardLayout.HandlesFor(_cells[i]);
-            if (Holds(grips.Corner, point)) return (i, true);
-            if (Holds(grips.Edge, point)) return (i, false);
-        }
+    /// <summary>Cells that show no grips: the popped-out slots (R19). Set by the board as it builds the grid.</summary>
+    public IReadOnlySet<int> NoGrips { get; set; } = new HashSet<int>();
 
-        return null;
-    }
-
-    private static bool Holds(CellRect rect, Point point) =>
-        point.X >= rect.Left && point.X <= rect.Left + rect.Width
-        && point.Y >= rect.Top && point.Y <= rect.Top + rect.Height;
+    /// <summary>The panel whose resize grip is under <paramref name="point"/>, and which grip; see <see cref="BoardLayout.GripAt"/>.</summary>
+    public (int Index, bool Corner)? GripAt(Point point) => BoardLayout.GripAt(_cells, point.X, point.Y, NoGrips);
 
     protected override Size MeasureOverride(Size availableSize)
     {

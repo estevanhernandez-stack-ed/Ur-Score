@@ -237,6 +237,28 @@ public static class BoardLayout
         return new DropCaret(cell.Left, cell.Top, cell.Height);
     }
 
+    /// <summary>
+    /// The panel whose resize grip is under (x, y), and which grip, or null for neither. The corner is tried before
+    /// the edge because it sits inside the edge grip's span and would otherwise be unreachable. A cell in
+    /// <paramref name="skip"/> — a popped-out panel's slot, which refuses a resize (R19) — offers neither.
+    /// </summary>
+    public static (int Index, bool Corner)? GripAt(IReadOnlyList<CellRect> cells, double x, double y, IReadOnlySet<int> skip)
+    {
+        for (var i = 0; i < cells.Count; i++)
+        {
+            if (skip.Contains(i)) continue;
+
+            var grips = HandlesFor(cells[i]);
+            if (Holds(grips.Corner, x, y)) return (i, true);
+            if (Holds(grips.Edge, x, y)) return (i, false);
+        }
+
+        return null;
+    }
+
+    private static bool Holds(CellRect rect, double x, double y) =>
+        x >= rect.Left && x <= rect.Left + rect.Width && y >= rect.Top && y <= rect.Top + rect.Height;
+
     private static bool Free(HashSet<(int Row, int Column)> taken, int row, int column, int span, int rows)
     {
         for (var r = row; r < row + rows; r++)

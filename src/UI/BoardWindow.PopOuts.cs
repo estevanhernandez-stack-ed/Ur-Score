@@ -214,7 +214,7 @@ public partial class BoardWindow
         var slot = new PoppedOutSlot(title, () =>
         {
             ReturnPanel(def.Id);
-            FocusToolLater(def.Id, Editing ? PanelTool.MoveEarlier : PanelTool.PopOut);
+            FocusToolLater(def.Id, Editing ? PanelTool.Settings : PanelTool.PopOut);
         });
 
         AutomationProperties.SetAutomationId(slot, automationId + "PoppedOut");

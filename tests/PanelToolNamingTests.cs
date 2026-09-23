@@ -61,7 +61,7 @@ public class PanelToolNamingTests
         var xaml = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", "PanelFrame.xaml"));
         var code = File.ReadAllText(Path.Combine(RepoRoot(), "src", "UI", "Panels", "PanelFrame.xaml.cs"));
 
-        foreach (var tool in new[] { "PopOutButton", "PanelSettingsButton", "ChooseAnotherButton" })
+        foreach (var tool in new[] { "PopOutButton", "PanelSettingsButton", "ChooseAnotherButton", "RemovePanelButton" })
         {
             var element = Regex.Match(xaml, $"<Button x:Name=\"{tool}\".*?/>", RegexOptions.Singleline);
             Assert.True(element.Success, $"{tool} is no longer a Button in PanelFrame.xaml; this fence is looking in the wrong place.");
@@ -72,6 +72,7 @@ public class PanelToolNamingTests
         Assert.Contains("AutomationProperties.SetName(PopOutButton, BoardText.PopOutName(title));", code);
         Assert.Contains("AutomationProperties.SetName(PanelSettingsButton, BoardText.PanelSettingsName(title));", code);
         Assert.Contains("AutomationProperties.SetName(ChooseAnotherButton, BoardText.ChooseAnotherName(title));", code);
+        Assert.Contains("AutomationProperties.SetName(RemovePanelButton, BoardText.RemovePanelName(title));", code);
     }
 
     /// <summary>
@@ -89,6 +90,13 @@ public class PanelToolNamingTests
         Assert.DoesNotContain("FocusPanelLater(index", editing, StringComparison.Ordinal);
         Assert.Contains("FocusPanelLater(panel.Id)", editing, StringComparison.Ordinal);
         Assert.Contains("public bool FocusFirstTool()", frame, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RemoveSaysWhichPanelItRemoves()
+    {
+        Assert.Equal("Remove Battle race", BoardText.RemovePanelName("Battle race"));
+        Assert.Equal("Remove panel", BoardText.RemovePanelName("  "));
     }
 
     private static string RepoRoot()

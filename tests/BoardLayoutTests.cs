@@ -223,4 +223,20 @@ public class BoardLayoutTests
     [Fact]
     public void APlacementPastTheRowsHasNoFirstRow() =>
         Assert.Equal(0, BoardLayout.FirstRowHeight(new PanelPlacement(0, 3, 0, 6), [120, 80]));
+
+    /// <summary>
+    /// A popped-out panel's slot is a short card that refuses a resize (R19), so it shows no grips and a press over
+    /// where they would be falls through to whatever is under it.
+    /// </summary>
+    [Fact]
+    public void ASkippedCellOffersNoGrip()
+    {
+        CellRect[] cells = [new(0, 0, 200, 100), new(212, 0, 200, 100)];
+        var corner0 = BoardLayout.HandlesFor(cells[0]).Corner;
+        var corner1 = BoardLayout.HandlesFor(cells[1]).Corner;
+
+        Assert.Null(BoardLayout.GripAt(cells, corner0.Left + 2, corner0.Top + 2, new HashSet<int> { 0 }));
+        Assert.Equal((1, true), BoardLayout.GripAt(cells, corner1.Left + 2, corner1.Top + 2, new HashSet<int> { 0 }));
+        Assert.Equal((0, true), BoardLayout.GripAt(cells, corner0.Left + 2, corner0.Top + 2, new HashSet<int>()));
+    }
 }

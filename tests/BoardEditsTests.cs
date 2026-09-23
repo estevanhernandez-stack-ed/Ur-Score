@@ -481,15 +481,6 @@ public class BoardEditsTests
     }
 
     [Fact]
-    public void AResizeThatKeepsTheSpanAndFlipsTallCameFromTheTallTick()
-    {
-        Assert.True(BoardEdits.IsTallTick(new PanelSize(4), new PanelSize(4, Tall: true)));
-        Assert.True(BoardEdits.IsTallTick(new PanelSize(6, Tall: true), new PanelSize(6)));
-        Assert.False(BoardEdits.IsTallTick(new PanelSize(4), new PanelSize(PanelSize.Half)));
-        Assert.False(BoardEdits.IsTallTick(new PanelSize(3, Tall: true), new PanelSize(PanelSize.Wide, Tall: true)));
-    }
-
-    [Fact]
     public void APoppedOutPanelIsNotMovedOrResizedUntilItIsBack()
     {
         var board = BoardEdits.PopOut(BoardOf("b", PanelType.Standing, PanelType.Race, PanelType.Top), "p-b-2", new PopOutRect(10, 10, 360, 300));

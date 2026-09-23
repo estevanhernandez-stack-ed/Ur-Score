@@ -248,6 +248,8 @@ public partial class BoardWindow : Window
             BoardPanels.Children.Add(view);
             _panels.Add((def, view, ids[i]));
         }
+
+        BoardPanels.NoGrips = board.Panels.Select((p, i) => (p, i)).Where(x => x.p.PopOut is not null).Select(x => x.i).ToHashSet();
     }
 
     /// <summary>The control for one panel on the board, named by its automation id; a popped-out panel's slot holds a placeholder (R19).</summary>

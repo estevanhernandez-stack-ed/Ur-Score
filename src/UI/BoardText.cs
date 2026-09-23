@@ -240,6 +240,10 @@ public static class BoardText
     public static string ChooseAnotherName(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "Choose another" : $"Choose another for {title.Trim()}";
 
+    /// <summary>As <see cref="PopOutName"/>, for ✕ in edit mode: five panels gave five buttons called "Remove panel".</summary>
+    public static string RemovePanelName(string? title) =>
+        string.IsNullOrWhiteSpace(title) ? "Remove panel" : $"Remove {title.Trim()}";
+
     /// <summary>
     /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
     /// (D4); a board with no panels, including a following tab being edited; else none.

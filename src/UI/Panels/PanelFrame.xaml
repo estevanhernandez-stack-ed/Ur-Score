@@ -22,7 +22,7 @@
                 </UniformGrid>
             </Label>
             <Button x:Name="RemovePanelButton" Content="✕" Tag="Remove" Style="{StaticResource FlatButton}" Padding="6,2"
-                    Click="OnToolClick" AutomationProperties.Name="Remove panel" />
+                    Click="OnToolClick" />
         </WrapPanel>
         <!-- The title line (the mock's .p-head): title, chip and tools centred on one line; the tools in the muted text colour. -->
         <!-- Background, not the default null: a DockPanel with no brush is hit-test invisible over its empty space,

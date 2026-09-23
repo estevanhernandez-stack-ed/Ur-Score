@@ -7,14 +7,11 @@ using Labs626.UrScore.Board;
 namespace Labs626.UrScore.UI;
 
 /// <summary>Every tool a panel's header can raise (spec §9.2, §9.3, §9.4).</summary>
-public enum PanelTool { PopOut, Settings, ChooseAnother, DragStart, MoveEarlier, MoveLater, Resize, Remove }
+public enum PanelTool { PopOut, Settings, ChooseAnother, DragStart, Remove }
 
-public sealed class PanelToolEventArgs(RoutedEvent routedEvent, PanelTool tool, PanelSize? size = null) : RoutedEventArgs(routedEvent)
+public sealed class PanelToolEventArgs(RoutedEvent routedEvent, PanelTool tool) : RoutedEventArgs(routedEvent)
 {
     public PanelTool Tool { get; } = tool;
-
-    /// <summary>The size picked, for <see cref="PanelTool.Resize"/>.</summary>
-    public PanelSize? Size { get; } = size;
 }
 
 /// <summary>
@@ -76,9 +73,9 @@ public partial class PanelFrame : UserControl
 
     /// <summary>
     /// Gives keyboard focus to one of this panel's tools, for the board to call once it has redrawn the panel under
-    /// a press (R7). <paramref name="tall"/> picks Tall over the size box for a resize. False when it can't take focus.
+    /// a press (R7). False when it can't take focus.
     /// </summary>
-    public bool FocusTool(PanelTool tool, bool tall = false)
+    public bool FocusTool(PanelTool tool)
     {
         Control? target = tool switch
         {
@@ -119,6 +116,7 @@ public partial class PanelFrame : UserControl
         AutomationProperties.SetName(PopOutButton, BoardText.PopOutName(title));
         AutomationProperties.SetName(PanelSettingsButton, BoardText.PanelSettingsName(title));
         AutomationProperties.SetName(ChooseAnotherButton, BoardText.ChooseAnotherName(title));
+        AutomationProperties.SetName(RemovePanelButton, BoardText.RemovePanelName(title));
 
         EditTools.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
 
