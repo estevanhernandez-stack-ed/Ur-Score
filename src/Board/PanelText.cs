@@ -195,6 +195,23 @@ public static class PanelText
         $"No {groups} are named here: {list.Name} does not say its groups are clans, so no names are kept.";
 
     /// <summary>
+    /// A race whose rival lines stopped: the clans list's latest read kept no names, so the band ends at the last read that
+    /// did while your own clan's line goes on. The owner saw exactly that on 2026-09-24 ("the lines were stopped, except
+    /// koi") under a note that said no clans were named, above a chart full of named clans. This one says what stopped,
+    /// when, in local time like the rest of the board, and why.
+    /// </summary>
+    /// <param name="keepsNames">Whether the list's recipe says its groups are clans. When it does, the cause is the read, not the recipe.</param>
+    public static string GroupNamesStopped(string group, string groups, Recipe list, DateTimeOffset lastNamed, TimeZoneInfo zone, bool keepsNames)
+    {
+        var at = TimeZoneInfo.ConvertTime(lastNamed, zone).ToString("HH:mm 'on' d MMM", CultureInfo.InvariantCulture);
+        var why = keepsNames ? $"the last read of {list.Name} kept no {group} names" : $"{list.Name} no longer keeps {group} names";
+        return $"Rival {groups} stopped updating at {at}: {why}.";
+    }
+
+    /// <summary>Where the fix for a list that keeps no names is, when the copy Ur Score ships keeps them (2026-09-24).</summary>
+    public static string RecipeUpdate(Recipe recipe) => $"Setup › Recipes has an update for {recipe.Name}.";
+
+    /// <summary>
     /// A live-only panel (Live leaderboard, Top, Promotion check) whose source was read this session and brought nothing back: no
     /// battle, or a read that failed (backlog S1-F.6). The score book never keeps other members, so there is nothing true to draw
     /// in its place, and the panel says why it is empty instead of "waiting" for a read that already happened. The state line

@@ -110,6 +110,17 @@ public sealed class ScoreBookReader(string root, TimeProvider time)
         return last is null ? [] : [.. last.Groups!.OrderByDescending(g => g.Value).Select(g => (g.Key, g.Value))];
     }
 
+    /// <summary>
+    /// When this source was last read, and when a read of it last kept a clan by name; either null when there is none.
+    /// They part when a clans list stops keeping names: the band on the race chart is drawn from <see cref="GroupSeries"/>
+    /// and so freezes at <c>Named</c>, while <c>Latest</c> goes on, and the chart alone cannot tell the two apart (2026-09-24).
+    /// </summary>
+    public (DateTimeOffset? Latest, DateTimeOffset? Named) GroupNamesKept(string sourceId, string? period)
+    {
+        var readings = Readings(sourceId, period, DateTimeOffset.MinValue);
+        return (readings.Count == 0 ? null : readings[^1].T, readings.LastOrDefault(l => l.Groups is { Count: > 0 })?.T);
+    }
+
     public IReadOnlyList<SeriesPoint> HeadlineSeries(string sourceId, string headlineId, string? period) =>
         Collapse(Readings(sourceId, period, DateTimeOffset.MinValue)
             .Where(l => l.Headline.ContainsKey(headlineId))
