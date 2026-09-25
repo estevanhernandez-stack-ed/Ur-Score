@@ -100,10 +100,7 @@ public static class PanelGallery
         var none = new FormValues();
         return type switch
         {
-            PanelType.Race => live.Sources
-                .Where(s => s.Enabled && live.FindRecipe(s.Recipe) is { } installed && PanelForms.Fits(type, installed.Recipe))
-                .GroupBy(s => s.Recipe, StringComparer.Ordinal)
-                .Any(),
+            PanelType.Race => live.Sources.Any(s => s.Enabled && live.FindRecipe(s.Recipe) is { } installed && PanelForms.Fits(type, installed.Recipe)),
             PanelType.PromotionCheck => PromotionRecipe(live) is not null,
             PanelType.MyAccounts or PanelType.Records or PanelType.ProfileStat or PanelType.AccountCard =>
                 PanelForms.StatChoices(type, live, none, null).Count > 0,

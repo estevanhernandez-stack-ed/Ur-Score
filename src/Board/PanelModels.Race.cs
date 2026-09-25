@@ -269,12 +269,14 @@ public static partial class PanelModels
 
         var list = installed.Recipe;
         var (latest, named) = reader.GroupNamesKept(field.Id, live.SnapshotOf(field.Id)?.Period?.Value);
+        // "No clans are named here" only while nothing named was ever read this period: beside a band still drawn from
+        // named reads it contradicts the chart, which is the very note the owner learned to ignore (review, 2026-09-24).
         var said = named is { } last && latest > last
             ? PanelText.GroupNamesStopped(group, groups, list, last, live.Time.LocalTimeZone, list.GroupsAreClans)
-            : list.GroupsAreClans ? null : PanelText.GroupNamesNotKept(groups, list);
-        if (said is null) return null;
+            : list.GroupsAreClans || named is not null ? null : PanelText.GroupNamesNotKept(groups, list);
+        var update = BuiltInRecipes.HasGroupNamesUpdate(installed) ? PanelText.RecipeUpdate(list) : null;
 
-        return BuiltInRecipes.HasGroupNamesUpdate(installed) ? $"{said} {PanelText.RecipeUpdate(list)}" : said;
+        return said is null ? update : update is null ? said : $"{said} {update}";
     }
 
     /// <summary>The switched-on clans list, whose readings carry the board.</summary>

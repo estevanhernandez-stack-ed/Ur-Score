@@ -234,6 +234,35 @@ public class RaceBoardTests
             race.Head.Note);
     }
 
+    /// <summary>
+    /// A list without the flag whose latest read is still an older named one: the band is drawn and has not stopped yet, so
+    /// "No clans are named here" would contradict the chart above it. Only the update pointer is left to say.
+    /// </summary>
+    [Fact]
+    public void AListStillOnItsNamedReadsDoesNotClaimNoClansAreNamed()
+    {
+        RaceModel NamedRace(Recipe list)
+        {
+            var field = new Source("s-00000009", list.Slug, new Dictionary<string, string>(), SourceRole.Watch);
+            Source[] all = [Mine, field];
+            var live = Live(all, [Installed(Clan, "value"), Installed(list)],
+                all.ToDictionary(s => s.Id, s => Snapshot(s.Id, [], period: LivePeriod), StringComparer.Ordinal));
+            var reader = Reader(
+                FieldRead(field, Now.AddHours(-1), BoardAt(10, 1_000)),
+                FieldRead(field, Now, BoardAt(10, 1_200)),
+                Read(Mine, Now.AddHours(-1), Period, new Dictionary<string, double> { ["clan-points"] = 400 }, "value"),
+                Read(Mine, Now, Period, new Dictionary<string, double> { ["clan-points"] = 900 }, "value"));
+            return PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
+        }
+
+        var race = NamedRace(TopClans with { GroupsAreClans = false });
+        Assert.Equal(7, race.Series.Count);
+        Assert.Equal("Setup › Recipes has an update for Pet Sim 99 top clans.", race.Head.Note);
+
+        // With no newer copy to point at, there is nothing to say at all.
+        Assert.Equal("", NamedRace(TopClans with { Name = "Old top clans", GroupsAreClans = false }).Head.Note);
+    }
+
     /// <summary>Two of your clans keep their own colours, and neither is drawn again as a rival.</summary>
     [Fact]
     public void YourOwnClansAreNeverDrawnAsRivals()
