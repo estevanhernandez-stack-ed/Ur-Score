@@ -235,6 +235,23 @@ public class PanelFormsTests
         Assert.DoesNotContain(PanelForms.StatChoices(PanelType.MyAccounts, live, new FormValues(), null), choice => choice.Key == PanelForms.NoStatKey);
     }
 
+    /// <summary>
+    /// A Clan pace settings form offered the profile source, which has no clan and no period and so could only ever draw
+    /// an empty panel (2026-09-24). Pace offers what the gallery says it needs: a group whose recipe has a total and a period.
+    /// </summary>
+    [Fact]
+    public void PaceOffersOnlySourcesWithATotalAndAPeriod()
+    {
+        var live = Everything();
+
+        Assert.Equal(new[] { MainClan.Id, AltClan.Id, Rival.Id }, Keys(PanelForms.SourceChoices(PanelType.Pace, PanelField.Source, live, new FormValues())));
+        Assert.True(PanelForms.Fits(PanelType.Pace, Clan));
+        Assert.False(PanelForms.Fits(PanelType.Pace, Profile));
+        Assert.False(PanelForms.Fits(PanelType.Pace, TopList));
+        Assert.Equal("This panel can't show that source.",
+            PanelForms.Problem(PanelType.Pace, new PanelSettings(Profile.Slug, SourceId: ProfileSource.Id), live));
+    }
+
     [Theory]
     [InlineData(PanelType.Standing, "Choose a source.")]
     [InlineData(PanelType.Race, "Choose 1 to 5 sources.")]

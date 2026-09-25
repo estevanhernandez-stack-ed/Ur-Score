@@ -46,13 +46,18 @@ public static class PanelForms
         return at <= 0 || at >= key.Length - 1 ? null : (key[..at], key[(at + 1)..]);
     }
 
-    /// <summary>Whether a recipe's sources or stats can feed this panel type.</summary>
+    /// <summary>
+    /// Whether a recipe's sources or stats can feed this panel type. Pace is the gallery's own rule, a total and a period:
+    /// <see cref="PacePanel"/> reads the summed headline over the current period, so a recipe without both (the profile)
+    /// could only ever draw an empty panel, and its settings form offered it (2026-09-24).
+    /// </summary>
     public static bool Fits(PanelType type, Recipe recipe) => type switch
     {
         PanelType.Top => recipe.IsGroupList,
         _ when recipe.IsGroupList => false,
         PanelType.Standing => recipe.Headline.Count > 0,
         PanelType.Race => recipe.Headline.Any(h => h.Sum),
+        PanelType.Pace => recipe.Headline.Any(h => h.Sum) && recipe.Period is not null,
         PanelType.PromotionCheck or PanelType.LiveLeaderboard => !recipe.LastStep.PerAccount,
         PanelType.PastPeriods => recipe.Period?.Past is not null,
         PanelType.ProfileStat or PanelType.AccountsTable => recipe.Period is null,
