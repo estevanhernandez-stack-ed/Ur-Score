@@ -483,9 +483,29 @@ public class ScoreBookReaderTests
         Assert.Equal(160, latest[0].Value);
     }
 
-    private static BookLine FieldRead(DateTimeOffset t, IReadOnlyDictionary<string, double> groups) => new(
+    /// <summary>
+    /// When a clans list was last read, and when a read of it last kept a clan by name. The two part when the list stops
+    /// keeping names: the band on the race chart freezes at the second while the first goes on (2026-09-24).
+    /// </summary>
+    [Fact]
+    public void AListSaysWhenItLastKeptANameAndWhenItWasLastRead()
+    {
+        var named = new Dictionary<string, double>(StringComparer.Ordinal) { ["UN0"] = 100 };
+        var reader = Reader(
+            FieldRead(Now.AddMinutes(-30), named),
+            FieldRead(Now.AddMinutes(-20), named),
+            FieldRead(Now.AddMinutes(-10), new Dictionary<string, double>(StringComparer.Ordinal)),
+            FieldRead(Now, null));
+
+        Assert.Equal((Now, Now.AddMinutes(-20)), reader.GroupNamesKept("s-top", "B"));
+        Assert.Equal((Now.AddMinutes(-20), Now.AddMinutes(-20)), Reader(FieldRead(Now.AddMinutes(-20), named)).GroupNamesKept("s-top", "B"));
+        Assert.Equal((Now, (DateTimeOffset?)null), Reader(FieldRead(Now, null)).GroupNamesKept("s-top", "B"));
+        Assert.Equal(((DateTimeOffset?)null, (DateTimeOffset?)null), reader.GroupNamesKept("s-top", "another battle"));
+    }
+
+    private static BookLine FieldRead(DateTimeOffset t, IReadOnlyDictionary<string, double>? groups) => new(
         BookLine.Version, BookLine.KindRead, t, -300, BookLine.TriggerTimer, new BookRecipeRef("pet-sim-99-top-clans", "3f9a1c0b7e2d4a55"),
         "s-top", "watch", new Dictionary<string, string>(), new BookPeriod("B"),
-        new Dictionary<string, double> { ["field-leader"] = groups.Values.Max() }, [],
+        new Dictionary<string, double> { ["field-leader"] = groups is { Count: > 0 } ? groups.Values.Max() : 0 }, [],
         new Dictionary<string, BookAccount>(StringComparer.Ordinal), null, null, null, groups);
 }

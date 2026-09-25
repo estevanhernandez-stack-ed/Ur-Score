@@ -48,14 +48,13 @@ public static partial class PanelModels
         var found = ids.Select(live.FindSource).OfType<Source>().ToList();
         if (found.Count == 0)
         {
-            var nothing = ids.Count == 0 ? new PanelHead(title, Stale: PanelText.RaceTooFew(groupsWord)) : StaleSource(live, settings, title);
+            var nothing = ids.Count == 0 ? new PanelHead(title, Stale: PanelText.RaceEmpty(RecipeWords.Group(recipe))) : StaleSource(live, settings, title);
             return new RaceModel(nothing, [], [], "");
         }
 
         var sources = found.Take(MaxRace).ToList();
         var notes = new List<string>();
         if (found.Count < ids.Count) notes.Add(PanelText.RaceRemoved(ids.Count - found.Count, groupsWord));
-        else if (found.Count < 2) notes.Add(PanelText.RaceTooFew(groupsWord));
         if (found.Count > MaxRace) notes.Add(PanelText.RaceOverLimit(groupsWord));
 
         var series = new List<ChartSeries>();
@@ -119,13 +118,7 @@ public static partial class PanelModels
             }
         }
 
-        // An empty board has two very different causes, and only one of them is worth a sentence: nothing read
-        // yet is ordinary, a recipe that never keeps names is a thing you have to be told (V3-S.25).
-        if (FieldOf(live) is { } fieldSource
-            && live.FindRecipe(fieldSource.Recipe)?.Recipe is { IsGroupList: true, GroupsAreClans: false } list)
-        {
-            notes.Add(PanelText.GroupNamesNotKept(groupsWord, list));
-        }
+        if (NamesNote(live, reader, RecipeWords.Group(recipe), groupsWord) is { } namesNote) notes.Add(namesNote);
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
         var span = from is null
@@ -259,6 +252,31 @@ public static partial class PanelModels
                 yours <= 0 || mine.Contains(g.Name) ? "" : PanelText.Signed(g.Value - yours),
                 mine.Contains(g.Name))),
         ];
+    }
+
+    /// <summary>
+    /// What the note says about the clans list's names, or null. An empty board has two very different causes, and only
+    /// one of them is worth a sentence: nothing read yet is ordinary, a recipe that never keeps names is a thing you have
+    /// to be told (V3-S.25). A band that STOPPED is a third, and the one the owner hit on 2026-09-24: his list was an old
+    /// copy without <c>"groupsAreClans": true</c>, so the band froze at the last read that kept names while his own
+    /// clan's line went on, under a note claiming no clans were named at all. When the lines stopped, that is the one
+    /// sentence; the older one is for a list that has never kept a name. Either way, when the copy Ur Score ships would
+    /// keep names, the note says where to update it.
+    /// </summary>
+    private static string? NamesNote(LiveBoard live, ScoreBookReader reader, string group, string groups)
+    {
+        if (FieldOf(live) is not { } field || live.FindRecipe(field.Recipe) is not { Recipe.IsGroupList: true } installed) return null;
+
+        var list = installed.Recipe;
+        var (latest, named) = reader.GroupNamesKept(field.Id, live.SnapshotOf(field.Id)?.Period?.Value);
+        // "No clans are named here" only while nothing named was ever read this period: beside a band still drawn from
+        // named reads it contradicts the chart, which is the very note the owner learned to ignore (review, 2026-09-24).
+        var said = named is { } last && latest > last
+            ? PanelText.GroupNamesStopped(group, groups, list, last, live.Time.LocalTimeZone, list.GroupsAreClans)
+            : list.GroupsAreClans || named is not null ? null : PanelText.GroupNamesNotKept(groups, list);
+        var update = BuiltInRecipes.HasGroupNamesUpdate(installed) ? PanelText.RecipeUpdate(list) : null;
+
+        return said is null ? update : update is null ? said : $"{said} {update}";
     }
 
     /// <summary>The switched-on clans list, whose readings carry the board.</summary>

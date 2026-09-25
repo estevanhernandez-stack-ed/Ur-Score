@@ -46,13 +46,18 @@ public static class PanelForms
         return at <= 0 || at >= key.Length - 1 ? null : (key[..at], key[(at + 1)..]);
     }
 
-    /// <summary>Whether a recipe's sources or stats can feed this panel type.</summary>
+    /// <summary>
+    /// Whether a recipe's sources or stats can feed this panel type. Pace is the gallery's own rule, a total and a period:
+    /// <see cref="PacePanel"/> reads the summed headline over the current period, so a recipe without both (the profile)
+    /// could only ever draw an empty panel, and its settings form offered it (2026-09-24).
+    /// </summary>
     public static bool Fits(PanelType type, Recipe recipe) => type switch
     {
         PanelType.Top => recipe.IsGroupList,
         _ when recipe.IsGroupList => false,
         PanelType.Standing => recipe.Headline.Count > 0,
         PanelType.Race => recipe.Headline.Any(h => h.Sum),
+        PanelType.Pace => recipe.Headline.Any(h => h.Sum) && recipe.Period is not null,
         PanelType.PromotionCheck or PanelType.LiveLeaderboard => !recipe.LastStep.PerAccount,
         PanelType.PastPeriods => recipe.Period?.Past is not null,
         PanelType.ProfileStat or PanelType.AccountsTable => recipe.Period is null,
@@ -339,10 +344,14 @@ public static class PanelForms
         return type == PanelType.PromotionCheck && source.Role == SourceRole.Watch ? $"Choose a {word} your accounts are in." : null;
     }
 
+    /// <summary>
+    /// What stops a race being saved. One clan is enough: with a clans list switched on the race brings its rivals in by
+    /// itself, so asking for a second clan made you add one you have accounts in just to get past the form (2026-09-24).
+    /// </summary>
     private static string? RaceProblem(PanelSettings settings, LiveBoard live, string word, string words)
     {
         var ids = settings.SourceIds ?? Array.Empty<string>();
-        if (ids.Count < 2 || ids.Count > PanelModels.MaxRace) return $"Choose 2 to {PanelModels.MaxRace} {words}.";
+        if (ids.Count < 1 || ids.Count > PanelModels.MaxRace) return $"Choose 1 to {PanelModels.MaxRace} {words}.";
         if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Count) return $"Choose each {word} once.";
 
         var sources = ids.Select(live.FindSource).ToList();

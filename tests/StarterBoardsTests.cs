@@ -90,6 +90,23 @@ public class StarterBoardsTests
             noTop.Panels.Select(p => (p.Type, p.Span)).ToArray());
     }
 
+    /// <summary>
+    /// One clan and a switched-on clans list is a whole race: the list brings the rivals in, as it does for a race added by
+    /// hand (2026-09-24). One clan and no list is a single line with nothing to race, so the starter leaves it off.
+    /// </summary>
+    [Fact]
+    public void OneClanRacesOnTheStarterOnlyWithAClansListOn()
+    {
+        var withList = StarterBoards.Build([Installed(Clan, "value"), Installed(TopList)], [MainClan, TopSource], StarterBoards.Battle);
+        var race = Assert.Single(withList.Panels, p => p.Type == PanelType.Race);
+        Assert.Equal(new[] { MainClan.Id }, race.Settings.SourceIds!.ToArray());
+        var rows = BoardLayout.Flow(withList.Panels.Select(p => p.Span).ToList(), 1280).GroupBy(p => p.Row);
+        Assert.All(rows, row => Assert.Equal(BoardLayout.Columns, row.Sum(p => p.Span)));
+
+        var noList = StarterBoards.Build([Installed(Clan, "value")], [MainClan], StarterBoards.Battle);
+        Assert.DoesNotContain(noList.Panels, p => p.Type == PanelType.Race);
+    }
+
     [Fact]
     public void WithNoAltsClanAndNoPastPeriodsAWatchedClanStillRacesAndRecordsTakesItsRow()
     {

@@ -108,11 +108,12 @@ public static class StarterBoards
 
         var panels = new List<PanelSpec>();
 
-        // 1. Your main clan's standing, a clan your accounts are in, and the race beside them (the mock's first row).
+        // 1. Your main clan's standing, a clan your accounts are in, and the race beside them (the mock's first row). One
+        // clan races only with a clans list on, which brings the rivals in; alone it would be a single line (2026-09-24).
         panels.AddRange(Row(
             (PanelType.Standing, 3, anchor is null ? null : new PanelSettings(slug, SourceId: anchor.Id)),
             (PanelType.Standing, 3, otherMine is null ? null : new PanelSettings(slug, SourceId: otherMine.Id)),
-            (PanelType.Race, 6, race.Count >= 2 ? new PanelSettings(slug, SourceIds: race) : null)));
+            (PanelType.Race, 6, race.Count >= 2 || (race.Count == 1 && top is not null) ? new PanelSettings(slug, SourceIds: race) : null)));
 
         // 2. My accounts, the promotion check from that clan to the main, and the top of the battle.
         panels.AddRange(Row(

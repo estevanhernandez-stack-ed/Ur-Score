@@ -475,7 +475,7 @@ type can be added more than once.
 | Panel | Needs | Shows |
 |---|---|---|
 | Standing | a source with a headline | Place, total, last hour's gain, the period line. Gap to the one above only when the group list has both it and the one above. Beside the place, that source's own icon when its recipe reads one (never the window's), named for the source; its space is kept while the picture isn't there |
-| Race | 2–5 sources | Each source's headline total over the current period, one line each, from the book, plus live |
+| Race | 1–5 sources | Each source's headline total over the current period, one line each, from the book, plus live. One is enough: a switched-on clans list supplies the rivals (2026-09-24) |
 | My accounts | a stat | Your accounts by that stat, grouped by source (★ first, then mine, then "Not in a watched clan"), rank in clan, change with span, a SENT dot, and a stalled mark (§9.6) |
 | Promotion check | from source, to source (default: → main) | For each account in *from*: where its current value would rank among *to*'s live rows, and *to*'s lowest value. Live only |
 | Account card | an account | Big numbers for shown stats, line for a picked stat, rank in clan, best period, best rank, periods played, last read, miss reason |

@@ -389,9 +389,12 @@ public class PanelModelsTests
         Assert.Equal(PanelModels.MaxRace, seven.Series.Count);
         Assert.Equal("Only the first 5 clans are drawn.", seven.Head.Note);
 
-        // Short of two lines with none removed, it says what a race needs; with no lines at all there is nothing to draw.
-        Assert.Equal("A race needs at least 2 clans.", Race(Clan.Slug, clans[0].Id).Head.Note);
-        Assert.Equal("A race needs at least 2 clans.", Race(Clan.Slug).Head.Stale);
+        // One clan is a whole race: a switched-on clans list brings its rivals in (2026-09-24). With no lines at all there is nothing to draw.
+        var one = Race(Clan.Slug, clans[0].Id);
+        Assert.Null(one.Head.Stale);
+        Assert.Equal("", one.Head.Note);
+        Assert.Single(one.Series);
+        Assert.Equal("Choose a clan to race.", Race(Clan.Slug).Head.Stale);
 
         // Every line gone is the one case that really is "removed".
         Assert.Equal("This panel's clan was removed.", Race(Clan.Slug, "s-gone0000", "s-gone0001").Head.Stale);

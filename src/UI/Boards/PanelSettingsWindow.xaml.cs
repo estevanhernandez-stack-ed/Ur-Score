@@ -59,7 +59,7 @@ public partial class PanelSettingsWindow : Window
         };
         SourceLabel.Text = sourceWord.ToUpperInvariant();
         AutomationProperties.SetName(SourceBox, RecipeWords.Capital(sourceWord));
-        SourcesLabel.Text = $"{groups.ToUpperInvariant()} TO RACE (2 TO {PanelModels.MaxRace})";
+        SourcesLabel.Text = $"{groups.ToUpperInvariant()} TO RACE (1 TO {PanelModels.MaxRace})";
 
         SourceRow.Visibility = Shows(PanelField.Source);
         SourcesRow.Visibility = Shows(PanelField.Sources);

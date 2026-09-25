@@ -42,30 +42,10 @@ public static class RecipesModel
     public const string NewerCopyShipped = "This version of Ur Score carries a newer copy of this recipe.";
 
     /// <summary>
-    /// Whether the copy Ur Score carries is a newer one this installed recipe could be updated to.
-    /// <para>
-    /// An installed recipe is a SNAPSHOT of the text that was imported, and there was no way to replace it with a
-    /// newer one. <see cref="BuiltIn"/> hides a built-in the moment it is installed — right, because offering it
-    /// again would read as a second copy — and the only other route was to find the recipe's JSON somewhere and
-    /// import it by hand, which for a built-in means extracting an embedded resource out of the exe. So every
-    /// user stayed on whatever they first imported, forever. The update MACHINERY was never missing:
-    /// <c>ImportFlow.RunTextAsync</c> already compares, re-asks about changed hosts, and carries the user's
-    /// choices across. Only a way to reach it was.
-    /// </para>
-    /// <para>
-    /// The name and author have to match, and that is not belt-and-braces: a slug is derived from them
-    /// (<see cref="Recipe.Slug"/>), so two different recipes CAN share one — "Pet Sim 99 clan battle points" and
-    /// "Pet Sim 99 Clan Battle Points" slugify identically. <c>ImportFlow</c> refuses that case outright ("rename
-    /// one of them before importing"), so without this clause the button would appear on somebody else's recipe
-    /// and be guaranteed to fail. Asking the same question the flow asks is what keeps the two from drifting.
-    /// </para>
+    /// Whether the copy Ur Score carries is a newer one this installed recipe could be updated to. The rule lives in
+    /// <see cref="BuiltInRecipes.CanUpdate(InstalledRecipe, BuiltInRecipe?)"/> since 2026-09-24, so the board's race note can point at the same button.
     /// </summary>
-    public static bool CanUpdate(InstalledRecipe installed, BuiltInRecipe? shipped) =>
-        shipped is not null
-        && !string.Equals(installed.Text, shipped.Text, StringComparison.Ordinal)
-        && RecipeParser.Parse(shipped.Text).Recipe is { } recipe
-        && string.Equals(recipe.Name, installed.Recipe.Name, StringComparison.Ordinal)
-        && string.Equals(recipe.Author, installed.Recipe.Author, StringComparison.Ordinal);
+    public static bool CanUpdate(InstalledRecipe installed, BuiltInRecipe? shipped) => BuiltInRecipes.CanUpdate(installed, shipped);
 
     public static IReadOnlyList<RecipeItem> Items(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, Func<string, string?> iconFile) =>
         [.. installed.Select(i => new RecipeItem(

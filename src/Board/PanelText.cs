@@ -175,8 +175,11 @@ public static class PanelText
     /// <summary>A race with more lines than it draws, which only a hand-edited boards.json can hold (S1-13.6).</summary>
     public static string RaceOverLimit(string groups) => $"Only the first {PanelModels.MaxRace} {groups} are drawn.";
 
-    /// <summary>A race with fewer than two lines and none of them removed: what a race needs, not a removal it never had (S1-13.6).</summary>
-    public static string RaceTooFew(string groups) => $"A race needs at least 2 {groups}.";
+    /// <summary>
+    /// A race with no lines chosen at all: what it needs, not a removal it never had (S1-13.6). One line is a whole race since
+    /// 2026-09-24, because a switched-on clans list brings the rivals in.
+    /// </summary>
+    public static string RaceEmpty(string group) => $"Choose a {group} to race.";
 
     /// <summary>
     /// Why a clans list has drawn no board. The recipe has to say its groups are clans before a name is kept
@@ -190,6 +193,23 @@ public static class PanelText
     /// </param>
     public static string GroupNamesNotKept(string groups, Recipe list) =>
         $"No {groups} are named here: {list.Name} does not say its groups are clans, so no names are kept.";
+
+    /// <summary>
+    /// A race whose rival lines stopped: the clans list's latest read kept no names, so the band ends at the last read that
+    /// did while your own clan's line goes on. The owner saw exactly that on 2026-09-24 ("the lines were stopped, except
+    /// koi") under a note that said no clans were named, above a chart full of named clans. This one says what stopped,
+    /// when, in local time like the rest of the board, and why.
+    /// </summary>
+    /// <param name="keepsNames">Whether the list's recipe says its groups are clans. When it does, the cause is the read, not the recipe.</param>
+    public static string GroupNamesStopped(string group, string groups, Recipe list, DateTimeOffset lastNamed, TimeZoneInfo zone, bool keepsNames)
+    {
+        var at = TimeZoneInfo.ConvertTime(lastNamed, zone).ToString("HH:mm 'on' d MMM", CultureInfo.InvariantCulture);
+        var why = keepsNames ? $"the last read of {list.Name} kept no {group} names" : $"{list.Name} no longer keeps {group} names";
+        return $"Rival {groups} stopped updating at {at}: {why}.";
+    }
+
+    /// <summary>Where the fix for a list that keeps no names is, when the copy Ur Score ships keeps them (2026-09-24).</summary>
+    public static string RecipeUpdate(Recipe recipe) => $"Setup › Recipes has an update for {recipe.Name}.";
 
     /// <summary>
     /// A live-only panel (Live leaderboard, Top, Promotion check) whose source was read this session and brought nothing back: no
