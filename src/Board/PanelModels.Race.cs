@@ -48,14 +48,13 @@ public static partial class PanelModels
         var found = ids.Select(live.FindSource).OfType<Source>().ToList();
         if (found.Count == 0)
         {
-            var nothing = ids.Count == 0 ? new PanelHead(title, Stale: PanelText.RaceTooFew(groupsWord)) : StaleSource(live, settings, title);
+            var nothing = ids.Count == 0 ? new PanelHead(title, Stale: PanelText.RaceEmpty(RecipeWords.Group(recipe))) : StaleSource(live, settings, title);
             return new RaceModel(nothing, [], [], "");
         }
 
         var sources = found.Take(MaxRace).ToList();
         var notes = new List<string>();
         if (found.Count < ids.Count) notes.Add(PanelText.RaceRemoved(ids.Count - found.Count, groupsWord));
-        else if (found.Count < 2) notes.Add(PanelText.RaceTooFew(groupsWord));
         if (found.Count > MaxRace) notes.Add(PanelText.RaceOverLimit(groupsWord));
 
         var series = new List<ChartSeries>();

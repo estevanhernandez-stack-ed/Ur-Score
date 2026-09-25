@@ -47,8 +47,8 @@ public static class PanelGallery
             var (needs, shows, whyNot) = type switch
             {
                 PanelType.Standing => ($"Needs a {group}.", $"Place, total, the last hour's gain and the {period} line.", $"Add a {group} in Setup first."),
-                PanelType.Race => ($"Needs 2 to {PanelModels.MaxRace} {groups} of one recipe.", $"Each {group}'s total over the current {period}, one line each.",
-                    $"Needs at least 2 {groups} of one recipe. Add them in Setup."),
+                PanelType.Race => ($"Needs 1 to {PanelModels.MaxRace} {groups} of one recipe.", $"Each {group}'s total over the current {period}, one line each.",
+                    $"Add a {group} in Setup first."),
                 PanelType.MyAccounts => ("Needs a stat.", $"Your accounts by that stat, grouped by {group}, with rank, change and what was sent.", TickFirst),
                 PanelType.PromotionCheck => ($"Needs a {group} your accounts are in, and one to compare with (your main unless you pick another).",
                     $"Where each of your accounts would place in the other {group} now. Live only.",
@@ -103,7 +103,7 @@ public static class PanelGallery
             PanelType.Race => live.Sources
                 .Where(s => s.Enabled && live.FindRecipe(s.Recipe) is { } installed && PanelForms.Fits(type, installed.Recipe))
                 .GroupBy(s => s.Recipe, StringComparer.Ordinal)
-                .Any(g => g.Count() >= 2),
+                .Any(),
             PanelType.PromotionCheck => PromotionRecipe(live) is not null,
             PanelType.MyAccounts or PanelType.Records or PanelType.ProfileStat or PanelType.AccountCard =>
                 PanelForms.StatChoices(type, live, none, null).Count > 0,

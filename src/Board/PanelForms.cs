@@ -339,10 +339,14 @@ public static class PanelForms
         return type == PanelType.PromotionCheck && source.Role == SourceRole.Watch ? $"Choose a {word} your accounts are in." : null;
     }
 
+    /// <summary>
+    /// What stops a race being saved. One clan is enough: with a clans list switched on the race brings its rivals in by
+    /// itself, so asking for a second clan made you add one you have accounts in just to get past the form (2026-09-24).
+    /// </summary>
     private static string? RaceProblem(PanelSettings settings, LiveBoard live, string word, string words)
     {
         var ids = settings.SourceIds ?? Array.Empty<string>();
-        if (ids.Count < 2 || ids.Count > PanelModels.MaxRace) return $"Choose 2 to {PanelModels.MaxRace} {words}.";
+        if (ids.Count < 1 || ids.Count > PanelModels.MaxRace) return $"Choose 1 to {PanelModels.MaxRace} {words}.";
         if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Count) return $"Choose each {word} once.";
 
         var sources = ids.Select(live.FindSource).ToList();

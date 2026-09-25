@@ -28,7 +28,7 @@ public class PanelGalleryTests
         Assert.All(cards, c => Assert.True(c.CanAdd, c.Title));
         Assert.All(cards, c => Assert.Equal("", c.WhyNot));
         Assert.Equal("Needs a clan.", Card(cards, PanelType.Standing).Needs);
-        Assert.Equal("Needs 2 to 5 clans of one recipe.", Card(cards, PanelType.Race).Needs);
+        Assert.Equal("Needs 1 to 5 clans of one recipe.", Card(cards, PanelType.Race).Needs);
     }
 
     [Fact]
@@ -45,13 +45,13 @@ public class PanelGalleryTests
     }
 
     [Fact]
-    public void OneClanCanStandButNotRaceOrBePromotedFrom()
+    public void OneClanCanStandAndRaceButNotBePromotedFrom()
     {
         var cards = PanelGallery.Cards(Live([MainClan], [Installed(Clan, "value")], NoReads));
 
         Assert.True(Card(cards, PanelType.Standing).CanAdd);
         Assert.True(Card(cards, PanelType.MyAccounts).CanAdd);
-        Assert.False(Card(cards, PanelType.Race).CanAdd);
+        Assert.True(Card(cards, PanelType.Race).CanAdd);
         Assert.False(Card(cards, PanelType.PromotionCheck).CanAdd);
         Assert.False(Card(cards, PanelType.Top).CanAdd);
         Assert.False(Card(cards, PanelType.ProfileStat).CanAdd);
@@ -59,10 +59,10 @@ public class PanelGalleryTests
 
     [Theory]
     [InlineData(false, false, false)]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
     [InlineData(true, true, true)]
-    public void RaceNeedsTwoEnabledClans(bool mainEnabled, bool altEnabled, bool canAdd)
+    public void RaceNeedsOneEnabledClan(bool mainEnabled, bool altEnabled, bool canAdd)
     {
         var live = Live(
             [MainClan with { Enabled = mainEnabled }, AltClan with { Enabled = altEnabled }],
@@ -71,7 +71,7 @@ public class PanelGalleryTests
         var race = Card(PanelGallery.Cards(live), PanelType.Race);
 
         Assert.Equal(canAdd, race.CanAdd);
-        Assert.Equal(canAdd ? "" : "Needs at least 2 clans of one recipe. Add them in Setup.", race.WhyNot);
+        Assert.Equal(canAdd ? "" : "Add a clan in Setup first.", race.WhyNot);
     }
 
     private const string GuildSeasonJson = """
@@ -120,7 +120,7 @@ public class PanelGalleryTests
             [Installed(Guild, "value"), Installed(Clan, "value"), Installed(TopRound)], NoReads));
 
         Assert.Equal(new[] { "Clan standing", "Needs a clan.", "Place, total, the last hour's gain and the battle line.", "" }, Lines(cards, PanelType.Standing));
-        Assert.Equal(new[] { "Battle race", "Needs 2 to 5 clans of one recipe.", "Each clan's total over the current battle, one line each.", "" }, Lines(cards, PanelType.Race));
+        Assert.Equal(new[] { "Battle race", "Needs 1 to 5 clans of one recipe.", "Each clan's total over the current battle, one line each.", "" }, Lines(cards, PanelType.Race));
         Assert.Equal(new[] { "Past battles", "Needs a clan.", "Finished battles newest first: place, total and your best account.", "" }, Lines(cards, PanelType.PastPeriods));
         // Top reads the list's own period, and names groups the way its panel's name column does.
         Assert.Equal(new[] { "Top of the round", "Needs a recipe that lists groups.", "The top of the round live, with your guilds placed where they'd rank.", "" },
@@ -212,7 +212,7 @@ public class PanelGalleryTests
             new[] { "Guild standing", "Needs a guild.", "Place, total, the last hour's gain and the season line.", "Add a guild in Setup first." },
             Lines(cards, PanelType.Standing));
         Assert.Equal(
-            new[] { "Season race", "Needs 2 to 5 guilds of one recipe.", "Each guild's total over the current season, one line each.", "Needs at least 2 guilds of one recipe. Add them in Setup." },
+            new[] { "Season race", "Needs 1 to 5 guilds of one recipe.", "Each guild's total over the current season, one line each.", "Add a guild in Setup first." },
             Lines(cards, PanelType.Race));
         // Only the clan recipe keeps past periods.
         Assert.Equal(

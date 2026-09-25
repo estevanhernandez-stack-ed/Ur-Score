@@ -175,8 +175,11 @@ public static class PanelText
     /// <summary>A race with more lines than it draws, which only a hand-edited boards.json can hold (S1-13.6).</summary>
     public static string RaceOverLimit(string groups) => $"Only the first {PanelModels.MaxRace} {groups} are drawn.";
 
-    /// <summary>A race with fewer than two lines and none of them removed: what a race needs, not a removal it never had (S1-13.6).</summary>
-    public static string RaceTooFew(string groups) => $"A race needs at least 2 {groups}.";
+    /// <summary>
+    /// A race with no lines chosen at all: what it needs, not a removal it never had (S1-13.6). One line is a whole race since
+    /// 2026-09-24, because a switched-on clans list brings the rivals in.
+    /// </summary>
+    public static string RaceEmpty(string group) => $"Choose a {group} to race.";
 
     /// <summary>
     /// Why a clans list has drawn no board. The recipe has to say its groups are clans before a name is kept

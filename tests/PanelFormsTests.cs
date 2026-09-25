@@ -237,7 +237,7 @@ public class PanelFormsTests
 
     [Theory]
     [InlineData(PanelType.Standing, "Choose a source.")]
-    [InlineData(PanelType.Race, "Choose 2 to 5 sources.")]
+    [InlineData(PanelType.Race, "Choose 1 to 5 sources.")]
     [InlineData(PanelType.PromotionCheck, "Choose a source.")]
     public void AMissingSavedRecipeDoesNotBorrowAnotherRecipesWords(PanelType type, string expected)
     {
@@ -320,7 +320,8 @@ public class PanelFormsTests
 
         Assert.Equal("Choose a clan.", PanelForms.Problem(PanelType.Standing, Clans(), live));
         Assert.Equal("This panel's clan was removed. Choose another.", PanelForms.Problem(PanelType.Standing, Clans("s-gone0000"), live));
-        Assert.Equal("Choose 2 to 5 clans.", PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id]), live));
+        Assert.Equal("Choose 1 to 5 clans.", PanelForms.Problem(PanelType.Race, Clans(race: []), live));
+        Assert.Null(PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id]), live));
         Assert.Equal("Every line in a race comes from the same recipe.", PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id, TopSource.Id]), live));
         Assert.Null(PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id, Rival.Id]), live));
         Assert.Equal("Choose a clan your accounts are in.", PanelForms.Problem(PanelType.PromotionCheck, Clans(Rival.Id, MainClan.Id, "value"), live));
