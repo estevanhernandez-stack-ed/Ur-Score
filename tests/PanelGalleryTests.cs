@@ -93,12 +93,13 @@ public class PanelGalleryTests
 
         var totalless = Card(PanelGallery.Cards(Live([MainClan, ProfileSource], [Installed(noTotal, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
         Assert.False(totalless.CanAdd);
-        Assert.Equal("Needs a source whose recipe has a total.", totalless.WhyNot);
+        // Nothing installed can race, so there is no card recipe to name the group: the word comes from the clan that is on.
+        Assert.Equal("Needs a clan whose recipe has a total.", totalless.WhyNot);
 
-        // A recipe that can race is installed, but the only source switched on is on one that can't.
+        // A new player: only a profile source on, and the clan recipe installed, which can race. What is missing is a clan.
         var profileOnly = Card(PanelGallery.Cards(Live([ProfileSource], [Installed(Clan, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
         Assert.False(profileOnly.CanAdd);
-        Assert.Equal("Needs a clan whose recipe has a total.", profileOnly.WhyNot);
+        Assert.Equal("Add a clan in Setup first.", profileOnly.WhyNot);
     }
 
     private const string GuildSeasonJson = """

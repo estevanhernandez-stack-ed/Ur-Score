@@ -48,7 +48,7 @@ public static class PanelGallery
             {
                 PanelType.Standing => ($"Needs a {group}.", $"Place, total, the last hour's gain and the {period} line.", $"Add a {group} in Setup first."),
                 PanelType.Race => ($"Needs 1 to {PanelModels.MaxRace} {groups} of one recipe.", $"Each {group}'s total over the current {period}, one line each.",
-                    HasSourceOn(live) ? $"Needs a {group} whose recipe has a total." : $"Add a {group} in Setup first."),
+                    RaceWhyNot(live, group)),
                 PanelType.MyAccounts => ("Needs a stat.", $"Your accounts by that stat, grouped by {group}, with rank, change and what was sent.", TickFirst),
                 PanelType.PromotionCheck => ($"Needs a {group} your accounts are in, and one to compare with (your main unless you pick another).",
                     $"Where each of your accounts would place in the other {group} now. Live only.",
@@ -96,12 +96,27 @@ public static class PanelGallery
     }
 
     /// <summary>
-    /// Whether any source is switched on, clans lists aside. A race that can't be added with one on is missing a recipe
-    /// with a summed total, not a clan, and "Add a clan in Setup first." sent the player to add one that could not race
-    /// either (0.6.3).
+    /// Why the Race card is off, of two reasons. While an installed recipe can race, or nothing is switched on, what is
+    /// missing is a clan, and "Add a clan in Setup first." is true. Only with sources on and NO installed recipe with a
+    /// summed total is another clan of the same recipe no help: then the card says the recipe needs a total (0.6.3).
+    /// A new player with only a profile source on is the first case, not the second (review, 2026-09-27).
+    /// <para>
+    /// In the second case no recipe fits Race, so the card has no recipe and <paramref name="group"/> is the generic
+    /// "source". The word is taken from the first source that is on instead, the one the player would call a clan.
+    /// </para>
     /// </summary>
-    private static bool HasSourceOn(LiveBoard live) =>
-        live.Sources.Any(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: false });
+    private static string RaceWhyNot(LiveBoard live, string group)
+    {
+        var on = live.Sources
+            .Where(s => s.Enabled)
+            .Select(s => live.FindRecipe(s.Recipe)?.Recipe)
+            .FirstOrDefault(r => r is { IsGroupList: false });
+        var canRace = live.Installed.Any(i => PanelForms.Fits(PanelType.Race, i.Recipe));
+
+        return on is null || canRace
+            ? $"Add a {group} in Setup first."
+            : $"Needs a {PanelForms.GroupWords(on).Group} whose recipe has a total.";
+    }
 
     private static bool CanAdd(PanelType type, LiveBoard live)
     {
