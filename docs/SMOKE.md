@@ -81,24 +81,44 @@ this repo's.
       any other account secret. (There should be none to find — Ur Score never holds one — but the
       point of this row is checking, not assuming.)
 
-## Needs a first walk-top-bar session (new automation, unverified)
+## The first walk-top-bar session (run 2026-09-23)
 
 Task 9 (2026-09-23) wrote `walk-top-bar.ps1` and its `Invoke-PauseResume` helper without running either — the
 controller ruling for that task forbade launching the app or touching a live data folder, so both rows below are
-this walk's own acceptance check (spec 3.8), not a real-battle or real-host row, and still need a person to run it
-once before its checks are trusted.
+this walk's own acceptance check (spec 3.8), not a real-battle or real-host row, and needed a person to run it
+once before its checks were trusted.
 
-- [ ] **`Find-InUrWindows 'PauseResumeButton'` actually finds the status card's button.** The status card is a
+**Run 2026-09-23, with RoRoRo quit.** The first pass found real defects (V3-S.49 read-now after a Pause, V3-S.50
+a quick header drag, V3-S.51 walk-score-book deleting the owner's import backups, V3-S.52 the privacy check's exit
+2 read differently by different walks in `docs/backlog.md`); the results below are after that fix round. Every
+skip needs RoRoRo running or a live battle, which this run had neither of by design.
+
+| Walk | Result |
+| --- | --- |
+| `walk-top-bar` | 14/14 |
+| `walk-board-editing` | 38/38 |
+| `walk-visible-fixes` | 30 passed, 0 failed (2 skips need a live battle) |
+| `walk-score-book` | 17/17 |
+| `walk-starter-board` | 23 passed, 0 failed (1 skip needs RoRoRo) |
+| `walk-alts` | 10 passed, 0 failed (1 skip needs RoRoRo) |
+| `walk-pop-outs` | 17 passed, 0 failed (1 skip needs a live battle) |
+| `window-smoke` | 13/13 |
+
+- [x] **`Find-InUrWindows 'PauseResumeButton'` actually finds the status card's button.** The status card is a
       WPF Popup, its own top-level HWND, and `Invoke-PauseResume` (`tools/smoke/uia-board.ps1`) assumes
       `Find-InUrWindows` reaches into it the same way it reaches a menu or a pop-out window. Run `walk-top-bar.ps1`
       once and confirm step 3 ("A click opens the card") passes rather than timing out into the helper's
       `'the status card never opened'` throw. If it doesn't, give the Popup's Border an AutomationId and walk
       `$AE::RootElement` children by process id for it instead, and update the helper's comment with whichever one
       worked.
-- [ ] **`walk-top-bar`, `walk-starter-board`, `walk-alts`, `walk-score-book`, `walk-pop-outs` and `window-smoke` all
+      **2026-09-23: settled, it does.** `walk-top-bar` steps 3 to 5 passed: `Find-InUrWindows` reaches into the
+      status card's Popup as it reaches a menu or a pop-out, so no AutomationId or root walk was needed.
+- [x] **`walk-top-bar`, `walk-starter-board`, `walk-alts`, `walk-score-book`, `walk-pop-outs` and `window-smoke` all
       run 0 failed.** The five Test-now walks besides `walk-top-bar` are meant to pass with no edits beyond Step 1's
       window-title widen (`Get-BoardWindow` now matches `RoRoRo Ur Score` with or without `" (Paused)"`) — that is
       this PR's acceptance check (spec 3.8). Record each result line.
+      **2026-09-23: all six ran 0 failed** after the fix round, as the table above records, and so did
+      `walk-board-editing` and `walk-visible-fixes`.
 
 ## Notes for whoever runs this list
 
