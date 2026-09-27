@@ -11,8 +11,11 @@ public partial class BoardWindow
     /// <summary>The saved boards' history, per board, for this session (BC6, spec §5.1).</summary>
     private readonly BoardUndo _undo = new();
 
-    /// <summary>The draft's own history while arranging; Done folds it into one step on <see cref="_undo"/> (spec §5.2).</summary>
-    private readonly BoardUndo _draftUndo = new();
+    /// <summary>
+    /// The draft's own history while arranging, every step of it (<see cref="BoardUndo.ForDraft"/>); Done folds it into
+    /// one step on <see cref="_undo"/> (spec §5.2).
+    /// </summary>
+    private readonly BoardUndo _draftUndo = BoardUndo.ForDraft();
 
     private void OnSettingsTool(object? sender, PanelToolEventArgs e)
     {

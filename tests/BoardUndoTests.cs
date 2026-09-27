@@ -44,6 +44,37 @@ public class BoardUndoTests
         Assert.Equal("step 24", undo.Peek("b-1")!.What);
     }
 
+    /// <summary>
+    /// One Arrange session's draft keeps every step. Done (n) counts the draft's history, so a 20-deep draft stopped
+    /// counting at 20, and Ctrl+Z in Arrange could not reach back to where arranging began. The 20-deep rule is for
+    /// the saved history across the session (spec §5.1), which Done adds only one step to.
+    /// </summary>
+    [Fact]
+    public void TheDraftKeepsEveryStepOfOneArrange()
+    {
+        var atEdit = Board("b-1", 1);
+        var draft = BoardUndo.ForDraft();
+        for (var i = 0; i < 30; i++) draft.Push(Board("b-1", i + 1), $"step {i}");
+
+        Assert.Equal(30, draft.Count("b-1"));
+        Assert.Equal(30, BoardUndo.DoneCount(atEdit, Board("b-1", 31), draft));
+
+        for (var i = 29; i >= 0; i--) Assert.Equal($"step {i}", draft.Pop("b-1")!.What);
+        Assert.Null(draft.Pop("b-1"));
+    }
+
+    [Fact]
+    public void ADepthSetAtConstructionIsKept()
+    {
+        var undo = new BoardUndo(3);
+        for (var i = 0; i < 5; i++) undo.Push(Board("b-1", 1), $"step {i}");
+
+        Assert.Equal(3, undo.Count("b-1"));
+        Assert.Equal("step 4", undo.Peek("b-1")!.What);
+        Assert.Equal(BoardUndo.Depth, new BoardUndo().Limit);
+        Assert.Null(BoardUndo.ForDraft().Limit);
+    }
+
     [Fact]
     public void PeekTakesNothing()
     {

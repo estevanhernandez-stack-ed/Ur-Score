@@ -118,7 +118,7 @@ public static partial class PanelModels
             }
         }
 
-        if (NamesNote(live, reader, RecipeWords.Group(recipe), groupsWord) is { } namesNote) notes.Add(namesNote);
+        if (NamesNote(live, reader, RecipeWords.Group(recipe), groupsWord, board.Count > 0) is { } namesNote) notes.Add(namesNote);
 
         var totalLabel = recipe.Headline.First(h => h.Id == totalId).Label;
         var span = from is null
@@ -262,8 +262,13 @@ public static partial class PanelModels
     /// clan's line went on, under a note claiming no clans were named at all. When the lines stopped, that is the one
     /// sentence; the older one is for a list that has never kept a name. Either way, when the copy Ur Score ships would
     /// keep names, the note says where to update it.
+    /// <para>
+    /// "Stopped updating" is said only when <paramref name="rivalsDrawn"/>: it is a sentence about rival lines, and a
+    /// line needs two named reads. With one named read before the names stopped there is no band, and the sentence
+    /// described lines nobody could see (0.6.3). The update pointer is about the recipe, not the chart, and stays.
+    /// </para>
     /// </summary>
-    private static string? NamesNote(LiveBoard live, ScoreBookReader reader, string group, string groups)
+    private static string? NamesNote(LiveBoard live, ScoreBookReader reader, string group, string groups, bool rivalsDrawn)
     {
         if (FieldOf(live) is not { } field || live.FindRecipe(field.Recipe) is not { Recipe.IsGroupList: true } installed) return null;
 
@@ -272,7 +277,7 @@ public static partial class PanelModels
         // "No clans are named here" only while nothing named was ever read this period: beside a band still drawn from
         // named reads it contradicts the chart, which is the very note the owner learned to ignore (review, 2026-09-24).
         var said = named is { } last && latest > last
-            ? PanelText.GroupNamesStopped(group, groups, list, last, live.Time.LocalTimeZone, list.GroupsAreClans)
+            ? rivalsDrawn ? PanelText.GroupNamesStopped(group, groups, list, last, live.Time.LocalTimeZone, list.GroupsAreClans) : null
             : list.GroupsAreClans || named is not null ? null : PanelText.GroupNamesNotKept(groups, list);
         var update = BuiltInRecipes.HasGroupNamesUpdate(installed) ? PanelText.RecipeUpdate(list) : null;
 

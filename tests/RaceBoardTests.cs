@@ -235,6 +235,36 @@ public class RaceBoardTests
     }
 
     /// <summary>
+    /// "Rival clans stopped updating" is a claim about lines on the chart, so it needs a rival line to be about. A band line
+    /// needs two named reads; with only one before the names stopped there is no band at all, and the sentence spoke of lines
+    /// nobody could see. The update pointer is about the recipe, not the chart, and stays.
+    /// </summary>
+    [Fact]
+    public void ARaceWithNoRivalLinesDoesNotSayTheyStopped()
+    {
+        RaceModel OneNamedRead(Recipe list)
+        {
+            var field = new Source("s-00000009", list.Slug, new Dictionary<string, string>(), SourceRole.Watch);
+            Source[] all = [Mine, field];
+            var live = Live(all, [Installed(Clan, "value"), Installed(list)],
+                all.ToDictionary(s => s.Id, s => Snapshot(s.Id, [], period: LivePeriod), StringComparer.Ordinal));
+            var reader = Reader(
+                FieldRead(field, Now.AddHours(-1), BoardAt(10, 1_100)),
+                FieldRead(field, Now, BoardAt(10, 1_200)) with { Groups = null },
+                Read(Mine, Now.AddHours(-2), Period, new Dictionary<string, double> { ["clan-points"] = 400 }, "value"),
+                Read(Mine, Now, Period, new Dictionary<string, double> { ["clan-points"] = 900 }, "value"));
+            return PanelModels.Race(live, reader, new PanelSettings(Clan.Slug, SourceIds: [Mine.Id]));
+        }
+
+        var race = OneNamedRead(TopClans);
+        Assert.Single(race.Series);
+        Assert.Equal("", race.Head.Note);
+
+        Assert.Equal("Setup › Recipes has an update for Pet Sim 99 top clans.",
+            OneNamedRead(TopClans with { GroupsAreClans = false }).Head.Note);
+    }
+
+    /// <summary>
     /// A list without the flag whose latest read is still an older named one: the band is drawn and has not stopped yet, so
     /// "No clans are named here" would contradict the chart above it. Only the update pointer is left to say.
     /// </summary>

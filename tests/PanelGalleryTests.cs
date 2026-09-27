@@ -74,6 +74,34 @@ public class PanelGalleryTests
         Assert.Equal(canAdd ? "" : "Add a clan in Setup first.", race.WhyNot);
     }
 
+    /// <summary>
+    /// A race is off for two different reasons, and "Add a clan in Setup first." is only one of them. With clans on
+    /// whose recipe has no summed total, adding another clan of the same recipe would change nothing: the card says what
+    /// is actually missing.
+    /// </summary>
+    [Fact]
+    public void RaceSaysWhetherItNeedsAClanOrAClanThatHasATotal()
+    {
+        var noTotal = Clan with { Headline = [.. Clan.Headline.Select(h => h with { Sum = false })] };
+
+        var none = Card(PanelGallery.Cards(Live([], [Installed(Clan, "value")], NoReads)), PanelType.Race);
+        Assert.False(none.CanAdd);
+        Assert.Equal("Add a clan in Setup first.", none.WhyNot);
+
+        var races = Card(PanelGallery.Cards(Live([MainClan], [Installed(Clan, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
+        Assert.True(races.CanAdd);
+
+        var totalless = Card(PanelGallery.Cards(Live([MainClan, ProfileSource], [Installed(noTotal, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
+        Assert.False(totalless.CanAdd);
+        // Nothing installed can race, so there is no card recipe to name the group: the word comes from the clan that is on.
+        Assert.Equal("Needs a clan whose recipe has a total.", totalless.WhyNot);
+
+        // A new player: only a profile source on, and the clan recipe installed, which can race. What is missing is a clan.
+        var profileOnly = Card(PanelGallery.Cards(Live([ProfileSource], [Installed(Clan, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
+        Assert.False(profileOnly.CanAdd);
+        Assert.Equal("Add a clan in Setup first.", profileOnly.WhyNot);
+    }
+
     private const string GuildSeasonJson = """
         {
           "recipe": 1, "name": "Guild season", "credit": "Test data.", "metricId": "test.guild", "valueLabel": "Points",
