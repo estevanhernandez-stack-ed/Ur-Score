@@ -48,7 +48,7 @@ public static class PanelGallery
             {
                 PanelType.Standing => ($"Needs a {group}.", $"Place, total, the last hour's gain and the {period} line.", $"Add a {group} in Setup first."),
                 PanelType.Race => ($"Needs 1 to {PanelModels.MaxRace} {groups} of one recipe.", $"Each {group}'s total over the current {period}, one line each.",
-                    $"Add a {group} in Setup first."),
+                    HasSourceOn(live) ? $"Needs a {group} whose recipe has a total." : $"Add a {group} in Setup first."),
                 PanelType.MyAccounts => ("Needs a stat.", $"Your accounts by that stat, grouped by {group}, with rank, change and what was sent.", TickFirst),
                 PanelType.PromotionCheck => ($"Needs a {group} your accounts are in, and one to compare with (your main unless you pick another).",
                     $"Where each of your accounts would place in the other {group} now. Live only.",
@@ -94,6 +94,14 @@ public static class PanelGallery
 
         return origin is null ? null : live.FindRecipe(live.FindSource(origin.Key)!.Recipe)?.Recipe;
     }
+
+    /// <summary>
+    /// Whether any source is switched on, clans lists aside. A race that can't be added with one on is missing a recipe
+    /// with a summed total, not a clan, and "Add a clan in Setup first." sent the player to add one that could not race
+    /// either (0.6.3).
+    /// </summary>
+    private static bool HasSourceOn(LiveBoard live) =>
+        live.Sources.Any(s => s.Enabled && live.FindRecipe(s.Recipe) is { Recipe.IsGroupList: false });
 
     private static bool CanAdd(PanelType type, LiveBoard live)
     {

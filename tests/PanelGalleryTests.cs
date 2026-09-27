@@ -74,6 +74,33 @@ public class PanelGalleryTests
         Assert.Equal(canAdd ? "" : "Add a clan in Setup first.", race.WhyNot);
     }
 
+    /// <summary>
+    /// A race is off for two different reasons, and "Add a clan in Setup first." is only one of them. With clans on
+    /// whose recipe has no summed total, adding another clan of the same recipe would change nothing: the card says what
+    /// is actually missing.
+    /// </summary>
+    [Fact]
+    public void RaceSaysWhetherItNeedsAClanOrAClanThatHasATotal()
+    {
+        var noTotal = Clan with { Headline = [.. Clan.Headline.Select(h => h with { Sum = false })] };
+
+        var none = Card(PanelGallery.Cards(Live([], [Installed(Clan, "value")], NoReads)), PanelType.Race);
+        Assert.False(none.CanAdd);
+        Assert.Equal("Add a clan in Setup first.", none.WhyNot);
+
+        var races = Card(PanelGallery.Cards(Live([MainClan], [Installed(Clan, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
+        Assert.True(races.CanAdd);
+
+        var totalless = Card(PanelGallery.Cards(Live([MainClan, ProfileSource], [Installed(noTotal, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
+        Assert.False(totalless.CanAdd);
+        Assert.Equal("Needs a source whose recipe has a total.", totalless.WhyNot);
+
+        // A recipe that can race is installed, but the only source switched on is on one that can't.
+        var profileOnly = Card(PanelGallery.Cards(Live([ProfileSource], [Installed(Clan, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
+        Assert.False(profileOnly.CanAdd);
+        Assert.Equal("Needs a clan whose recipe has a total.", profileOnly.WhyNot);
+    }
+
     private const string GuildSeasonJson = """
         {
           "recipe": 1, "name": "Guild season", "credit": "Test data.", "metricId": "test.guild", "valueLabel": "Points",
