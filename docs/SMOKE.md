@@ -90,7 +90,7 @@ once before its checks were trusted.
 
 **Run 2026-09-23, with RoRoRo quit.** The first pass found real defects (V3-S.49 read-now after a Pause, V3-S.50
 a quick header drag, V3-S.51 walk-score-book deleting the owner's import backups, V3-S.52 the privacy check's exit
-2 read differently by different walks in `docs/backlog.md`); the results below are after that fix round. Every
+2 read differently by different walks; all four in `docs/backlog.md`); the results below are after that fix round. Every
 skip needs RoRoRo running or a live battle, which this run had neither of by design.
 
 | Walk | Result |

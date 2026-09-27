@@ -21,6 +21,8 @@ The battle race and the pace panel, fixed from a real battle, and Done in Arrang
 - **Clan pace offers only what can have a pace.** Its settings used to offer sources with no clan and no battle,
   such as a Pet Sim 99 profile, which could only draw an empty panel. It now offers clans whose recipe has a
   total and a battle.
+- **Ur Score is open source**, under the Apache License 2.0: `LICENSE` and `NOTICE` are in the repository.
+  Releases before 0.6.3 stay under the license they shipped with.
 
 ### Fixed
 
