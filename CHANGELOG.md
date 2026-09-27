@@ -3,6 +3,35 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.6.3 - 2026-09-27
+
+The battle race and the pace panel, fixed from a real battle, and Done in Arrange counting every change.
+
+### Added
+
+- **The race says when its rival lines stopped.** If your clans list stops keeping clan names, the rival lines
+  on the race freeze while yours goes on. The race now says so under the chart, with the time they stopped and
+  why, and when Ur Score has a newer copy of the list that keeps names, where to get it: **Setup › Recipes**,
+  **Update**. Updating a recipe is still up to you; nothing updates on its own.
+
+### Changed
+
+- **A battle race takes one clan.** With a clans list switched on, the race brings your rivals in by itself, so
+  one clan of yours is a whole race. It used to ask for two; it now takes 1 to 5.
+- **Clan pace offers only what can have a pace.** Its settings used to offer sources with no clan and no battle,
+  such as a Pet Sim 99 profile, which could only draw an empty panel. It now offers clans whose recipe has a
+  total and a battle.
+
+### Fixed
+
+- **Done (n) counts every change.** In Arrange, the count on **Done** stopped at 20, and Ctrl+Z couldn't step
+  back further than 20 changes. Both now reach all the way back to where you started arranging. Undo outside
+  Arrange still keeps the last 20 steps.
+- **The race only says its rival lines stopped when it draws some.** With no rival lines on the chart, the
+  sentence spoke of lines you couldn't see.
+- **The Race card in Add panel says why it's off.** It said "Add a clan in Setup first." even with clans already
+  there; when their recipe has no total, it now says it needs a clan whose recipe has one.
+
 ## 0.6.2 - 2026-09-23
 
 The board's top bar, editing and undo, reworked now that testing is done. 0.5.10, 0.6.0 and 0.6.1 were never
