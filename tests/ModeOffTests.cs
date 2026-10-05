@@ -68,6 +68,24 @@ public class ModeOffTests
         Assert.Contains(services.Trail, line => line.EndsWith("MODES: Battle is on.", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Review round 2: the readers that count for the pages' history budget and request counts are the active ones. Battle
+    /// off leaves Profile alone among them; the game off leaves none.
+    /// </summary>
+    [Fact]
+    public void ActiveReadersAreTheReadersOfModesThatAreOn()
+    {
+        using var dir = OldInstallFixtureTests.Copy();
+        using var services = Compose(dir, new StubHost(reachable: false), new Transport());
+        Assert.Equal([ClanSlug, "pet-sim-99-top-clans", ProfileSlug], services.ActiveReaders.Select(i => i.Recipe.Slug));
+
+        services.SetSwitch(Battle, false);
+        Assert.Equal([ProfileSlug], services.ActiveReaders.Select(i => i.Recipe.Slug));
+
+        services.SetSwitch(Game, false);
+        Assert.Empty(services.ActiveReaders);
+    }
+
     /// <summary>The game switch masks every mode under it, and each mode's own switch is untouched by it.</summary>
     [Fact]
     public async Task TheGameSwitchMasksBothModesAndRemembersThem()

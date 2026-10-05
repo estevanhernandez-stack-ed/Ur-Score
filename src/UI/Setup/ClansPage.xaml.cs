@@ -177,7 +177,8 @@ public partial class ClansPage : UserControl, ISetupPage
         }
 
         // Asked in Ur Score's own window, in the theme, never a stock Windows box (owner rule, backlog V3-S.10).
-        if (ClansModel.AddQuestion(before, change, recipe, _services.Installed, _services.KnownAccounts.Count, name) is { } question
+        // The request count is about what will read: an off mode's clans are not (review round 2).
+        if (ClansModel.AddQuestion(before, change, recipe, _services.ActiveReaders, _services.KnownAccounts.Count, name) is { } question
             && !ConfirmWindow.Ask(Window.GetWindow(this), question))
         {
             return;

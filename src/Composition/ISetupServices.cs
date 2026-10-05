@@ -32,6 +32,15 @@ public interface ISetupServices
     /// <summary>The sources whose mode is on: the only ones read, and the only ones a request count is about (A3).</summary>
     IReadOnlyList<Source> ActiveSources { get; }
 
+    /// <summary>
+    /// The readers whose mode is on: the only ones a history budget or a request count is about, since an off mode reads
+    /// and sends nothing (review round 2).
+    /// </summary>
+    IReadOnlyList<InstalledRecipe> ActiveReaders { get; }
+
+    /// <summary>The name of the mode a reader belongs to when that mode is off, else null (an orphan is not in a mode).</summary>
+    string? OffModeOf(string slug);
+
     /// <summary>Data-folder recipes no mode names: kept, listed in Diagnostics, never read.</summary>
     IReadOnlyList<InstalledRecipe> Orphans { get; }
 

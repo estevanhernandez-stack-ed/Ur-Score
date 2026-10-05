@@ -642,6 +642,11 @@ public sealed class AppServices : ISetupServices, IDisposable
         ApplySources();
     }
 
+    public IReadOnlyList<InstalledRecipe> ActiveReaders => ReadersOn(_switches);
+
+    public string? OffModeOf(string slug) =>
+        Catalog.ModeOf(slug) is { } mode && !_switches.IsOn(mode.Key) ? mode.Name : null;
+
     /// <summary>The readers a set of switches lets read.</summary>
     private IReadOnlyList<InstalledRecipe> ReadersOn(ModeSwitches switches) =>
         [.. Installed.Where(i => switches.IsReaderOn(i.Recipe.Slug))];

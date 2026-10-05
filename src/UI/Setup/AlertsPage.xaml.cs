@@ -31,7 +31,8 @@ public partial class AlertsPage : UserControl, ISetupPage
 
     public void Refresh()
     {
-        var policies = AlertsModel.Policies(_services.Installed, _services.KnownAccounts, _services.Sources, _services.Settings.ResolveNames, _services.PolicyCounts);
+        var policies = AlertsModel.Policies(
+            _services.Installed, _services.KnownAccounts, _services.ActiveSources, _services.Settings.ResolveNames, _services.PolicyCounts, _services.OffModeOf);
         PolicyList.ItemsSource = policies;
         PolicyEmptyLine.Visibility = policies.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 

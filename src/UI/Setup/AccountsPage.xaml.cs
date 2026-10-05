@@ -91,7 +91,8 @@ public partial class AccountsPage : UserControl, ISetupPage
             if (_services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, slug, StringComparison.Ordinal)) is not { } installed) return;
 
             var ids = _services.KnownAccounts.Select(a => a.AccountId).ToList();
-            var change = AccountsModel.ToggleSend(installed, _services.Installed, ids, accountId, on);
+            // Only the readers that read count toward RoRoRo's history limit: an off mode sends nothing (review round 2).
+            var change = AccountsModel.ToggleSend(installed, _services.ActiveReaders, ids, accountId, on);
 
             if (change.Refusal is not null)
             {

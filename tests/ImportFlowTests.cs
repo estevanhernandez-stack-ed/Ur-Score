@@ -116,6 +116,10 @@ public class ImportFlowTests : IDisposable
 
         public IReadOnlyList<Source> ActiveSources => [];
 
+        public IReadOnlyList<InstalledRecipe> ActiveReaders => [];
+
+        public string? OffModeOf(string slug) => null;
+
         public IReadOnlyList<InstalledRecipe> Orphans => [];
 
         public void SetSwitch(string key, bool on) => throw new NotSupportedException();

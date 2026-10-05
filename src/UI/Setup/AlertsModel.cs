@@ -17,7 +17,8 @@ public static class AlertsModel
 
     /// <summary>
     /// One report policy card line per recipe, in <see cref="ReportPolicy.Describe"/>'s words, with the allow
-    /// list the running watches use (<see cref="ReportPolicies.Allowed"/>).
+    /// list the running watches use (<see cref="ReportPolicies.Allowed"/>). A reader whose mode is off
+    /// (<paramref name="offModeName"/> names the mode) has no watch, so it says that and nothing more (review round 2).
     /// <para>
     /// A clans list gets a card of its own from 0.5.0. It sends for no account and never will, but it may send
     /// the clan-and-field numbers you ticked (<see cref="FieldMetrics"/>) — and a window whose whole job is to
@@ -26,11 +27,12 @@ public static class AlertsModel
     /// </summary>
     public static IReadOnlyList<PolicyItem> Policies(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<HostAccount> accounts, IReadOnlyList<Source> sources, bool resolveNames,
-        Func<string, (int Sent, int Dropped, int Held)> counts) =>
+        Func<string, (int Sent, int Dropped, int Held)> counts, Func<string, string?>? offModeName = null) =>
         [.. installed.Select(i =>
         {
             var (sent, dropped, held) = counts(i.Recipe.Slug);
-            var line = i.Recipe.IsGroupList
+            var line = offModeName?.Invoke(i.Recipe.Slug) is { } mode ? $"{mode} is off, so nothing is sent."
+                : i.Recipe.IsGroupList
                 ? new ReportPolicy([], new HashSet<Guid>(), FieldMetrics.Offered(i.State.FieldMetricKeys)).DescribeField()
                 : ReportPolicies.SendsByRole(i, sources)
                     ? new ReportPolicy(i.State.SentStats(i.Recipe), ReportPolicies.Allowed(i, accounts, sources)).Describe(accounts.Count, resolveNames)
