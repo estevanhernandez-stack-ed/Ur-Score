@@ -1,13 +1,12 @@
 # Setup > Alerts on a clean data folder, against a scratch rules file (plan A1): RoRoRo's own metric-rules.json is never
 # written, and the last step fails if its bytes change. Seeds the rule 0.3.1 added, one you wrote and another plugin's,
-# imports the profile recipe sending Diamonds and Player rank, then: the cards read as sentences with no JSON and the
+# ticks Send on Diamonds and Player rank (Setup > Stats), then: the cards read as sentences with no JSON and the
 # next step in RoRoRo; Change a stops-climbing alert, confirmed with Enter in the closed minutes box; add a
 # crosses-a-number alert with a refused number first and Enter in the number box; Escape cancels, from the number box
 # and from a closed direction box; a locked file is said on the card and changes nothing; Remove; a stat you stop
 # sending keeps its card with Remove only. RoRoRo running is optional.
 . (Join-Path $PSScriptRoot 'uia-board.ps1')
 $ErrorActionPreference = 'Stop'
-$profileFixture = Join-Path $UrFixtures 'petsim99-profile.recipe.json'
 $realRules = Join-Path $env:LOCALAPPDATA 'ROROROblox\metric-rules.json'
 $scratchDir = Join-Path $env:TEMP "ur-score-smoke-rules-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 $scratch = Join-Path $scratchDir 'metric-rules.json'
@@ -67,7 +66,15 @@ try {
     Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
-    Complete-ClanImport $profileFixture @() @('Diamonds', 'Player rank') | Out-Null
+    # Sending Diamonds and Player rank is what gives them alert cards. The import that ticked them is gone, so the walk ticks
+    # Send on Setup > Stats, on the Profile reader, and saves (nothing reads until Start, and start on open is off here).
+    $stats = Open-SetupPage 'Stats'
+    $modeBox = Find-All $stats $CT::ComboBox | Where-Object { $_.Current.Name -eq 'Mode' } | Select-Object -First 1
+    if ($modeBox) { Select-ComboItem $modeBox 'Profile'; $stats = Get-SetupWindow }
+    Set-Tick (Get-Check $stats 'Send Diamonds') $true
+    Set-Tick (Get-Check $stats 'Send Player rank') $true
+    Invoke-Element (Find-ByAutomationId $stats 'SaveStatsButton')
+    Wait-Line $stats 'StatsSavedLine' '^Saved\.' 5 | Out-Null
     Open-SetupPage 'Alerts' | Out-Null
     $rate100 = "Alert me when an account's Diamonds gains fewer than 100 a minute for 10 minutes."
     # Controller ruling 2: throw before any click on this page if Ur Score isn't reading the scratch file. Without this,
@@ -191,6 +198,8 @@ try {
 
     # 7. A stat you stop sending keeps its card while Ur Score has an alert for it, with Remove only.
     $setup = Open-SetupPage 'Stats'
+    $modeBox = Find-All $setup $CT::ComboBox | Where-Object { $_.Current.Name -eq 'Mode' } | Select-Object -First 1
+    if ($modeBox) { Select-ComboItem $modeBox 'Profile'; $setup = Get-SetupWindow }
     Set-Tick (Get-Check $setup 'Send Player rank') $false
     Invoke-Element (Find-ByAutomationId $setup 'SaveStatsButton')
     $saved = Wait-Line $setup 'StatsSavedLine' '^Saved\.' 5

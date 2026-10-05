@@ -1,10 +1,9 @@
-# The Alts tab on a clean data folder: a first import of the profile recipe starts with its suggested stats ticked to
+# The Alts tab on a clean data folder: a fresh install starts with Profile's suggested stats ticked to
 # show and none to send; the board opens on Alts alone; the accounts table has a column per shown stat, sorted by the
 # first with its change; a heading click sorts and a second flips; picking a row fills the account card; the total
 # sums what adds up; and none of it writes boards.json. Steps 4 to 7 need RoRoRo running and listing your accounts.
 . (Join-Path $PSScriptRoot 'uia-board.ps1')
 $ErrorActionPreference = 'Stop'
-$profileFixture = Join-Path $UrFixtures 'petsim99-profile.recipe.json'
 $rororo = [bool](Get-Process -Name 'ROROROblox.App' -ErrorAction SilentlyContinue)
 $boardsFile = Join-Path $UrData 'boards.json'
 $down = [string][char]0x2193
@@ -22,21 +21,21 @@ try {
     Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
-    # 1. A first import ticks what the recipe suggests, to show only, and says so.
-    Start-Import $profileFixture
-    $screen = Wait-UrWindow '^Import recipe$' 30
+    # 1. A fresh install seeds what the Profile reader suggests, to show only. (The import screen that said so, with its
+    # SuggestedLine, is gone; the same table is on Setup > Stats.)
+    $setup = Open-SetupPage 'Stats'
+    $modeBox = Find-All $setup $CT::ComboBox | Where-Object { $_.Current.Name -eq 'Mode' } | Select-Object -First 1
+    if ($modeBox) { Select-ComboItem $modeBox 'Profile'; $setup = Get-SetupWindow }
     $suggested = @('Diamonds', 'Eggs hatched', 'Player rank', 'Rebirths', 'Different pets hatched', 'Goals completed', 'Playtime')
-    $shown = @($suggested | Where-Object { Get-Toggle $screen "Show $_" })
-    $sent = @($suggested | Where-Object { Get-Toggle $screen "Send $_" })
+    $shown = @($suggested | Where-Object { Get-Toggle $setup "Show $_" })
+    $sent = @($suggested | Where-Object { Get-Toggle $setup "Send $_" })
     Check '1 The suggested stats start ticked to show' ($shown.Count -eq $suggested.Count) ($shown -join ', ')
     Check '1b ...and none to send' ($sent.Count -eq 0) ($sent -join ', ')
-    $line = Line $screen 'SuggestedLine'
-    Check '1c The screen says why, and that nothing is sent' ($line -like 'The recipe suggests showing *Nothing is sent to RoRoRo unless you tick Send.') $line
-    Invoke-Element (Find-ByAutomationId $screen 'ImportButton')
-    Start-Sleep -Seconds 2
+    # Removed: 1c, "the screen says why, and that nothing is sent". It read the import screen's SuggestedLine, which went with
+    # the import window; Setup > Stats has no such line.
     Close-UrWindow (Get-SetupWindow)
 
-    # 2. Only Alts: there is no battle recipe to build Battle from.
+    # 2. Only Alts: Battle needs a clan, so its starter has no panels yet and no tab.
     Wait-Until { (Get-TabNames (Get-BoardWindow)) -contains 'Alts' } 20 | Out-Null
     $board = Get-BoardWindow
     $tabs = @(Get-TabNames $board)

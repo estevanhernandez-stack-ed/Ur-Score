@@ -1,5 +1,5 @@
-# The starter boards on a clean data folder: a main clan, a clan your accounts are in, a watched clan, (when
-# the fixture exists) the top list and the profile recipe with its suggestions, then two tabs, Battle first, and
+# The starter boards on a clean data folder: a main clan, a clan your accounts are in, a watched clan (the top list and
+# Profile are built in), then two tabs, Battle first, and
 # every Battle panel with its title and no account card or table on it, Alts as its own tab, Start, Test now and
 # Pause through the status card, and a change to Alts that leaves Battle following.
 param(
@@ -9,10 +9,7 @@ param(
 
 . (Join-Path $PSScriptRoot 'uia-board.ps1')
 $ErrorActionPreference = 'Stop'
-$clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
-$profileFixture = Join-Path $UrFixtures 'petsim99-profile.recipe.json'
 $boardsFile = Join-Path $UrData 'boards.json'
-$topFixture = Get-ChildItem $UrFixtures -Filter *.recipe.json | Where-Object { (Get-Content $_.FullName -Raw) -match '"groupName"' } | Select-Object -First 1
 $rororo = [bool](Get-Process -Name 'ROROROblox.App' -ErrorAction SilentlyContinue)
 $backup = $null
 
@@ -21,11 +18,9 @@ try {
     Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
-    $board = Get-BoardWindow
-    Invoke-Element (Find-ByAutomationId $board 'SetupButton')
-    Wait-UrWindow '^Setup$' 15 | Out-Null
-    $setup = Complete-ClanImport $clanFixture @('Points') @('Points')
-    $setup = Wait-UrWindow '^Setup$' 30
+    # The three Pet Sim 99 readers are built in: a fresh folder composes them, with Profile and the top clans each given
+    # their one source. Only the clans are picked here, in Battle's section of the game page.
+    $setup = Open-GamePage
     Select-SearchName $setup 'Your main clan' $Main
     Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
     Invoke-WhenReady $setup 'AddMineButton'
@@ -34,19 +29,10 @@ try {
     Invoke-WhenReady $setup 'WatchClanButton'
     Select-FirstSearchMatch $setup 'Watch a clan' 'an' @($Main, $Alt) | Out-Null
 
-    if ($topFixture) {
-        Start-Import $topFixture.FullName
-        $screen = Wait-UrWindow '^Import recipe$' 30
-        Invoke-WhenReady $screen 'ImportButton'
-        Start-Sleep -Seconds 2
-    }
-
-    Start-Import $profileFixture
-    $screen = Wait-UrWindow '^Import recipe$' 30
-    Invoke-WhenReady $screen 'ImportButton'
-    Start-Sleep -Seconds 2
-
     Close-UrWindow (Get-SetupWindow)
+    # Alts was the only tab until the clan was picked and may still be the one selected: land on Battle before reading it.
+    Wait-Until { (Get-TabNames (Get-BoardWindow)) -contains 'Battle' } 20 | Out-Null
+    Select-Tab (Get-BoardWindow) 'Battle'
     $board = Get-BoardWindow
 
     $expected = [ordered]@{
@@ -58,7 +44,8 @@ try {
         'PastPeriodsPanel1'    = 'Past battles'
         'RecordsPanel1'        = 'Records'
     }
-    if ($topFixture) { $expected['TopPanel1'] = 'Top of the battle' }
+    # The top clans list is a built-in reader of Battle now, so its panel is always on the starter (the walk used to add it only when a group-list fixture existed).
+    $expected['TopPanel1'] = 'Top of the battle'
 
     # Records is the last panel the Battle starter adds, so waiting for its bound title is a proxy for the
     # whole board having finished rendering -- reading a panel's text right after it merely appears in the

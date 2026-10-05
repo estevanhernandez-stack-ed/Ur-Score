@@ -18,7 +18,7 @@ function Get-SavedPanel([string]$type) {
 }
 
 try {
-    $backup = Move-UrDataAside
+    $backup = Move-UrDataAside -ModesOff 'pet-sim-99/profile'
     Note-RoRoRo 'before'
     $board = Initialize-ClanBoard $Main ''
 

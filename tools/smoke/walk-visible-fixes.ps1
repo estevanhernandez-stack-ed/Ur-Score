@@ -36,7 +36,6 @@ public static class UrPointer {
 [UrPointer]::SetProcessDPIAware() | Out-Null
 Add-Type -AssemblyName System.Drawing
 
-$profileFixture = Join-Path $UrFixtures 'petsim99-profile.recipe.json'
 $realRules = Join-Path $env:LOCALAPPDATA 'ROROROblox\metric-rules.json'
 $scratchDir = Join-Path $env:TEMP "ur-score-smoke-visible-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 $scratch = Join-Path $scratchDir 'metric-rules.json'
@@ -187,7 +186,9 @@ try {
 ]
 '@
     $env:UR_SCORE_RULES_FILE = $scratch
-    $backup = Move-UrDataAside
+    # Profile off: the first-run board must be the empty one (step 1 asks whether it can be duplicated), and a fresh 0.7.0
+    # folder would show an Alts tab with panels. Step 7 turns Profile on, the way a player would.
+    $backup = Move-UrDataAside -ModesOff 'pet-sim-99/profile'
     Note-RoRoRo 'before'
     Start-UrScore | Out-Null
 
@@ -200,11 +201,8 @@ try {
         Check '1 Duplicate is off for the empty starter' ($emptyDuplicate -eq $false) "DuplicateBoardItem enabled=$emptyDuplicate; tabs: $((Get-TabNames (Get-BoardWindow)) -join ', ')"
     }
 
-    # The clan fixture with Points shown and nothing sent, and the main clan.
-    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'SetupButton')
-    Wait-UrWindow '^Setup$' 15 | Out-Null
-    Complete-ClanImport (Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json') @('Points') @() | Out-Null
-    $setup = Wait-UrWindow '^Setup$' 30
+    # The main clan, picked in Battle's section of the game page (Points is shown by the built-in reader, nothing is sent).
+    $setup = Open-GamePage
     Select-SearchName $setup 'Your main clan' $Main
     Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
     Close-UrWindow (Get-SetupWindow)
@@ -405,7 +403,17 @@ try {
     }
 
     # 7. AC-2.2 and AC-3.4: Setup > Alerts, with Diamonds sent.
-    Complete-ClanImport $profileFixture @('Diamonds') @('Diamonds') | Out-Null
+    # Profile goes on from its switch on the game page, then Diamonds is ticked to send on Setup > Stats and saved (the import
+    # that did both is gone). Turning the mode on gives the Profile reader its one source and its Alts tab.
+    $setup = Open-GamePage
+    Set-Tick (Find-ByAutomationId $setup 'ModeSwitch_profile') $true
+    $setup = Open-SetupPage 'Stats'
+    $modeBox = Find-All $setup $CT::ComboBox | Where-Object { $_.Current.Name -eq 'Mode' } | Select-Object -First 1
+    if ($modeBox) { Select-ComboItem $modeBox 'Profile'; $setup = Get-SetupWindow }
+    Set-Tick (Get-Check $setup 'Show Diamonds') $true
+    Set-Tick (Get-Check $setup 'Send Diamonds') $true
+    Invoke-Element (Find-ByAutomationId $setup 'SaveStatsButton')
+    Wait-Line $setup 'StatsSavedLine' '^Saved\.' 5 | Out-Null
     $setup = Open-SetupPage 'Alerts'
     Wait-Until { @(Get-AllTexts (Get-SetupWindow)) -match '1E\+300' } 15 | Out-Null
     $sentence = @(Get-AllTexts (Get-SetupWindow)) | Where-Object { $_ -match '1E\+300' } | Select-Object -First 1
@@ -455,7 +463,7 @@ try {
     $all = @(Read-Sources)
     $profileSource = $all | Where-Object { "$($_.recipe)" -like '*profile*' } | Select-Object -First 1
     if (-not $profileSource) {
-        Skip '8 Profile stat settings say a switched-off source is not read' 'the profile import made no source' ((@($all | ForEach-Object { "$($_.recipe)" })) -join ', ')
+        Skip '8 Profile stat settings say a switched-off source is not read' 'turning Profile on made no source' ((@($all | ForEach-Object { "$($_.recipe)" })) -join ', ')
         Start-UrScore | Out-Null
     }
     else {

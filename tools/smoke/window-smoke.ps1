@@ -1,11 +1,10 @@
-# The whole window in one pass, on a clean data folder: first run, a refused file, the import screen,
-# Setup opening on Clans, picking the main clan, the starter board, Test now, and copied diagnostics.
+# The whole window in one pass, on a clean data folder: first run, Setup opening on the Pet Sim 99 page, both modes on,
+# picking the main clan, the starter board, Test now, and copied diagnostics.
+# 0.7.0 retired the import window, so the old steps for a refused file and the import screen are gone with it.
 param([string]$Main = 'CCGP')
 
-. (Join-Path $PSScriptRoot 'uia-import.ps1')
+. (Join-Path $PSScriptRoot 'uia-board.ps1')
 $ErrorActionPreference = 'Stop'
-$clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
-$invalid = Join-Path $PSScriptRoot 'checks\invalid-no-step2-url.recipe.json'
 $rororo = [bool](Get-Process -Name 'ROROROblox.App' -ErrorAction SilentlyContinue)
 $backup = $null
 
@@ -14,29 +13,20 @@ try {
     Note-RoRoRo 'before'
     $board = Start-UrScore
 
-    Check '1 First run asks for a recipe' ((Line $board 'EmptyStateLine') -eq 'Import a recipe to start') (Line $board 'EmptyStateLine')
+    # A fresh folder composes the three built-in readers by itself. Profile needs no clan, so its Alts tab shows; Battle
+    # needs one and has no tab until a clan is picked.
+    $tabs = @(Get-TabNames $board)
+    Check '1 First run: Alts shows, Battle waits for a clan' (($tabs -contains 'Alts') -and ($tabs -notcontains 'Battle')) ($tabs -join ', ')
 
-    # The refusal is a line on Setup > Recipes now, not a box to dismiss, so it is read where it is said.
-    Start-Import $invalid
-    $text = Get-ImportRefusal 15
-    Check '2 An invalid file is refused, on the page, and nothing is installed' (($text -match "Step 2 has no 'url'\.") -and -not (Test-Path (Join-Path $UrData 'recipes\*.recipe.json'))) $text
+    # Replaces the old steps 2 and 3 (a refused file, the import screen): there is no file to import any more.
+    Invoke-Element (Find-ByAutomationId $board 'SetupButton')
+    $setup = Wait-UrWindow '^Setup$' 15
+    $title = Get-SetupPageTitle $setup
+    $picker = Get-UrWindows | Where-Object { $_.Current.Name -match 'Import|Open' -and $_.Current.Name -ne 'Setup' } | Select-Object -First 1
+    Check '2 Setup opens on the Pet Sim 99 page, with no file picker' (($title -eq 'Pet Sim 99') -and -not $picker) "page='$title' picker=$([bool]$picker)"
 
-    Start-Import $clanFixture
-    $screen = Wait-UrWindow '^Import recipe$' 30
-    $texts = @(Get-AllTexts $screen)
-    Check '3 The import screen names the host, the poll and what the book keeps' (
-        ($texts -contains 'ps99.biggamesapi.io') -and (@($texts -match '^Asks every \d+ seconds\.$').Count -gt 0) -and
-        ($texts -contains 'KEPT IN YOUR SCORE BOOK') -and (@($texts -like '*Clan place').Count -gt 0)) ($texts -join ' | ')
-    Check '3b With nothing ticked, Import is refused' ((Line $screen 'RefusalLine') -match 'Tick at least one stat') (Line $screen 'RefusalLine')
-
-    Set-Tick (Get-Check $screen 'Show Points') $true
-    Set-Tick (Get-Check $screen 'Send Points') $true
-    Check '3c A Send tick shows the name RoRoRo uses' ([bool](Get-Edit $screen 'Name RoRoRo uses for Points')) 'Name RoRoRo uses for Points'
-    Invoke-Element (Find-ByAutomationId $screen 'ImportButton')
-
-    $setup = Wait-UrWindow '^Setup$' 30
-    $title = Wait-Line $setup 'ClansPageTitle' '^Clans$' 30
-    Check '4 A recipe with inputs opens Setup on its Clans page' ($title -eq 'Clans') "title='$title'"
+    Check '3 Both modes are on' ((Test-Toggled (Find-ByAutomationId $setup 'ModeSwitch_battle')) -and (Test-Toggled (Find-ByAutomationId $setup 'ModeSwitch_profile'))) 'ModeSwitch_battle, ModeSwitch_profile'
+    Check '3b The page offers start on open' ([bool](Find-ByAutomationId $setup 'StartOnOpenBox')) 'StartOnOpenBox'
 
     Select-SearchName $setup 'Your main clan' $Main
     $found = Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120
@@ -48,6 +38,9 @@ try {
     Check '5b sources.json holds it as the main clan' (($mainSources.Count -eq 1) -and ($mainSources[0].inputs.clan -eq $Main)) (Get-Content (Join-Path $UrData 'sources.json') -Raw)
 
     Close-UrWindow $setup
+    # The Battle tab arrives with the clan; Alts was the tab on screen, so select Battle before reading its panel.
+    Wait-Until { (Get-TabNames (Get-BoardWindow)) -contains 'Battle' } 20 | Out-Null
+    Select-Tab (Get-BoardWindow) 'Battle'
     $board = Get-BoardWindow
     # Wait for the panel's bound text, not just its presence in the tree, before reading it for the check.
     Wait-Until {
@@ -57,13 +50,7 @@ try {
     $standing = Find-ByAutomationId $board 'StandingPanel1'
     Check '6 The board shows the main clan standing' ((Line $standing 'PanelTitle') -eq 'Clan standing' -and (Line $standing 'PanelSubtitle') -eq $Main) "title='$(Line $standing 'PanelTitle')' subtitle='$(Line $standing 'PanelSubtitle')'"
 
-    Invoke-Element (Find-ByAutomationId $board 'TestNowButton')
-    # Wait for the read to END before judging it. This step used to accept any state line starting "Reading", which the
-    # in-flight "Reading every source once..." matches at once: it returned before the read finished and then checked a
-    # read that could not have failed yet, so it passed while proving nothing. Test now is off while a read runs and back
-    # on after, so wait for off, then for on. (No assignment inside the blocks: one there would not escape them.)
-    $null = Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10
-    $finished = Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 240
+    $finished = Wait-UrReadOnce 240
     $state = Line (Get-BoardWindow) 'StateLine'
     Check '7 Test now reads without a failure' ($finished -and $state -notmatch 'Something unexpected' -and $state -notmatch '^Reading every source') "state='$state' detail='$(Line $board 'DetailLine')'"
 
