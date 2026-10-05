@@ -192,7 +192,12 @@ public sealed class RecipeStore(string directory)
         }
     }
 
-    private RecipeState LoadState(Recipe recipe)
+    /// <summary>
+    /// One recipe's saved state, with the legacy <c>metricIdOverride</c> carried into <see cref="RecipeState.LegacyStatChoices"/>
+    /// (needs the recipe for that). A missing file gives an empty state; an unreadable one costs the choices, not the recipe.
+    /// Readers.Compose calls this per built-in recipe (games-and-modes A8).
+    /// </summary>
+    internal RecipeState LoadState(Recipe recipe)
     {
         try
         {

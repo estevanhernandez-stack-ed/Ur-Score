@@ -157,9 +157,7 @@ public static class StatsTableModel
     /// A first import's starting ticks (D11): Show on each value the recipe suggests, under its suggested name, and never
     /// Send. An update and Setup › Stats start from your saved choices instead, so a tick you made is never changed.
     /// </summary>
-    public static IReadOnlyDictionary<string, StatChoice> Suggested(Recipe recipe) =>
-        RecipeStats.Suggested(recipe)
-            .ToDictionary(v => v.Id, v => new StatChoice(Show: true, MetricId: v.MetricId), StringComparer.Ordinal);
+    public static IReadOnlyDictionary<string, StatChoice> Suggested(Recipe recipe) => RecipeStats.SuggestedChoices(recipe);
 
     /// <summary>Rows whose label contains the query, ignoring case, plus every ticked row. A blank query shows all.</summary>
     public static IReadOnlyList<StatRow> Visible(IReadOnlyList<StatRow> rows, string? query)
