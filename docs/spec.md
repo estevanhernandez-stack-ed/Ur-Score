@@ -106,8 +106,8 @@ PRD ref: `prd.md > The game page`.
 
 Add `IReadOnlyDictionary<string, bool>? Modes = null` to the `Settings` record. Keys: a game id (`"pet-sim-99"`) or a
 mode key (`"pet-sim-99/battle"`). Missing key = default (game: on; mode: `OnByDefault`). `ActiveRecipe` stays on the
-record for reading old files but is no longer written by SetupPack (it was never read). No `SettingsVersion` bump: a
-missing `modes` already means defaults.
+record for reading old files but is no longer written by SetupPack (it was never read). **Superseded by fix round 2:** `SettingsVersion` 3 marks the modes decision as made; the upgrade map runs only for a
+readable file below v3, and an unreadable settings.json is never written (defaults in memory).
 
 ### ModeSwitches (src/Games/ModeSwitches.cs)
 
