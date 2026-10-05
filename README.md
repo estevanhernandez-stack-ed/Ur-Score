@@ -59,7 +59,13 @@ and each mode below it has its own switch, a line saying what it is, and a line 
 what it contacts and how often ("Reads ps99.biggamesapi.io every 3 min"). Battle also asks the one
 thing it can't know, which clan is yours: search for it by name, **Make main** marks the one the
 board leads with, and **Watch it instead** follows one your accounts aren't in, which is read and
-shown but never sent. Profile asks nothing; it reads the accounts you saved in RoRoRo, and it only
+shown but never sent. You name your clan once: Ur Score reads that clan's member list and says
+which of your RoRoRo accounts are in it ("Found 3 of your 8 accounts in K0i2: ..."), battle or no
+battle. If some aren't, it asks "5 of your accounts aren't in K0i2 yet. Are they in another clan?"
+with a second search; a clan you pick there is added as one your accounts are in and checked for
+the rest only. **That's all** stops the question, and it comes back only when RoRoRo lists an
+account Ur Score hasn't placed. The member list holds everyone in the clan: other members' ids are
+compared with yours on your PC and dropped, never written, logged or shown. Profile asks nothing; it reads the accounts you saved in RoRoRo, and it only
 has numbers for an account that is linked on db.biggames.io with its Profile view public. An
 account that isn't linked reads as empty, and Ur Score shows dashes and says why beside them.
 
@@ -77,7 +83,7 @@ Each mode has its own boundary, and so does the pipe to RoRoRo:
 
 | Destination | What goes | What doesn't |
 | --- | --- | --- |
-| **Battle**: `ps99.biggamesapi.io` every 3 minutes, plus `thumbnails.roblox.com` and the picture host it names on `rbxcdn.com` for clan icons | The clan name you searched for, as part of a request for that clan's battle, and a request for the clans list and the current battle. For a clan's icon, the icon id the answer names. Icons are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Your accounts' ids: Battle reads whole clans and compares them with your accounts on your PC. |
+| **Battle**: `ps99.biggamesapi.io` every 3 minutes, plus `thumbnails.roblox.com` and the picture host it names on `rbxcdn.com` for clan icons | The clan name you searched for, as part of a request for that clan's battle and its member list, and a request for the clans list and the current battle. For a clan's icon, the icon id the answer names. Icons are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Your accounts' ids: Battle reads whole clans and compares them with your accounts on your PC. |
 | **Profile**: `ps99.biggamesapi.io` every 30 minutes | Your own accounts' Roblox user ids, one account at a time, since a profile is looked up by id. | Anyone else's. |
 | **RoRoRo**, over a local pipe on your own PC | Only your own saved accounts' values, only under a metric id you set to send, only if the number is a real finite value. This is the whole point of the plugin and it is checked at one gate in the code (`ReportPolicy`), not scattered around. | Anything about anyone else. Other rows' ids and values are read off the source, compared against your accounts, and dropped — never reported, never written to a file, never logged. |
 | **Roblox's own public username lookup** (`users.roblox.com`) | Other members' Roblox user ids, so the live leaderboard can show names instead of a column of numbers. Those ids came from the source in the first place, and only names come back. | Your own accounts' ids — their names are already known locally, from RoRoRo, so they never need this call. |

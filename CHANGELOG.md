@@ -14,6 +14,7 @@ Recipes are gone. Pet Sim 99's modes are built in and update with the app.
   3 min"), and Battle's clan search, with Make main and Watch it instead, where it belongs. A mode that is off
   reads nothing, records nothing and sends nothing; its starter board says "Battle is off." with a **Turn on**
   button, and your clans and ticks are kept for when it comes back. Panels of an off mode say so too.
+- **Name your clan once: Ur Score finds which of your accounts are in it and asks only about the rest.**
 - **A first run with no file picker.** A fresh install has Battle and Profile on, and the first time Setup opens it
   lands on the game page with the clan search ready. There is no file to find and nothing to import.
 - **Diagnostics lists what no mode reads.** A reader file an older version saved in your data folder, and that no
