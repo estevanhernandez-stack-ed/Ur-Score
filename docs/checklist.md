@@ -131,7 +131,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Verify: GameModelTests + rewritten SetupPagesTests + a WPF render test of GamePage (in WpfCollection) green; the
   planned drop is listed test by test in the commit body; Release build green.
 
-- [ ] **12. No recipe words left in the UI**
+- [x] **12. No recipe words left in the UI**
   Spec ref: `spec.md > Setup UI > Other pages, wording only` + `A11` (word fence)
   What to build: reword Stats ("Mode"), Alerts, Accounts columns, Score book ("PER MODE"), Diagnostics (orphans
   section), PanelGallery, PanelForms, PanelText, AddBoardWindow, AlertCards, HistoryBudget, BookImport lines, per the
