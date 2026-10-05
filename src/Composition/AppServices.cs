@@ -70,6 +70,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary>Each source's own picture, never one per recipe (backlog V3-S.7), and back from the cache at start (V3-S.6).</summary>
     private readonly SourceIcons _sourceIcons;
     private readonly SearchLists _searchLists;
+    private readonly MemberLists _memberLists;
     private readonly SourceStore _sourceStore;
     private readonly BoardsFile _boardsFile;
 
@@ -193,6 +194,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         transport ??= new SpacedTransport(new HttpRecipeTransport(_recipeHttp, rawDirectory: null, Redactor), _time, SpacedTransport.DefaultSpacing);
         _engine = new RecipeEngine(transport, Keys);
         _searchLists = new SearchLists(transport);
+        _memberLists = new MemberLists(transport);
 
         AccountsCache = new AccountsCache(paths.Accounts);
         _savedAccounts = LoadSavedAccounts(AccountsCache);
@@ -749,6 +751,48 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public Task<SearchListResult> SearchListAsync(RecipeSearch search, CancellationToken cancellationToken) =>
         _searchLists.GetAsync(search, cancellationToken);
+
+    /// <summary>
+    /// The trail gets counts and the redacted problem, never an id: the members list is other players, and other players never
+    /// reach disk, the trail or Diagnostics (README "What leaves your machine").
+    /// </summary>
+    public async Task<MembersResult?> FindOwnMembersAsync(Recipe recipe, string value, CancellationToken cancellationToken)
+    {
+        if (RecipeWords.MainInput(recipe) is not { Members: { } members } input) return null;
+
+        await RefreshAccountsAsync(cancellationToken);
+        var yours = KnownAccounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
+        var inputs = new Dictionary<string, string>(StringComparer.Ordinal) { [input.Id] = value.Trim() };
+
+        MembersResult result;
+        try
+        {
+            result = await _memberLists.FindAsync(members, inputs, yours, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            result = new MembersResult(new HashSet<long>(), $"Could not read the members ({ex.GetType().Name}).");
+        }
+
+        result = result with { Problem = result.Problem is null ? null : Redactor.Redact(result.Problem) };
+        AddTrail(result.Problem is null
+            ? $"MEMBERS READ: {result.Found.Count} of your {yours.Count} account(s) found."
+            : $"MEMBERS NOT READ: {result.Problem}");
+        return result;
+    }
+
+    public void SaveSettledAccounts(Recipe recipe, IReadOnlyList<string> accountIds)
+    {
+        if (FindInstalled(recipe.Slug) is not { } installed) return;
+
+        var state = installed.State with { SettledAccountIds = [.. accountIds] };
+        Store.SaveState(installed.Recipe, installed.Seeded ? state with { Stats = null } : state);
+        Installed = [.. Installed.Select(i => ReferenceEquals(i, installed) ? i with { State = state } : i)];
+    }
 
     /// <summary>
     /// One read with every recipe value asked for, so the response can offer its counter names. Its reading

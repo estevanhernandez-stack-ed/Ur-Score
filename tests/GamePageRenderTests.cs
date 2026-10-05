@@ -92,7 +92,7 @@ public class GamePageRenderTests
         new(Dispatcher.CurrentDispatcher, new AppPaths(folder), new StubHost(reachable: false), new NullTransport(),
             new ManualTime(new DateTimeOffset(2026, 10, 5, 18, 0, 0, TimeSpan.Zero)), Path.Combine(folder, "metric-rules.json"));
 
-    private static Window Show(FrameworkElement page)
+    internal static Window Show(FrameworkElement page)
     {
         // Foreground as SetupWindow sets it, so the snapshot shows what Setup shows.
         var window = new Window
@@ -110,7 +110,7 @@ public class GamePageRenderTests
     /// The page drawn on the theme's background into artifacts/smoke (ignored by git), for eyes: the walks that would show it
     /// move the real data folder and wait for the owner (testing.md rule 4).
     /// </summary>
-    private static void Snap(FrameworkElement page, string name)
+    internal static void Snap(FrameworkElement page, string name)
     {
         page.UpdateLayout();
         Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Render);

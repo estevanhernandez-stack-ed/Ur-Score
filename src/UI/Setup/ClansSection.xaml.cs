@@ -24,8 +24,18 @@ public partial class ClansSection : UserControl
     private readonly CancellationTokenSource _closing = new();
     private string? _mainProbeId;
     private string? _mineProbeId;
+    private string? _otherProbeId;
     private bool _rendering;
     private bool _namesAsked;
+
+    /// <summary>
+    /// Your accounts a members read placed while this section has been open (name your clan once, 0.7.0). Your own account ids
+    /// only: a members read hands back nothing else. Accounts placed or let go for good are in the reader's state instead.
+    /// </summary>
+    private readonly HashSet<Guid> _placed = [];
+
+    /// <summary>A members read has answered here, so the question about the rest stands on evidence, not on nothing read yet.</summary>
+    private bool _membersRead;
 
     /// <param name="recipeSlug">The mode's asking reader (<see cref="GameModel.AskingSlug"/>).</param>
     public ClansSection(ISetupServices services, string recipeSlug)
@@ -39,6 +49,7 @@ public partial class ClansSection : UserControl
         MainClanSearch.Picked += name => Unawaited.TrailFailures(PickAsync(name, SourceRole.Main), _services.AddTrail, "CLAN PICK");
         MineClanSearch.Picked += name => Unawaited.TrailFailures(PickAsync(name, SourceRole.Mine), _services.AddTrail, "CLAN PICK");
         WatchClanSearch.Picked += name => Unawaited.TrailFailures(PickAsync(name, SourceRole.Watch), _services.AddTrail, "CLAN PICK");
+        OtherClanSearch.Picked += name => Unawaited.TrailFailures(PickOtherAsync(name), _services.AddTrail, "CLAN PICK");
         Unloaded += (_, _) => _closing.Cancel();
 
         Refresh();
@@ -56,7 +67,12 @@ public partial class ClansSection : UserControl
         if (_namesAsked) return;
         _namesAsked = true;
         Unawaited.TrailFailures(LoadNamesAsync(), _services.AddTrail, "CLAN NAMES");
+        Placement = PlaceSavedClansAsync();
+        Unawaited.TrailFailures(Placement, _services.AddTrail, "CLAN MEMBERS");
     }
+
+    /// <summary>The members reads <see cref="Activate"/> started, for a test to wait on.</summary>
+    internal Task Placement { get; private set; } = Task.CompletedTask;
 
     /// <summary>First run lands here (A11): the main clan's search takes the keyboard.</summary>
     public void FocusMainSearch() => MainClanSearch.FocusSearch();
@@ -119,6 +135,7 @@ public partial class ClansSection : UserControl
                     + $"Every read keeps where yours stands, how the field is doing, and the top {GroupRows.Top} by name.";
             }
 
+            ShowQuestion(recipe, lists);
             ShowLine(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.ActiveSources, _services.Installed, accounts.Count), _services.OffModeOf(_slug)));
         }
         finally
@@ -131,7 +148,7 @@ public partial class ClansSection : UserControl
     {
         if (Installed?.Recipe is not { } recipe) return;
 
-        ClanSearchBox[] boxes = [MainClanSearch, MineClanSearch, WatchClanSearch];
+        ClanSearchBox[] boxes = [MainClanSearch, MineClanSearch, WatchClanSearch, OtherClanSearch];
         var group = RecipeWords.Group(recipe);
         void Status(string text)
         {
@@ -168,7 +185,7 @@ public partial class ClansSection : UserControl
         Status($"Searches all {result.Names.Count.ToString("N0", CultureInfo.InvariantCulture)} {group} names. Enter or a click picks one.");
     }
 
-    private async Task PickAsync(string picked, SourceRole role)
+    internal async Task PickAsync(string picked, SourceRole role)
     {
         if (Installed?.Recipe is not { } recipe) return;
 
@@ -238,7 +255,16 @@ public partial class ClansSection : UserControl
             return;
         }
 
-        var probe = ClansModel.Probe(name, snapshot, _services.KnownAccounts);
+        ClanProbe probe;
+        try
+        {
+            probe = await PlaceAsync(recipe, name, snapshot);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
         ShowLine(line, _services.Redactor.Redact(probe.Text));
 
         if (role == SourceRole.Main) _mainProbeId = probe.OfferWatch ? change.SourceId : null;
@@ -247,6 +273,213 @@ public partial class ClansSection : UserControl
         if (watchInstead is not null) watchInstead.Visibility = probe.OfferWatch ? Visibility.Visible : Visibility.Collapsed;
         if (role == SourceRole.Mine && !probe.OfferWatch) MineClanSearch.Visibility = Visibility.Collapsed;
         Refresh();
+    }
+
+    /// <summary>
+    /// Who of yours a pick's clan holds. From its members list when the reader has one (name your clan once, 0.7.0), so it
+    /// answers between battles too (V3-S.20), and from the battle read only when it has none or the list couldn't be read.
+    /// </summary>
+    private async Task<ClanProbe> PlaceAsync(Recipe recipe, string name, RecipeSnapshot? snapshot)
+    {
+        var members = await _services.FindOwnMembersAsync(recipe, name, _closing.Token);
+        if (members is null) return ClansModel.Probe(name, snapshot, _services.KnownAccounts);
+
+        Placed(recipe, members, _services.KnownAccounts);
+        return ClansModel.Placed(name, members, _services.KnownAccounts, snapshot);
+    }
+
+    /// <summary>Takes in what a members read found among <paramref name="among"/>, and settles for good once every account is placed.</summary>
+    private void Placed(Recipe recipe, MembersResult members, IReadOnlyList<HostAccount> among)
+    {
+        if (members.Problem is not null) return;
+
+        _membersRead = true;
+        _placed.UnionWith(ClansModel.InClan(among, members).Select(a => a.AccountId));
+        var state = Installed?.State ?? new RecipeState();
+        if (ClansModel.Listed(_services.KnownAccounts).Count > 0 && ClansModel.Remaining(_services.KnownAccounts, _placed, state).Count == 0)
+        {
+            Settle(recipe, state);
+        }
+    }
+
+    /// <summary>
+    /// Opening the page with a main clan and accounts nobody has placed yet: each clan your accounts are in is asked for its
+    /// members once, main first, stopping when nothing is left to place. Nothing is asked once every account is settled, so
+    /// <b>That's all</b> keeps this quiet until RoRoRo lists a new account. Only while the mode is on (<see cref="Activate"/>).
+    /// </summary>
+    private async Task PlaceSavedClansAsync()
+    {
+        if (Installed is not { } installed || RecipeWords.MainInput(installed.Recipe)?.Members is null) return;
+
+        var recipe = installed.Recipe;
+        if (ClansModel.Lists(recipe, _services.Sources, _services.Latest, _services.KnownAccounts).Main is null) return;
+
+        // RoRoRo's list now, not the one saved last session: a new account there is exactly what brings the question back.
+        try
+        {
+            await _services.RefreshAccountsAsync(_closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        var lists = ClansModel.Lists(recipe, _services.Sources, _services.Latest, _services.KnownAccounts);
+        if (lists.Main is null || ClansModel.Remaining(_services.KnownAccounts, _placed, Installed?.State ?? installed.State).Count == 0) return;
+
+        var said = new List<string>();
+        foreach (var clan in lists.Mine)
+        {
+            var rest = ClansModel.Remaining(_services.KnownAccounts, _placed, Installed?.State ?? installed.State);
+            if (rest.Count == 0) break;
+
+            MembersResult? members;
+            try
+            {
+                members = await _services.FindOwnMembersAsync(recipe, clan.Name, _closing.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (members is null) return;
+            if (members.Problem is not null) continue;
+
+            // Only what was found is said: the question below already counts the accounts nobody holds, and a "you can still
+            // watch it" with no button to do so would be an offer the page can't keep.
+            var found = ClansModel.InClan(rest, members);
+            Placed(recipe, members, rest);
+            if (found.Count == 0) continue;
+            // The first sentence counts against all your accounts, and the rest say "of them" after it.
+            said.Add(said.Count == 0
+                ? ClansModel.Placed(clan.Name, members with { Found = found.Select(a => a.RobloxUserId).ToHashSet() }, _services.KnownAccounts, null).Text
+                : ClansModel.PlacedOther(clan.Name, found).Text);
+        }
+
+        ShowLine(PlaceAccountsLine, _services.Redactor.Redact(string.Join(" ", said)));
+        Refresh();
+    }
+
+    /// <summary>A clan picked under the question: added as one of yours, never main, and asked only about the accounts left.</summary>
+    internal async Task PickOtherAsync(string picked)
+    {
+        if (Installed?.Recipe is not { } recipe) return;
+
+        var name = picked.Trim();
+        OtherWatchInsteadButton.Visibility = Visibility.Collapsed;
+        _otherProbeId = null;
+
+        var before = _services.Sources;
+        SourceChange change;
+        try
+        {
+            change = ClansModel.Pick(before, recipe, name, SourceRole.Mine);
+        }
+        catch (Exception ex)
+        {
+            ShowLine(PlaceAccountsLine, _services.Redactor.Redact($"Could not add that: {ex.Message}"));
+            return;
+        }
+
+        if (change.Note is not null)
+        {
+            ShowLine(PlaceAccountsLine, change.Note);
+            return;
+        }
+
+        // Asked in Ur Score's own window, as any other pick past the confirm line is (V3-S.10).
+        if (ClansModel.AddQuestion(before, change, recipe, _services.ActiveReaders, _services.KnownAccounts.Count, name) is { } question
+            && !ConfirmWindow.Ask(Window.GetWindow(this), question))
+        {
+            return;
+        }
+
+        try
+        {
+            _services.SaveSources(change.Sources);
+        }
+        catch (Exception ex)
+        {
+            ShowLine(PlaceAccountsLine, _services.Redactor.Redact($"Could not save that change: {ex.Message}"));
+            return;
+        }
+
+        ShowLine(PlaceAccountsLine, $"Reading who is in {name}…");
+        var rest = ClansModel.Remaining(_services.KnownAccounts, _placed, Installed?.State ?? new RecipeState());
+
+        MembersResult? members;
+        try
+        {
+            members = await _services.FindOwnMembersAsync(recipe, name, _closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (members?.Problem is { } problem)
+        {
+            ShowLine(PlaceAccountsLine, _services.Redactor.Redact($"Added {name}, but who is in it couldn't be read just now. {problem}"));
+            Refresh();
+            return;
+        }
+
+        var probe = ClansModel.PlacedOther(name, members is null ? [] : ClansModel.InClan(rest, members));
+        if (members is not null) Placed(recipe, members, rest);
+        ShowLine(PlaceAccountsLine, _services.Redactor.Redact(probe.Text));
+        _otherProbeId = probe.OfferWatch ? change.SourceId : null;
+        OtherWatchInsteadButton.Visibility = probe.OfferWatch ? Visibility.Visible : Visibility.Collapsed;
+        Refresh();
+    }
+
+    /// <summary>
+    /// The question about the accounts no clan here holds: shown once a members read has answered and while any remain,
+    /// gone when every account is placed or <b>That's all</b> was pressed for them.
+    /// </summary>
+    private void ShowQuestion(Recipe recipe, ClanLists lists)
+    {
+        var state = Installed?.State ?? new RecipeState();
+        var rest = ClansModel.Remaining(_services.KnownAccounts, _placed, state);
+        var group = RecipeWords.Group(recipe);
+        var question = _membersRead ? ClansModel.RemainingLine(rest.Count, [.. lists.Mine.Select(r => r.Name)], group) : null;
+
+        ShowLine(RemainingAccountsLine, question ?? "");
+        var asking = question is null ? Visibility.Collapsed : Visibility.Visible;
+        OtherClanSearch.Visibility = asking;
+        ThatsAllButton.Visibility = asking;
+        OtherClanSearch.SetLabel($"Another {group} your accounts are in");
+
+        PlacementPanel.Visibility = question is not null || OtherWatchInsteadButton.Visibility == Visibility.Visible
+                                    || PlaceAccountsLine.Visibility == Visibility.Visible
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    /// <summary>"That's all": the accounts left are in no clan Ur Score should read, so it stops asking about them.</summary>
+    private void OnThatsAllClick(object sender, RoutedEventArgs e)
+    {
+        if (Installed is not { } installed) return;
+
+        if (!Settle(installed.Recipe, installed.State)) return;
+        ShowLine(PlaceAccountsLine, "Ur Score won't ask about them again unless RoRoRo lists another account.");
+        OtherWatchInsteadButton.Visibility = Visibility.Collapsed;
+        _otherProbeId = null;
+        Refresh();
+    }
+
+    private bool Settle(Recipe recipe, RecipeState state)
+    {
+        try
+        {
+            _services.SaveSettledAccounts(recipe, ClansModel.Settle(_services.KnownAccounts, _placed, state));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ShowLine(PlaceAccountsLine, _services.Redactor.Redact($"Could not save that: {ex.Message}"));
+            return false;
+        }
     }
 
     private void OnAddMineClick(object sender, RoutedEventArgs e)
@@ -264,15 +497,18 @@ public partial class ClansSection : UserControl
     private void OnWatchInsteadClick(object sender, RoutedEventArgs e)
     {
         var fromMain = ReferenceEquals(sender, MainWatchInsteadButton);
-        if ((fromMain ? _mainProbeId : _mineProbeId) is not { } id) return;
+        var fromOther = ReferenceEquals(sender, OtherWatchInsteadButton);
+        if ((fromMain ? _mainProbeId : fromOther ? _otherProbeId : _mineProbeId) is not { } id) return;
 
         if (!Save(ClansModel.WatchInstead(_services.Sources, id))) return;
 
-        ShowLine(fromMain ? MainFoundLine : MineFoundLine,
+        ShowLine(fromMain ? MainFoundLine : fromOther ? PlaceAccountsLine : MineFoundLine,
             "Watching it instead. Only its own numbers are read; none of its members are matched to your accounts.");
         ((Button)sender).Visibility = Visibility.Collapsed;
         if (fromMain) _mainProbeId = null;
+        else if (fromOther) _otherProbeId = null;
         else _mineProbeId = null;
+        Refresh();
     }
 
     private void OnMakeMainClick(object sender, RoutedEventArgs e)

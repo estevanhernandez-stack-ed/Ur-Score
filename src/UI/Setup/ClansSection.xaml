@@ -46,6 +46,18 @@
         <Button x:Name="MainWatchInsteadButton" Content="Watch it instead" HorizontalAlignment="Left" Margin="0,8,0,0"
                 Visibility="Collapsed" Click="OnWatchInsteadClick" />
 
+        <!-- Name your clan once (0.7.0): what the members lists placed, and a question about only the accounts left over. -->
+        <StackPanel x:Name="PlacementPanel" Margin="0,12,0,0" Visibility="Collapsed">
+            <TextBlock x:Name="PlaceAccountsLine" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed" />
+            <TextBlock x:Name="RemainingAccountsLine" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,0,0,8" Visibility="Collapsed" />
+            <ui:ClanSearchBox x:Name="OtherClanSearch" Visibility="Collapsed" />
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <Button x:Name="OtherWatchInsteadButton" Content="Watch it instead" Margin="0,0,8,0"
+                        Visibility="Collapsed" Click="OnWatchInsteadClick" />
+                <Button x:Name="ThatsAllButton" Content="That's all" Visibility="Collapsed" Click="OnThatsAllClick" />
+            </StackPanel>
+        </StackPanel>
+
         <TextBlock x:Name="MineLabel" FontWeight="SemiBold" Margin="0,26,0,8" />
         <ui:RowList x:Name="MineList" ItemTemplate="{StaticResource ClanRowTemplate}"
                       AutomationProperties.Name="Sources your accounts are in" />

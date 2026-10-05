@@ -97,6 +97,65 @@ public static class ClansModel
             : new ClanProbe($"None of your accounts are in {name} yet. You can still watch it.", true);
     }
 
+    /// <summary>Your accounts a members read can place: those RoRoRo has given a Roblox id, once each.</summary>
+    public static IReadOnlyList<HostAccount> Listed(IReadOnlyList<HostAccount> accounts) =>
+        [.. accounts.Where(a => a.RobloxUserId != 0).DistinctBy(a => a.AccountId)];
+
+    /// <summary>Which of <paramref name="accounts"/> a members read found, in their own order.</summary>
+    public static IReadOnlyList<HostAccount> InClan(IReadOnlyList<HostAccount> accounts, MembersResult members) =>
+        [.. Listed(accounts).Where(a => members.Found.Contains(a.RobloxUserId))];
+
+    /// <summary>
+    /// The sentence after a pick when the recipe lists members (name your clan once, 0.7.0): how many of your accounts the
+    /// clan's roster holds, by name, or the offer to watch it when none. A list that couldn't be read says what the battle
+    /// read said instead (<see cref="Probe"/>), so a pick never ends on nothing. The opening words are the ones the smoke
+    /// walks wait for ("Found ", "None of your accounts", "Read ").
+    /// </summary>
+    public static ClanProbe Placed(string name, MembersResult members, IReadOnlyList<HostAccount> accounts, RecipeSnapshot? snapshot)
+    {
+        var listed = Listed(accounts);
+        if (listed.Count == 0)
+        {
+            return new ClanProbe($"Read {name}. RoRoRo hasn't listed your accounts yet, so Ur Score can't say which of them are in it.", false);
+        }
+
+        if (members.Problem is not null) return Probe(name, snapshot, accounts);
+
+        var found = InClan(listed, members);
+        return found.Count == 0
+            ? new ClanProbe($"None of your accounts are in {name} yet. You can still watch it.", true)
+            : new ClanProbe($"Found {found.Count} of your {Count(listed.Count, "account")} in {name}: {Names(found)}.", false);
+    }
+
+    /// <summary>What another clan's roster holds of the accounts still unplaced, or the watch offer when none of them.</summary>
+    public static ClanProbe PlacedOther(string name, IReadOnlyList<HostAccount> found) =>
+        found.Count == 0
+            ? new ClanProbe($"None of the rest are in {name}. You can still watch it.", true)
+            : new ClanProbe($"{name} has {found.Count} of them: {Names(found)}.", false);
+
+    /// <summary>Your listed accounts no members read has placed and <b>That's all</b> has not settled.</summary>
+    public static IReadOnlyList<HostAccount> Remaining(IReadOnlyList<HostAccount> accounts, IReadOnlySet<Guid> placed, RecipeState state)
+    {
+        var settled = state.Settled;
+        return [.. Listed(accounts).Where(a => !placed.Contains(a.AccountId) && !settled.Contains(a.AccountId))];
+    }
+
+    /// <summary>
+    /// The question over the other-clan search, naming every one of your <paramref name="clans"/> placed so far, or null when
+    /// nothing remains (the question is gone).
+    /// </summary>
+    public static string? RemainingLine(int remaining, IReadOnlyList<string> clans, string group) =>
+        remaining <= 0 ? null
+        : remaining == 1 ? $"1 of your accounts isn't in {Or(clans, group)} yet. Is it in another {group}?"
+        : $"{remaining} of your accounts aren't in {Or(clans, group)} yet. Are they in another {group}?";
+
+    /// <summary>
+    /// The settled set after <b>That's all</b>, or after every account is placed: what was settled before, every account listed
+    /// now, and every one placed. An account with no Roblox id yet is left out, so it is asked about once it has one.
+    /// </summary>
+    public static IReadOnlyList<string> Settle(IReadOnlyList<HostAccount> accounts, IEnumerable<Guid> placed, RecipeState state) =>
+        [.. state.Settled.Concat(Listed(accounts).Select(a => a.AccountId)).Concat(placed).Distinct().Select(id => id.ToString())];
+
     /// <summary>
     /// Adds a picked name with a role, or reuses the source that already has it (names match ignoring case,
     /// through <see cref="Source.KeyOf"/>). A new main is added as mine and then made main, so there is only
@@ -207,6 +266,17 @@ public static class ClansModel
 
     private static IReadOnlyList<Source> Replace(IReadOnlyList<Source> sources, Source updated) =>
         [.. sources.Select(s => s.Id == updated.Id ? updated : s)];
+
+    private static string Names(IReadOnlyList<HostAccount> accounts) => string.Join(", ", accounts.Select(a => a.DisplayName));
+
+    private static string Count(int count, string noun) => count == 1 ? $"{count} {noun}" : $"{count} {noun}s";
+
+    private static string Or(IReadOnlyList<string> items, string group) => items.Count switch
+    {
+        0 => $"your {group}",
+        1 => items[0],
+        _ => $"{string.Join(", ", items.Take(items.Count - 1))} or {items[^1]}",
+    };
 
     private static string JoinWithAnd(IReadOnlyList<string> items) => items.Count switch
     {

@@ -16,13 +16,20 @@ public sealed record StatChoice(bool Show = false, bool Send = false, string Met
 /// What the user chose for one recipe: input values, accounts switched off, which stats are shown and
 /// sent under which names, and the counter names last read from the source. Never written into the
 /// recipe file (spec §3.3). A state with no <see cref="Stats"/> ticks nothing (stats design §2).
+/// <para>
+/// <see cref="SettledAccountIds"/> (name your clan once, 0.7.0) are the RoRoRo account ids, yours only, that Setup has stopped
+/// asking about: placed in a clan by a members read, or let go with <b>That's all</b>. Null until either happens. It is a set
+/// rather than a flag so that an account RoRoRo lists later, which is not in it, brings the question back for that account
+/// alone, and nothing has to be cleared to re-arm it.
+/// </para>
 /// </summary>
 public sealed record RecipeState(
     IReadOnlyDictionary<string, string>? Inputs = null,
     IReadOnlyList<string>? ExcludedAccountIds = null,
     IReadOnlyDictionary<string, StatChoice>? Stats = null,
     IReadOnlyList<string>? CounterNames = null,
-    IReadOnlyList<string>? SentFieldMetrics = null)
+    IReadOnlyList<string>? SentFieldMetrics = null,
+    IReadOnlyList<string>? SettledAccountIds = null)
 {
     /// <summary>
     /// The clan-and-field numbers ticked on a clans list. Keys only: unlike a stat, these ids are fixed by the
@@ -55,6 +62,14 @@ public sealed record RecipeState(
 
     [JsonIgnore]
     public IReadOnlyList<string> SavedCounterNames => CounterNames ?? [];
+
+    /// <summary><see cref="SettledAccountIds"/> parsed; an id that isn't a GUID is ignored, as with the exclude list.</summary>
+    [JsonIgnore]
+    public IReadOnlySet<Guid> Settled => (SettledAccountIds ?? [])
+        .Select(id => (Parsed: Guid.TryParse(id, out var guid), Id: guid))
+        .Where(x => x.Parsed)
+        .Select(x => x.Id)
+        .ToHashSet();
 
     /// <summary>Tracked means Show or Send: the stats a read asks for. Only stats this recipe still offers.</summary>
     public IReadOnlySet<string> TrackedStats(Recipe recipe) =>

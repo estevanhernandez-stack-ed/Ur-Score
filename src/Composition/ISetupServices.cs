@@ -130,6 +130,19 @@ public interface ISetupServices
 
     Task<SearchListResult> SearchListAsync(RecipeSearch search, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Which of your accounts the <paramref name="value"/> of the reader's main input (a clan) lists as members: one read of
+    /// its <c>members</c> list, your ids only, every other member compared and dropped (name your clan once, 0.7.0). Null when
+    /// the reader declares no members list.
+    /// </summary>
+    Task<MembersResult?> FindOwnMembersAsync(Recipe recipe, string value, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Saves the accounts Setup stops asking about (<see cref="RecipeState.SettledAccountIds"/>). Not a change of ticks: a
+    /// seeded state is written without its stats, as a read's counter names are.
+    /// </summary>
+    void SaveSettledAccounts(Recipe recipe, IReadOnlyList<string> accountIds);
+
     /// <summary>One read with every recipe value asked for, so the response can offer its counter names. Sends nothing.</summary>
     Task<CounterLookup> ReadCounterNamesAsync(Recipe recipe, CancellationToken cancellationToken);
 
