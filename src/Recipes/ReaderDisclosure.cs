@@ -55,6 +55,15 @@ public static class ReaderDisclosure
             Add(RecipeHosts.HostOf(input.Search!.Url), SendsNothing);
         }
 
+        // A members list is asked with the value you entered (the parser refuses {userId} there), once per clan, not per account.
+        foreach (var input in recipe.Inputs.Where(i => i.Members is not null))
+        {
+            var names = Placeholders.Names(input.Members!.Url);
+            var host = RecipeHosts.HostOf(input.Members.Url);
+            foreach (var named in recipe.Inputs.Where(i => names.Contains(i.Id))) Add(host, $"the value you enter for {named.Label}");
+            if (!sends.ContainsKey(host)) Add(host, SendsNothing);
+        }
+
         var refusals = new List<string>();
         var reused = new List<string>();
         var reusedLabels = new HashSet<string>(StringComparer.Ordinal);
@@ -108,7 +117,7 @@ public static class ReaderDisclosure
             list.Remove(SendsNothing);
         }
 
-        // First appearance across steps, then search lists, then the icon hosts (A4), by contract
+        // First appearance across steps, then search lists and members lists, then the icon hosts (A4), by contract
         // rather than by the dictionary's enumeration order.
         var order = RecipeHosts.OrderedContactedBy(recipe).ToList();
         if (recipe.Icon is not null) order.AddRange([IconClient.ThumbnailsHost, IconClient.PictureHostShown]);

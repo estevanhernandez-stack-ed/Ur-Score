@@ -44,6 +44,28 @@ public class ReaderDisclosureTests
         Assert.True(review.CanImport);
     }
 
+    /// <summary>
+    /// A members list on a host no step contacts is still a host the reader contacts, and it receives the clan you enter.
+    /// The shipped recipe's members list is on its steps' own host, so its lines do not change; this is the case they hide.
+    /// </summary>
+    [Fact]
+    public void AMembersListsHostIsDisclosedWithTheValueItReceives()
+    {
+        var recipe = Parse("""
+            {
+              "recipe": 1, "name": "Members", "credit": "Test.", "metricId": "m.v", "everySeconds": 60,
+              "inputs": [{ "id": "clan", "label": "Your clan", "members": { "url": "https://roster.example/c/{clan}", "list": "data", "userId": "id" } }],
+              "steps": [{ "url": "https://api.example/rows", "rows": "data", "userId": "id", "value": "score" }]
+            }
+            """);
+
+        var review = ReaderDisclosure.Review(recipe, new FakeKeys());
+
+        Assert.Equal(new[] { "api.example", "roster.example" }, review.Hosts.Select(h => h.Host).ToArray());
+        Assert.Equal(new[] { "the value you enter for Your clan" }, review.Hosts[1].Sends);
+        Assert.Equal(new[] { "api.example", "roster.example" }, RecipeHosts.OrderedContactedBy(recipe).ToArray());
+    }
+
     [Fact]
     public void AnIconNamesRobloxsTwoPictureHostsAndWhatEach()
     {

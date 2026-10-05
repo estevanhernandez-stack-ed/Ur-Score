@@ -229,7 +229,17 @@ public static class RecipeParser
                 if (url is not null && list is not null) search = new RecipeSearch(url, list);
             }
 
-            if (id is not null && label is not null) inputs.Add(new RecipeInput(id, label, search, OptionalString(item, "plural")));
+            RecipeMembers? members = null;
+            if (JsonNav.TryGet(item, "members", out var m) && m.ValueKind == JsonValueKind.Object)
+            {
+                var url = RequiredString(m, "url", $"{where}'s members", problems);
+                var list = RequiredString(m, "list", $"{where}'s members", problems);
+                var userId = RequiredString(m, "userId", $"{where}'s members", problems);
+                if (url is not null) RequireHttps(url, $"{where}'s members url", problems);
+                if (url is not null && list is not null && userId is not null) members = new RecipeMembers(url, list, userId, OptionalString(m, "owner"));
+            }
+
+            if (id is not null && label is not null) inputs.Add(new RecipeInput(id, label, search, OptionalString(item, "plural"), members));
         }
 
         return inputs;
@@ -724,6 +734,38 @@ public static class RecipeParser
             foreach (var name in Placeholders.Names(input.Search!.Url).Concat(Placeholders.Names(input.Search.List)))
             {
                 problems.Add($"Input '{input.Id}' searches with a placeholder {{{name}}}. A search list's address must be fixed.");
+            }
+        }
+
+        // A members list is asked once for the whole clan with the value you entered: never with your accounts' ids, and its
+        // paths read every member alike, so they name nothing taken and no particular player.
+        foreach (var input in inputs.Where(i => i.Members is not null))
+        {
+            var members = input.Members!;
+            foreach (var name in Placeholders.Names(members.Url))
+            {
+                if (name == Placeholders.UserId)
+                {
+                    problems.Add($"Input '{input.Id}''s members url cannot use {{userId}}. A members list is asked once, not per account.");
+                }
+                else if (!inputIds.Contains(name))
+                {
+                    problems.Add($"Unknown placeholder {{{name}}} in input '{input.Id}''s members url.");
+                }
+            }
+
+            foreach (var (label, path) in new[] { ("list", members.List), ("userId", members.UserId), ("owner", members.Owner) })
+            {
+                if (path is null) continue;
+                foreach (var name in Placeholders.Names(path))
+                {
+                    problems.Add($"Input '{input.Id}''s members paths can't use placeholders, and {label} uses {{{name}}}.");
+                }
+
+                if (PathRules.HasLiteralNumber(path))
+                {
+                    problems.Add($"Input '{input.Id}''s members: '{path}' names a number. Recipes can't point at a particular player; use a placeholder instead.");
+                }
             }
         }
 

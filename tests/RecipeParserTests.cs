@@ -280,6 +280,64 @@ public class RecipeParserTests
         Assert.Contains("Input 'clan' searches with a placeholder {clan}. A search list's address must be fixed.", Problems(With(OneListStep, extra)));
     }
 
+    /// <summary>An input with a members declaration, its fields swapped in by each test.</summary>
+    private static string Members(string members) =>
+        With(OneListStep, $$""", "inputs": [{ "id": "clan", "label": "Your clan", "members": {{members}} }]""");
+
+    [Fact]
+    public void AnInputCanDeclareWhereItsMembersAre()
+    {
+        var result = RecipeParser.Parse(Members(
+            """{ "url": "https://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID", "owner": "data.Owner" }"""));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        var members = result.Recipe!.Inputs[0].Members!;
+        Assert.Equal("https://example.com/clan/{clan}", members.Url);
+        Assert.Equal("data.Members", members.List);
+        Assert.Equal("UserID", members.UserId);
+        Assert.Equal("data.Owner", members.Owner);
+    }
+
+    [Fact]
+    public void AMembersOwnerIsOptional() =>
+        Assert.Null(RecipeParser.Parse(Members("""{ "url": "https://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID" }"""))
+            .Recipe!.Inputs[0].Members!.Owner);
+
+    [Fact]
+    public void AMembersDeclarationNeedsItsUrlListAndUserId()
+    {
+        var problems = Problems(Members("{}"));
+
+        Assert.Contains("Input 1's members has no 'url'.", problems);
+        Assert.Contains("Input 1's members has no 'list'.", problems);
+        Assert.Contains("Input 1's members has no 'userId'.", problems);
+    }
+
+    [Fact]
+    public void AMembersUrlMustBeHttps() =>
+        Assert.Contains("Input 1's members url must start with https://.",
+            Problems(Members("""{ "url": "http://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID" }""")));
+
+    [Fact]
+    public void AMembersUrlsPlaceholdersMustNameAnInput()
+    {
+        Assert.Contains("Unknown placeholder {guild} in input 'clan''s members url.",
+            Problems(Members("""{ "url": "https://example.com/clan/{guild}", "list": "data.Members", "userId": "UserID" }""")));
+
+        // Your accounts' ids never go to a members address: it is asked once for the whole clan.
+        Assert.Contains("Input 'clan''s members url cannot use {userId}. A members list is asked once, not per account.",
+            Problems(Members("""{ "url": "https://example.com/clan/{clan}/{userId}", "list": "data.Members", "userId": "UserID" }""")));
+    }
+
+    [Fact]
+    public void AMembersPathCannotPointAtAPlayerOrUseAPlaceholder()
+    {
+        Assert.Contains("Input 'clan''s members: 'data.12345' names a number. Recipes can't point at a particular player; use a placeholder instead.",
+            Problems(Members("""{ "url": "https://example.com/clan/{clan}", "list": "data.12345", "userId": "UserID" }""")));
+        Assert.Contains("Input 'clan''s members paths can't use placeholders, and owner uses {clan}.",
+            Problems(Members("""{ "url": "https://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID", "owner": "data.{clan}" }""")));
+    }
+
     [Fact]
     public void AnInputCannotBeCalledUserId()
     {

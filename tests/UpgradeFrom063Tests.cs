@@ -206,9 +206,9 @@ public class UpgradeFrom063Tests
 
     /// <summary>
     /// Score book continuity (spec "Score book continuity"): the 0.6.3 install's clan-battle text was an older snapshot, so
-    /// its lines carry that text's hash, and 0.7.0's reads carry the built-in text's. The fixture's own snapshot happens to
-    /// equal today's built-in text, so the older snapshot is made here: the same recipe with a different credit line, its
-    /// lines and version file re-hashed. Then the running app appends two readings and a final under the built-in hash.
+    /// its lines carry that text's hash, and 0.7.0's reads carry the built-in text's. The older snapshot is made here: the
+    /// built-in recipe with a different credit line, its lines and version file re-hashed. (The fixture's own snapshot equalled
+    /// the built-in text until 0.7.0's clan recipe gained its members list; this test no longer leans on that either way.) Then the running app appends two readings and a final under the built-in hash.
     /// Every reader of the book the board's panels use sees ONE series for the main clan: the series behind Pace and
     /// Standing, the records (highest, biggest day, best rank across the two finals), and the past periods.
     /// </summary>
@@ -230,7 +230,7 @@ public class UpgradeFrom063Tests
         File.WriteAllText(BookFiles.RecipeFile(paths.Book, BattleSlug, oldHash), oldText);
         var month = Path.Combine(paths.Book, BattleSlug, "2026-09.jsonl");
         var oldLines = File.ReadAllLines(month).Select(l => BookJson.TryParse(l)!).ToList();
-        Assert.All(oldLines, l => Assert.Equal(newHash, l.Recipe.Hash));
+        Assert.Single(oldLines.Select(l => l.Recipe.Hash).Distinct());
         var template = oldLines[^1];
         BookLine Final(string hash, string period, DateTimeOffset t, double value, int rank) => template with
         {

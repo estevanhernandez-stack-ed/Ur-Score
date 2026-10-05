@@ -73,6 +73,23 @@ public class ShippedRecipesTests
     }
 
     /// <summary>
+    /// Name your clan once (0.7.0): the clan-battle recipe says where a clan's members are, so Ur Score can place your
+    /// accounts from the roster, between battles too (V3-S.20), and only on the host its steps already contact.
+    /// </summary>
+    [Fact]
+    public void TheClanBattleRecipeSaysWhereAClansMembersAre()
+    {
+        var file = Files().Single(f => Path.GetFileName(f) == "pet-sim-99-clan-battle.recipe.json");
+        var recipe = RecipeParser.Parse(File.ReadAllText(file)).Recipe!;
+
+        var members = Assert.Single(recipe.Inputs).Members;
+        Assert.NotNull(members);
+        Assert.Equal("https://ps99.biggamesapi.io/api/clan/{clan}", members.Url);
+        Assert.Equal(("data.Members", "UserID", "data.Owner"), (members.List, members.UserId, members.Owner));
+        Assert.Equal(new[] { "ps99.biggamesapi.io" }, RecipeHosts.OrderedContactedBy(recipe).ToArray());
+    }
+
+    /// <summary>
     /// The recipes inside the binary are the recipes beside the release: embedded at build time from the same files,
     /// so a clan member who adds a built-in one gets exactly what the download would have given them.
     /// </summary>

@@ -6,7 +6,9 @@
   "valueLabel": "Points",
   "placeLabel": "Clan place",
   "everySeconds": 180,
-  "inputs": [ { "id": "clan", "label": "Your clan", "plural": "Clans", "search": { "url": "https://ps99.biggamesapi.io/api/clansList", "list": "data" } } ],
+  "inputs": [ { "id": "clan", "label": "Your clan", "plural": "Clans",
+                "search": { "url": "https://ps99.biggamesapi.io/api/clansList", "list": "data" },
+                "members": { "url": "https://ps99.biggamesapi.io/api/clan/{clan}", "list": "data.Members", "userId": "UserID", "owner": "data.Owner" } } ],
   "steps": [
     { "url": "https://ps99.biggamesapi.io/api/activeClanBattle",
       "take": { "battle": "data.configName", "battleStarts": "data.configData.StartTime", "battleEnds": "data.configData.FinishTime" },
