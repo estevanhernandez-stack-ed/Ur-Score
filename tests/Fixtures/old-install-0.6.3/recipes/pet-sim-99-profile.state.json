@@ -1,0 +1,23 @@
+{
+  "inputs": null,
+  "excludedAccountIds": null,
+  "stats": {
+    "diamonds": {
+      "show": true,
+      "send": true,
+      "metricId": "ps99.diamonds"
+    },
+    "eggs": {
+      "show": true,
+      "send": true,
+      "metricId": "ps99.eggs-hatched"
+    },
+    "rank": {
+      "show": true,
+      "send": false,
+      "metricId": "ps99.rank"
+    }
+  },
+  "counterNames": null,
+  "sentFieldMetrics": null
+}

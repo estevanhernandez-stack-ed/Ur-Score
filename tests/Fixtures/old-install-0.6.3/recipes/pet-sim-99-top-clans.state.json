@@ -1,0 +1,11 @@
+{
+  "inputs": null,
+  "excludedAccountIds": null,
+  "stats": null,
+  "counterNames": null,
+  "sentFieldMetrics": [
+    "points",
+    "place",
+    "gap-above"
+  ]
+}

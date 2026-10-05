@@ -1,0 +1,12 @@
+{
+  "recipe": 1,
+  "name": "Roblox followers",
+  "credit": "Data from Roblox's public friends API.",
+  "metricId": "roblox.followers",
+  "valueLabel": "Followers",
+  "everySeconds": 600,
+  "steps": [
+    { "url": "https://friends.roblox.com/v1/users/{userId}/followers/count",
+      "perAccount": true, "value": "count" }
+  ]
+}

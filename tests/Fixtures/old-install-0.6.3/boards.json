@@ -1,0 +1,40 @@
+[
+  {
+    "id": "b-starter-battle",
+    "name": "Battle",
+    "follows": "battle",
+    "panels": []
+  },
+  {
+    "id": "b-c0ffee01",
+    "name": "My watch",
+    "panels": [
+      {
+        "id": "p-c0ffee02",
+        "type": "standing",
+        "size": {
+          "span": 6,
+          "tall": false
+        },
+        "order": 0,
+        "settings": {
+          "recipe": "pet-sim-99-clan-battle-points",
+          "sourceId": "s-a0000001"
+        }
+      },
+      {
+        "id": "p-c0ffee03",
+        "type": "pastPeriods",
+        "size": {
+          "span": 6,
+          "tall": true
+        },
+        "order": 1,
+        "settings": {
+          "recipe": "pet-sim-99-clan-battle-points",
+          "sourceId": "s-a0000001"
+        }
+      }
+    ]
+  }
+]

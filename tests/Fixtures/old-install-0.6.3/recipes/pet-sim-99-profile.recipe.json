@@ -1,0 +1,32 @@
+{
+  "recipe": 1,
+  "name": "Pet Sim 99 profile",
+  "credit": "Data from Big Games' public Pet Simulator 99 API. Each account must be linked on db.biggames.io with its Profile view public.",
+  "everySeconds": 1800,
+  "steps": [
+    { "url": "https://ps99.biggamesapi.io/v1/players/{userId}?include=profile",
+      "perAccount": true,
+      "asOf": { "time": "data.views.profile.fetchedAt", "stale": "data.views.profile.isStale" },
+      "unavailable": { "path": "data.views.profile.available", "is": false,
+                       "message": "Profile is private. Link this account on db.biggames.io and turn on its Profile view." },
+      "values": [
+        { "id": "diamonds", "label": "Diamonds", "path": "data.views.profile.data.Currency.Diamonds._am", "metricId": "ps99.diamonds", "show": true, "section": "Account" },
+        { "id": "eggs", "label": "Eggs hatched", "path": "data.views.profile.data.EggsHatched", "metricId": "ps99.eggs-hatched", "show": true, "section": "Progression" },
+        { "id": "rank", "label": "Player rank", "path": "data.views.profile.data.Rank", "metricId": "ps99.rank", "sum": false, "show": true, "section": "Progression" },
+        { "id": "rebirths", "label": "Rebirths", "path": "data.views.profile.data.Rebirths", "metricId": "ps99.rebirths", "sum": false, "show": true, "section": "Progression" },
+        { "id": "rank-stars", "label": "Rank stars", "path": "data.views.profile.data.RankStars", "metricId": "ps99.rank-stars", "sum": false, "section": "Progression" },
+        { "id": "pets", "label": "Different pets hatched", "path": "data.views.profile.data.PetHatchCount", "metricId": "ps99.pets-hatched", "count": true, "sum": false, "show": true, "section": "Progression" },
+        { "id": "goals", "label": "Goals completed", "path": "data.views.profile.data.GoalsCompleted", "metricId": "ps99.goals-completed", "show": true, "section": "Progression" },
+        { "id": "achievements", "label": "Achievements", "path": "data.views.profile.data.Achievements", "metricId": "ps99.achievements", "count": true, "sum": false, "section": "Progression" },
+        { "id": "zones", "label": "Zones unlocked", "path": "data.views.profile.data.UnlockedZones", "metricId": "ps99.zones-unlocked", "count": true, "sum": false, "section": "Progression" },
+        { "id": "playtime", "label": "Playtime", "path": "data.views.profile.data.Age", "metricId": "ps99.playtime", "format": "duration", "show": true, "section": "Account" },
+        { "id": "sessions", "label": "Sessions", "path": "data.views.profile.data.TotalSessions", "metricId": "ps99.sessions", "section": "Account" },
+        { "id": "first-join", "label": "First joined", "path": "data.views.profile.data.FirstJoinTimestamp", "metricId": "ps99.first-join", "format": "date", "sum": false, "section": "Account" },
+        { "id": "booth-diamonds", "label": "Booth diamonds earned", "path": "data.views.profile.data.BoothDiamondsEarned", "metricId": "ps99.booth-diamonds-earned", "section": "Account" },
+        { "id": "booth-slots", "label": "Booth slots", "path": "data.views.profile.data.BoothSlots", "metricId": "ps99.booth-slots", "sum": false, "section": "Slots" },
+        { "id": "egg-slots", "label": "Egg slots bought", "path": "data.views.profile.data.EggSlotsPurchased", "metricId": "ps99.egg-slots", "sum": false, "section": "Slots" },
+        { "id": "pet-slots", "label": "Pet slots bought", "path": "data.views.profile.data.PetSlotsPurchased", "metricId": "ps99.pet-slots", "sum": false, "section": "Slots" }
+      ],
+      "counters": { "label": "Game statistics", "path": "data.views.profile.data.Statistics", "metricIdPrefix": "ps99.stat." } }
+  ]
+}
