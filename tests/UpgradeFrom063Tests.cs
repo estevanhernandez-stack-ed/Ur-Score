@@ -298,6 +298,38 @@ public class UpgradeFrom063Tests
         Assert.Equal(["OldBattle", "PrevBattle"], reader.Finals(BattleSlug, "clan=testclan").Select(f => f.Period).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// Review round 2: the upgrade reads exactly what 0.6.3 read, sources included. A 0.6.3 player who imported the
+    /// clan-battle recipe and never the clans list had Battle, so Battle comes up on, but the clans list was never
+    /// installed: the input-less source every NEW reader gets is not added on this start, and sources.json is not written.
+    /// Turning Battle off and on later is a choice, and that one still adds it.
+    /// </summary>
+    [Fact]
+    public async Task AClanBattleOnlyInstallGainsNoClansListSourceOnItsUpgrade()
+    {
+        using var dir = OldInstallFixtureTests.Copy();
+        var paths = new AppPaths(dir.Path);
+        foreach (var slug in new[] { TopSlug, ProfileSlug })
+        {
+            File.Delete(Path.Combine(paths.Recipes, slug + ".recipe.json"));
+            File.Delete(Path.Combine(paths.Recipes, slug + ".state.json"));
+        }
+
+        new SourceStore(paths.Sources).Save([.. new SourceStore(paths.Sources).Load().Where(s => s.Recipe is not (TopSlug or ProfileSlug))]);
+        var sourcesBefore = File.ReadAllText(paths.Sources);
+
+        using var services = Compose(dir);
+        await services.LoadBookAsync();
+
+        Assert.True(services.Switches.IsOn("pet-sim-99/battle"));
+        Assert.DoesNotContain(services.Sources, s => s.Recipe == TopSlug);
+        Assert.Equal(sourcesBefore, File.ReadAllText(paths.Sources));
+
+        services.SetSwitch("pet-sim-99/battle", false);
+        services.SetSwitch("pet-sim-99/battle", true);
+        Assert.Contains(services.Sources, s => s.Recipe == TopSlug && s.Role == SourceRole.Watch);
+    }
+
     /// <summary>The fixture with Battle's readers alone on disk: the install whose upgrade turns Profile off.</summary>
     private static TempDir.Scope BattleOnly()
     {

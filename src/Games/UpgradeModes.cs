@@ -38,7 +38,7 @@ public static class UpgradeModes
 
     /// <summary>
     /// Whether the data folder was in use before this start: it has a <c>sources.json</c> or at least one
-    /// <c>*.recipe.json</c>. Not settings.json, which <see cref="Settings.Load"/> creates on every first start (so it
+    /// <c>*.recipe.json</c>. Not settings.json, which every start writes when it is missing (so it
     /// is present by the time this runs), and not the bare folder, which a failed earlier start may have left empty.
     /// Call it before anything in this start writes to the folder.
     /// </summary>

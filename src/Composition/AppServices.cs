@@ -116,8 +116,11 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary><c>settings.json</c> was there at start but could not be read: the defaults run in memory and this session never writes over it.</summary>
     private bool _settingsUnreadable;
 
-    /// <summary>This start turned a pre-modes install's recipe files into a modes map (A5); <see cref="LoadAtStart"/> reads it.</summary>
-    private bool _upgradedModes;
+    /// <summary>
+    /// The slugs whose <c>{slug}.recipe.json</c> was on disk, when this start turned them into a modes map (A5); null on any
+    /// other start. <see cref="LoadAtStart"/> reads it.
+    /// </summary>
+    private IReadOnlyList<string>? _upgradedFrom;
 
     private static int _ownCompositions;
 
@@ -680,7 +683,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
 
         TrySaveSettings(_settings with { Modes = modes, SettingsVersion = Core.Settings.CurrentVersion });
-        _upgradedModes = true;
+        _upgradedFrom = installedOnDisk;
         var on = Catalog.Modes.Where(m => _switches.IsOn(m.Key)).Select(m => m.Name).ToList();
         AddTrail($"MODES: set from what was installed before modes. On: {(on.Count == 0 ? "none" : string.Join(", ", on))}.");
     }
@@ -1331,10 +1334,19 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         LoadInstalled();
 
+        // Only readers of on modes (A5): a Battle-only upgrader does not wake up with a profile source. On the upgrade's own
+        // start, only readers 0.6.3 had installed too (review round 2): Battle is on for a player who imported the
+        // clan-battle recipe alone, and the clans list they never installed gets its source when they next turn Battle on,
+        // not unasked.
+        var upgradedFrom = _upgradedFrom;
+        var readers = upgradedFrom is null
+            ? ReadersOn(_switches)
+            : [.. ReadersOn(_switches).Where(i => upgradedFrom.Contains(i.Recipe.Slug, StringComparer.Ordinal))];
+
         var load = _sourceStore.LoadResult();
         if (!load.Exists)
         {
-            var migrated = SourceRules.Migrate(ReadersOn(_switches), []);
+            var migrated = SourceRules.Migrate(readers, []);
             Sources = migrated;
             TrySaveSources(migrated);
             return;
@@ -1348,9 +1360,8 @@ public sealed class AppServices : ISetupServices, IDisposable
             return;
         }
 
-        // Nothing counts as installed before, so every input-less reader without a source is treated as new. Only readers
-        // of on modes (A5): a Battle-only upgrader does not wake up with a profile source.
-        var sources = SourceRules.ForNewRecipes(load.Sources, [], ReadersOn(_switches));
+        // Nothing counts as installed before, so every input-less reader without a source is treated as new.
+        var sources = SourceRules.ForNewRecipes(load.Sources, [], readers);
         Sources = sources;
         if (!ReferenceEquals(sources, load.Sources)) TrySaveSources(sources);
     }

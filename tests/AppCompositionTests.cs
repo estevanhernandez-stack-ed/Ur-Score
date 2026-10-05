@@ -106,8 +106,8 @@ public class AppCompositionTests
     /// <para>
     /// Since games and modes the folder's recipe file is read only for its slug (the text is the built-in one, which this
     /// fixture's happens to equal) and, there being a version 2 settings.json, as a 0.6.3 install: Battle on because its reader
-    /// was installed, Profile off because it wasn't (A5), and Battle's clans list gets the one source a mode's input-less
-    /// reader always gets. The settings file is what makes it an upgrade (review round 2): every 0.6.3 start wrote one, and
+    /// was installed, Profile off because it wasn't (A5), and Battle's clans list, which 0.6.3 never had installed here,
+    /// gets no source on this start (review round 2: the upgrade reads exactly what 0.6.3 read). The settings file is what makes it an upgrade (review round 2): every 0.6.3 start wrote one, and
     /// a folder without one takes the defaults.
     /// </para>
     /// </summary>
@@ -134,9 +134,7 @@ public class AppCompositionTests
         Assert.Equal(BuiltInRecipes.Find(recipe.Slug)!.Text, Assert.Single(services.Installed, i => i.Recipe.Slug == recipe.Slug).Text);
         Assert.True(services.Switches.IsOn("pet-sim-99/battle"));
         Assert.False(services.Switches.IsOn("pet-sim-99/profile"));
-        Assert.Equal(
-            [("s-00000001", recipe.Slug), (null, "pet-sim-99-top-clans")],
-            services.Sources.Select(s => (s.Id == "s-00000001" ? s.Id : null, s.Recipe)));
+        Assert.Equal([("s-00000001", recipe.Slug)], services.Sources.Select(s => (s.Id, s.Recipe)));
         await services.LoadBookAsync();
         Assert.NotNull(services.Runner.WatchFor("s-00000001"));
 
