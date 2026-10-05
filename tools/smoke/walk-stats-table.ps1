@@ -32,7 +32,7 @@ try {
     foreach ($label in $suggested) { Set-Tick (Get-Check $setup "Show $label") $false }
 
     $read = Find-ByAutomationId $setup 'ReadNamesButton'
-    Check '1 A counters reader offers one read of every game statistic' ($read -and $read.Current.Name -like 'Show every game statistic*') "button='$($read.Current.Name)'"
+    Check '1 A counters reader offers to read every game statistic again (the Stats page''s own button since 0.7.0)' ($read -and $read.Current.Name -like 'Read stat names again*') "button='$($read.Current.Name)'"
 
     Set-ElementValue (Find-ByAutomationId $setup 'StatsSearchBox') 'EGGS'
     $showing = Wait-Line $setup 'ShowingLine' '^Showing ' 5
