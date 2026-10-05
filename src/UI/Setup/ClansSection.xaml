@@ -1,4 +1,4 @@
-<UserControl x:Class="Labs626.UrScore.UI.ClansPage"
+<UserControl x:Class="Labs626.UrScore.UI.ClansSection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="clr-namespace:Labs626.UrScore.UI">
@@ -33,11 +33,11 @@
         </DataTemplate>
     </UserControl.Resources>
 
+    <!-- The old Clans page as one section of a mode's row on the game page (spec "ClansSection"): same controls, same names, so
+         a walk that found them on the Clans page finds them here. The mode's row above it carries the title. -->
     <StackPanel MaxWidth="780" HorizontalAlignment="Left">
-        <TextBlock x:Name="ClansPageTitle" Style="{StaticResource Heading}" />
-        <!-- What the import that opened this page did (backlog S1-12.4): the Recipes page it was said on is gone. No redraw touches it. -->
-        <TextBlock x:Name="ImportedLine" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed" />
-        <TextBlock x:Name="RecipeLine" Style="{StaticResource Muted}" Margin="0,4,0,18" />
+        <TextBlock x:Name="ClansTitle" Style="{StaticResource SectionLabel}" />
+        <TextBlock x:Name="ClansLine" Style="{StaticResource Muted}" Margin="0,0,0,14" />
 
         <TextBlock x:Name="MainClanLabel" FontWeight="SemiBold" Margin="0,0,0,4" />
         <TextBlock x:Name="MainCurrentLine" Style="{StaticResource Muted}" Margin="0,0,0,8" />

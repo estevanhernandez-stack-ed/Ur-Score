@@ -35,7 +35,7 @@ public partial class AccountsPage : UserControl, ISetupPage
     public void Refresh()
     {
         ListedLine.Text = _asking
-            ? ImportFlow.AskingForAccounts
+            ? AccountsModel.AskingForAccounts
             : AccountsModel.ListedLine(_services.Accounts.Last, _services.AccountsCache.SavedAt(), DateTimeOffset.UtcNow);
 
         foreach (var tick in _rows.SelectMany(r => r.Sends)) tick.PropertyChanged -= OnTick;
@@ -55,7 +55,7 @@ public partial class AccountsPage : UserControl, ISetupPage
     private async Task AskForAccountsAsync()
     {
         _asking = true;
-        ListedLine.Text = ImportFlow.AskingForAccounts;
+        ListedLine.Text = AccountsModel.AskingForAccounts;
         try
         {
             await _services.RefreshAccountsAsync(CancellationToken.None);

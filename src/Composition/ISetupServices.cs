@@ -18,7 +18,7 @@ public interface ISetupServices
     /// <summary>Installed recipes as last loaded, in file order.</summary>
     IReadOnlyList<InstalledRecipe> Installed { get; }
 
-    /// <summary>Recipe files that could not be read, already redacted.</summary>
+    /// <summary>Game manifest and reader problems, already redacted (in the trail too; the Recipes page that listed them is gone).</summary>
     IReadOnlyList<string> RecipeProblems { get; }
 
     IReadOnlyList<Source> Sources { get; }
@@ -43,10 +43,6 @@ public interface ISetupServices
 
     /// <summary>Data-folder recipes no mode names: kept, listed in Diagnostics, never read.</summary>
     IReadOnlyList<InstalledRecipe> Orphans { get; }
-
-    RecipeStore Store { get; }
-
-    IKeyStore Keys { get; }
 
     Redactor Redactor { get; }
 
@@ -94,12 +90,6 @@ public interface ISetupServices
     /// <summary>Reports sent and dropped this session, summed over a recipe's sources.</summary>
     (int Sent, int Dropped, int Held) PolicyCounts(string recipeSlug);
 
-    /// <summary>
-    /// The picture for a recipe's row: its own main clan's, once a read has named one (or last session's is in the cache), else
-    /// null. Never another clan's (backlog V3-S.7).
-    /// </summary>
-    string? IconFileFor(string recipeSlug);
-
     /// <summary>The cached picture for one of your own accounts, once it has been fetched, else null. Never another player's.</summary>
     string? AvatarFileFor(long userId);
 
@@ -132,14 +122,8 @@ public interface ISetupServices
     /// <summary>Turns a game (its id) or a mode (its key) on or off: saved, applied to reading at once, redrawn.</summary>
     void SetSwitch(string key, bool on);
 
-    /// <summary>Reloads recipes from disk, migrates sources for any new recipe, applies, and raises <see cref="Changed"/>.</summary>
-    void ReloadRecipes();
-
     /// <summary>Saves one recipe's state (stats, Send per account, counter names) and updates its watches.</summary>
     void SaveRecipeState(Recipe recipe, RecipeState state);
-
-    /// <summary>Removes a recipe file and its sources. Never touches its score book.</summary>
-    void RemoveRecipe(string slug);
 
     /// <summary>Reads one source once, right now, and records it like any read. Null when that source has no watch yet.</summary>
     Task<RecipeSnapshot?> ReadOnceAsync(string sourceId, CancellationToken cancellationToken);

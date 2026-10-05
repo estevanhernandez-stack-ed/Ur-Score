@@ -12,10 +12,12 @@ using static Labs626.UrScore.UI.TextLines;
 namespace Labs626.UrScore.UI;
 
 /// <summary>
-/// Setup › Clans for one recipe (spec §7.1): the main clan search, the clans your accounts are in, the
-/// clans you watch, and the Top switch. Every change is saved and applied at once.
+/// The clans of one mode, inside its row on the game page (spec "ClansSection"; it was Setup › Clans, spec §7.1): the main
+/// clan search, the clans your accounts are in, the clans you watch, and the Top switch. Every change is saved and applied at
+/// once. The game page owns it and redraws it; while the mode is off the page disables it, and the clans list is not fetched
+/// until it is first enabled (<see cref="Activate"/>), so an off mode contacts nothing.
 /// </summary>
-public partial class ClansPage : UserControl, ISetupPage
+public partial class ClansSection : UserControl
 {
     private readonly ISetupServices _services;
     private readonly string _slug;
@@ -23,14 +25,14 @@ public partial class ClansPage : UserControl, ISetupPage
     private string? _mainProbeId;
     private string? _mineProbeId;
     private bool _rendering;
+    private bool _namesAsked;
 
-    /// <param name="note">What the import that opened this page did, said above the page and left alone by every redraw (S1-12.4).</param>
-    public ClansPage(ISetupServices services, string recipeSlug, string? note = null)
+    /// <param name="recipeSlug">The mode's asking reader (<see cref="GameModel.AskingSlug"/>).</param>
+    public ClansSection(ISetupServices services, string recipeSlug)
     {
         InitializeComponent();
         _services = services;
         _slug = recipeSlug;
-        ShowLine(ImportedLine, note ?? "");
 
         // Not awaited, and not lost: a pick or the name list failing past its own catches used to vanish, since a
         // discarded task's fault reaches no handler (S1-11.1). Its type goes to the trail now.
@@ -40,8 +42,24 @@ public partial class ClansPage : UserControl, ISetupPage
         Unloaded += (_, _) => _closing.Cancel();
 
         Refresh();
+    }
+
+    /// <summary>The reader this section picks clans for.</summary>
+    public string Slug => _slug;
+
+    /// <summary>
+    /// Reads the clans list for the search boxes, once. Called by the game page while the mode is on, never while it is off:
+    /// the list comes from the game's host, and an off mode contacts nothing.
+    /// </summary>
+    public void Activate()
+    {
+        if (_namesAsked) return;
+        _namesAsked = true;
         Unawaited.TrailFailures(LoadNamesAsync(), _services.AddTrail, "CLAN NAMES");
     }
+
+    /// <summary>First run lands here (A11): the main clan's search takes the keyboard.</summary>
+    public void FocusMainSearch() => MainClanSearch.FocusSearch();
 
     private InstalledRecipe? Installed =>
         _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _slug, StringComparison.Ordinal));
@@ -50,8 +68,9 @@ public partial class ClansPage : UserControl, ISetupPage
     {
         if (Installed is not { } installed)
         {
-            ClansPageTitle.Text = "Not installed";
-            RecipeLine.Text = "This recipe is no longer installed.";
+            // Readers ship with the app, so this is a build whose reader failed to load; Diagnostics says why.
+            ClansTitle.Text = "";
+            ClansLine.Text = "This version of Ur Score can't read this mode. Diagnostics says why.";
             return;
         }
 
@@ -64,8 +83,8 @@ public partial class ClansPage : UserControl, ISetupPage
         _rendering = true;
         try
         {
-            ClansPageTitle.Text = groups;
-            RecipeLine.Text = $"From {recipe.Name}. Changes apply at once. Removing a {group} keeps its score book.";
+            ClansTitle.Text = groups.ToUpperInvariant();
+            ClansLine.Text = $"Changes apply at once. Removing a {group} keeps its score book.";
 
             MainClanLabel.Text = $"Your main {group}";
             MainCurrentLine.Text = lists.Main is { } main
@@ -95,8 +114,8 @@ public partial class ClansPage : UserControl, ISetupPage
                 AutomationProperties.SetName(TopSwitch, $"Top of the {period}");
                 TopSwitch.IsChecked = top.Enabled;
                 // "Shown live, never kept" stopped being true in 0.3.10, and it was the screen where you switch the
-                // list ON — the worst place for it. Same pass as ImportText, 2026-09-20.
-                TopLine.Text = $"The leading {RecipeWords.GroupsLower(recipe)} from {topRecipe.Name}, for the Top of the {period} panel. "
+                // list ON, the worst place for it (2026-09-20). The clans list is named by what it is, never by its file.
+                TopLine.Text = $"The leading {RecipeWords.GroupsLower(recipe)} of the {period}, for the Top of the {period} panel. "
                     + $"Every read keeps where yours stands, how the field is doing, and the top {GroupRows.Top} by name.";
             }
 

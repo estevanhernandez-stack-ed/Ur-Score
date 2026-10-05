@@ -225,12 +225,14 @@ public class BoardModesTests
             BoardText.EmptyState(BoardEmpty.NoModes, null));
     }
 
-    /// <summary>The one helper item 11 repoints: today a clan pick goes to that reader's clans page, anything else to Recipes.</summary>
+    /// <summary>Pick your clan and Turn on a mode both go to the game page of the mode they speak for, which is Setup's first page.</summary>
     [Fact]
-    public void TheGamePageHelperNamesTodaysBestTarget()
+    public void TheEmptyStatesButtonsGoToTheGamesPage()
     {
-        Assert.Equal(SetupPages.ClansId(Clan.Slug), SetupPages.GamePage("pet-sim-99", Clan.Slug));
-        Assert.Equal(SetupPages.Recipes, SetupPages.GamePage("pet-sim-99"));
+        var game = GameCatalog.BuiltIn.ModeOf(Clan.Slug)!.GameId;
+
+        Assert.Equal("game:pet-sim-99", SetupPages.GamePage(game));
+        Assert.Equal(SetupPages.For(GameCatalog.BuiltIn)[0].Id, SetupPages.GamePage(GameCatalog.BuiltIn.Games.FirstOrDefault()?.Id));
     }
 
     /// <summary>

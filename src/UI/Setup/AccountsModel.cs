@@ -68,6 +68,9 @@ public static class AccountsModel
             PanelText.CannotRead(account.RobloxUserId, installed, sources, latest, nameTheRecipe: true)))];
     }
 
+    /// <summary>Said on the listed line while Ur Score waits on RoRoRo for your accounts (it was the import's line).</summary>
+    public const string AskingForAccounts = "Asking RoRoRo for your accounts…";
+
     /// <summary>
     /// The main and mine sources whose last read had this account, main first. Else where it is, in the words My accounts heads
     /// the same accounts with (PanelText.NotFound): only in groups you watch, or how much has been read and whether what was read
@@ -78,7 +81,8 @@ public static class AccountsModel
         HostAccount account, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
         IReadOnlyDictionary<string, RecipeSnapshot> latest)
     {
-        var withInputs = installed.Where(SetupPages.HasClansPage).ToList();
+        // The readers you pick clans for: they have an input and are not a clans list (the Clans page's old test, kept here).
+        var withInputs = installed.Where(i => i.Recipe.Inputs.Count > 0 && !i.Recipe.IsGroupList).ToList();
         if (withInputs.Count == 0) return "";
         if (account.RobloxUserId == 0) return PanelText.NotMatched;
 

@@ -361,8 +361,6 @@ public sealed class AppServices : ISetupServices, IDisposable
         return (sent, dropped, held);
     }
 
-    public string? IconFileFor(string recipeSlug) => IconChoice.ForRecipe(recipeSlug, Sources, Installed, _sourceIcons.FileFor);
-
     /// <summary>
     /// The window's icon: the main clan's picture and never another clan's, whichever was read last (backlog V3-S.7). With no
     /// main, Ur Score's own.
@@ -718,46 +716,10 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
     }
 
-    /// <summary>
-    /// After an import or update: recipes come from disk again, sources don't. Only a newly installed recipe
-    /// with no inputs gets a source (<see cref="SourceRules.ForNewRecipes"/>), and the file is saved only then.
-    /// </summary>
-    public void ReloadRecipes()
-    {
-        var before = ReadersOn(_switches);
-        LoadInstalled();
-
-        // Only readers of on modes count: a reader of an off mode gets its source when the mode is turned on (A5).
-        var sources = SourceRules.ForNewRecipes(Sources, before, ReadersOn(_switches));
-        if (!ReferenceEquals(sources, Sources))
-        {
-            Sources = sources;
-            TrySaveSources(sources);
-        }
-
-        ApplySources();
-    }
-
     public void SaveRecipeState(Recipe recipe, RecipeState state)
     {
         Store.SaveState(recipe, state);
         LoadInstalled();
-        ApplySources();
-    }
-
-    public void RemoveRecipe(string slug)
-    {
-        // The recipe file and its state go; its score book stays (spec §5.1).
-        Store.Remove(slug);
-        LoadInstalled();
-        var sources = SourceRules.ForgetRecipe(Sources, slug);
-        if (sources.Count != Sources.Count)
-        {
-            if (_sourcesUnreadable) AddTrail($"SOURCES NOT SAVED: {SourcesNotWritten}");
-            else _sourceStore.Save(sources);
-        }
-
-        Sources = sources;
         ApplySources();
     }
 

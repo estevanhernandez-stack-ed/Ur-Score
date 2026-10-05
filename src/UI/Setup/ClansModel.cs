@@ -28,7 +28,7 @@ public sealed record SourceChange(IReadOnlyList<Source> Sources, string SourceId
 public sealed record HostRequests(string Host, int PerHour);
 
 /// <summary>
-/// Setup › Clans' decisions (spec §7.1, §14), kept out of the page so they are testable. Changes are
+/// The clan section's decisions (spec §7.1, §14; it was Setup › Clans), kept out of the page so they are testable. Changes are
 /// returned as new source lists; the page saves them through <c>ISetupServices.SaveSources</c>.
 /// </summary>
 public static class ClansModel
@@ -181,7 +181,7 @@ public static class ClansModel
         string.Join(" ", requests.Select(r => $"Your PC asks {r.Host} about {r.PerHour.ToString("N0", CultureInfo.InvariantCulture)} times an hour."));
 
     public static string ConfirmText(Recipe recipe, IReadOnlyList<HostRequests> after) =>
-        $"That makes more than {ConfirmAbove} {RecipeWords.GroupsLower(recipe)} for {recipe.Name}. {RequestsLine(after)} Add it anyway?"
+        $"That makes more than {ConfirmAbove} {RecipeWords.GroupsLower(recipe)}. {RequestsLine(after)} Add it anyway?"
             .Replace("  ", " ", StringComparison.Ordinal);
 
     /// <summary>

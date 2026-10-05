@@ -217,7 +217,7 @@ public class ClansModelTests
 
         Assert.True(ClansModel.NeedsConfirmation(five, Clan.Slug));
         Assert.False(ClansModel.NeedsConfirmation(fourAndOneOff, Clan.Slug));
-        Assert.StartsWith("That makes more than 5 clans for Pet Sim 99 clan battle points.", ClansModel.ConfirmText(Clan, []));
+        Assert.StartsWith("That makes more than 5 clans. ", ClansModel.ConfirmText(Clan, []));
     }
 
     /// <summary>

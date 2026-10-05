@@ -7,12 +7,9 @@ namespace Labs626.UrScore.Recipes;
 public sealed record BuiltInRecipe(string Slug, string Name, string Text);
 
 /// <summary>
-/// The recipes Ur Score carries with it, so a first run needs no download and no file picker.
-/// <para>
-/// They are the same files the release publishes, embedded at build time, so the two can never drift. Importing one
-/// still goes through the review screen: the promise is that you see every host a recipe will contact before it is
-/// added, and that promise is about the recipe, not about where its text came from.
-/// </para>
+/// The recipes Ur Score carries with it: the only reader text there is (spec "Readers"). They are the same files the
+/// release publishes, embedded at build time, so the two can never drift; the game page shows the hosts each mode's readers
+/// contact (<see cref="Games.ModeLines"/>), worked out from this text.
 /// </summary>
 public static class BuiltInRecipes
 {
@@ -28,34 +25,6 @@ public static class BuiltInRecipes
 
     public static BuiltInRecipe? Find(string slug) =>
         All.FirstOrDefault(r => string.Equals(r.Slug, slug, StringComparison.Ordinal));
-
-    /// <summary>
-    /// Whether the copy Ur Score carries is a newer one this installed recipe could be updated to.
-    /// <para>
-    /// An installed recipe is a SNAPSHOT of the text that was imported, and there was no way to replace it with a
-    /// newer one. Setup › Recipes' built-in list hides a built-in the moment it is installed — right, because offering it
-    /// again would read as a second copy — and the only other route was to find the recipe's JSON somewhere and
-    /// import it by hand, which for a built-in means extracting an embedded resource out of the exe. So every
-    /// user stayed on whatever they first imported, forever. The update MACHINERY was never missing:
-    /// <c>ImportFlow.RunTextAsync</c> already compares, re-asks about changed hosts, and carries the user's
-    /// choices across. Only a way to reach it was.
-    /// </para>
-    /// <para>
-    /// The name and author have to match, and that is not belt-and-braces: a slug is derived from them
-    /// (<see cref="Recipe.Slug"/>), so two different recipes CAN share one — "Pet Sim 99 clan battle points" and
-    /// "Pet Sim 99 Clan Battle Points" slugify identically. <c>ImportFlow</c> refuses that case outright ("rename
-    /// one of them before importing"), so without this clause the button would appear on somebody else's recipe
-    /// and be guaranteed to fail. Asking the same question the flow asks is what keeps the two from drifting.
-    /// </para>
-    /// </summary>
-    public static bool CanUpdate(InstalledRecipe installed, BuiltInRecipe? shipped) =>
-        shipped is not null && CanUpdate(installed, shipped, RecipeParser.Parse(shipped.Text).Recipe);
-
-    private static bool CanUpdate(InstalledRecipe installed, BuiltInRecipe shipped, Recipe? recipe) =>
-        recipe is not null
-        && !string.Equals(installed.Text, shipped.Text, StringComparison.Ordinal)
-        && string.Equals(recipe.Name, installed.Recipe.Name, StringComparison.Ordinal)
-        && string.Equals(recipe.Author, installed.Recipe.Author, StringComparison.Ordinal);
 
     private static IReadOnlyList<BuiltInRecipe> Read()
     {

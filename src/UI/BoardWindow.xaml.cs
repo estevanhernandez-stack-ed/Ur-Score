@@ -64,6 +64,9 @@ public partial class BoardWindow : Window
     /// <summary>Why a board change couldn't be saved, only while its message box is open; the box is the notification.</summary>
     private string? _boardsNote;
 
+    /// <summary>Why the last Turn on couldn't be saved, said on the detail line until a press or a switch that works replaces it.</summary>
+    private string? _switchNote;
+
     /// <summary>
     /// Why the score book couldn't be read, in plain words, or null. It keeps the detail line, and the board's empty state
     /// offers Try again, until the book loads (S1-14.2).
@@ -150,9 +153,9 @@ public partial class BoardWindow : Window
     {
         if (!await ReadBookAsync() || _popOutLifecycle.ClosingApp) return;
 
-        // Spec §7.1: a mode that asks for a clan and has no source opens Setup on its game page.
-        var firstRun = SetupPages.FirstRunPage(_services.Installed, _services.Sources);
-        if (firstRun is not null) OpenSetup(firstRun);
+        // First run: an on mode that asks for a clan and has no source opens Setup on its game page, its clan search focused (A11).
+        var firstRun = SetupPages.FirstRun(_services.Catalog, _services.Switches, _services.Installed, _services.Sources);
+        if (firstRun is { } first) OpenSetup(SetupPages.GamePage(first.GameId), first.AskingSlug);
 
         // Sources already on at open are not "the first one came on" (§3.6); RenderBoard asks again only on none-to-some.
         _hadSources = _services.Sources.Any(s => s.Enabled);
@@ -390,7 +393,7 @@ public partial class BoardWindow : Window
         // Worked out on every redraw from what the window is doing, never written once, so no redraw wipes it (S1-14.3, S1-14.5).
         var activity = new BoardActivity(_starting, _testing, _services.AskedReadAt, _services.StoppedAt, _failed);
         StateLine.Text = BoardText.StateLine(live, _services.EverStarted, activity);
-        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem, _failed ? BoardText.UnexpectedDetail : null);
+        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem, _failed ? BoardText.UnexpectedDetail : _switchNote);
 
         // BC3: the pair shows only when it has something to say; the card always has the lot. While arranging the
         // banner holds their slot (spec §4.2).
@@ -924,14 +927,14 @@ public partial class BoardWindow : Window
 
         if (_empty == BoardEmpty.ModeOff && _emptyMode is { } off)
         {
-            _services.SetSwitch(off.Key, true);
+            TurnModeOn(off.Key);
             return;
         }
 
-        // Pick your clan: the game page of the mode that asks (A11 focuses its clan search once item 11 builds it).
+        // Pick your clan: the game page of the mode that asks, its clan search focused (A11).
         if (_empty == BoardEmpty.NoSources && _emptyRecipe is { } slug)
         {
-            OpenSetup(SetupPages.GamePage(_services.Catalog.ModeOf(slug)?.GameId, slug));
+            OpenSetup(SetupPages.GamePage(_services.Catalog.ModeOf(slug)?.GameId), slug);
             return;
         }
 
@@ -945,17 +948,17 @@ public partial class BoardWindow : Window
         if (_empty is BoardEmpty.NoModes or BoardEmpty.NoRecipes) OpenSetup(SetupPages.GamePage(_services.Catalog.Games.FirstOrDefault()?.Id));
     }
 
-    /// <param name="note">What the page opens saying, such as an import's result on the Clans page it goes on to (S1-12.4).</param>
-    private void OpenSetup(string? page, string? note = null)
+    /// <param name="focusSlug">On a game page, the asking reader whose clan search takes the keyboard (A11).</param>
+    private void OpenSetup(string? page, string? focusSlug = null)
     {
         if (_setup is not null)
         {
-            if (page is not null) _setup.ShowPage(page, note);
+            if (page is not null) _setup.ShowPage(page, focusSlug);
             _setup.Activate();
             return;
         }
 
-        _setup = new SetupWindow(_services, page, note) { Owner = this };
+        _setup = new SetupWindow(_services, page, focusSlug) { Owner = this };
         _setup.Closed += async (_, _) =>
         {
             _setup = null;
@@ -981,6 +984,28 @@ public partial class BoardWindow : Window
     private void ClearPressNotes()
     {
         _failed = false;
+        _switchNote = null;
+    }
+
+    /// <summary>
+    /// Turn on, from a panel of an off mode or the board's "Battle is off": the switch, saved and applied. One that can't be saved
+    /// (settings.json unreadable this session, or the write failing) says why on the detail line and changes nothing; it never
+    /// escapes the click. The services' change redraws the board when it worked.
+    /// </summary>
+    private void TurnModeOn(string key)
+    {
+        try
+        {
+            _services.SetSwitch(key, true);
+            _switchNote = null;
+        }
+        catch (Exception ex)
+        {
+            _switchNote = _services.Redactor.Redact(GameModel.SwitchProblem(ex));
+            _services.AddTrail($"SWITCH NOT SAVED: {ex.GetType().Name}");
+        }
+
+        RenderLines();
     }
 
     /// <summary>

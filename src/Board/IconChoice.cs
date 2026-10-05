@@ -41,7 +41,7 @@ public static class IconChoice
         return new WindowIcon(fileFor(source.Id), PanelText.IconName(LiveBoard.NameOf(source, recipe), recipe));
     }
 
-    /// <summary>Setup › Recipes: a recipe's row shows its own main's picture, chosen as the window's is, and no other source's.</summary>
+    /// <summary>A reader's own main's picture, chosen as the window's is, and no other source's (it drew the old Recipes page's row).</summary>
     public static string? ForRecipe(string recipeSlug, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, Func<string, string?> fileFor) =>
         RecipeSource(recipeSlug, sources, installed) is { } main ? fileFor(main.Id) : null;
 

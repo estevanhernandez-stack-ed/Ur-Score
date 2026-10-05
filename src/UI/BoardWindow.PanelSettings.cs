@@ -26,7 +26,7 @@ public partial class BoardWindow
         if (e.Tool != PanelTool.TurnOnMode || (e.OriginalSource as FrameworkElement)?.DataContext is not PanelHead { TurnOnMode: { } key }) return;
 
         e.Handled = true;
-        _services.SetSwitch(key, true);
+        TurnModeOn(key);
     }
 
     private void OnSettingsTool(object? sender, PanelToolEventArgs e)

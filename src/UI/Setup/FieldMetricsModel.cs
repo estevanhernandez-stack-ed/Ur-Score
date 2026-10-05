@@ -57,7 +57,7 @@ public static class FieldMetricsModel
     }
 
     internal const string NoClanSet =
-        "Set your clan's name on a clan source in Setup › Clans first. Without it a read cannot tell which row is yours, "
+        "Pick your clan on your game's page in Setup first. Without it a read cannot tell which row is yours, "
         + "so there is no standing to send.";
 
     /// <summary>
