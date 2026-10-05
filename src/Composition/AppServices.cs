@@ -761,9 +761,20 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         AskedReadAt = _time.GetUtcNow();
         await RefreshAccountsAsync(cancellationToken);
-        if (Runner.WatchFor(sourceId) is not { } watch) return null;
 
-        var snapshot = await watch.RunOnceAsync(cancellationToken, BookLine.TriggerManual);
+        // Under the source's own token too: its mode switched off (or the source removed) mid-read cancels the read before
+        // it writes a line or sends, and that is no failure of the caller's, so it is no snapshot rather than a throw.
+        RecipeSnapshot? snapshot;
+        try
+        {
+            snapshot = await Runner.ReadNowAsync(sourceId, BookLine.TriggerManual, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        if (snapshot is null) return null;
         Record(sourceId, snapshot, _time.GetUtcNow());
         return snapshot;
     }
@@ -1169,6 +1180,11 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     private void Record(string sourceId, RecipeSnapshot snapshot, DateTimeOffset at)
     {
+        // A snapshot queued for this thread before its mode went off (or its source went) arrives after the prune in
+        // ApplySources, and would put an off mode back among the live readings (review round 2). The book already has
+        // what the read kept while it was on.
+        if (!ActiveSources.Any(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal))) return;
+
         _latest[sourceId] = snapshot;
         _lastRead[sourceId] = at;
         AddTrail($"{sourceId} {snapshot.State}: {snapshot.Detail}");

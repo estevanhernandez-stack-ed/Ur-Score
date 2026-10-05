@@ -142,6 +142,121 @@ public class ModeOffTests
     }
 
     /// <summary>
+    /// Review round 2: the same edge through Setup's read-once, which ran under the caller's token alone. Switching the
+    /// mode off dropped the watch from the runner but not the read, which went on to write its line and send its stat. It
+    /// now runs under the source's own token too, so the switch cancels it before anything is kept. The control is the same
+    /// read with the mode on.
+    /// </summary>
+    [Fact]
+    public async Task AManualReadInFlightWhenItsModeGoesOffRecordsAndReportsNothing()
+    {
+        using var dir = TempDir.Create("urscore-mode-off-manual");
+        var paths = new AppPaths(dir.Path);
+        var (source, host, transport, services) = await BattleSourceReading(dir);
+        using var _ = services;
+
+        var held = transport.Hold("https://ps99.biggamesapi.io/api/clan/K0i2", ClanResponse);
+        var reading = services.ReadOnceAsync(source.Id, CancellationToken.None);
+        await held.Asked.WaitAsync(TimeSpan.FromSeconds(10));
+
+        services.SetSwitch(Battle, false);
+        held.Answer();
+        Assert.Null(await reading.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        services.Book.Flush();
+        Assert.Empty(BookFiles.ReadAll(paths.Book, ClanSlug));
+        Assert.Empty(host.Reported);
+        Assert.DoesNotContain(source.Id, services.Latest.Keys);
+
+        services.SetSwitch(Battle, true);
+        Assert.NotNull(await services.ReadOnceAsync(source.Id, CancellationToken.None));
+        services.Book.Flush();
+        Assert.Equal(source.Id, Assert.Single(BookFiles.ReadAll(paths.Book, ClanSlug)).Source);
+        Assert.Equal("clan.battle.points", Assert.Single(host.Reported).MetricId);
+        Assert.Contains(source.Id, services.Latest.Keys);
+    }
+
+    /// <summary>
+    /// Review round 2: a read that finished while its mode was on hands its snapshot to the window through the dispatcher.
+    /// If the switch goes off before the window gets to it, the queued snapshot used to put the source back among the
+    /// latest readings (and its last-read time), drawing an off mode as live. The window's thread here is held until after
+    /// the switch, so the snapshot is still queued when it flips. The control: on again, the same queued path records.
+    /// </summary>
+    [Fact]
+    public async Task ASnapshotQueuedBeforeItsModeWentOffIsNotShown()
+    {
+        using var dir = TempDir.Create("urscore-mode-off-queued");
+        var window = new HeldDispatcher();
+        var (source, _, _, services) = await BattleSourceReading(dir, window.Dispatcher);
+        using var __ = services;
+
+        await services.TestNowAsync();
+        services.SetSwitch(Battle, false);
+        window.Release();
+        window.Drain();
+
+        Assert.DoesNotContain(source.Id, services.Latest.Keys);
+        Assert.Null(services.LastReadAt(source.Id));
+
+        services.SetSwitch(Battle, true);
+        await services.TestNowAsync();
+        window.Drain();
+        Assert.Contains(source.Id, services.Latest.Keys);
+        window.Dispatcher.InvokeShutdown();
+    }
+
+    /// <summary>One Main clan whose stat is ticked to send, the book loaded, RoRoRo listing one account.</summary>
+    private static async Task<(Source Source, StubHost Host, Transport Transport, AppServices Services)> BattleSourceReading(
+        TempDir.Scope dir, Dispatcher? ui = null)
+    {
+        var paths = new AppPaths(dir.Path);
+        new RecipeStore(paths.Recipes).SaveState(BuiltInRecipes.BySlug[ClanSlug], new RecipeState(Stats: new Dictionary<string, StatChoice>
+        {
+            ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points"),
+        }));
+        var source = new Source("s-00000001", ClanSlug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main);
+        var host = new StubHost(reachable: true, Alt);
+        var transport = new Transport();
+        var services = new AppServices(ui ?? Dispatcher.CurrentDispatcher, paths, host, transport, new ManualTime(Start), Path.Combine(dir.Path, "metric-rules.json"));
+        services.SaveSources([.. services.Sources, source]);
+        await services.LoadBookAsync();
+        Assert.NotNull(services.Runner.WatchFor(source.Id));
+        return (source, host, transport, services);
+    }
+
+    /// <summary>
+    /// A window thread that is not running yet: everything the composition hands it waits in its queue until
+    /// <see cref="Release"/>, and <see cref="Drain"/> waits for the queue to empty.
+    /// </summary>
+    private sealed class HeldDispatcher
+    {
+        private readonly ManualResetEventSlim _go = new();
+
+        public HeldDispatcher()
+        {
+            using var ready = new ManualResetEventSlim();
+            Dispatcher? dispatcher = null;
+            var thread = new Thread(() =>
+            {
+                dispatcher = Dispatcher.CurrentDispatcher;
+                ready.Set();
+                _go.Wait();
+                Dispatcher.Run();
+            }) { IsBackground = true };
+            thread.Start();
+            ready.Wait();
+            Dispatcher = dispatcher!;
+        }
+
+        public Dispatcher Dispatcher { get; }
+
+        public void Release() => _go.Set();
+
+        /// <summary>Everything queued before this call, at any priority above idle, has run.</summary>
+        public void Drain() => Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>
     /// A1 through the composition: a fresh install, then the one thing first run asks for (your clan, as Main), and the
     /// Battle starter is a board, not "No stats turned on yet". Before the clan it asks for one.
     /// </summary>
