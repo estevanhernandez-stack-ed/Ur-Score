@@ -33,6 +33,12 @@ public sealed record SetupPack(
     public const string Folder = "setup";
 
     /// <summary>
+    /// The file's <c>modes.json</c> was there and could not be read (review round 2): the switches are left out, and the
+    /// plan says so as one skipped item instead of the whole import failing over them.
+    /// </summary>
+    public bool ModesUnreadable { get; init; }
+
+    /// <summary>
     /// Nothing the person made. A pristine PC now holds the shipped readers and their automatic sources, so "nothing"
     /// can no longer mean "no lists" (item 9). It means: no reader whose choices differ from its seed
     /// (<see cref="FromHere"/> only lists those), no clan (a source with an input), no board of their own, no key
@@ -104,7 +110,10 @@ public sealed record SetupPack(
     /// </summary>
     public static string Canonical(RecipeState state) => RecipeStore.SerializeState(state with
     {
-        Inputs = state.Inputs?.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal),
+        // No inputs and an empty inputs object say the same thing (review round 2); one writer leaves the key out, another writes {}.
+        Inputs = state.Inputs is { Count: > 0 } inputs
+            ? inputs.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal)
+            : null,
         Stats = state.Stats?.OrderBy(kv => kv.Key, StringComparer.Ordinal)
             .ToDictionary(kv => kv.Key, kv => kv.Value with { Send = false }, StringComparer.Ordinal),
         SentFieldMetrics = null,
@@ -152,12 +161,22 @@ public sealed record SetupPack(
 
         foreach (var slug in slugs)
         {
-            var stateFile = Path.Combine(recipesFolder, slug + ".state.json");
-            var state = File.Exists(stateFile) ? RecipeStore.ParseState(File.ReadAllText(stateFile)) : new RecipeState();
-            recipes.Add(new SetupRecipe(slug, slug, null, state, exclusions.GetValueOrDefault(slug) ?? []));
+            recipes.Add(new SetupRecipe(slug, slug, null, StateFrom(recipesFolder, slug), exclusions.GetValueOrDefault(slug) ?? []));
         }
 
-        var modesRead = ReadJson<Dictionary<string, bool>>(Path.Combine(folder, "modes.json"));
+        // A broken modes.json costs the switches, said as one skipped item, never the whole import (review round 2).
+        Dictionary<string, bool>? modesRead;
+        var modesUnreadable = false;
+        try
+        {
+            modesRead = ReadJson<Dictionary<string, bool>>(Path.Combine(folder, "modes.json"));
+        }
+        catch (JsonException)
+        {
+            modesRead = null;
+            modesUnreadable = true;
+        }
+
         IReadOnlyDictionary<string, bool>? modes = modesRead is { Count: > 0 } ? modesRead : null;
 
         return new SetupPack(
@@ -167,7 +186,28 @@ public sealed record SetupPack(
             ReadJson<SettingsDto>(Path.Combine(folder, "settings.json")) is { } settings
                 ? new Settings(ResolveNames: settings.ResolveNames, Modes: modes)
                 : new Settings(Modes: modes),
-            ReadJson<List<SetupKey>>(Path.Combine(folder, "keys.json")) ?? []);
+            ReadJson<List<SetupKey>>(Path.Combine(folder, "keys.json")) ?? [])
+        {
+            ModesUnreadable = modesUnreadable,
+        };
+    }
+
+    /// <summary>
+    /// A reader's state from the pack, read the way the app reads its own folder when the reader is built in (review round 2):
+    /// a 0.6.3 export's clan-battle state holds only a legacy <c>metricIdOverride</c>, which plain parsing drops, so the
+    /// pinned id would never arrive. Its legacy choices become the state's ticks here, as <c>RecipeStates.Effective</c>
+    /// makes them at home. A slug this version doesn't build in is parsed plainly; the plan skips it anyway.
+    /// </summary>
+    private static RecipeState StateFrom(string recipesFolder, string slug)
+    {
+        var stateFile = Path.Combine(recipesFolder, slug + ".state.json");
+        if (!File.Exists(stateFile)) return new RecipeState();
+        if (!BuiltInRecipes.BySlug.TryGetValue(slug, out var builtIn)) return RecipeStore.ParseState(File.ReadAllText(stateFile));
+
+        var state = new RecipeStore(recipesFolder).TryLoadState(builtIn) ?? RecipeStore.ParseState(File.ReadAllText(stateFile));
+        return state.Stats is null && state.ChoicesForUpdate.Count > 0
+            ? state with { Stats = new Dictionary<string, StatChoice>(state.ChoicesForUpdate, StringComparer.Ordinal) }
+            : state;
     }
 
     private static T? ReadJson<T>(string file) where T : class =>

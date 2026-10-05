@@ -106,6 +106,55 @@ public class SetupMergeTests
         Assert.Null(writer.Sources);
     }
 
+    /// <summary>
+    /// Review round 2: Recipes counts the readers whose ticks were written, and the after-line counts what it says, modes.
+    /// The two Battle readers (the clan battle and its clans list) both arrive: two readers, one mode. Before, Recipes held
+    /// the mode count, so a caller reading it as readers was told 1.
+    /// </summary>
+    [Fact]
+    public void TheApplyCountsReadersAndTheLineCountsModes()
+    {
+        var top = BuiltInRecipes.BySlug["pet-sim-99-top-clans"];
+        var here = Here([Seeded(Clan, ClanText), Seeded(top, BuiltInRecipes.Find(top.Slug)!.Text)]);
+        var ticked = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: false, MetricId: "clan.battle.points"), ["rank"] = new(Show: true, Send: false, MetricId: "clan.battle.rank") });
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Clan, ticked), FileRecipe(top, null, AltOne.RobloxUserId)]), here, 0, 0);
+        Assert.All(plan.Items.Where(i => i.Kind == SetupKind.Recipe), i => Assert.Equal(SetupOutcome.Update, i.Outcome));
+
+        using var dir = TempDir.Create("urscore-apply-count");
+        var writer = new FakeSetupWriter(Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName, here);
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+
+        Assert.Equal((2, 1), (applied.Recipes, applied.Modes));
+        Assert.StartsWith("Imported 1 mode.", Labs626.UrScore.UI.ImportPreviewModel.AfterLine(applied, new Labs626.UrScore.Book.BookImportOutcome(0, "")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Review round 2: a pack whose modes.json is broken still imports everything else. The switches are one skipped item
+    /// that says why, not counted among the "not part of any mode" skips, and nothing about the modes is written.
+    /// </summary>
+    [Fact]
+    public void ABrokenModesFileIsOneSkippedItemNotAFailedImport()
+    {
+        using var dir = TempDir.Create("urscore-setup-modes");
+        new SetupPack([], [], [], new Settings(Modes: new Dictionary<string, bool> { ["pet-sim-99/battle"] = false }), []).ToFolder(dir.Path);
+        File.WriteAllText(Path.Combine(dir.Path, SetupPack.Folder, "modes.json"), "{ broken");
+
+        var back = SetupPack.FromFolder(dir.Path)!;
+        var plan = SetupMerge.Plan(back, Here(), 0, 0);
+
+        Assert.True(back.ModesUnreadable);
+        Assert.Null(back.Settings.Modes);
+        var modes = Item(plan, SetupKind.Mode, "Mode switches");
+        Assert.Equal((SetupOutcome.Skipped, false, "the file's mode switches could not be read"), (modes.Outcome, modes.Ticked, modes.Note));
+
+        using var data = TempDir.Create("urscore-apply-modes");
+        var writer = new FakeSetupWriter(Directory.CreateDirectory(Path.Combine(data.Path, "626labs.ur-score")).FullName, Here());
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+        Assert.Null(applied.FailedStep);
+        Assert.Equal((0, false), (applied.SkippedItems, applied.ModesApplied));
+        Assert.Null(writer.Settings!.Modes);
+    }
+
     /// <summary>The file's mode switches are one item: same when each already holds here, an update that names what it sets when not.</summary>
     [Fact]
     public void ModeSwitchesAreOneItemSameOrUpdate()

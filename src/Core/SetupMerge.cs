@@ -65,14 +65,16 @@ public interface ISetupWriter
 }
 
 /// <summary>
-/// What Apply did, for the line the page says. <see cref="FailedStep"/> names the step that threw, or null.
+/// What Apply did, for the line the page says. <see cref="Recipes"/> counts the readers whose ticks were written and
+/// <see cref="Modes"/> the modes those readers belong to, which is what the line counts (review round 2).
+/// <see cref="FailedStep"/> names the step that threw, or null.
 /// <see cref="SkippedItems"/> counts the items left out because no mode reads their reader (A7), and
 /// <see cref="ModesApplied"/> says the file's mode switches were applied. <see cref="FailureType"/> is for
 /// the trail; <see cref="FailureMessage"/> is what the failure said, redacted, for the screen (spec §4).
 /// </summary>
 public sealed record SetupApplied(
     int Recipes, int Clans, int Boards, int KeptClans, int Keys, int DroppedExclusions, string? AsideFolder, string? FailedStep, string? FailureType,
-    int SkippedItems = 0, string? FailureMessage = null, bool ModesApplied = false);
+    int SkippedItems = 0, string? FailureMessage = null, bool ModesApplied = false, int Modes = 0);
 
 /// <summary>
 /// Importing a setup: the plan, pure (spec §2), and the apply (spec §4, Task 6). Identity: a reader by slug, a clan by
@@ -180,7 +182,11 @@ public static class SetupMerge
                 $"{ReaderNames.For(key.RecipeSlug, catalog, here.Installed)}. Keys never leave the PC that saved them.", Ticked: false));
         }
 
-        if (ModeChanges(file.Settings.Modes, here.Settings.Modes, catalog) is { } changes)
+        if (file.ModesUnreadable)
+        {
+            items.Add(new SetupItem(SetupKind.Mode, "modes", "Mode switches", SetupOutcome.Skipped, "the file's mode switches could not be read", Ticked: false));
+        }
+        else if (ModeChanges(file.Settings.Modes, here.Settings.Modes, catalog) is { } changes)
         {
             items.Add(changes.Count == 0
                 ? new SetupItem(SetupKind.Mode, "modes", "Mode switches", SetupOutcome.Same, "same as here", Ticked: false)
@@ -239,7 +245,8 @@ public static class SetupMerge
         var clans = 0;
         var boards = 0;
         var dropped = 0;
-        var skipped = plan.Items.Count(i => i.Outcome == SetupOutcome.Skipped);
+        // Only the skips the line explains ("not part of any mode"); an unreadable modes file is its own item with its own words.
+        var skipped = plan.Items.Count(i => i.Outcome == SetupOutcome.Skipped && i.Note == NotInAMode);
         var modesApplied = false;
         var modesTouched = new HashSet<string>(StringComparer.Ordinal);
         var catalog = here.Catalog ?? GameCatalog.BuiltIn;
@@ -261,7 +268,7 @@ public static class SetupMerge
                 // Counter names are what the last read saw on THIS PC, not a choice, so the file's absence keeps them.
                 writer.SaveState(recipe.Slug, state with { CounterNames = state.CounterNames ?? local.State.CounterNames });
                 if (catalog.ModeOf(recipe.Slug) is { } mode) modesTouched.Add(mode.Key);
-                recipes = modesTouched.Count;
+                recipes++;
             }
 
             step = "clans";
@@ -339,11 +346,11 @@ public static class SetupMerge
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, step, ex.GetType().Name,
-                skipped, Redact(ex.Message, writer.DataRoot), modesApplied);
+                skipped, Redact(ex.Message, writer.DataRoot), modesApplied, modesTouched.Count);
         }
 
         return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, null, null,
-            skipped, ModesApplied: modesApplied);
+            skipped, ModesApplied: modesApplied, Modes: modesTouched.Count);
     }
 
     /// <summary>

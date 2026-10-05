@@ -62,7 +62,8 @@ public class ImportPreviewModelTests
     [Fact]
     public void TheAfterLineSaysWhatWasImportedKeptAndWhereTheOldSetupIs()
     {
-        var applied = new SetupApplied(2, 3, 2, 1, 1, 0, @"C:\x\626labs.ur-score.before-import-20260922-1431", null, null);
+        // Two modes' readers (three readers): the line counts modes (review round 2).
+        var applied = new SetupApplied(3, 3, 2, 1, 1, 0, @"C:\x\626labs.ur-score.before-import-20260922-1431", null, null, Modes: 2);
         var stats = new BookImportOutcome(1204, "Imported 1,204 readings. 12 were already here.");
 
         // The "Then " sentence reuses stats.Message verbatim except its own first letter, which is lowered so it
@@ -80,7 +81,7 @@ public class ImportPreviewModelTests
             + "Your previous setup is in 626labs.ur-score.before-import-20260922-1431.",
             ImportPreviewModel.AfterLine(skipped, stats));
         Assert.Contains("3 items skipped: not part of any mode", ImportPreviewModel.AfterLine(applied with { SkippedItems = 3 }, stats), StringComparison.Ordinal);
-        Assert.Contains("Imported 1 mode,", ImportPreviewModel.AfterLine(applied with { Recipes = 1 }, stats), StringComparison.Ordinal);
+        Assert.Contains("Imported 1 mode,", ImportPreviewModel.AfterLine(applied with { Modes = 1 }, stats), StringComparison.Ordinal);
 
         // No message of its own: the type in brackets, as the line read before there was one.
         var failed = applied with { Boards = 0, FailedStep = "boards", FailureType = "UnauthorizedAccessException" };

@@ -178,6 +178,30 @@ public class SetupPackTests
         Assert.Null(back.Settings.Modes);   // no modes.json: nothing to apply
     }
 
+    /// <summary>
+    /// Review round 2: a 0.6.3 export carries the clan battle's state as 0.6.3 wrote it, with only a legacy
+    /// <c>metricIdOverride</c>. Read plainly that is no ticks at all, so the import would have offered nothing and the
+    /// pinned id was lost. Read the way the app reads its own folder (with the built-in reader), it is the value ticked to
+    /// show and send under the pinned id.
+    /// </summary>
+    [Fact]
+    public void AnOldExportsLegacyMetricIdIsReadAsItsTick()
+    {
+        using var dir = TempDir.Create("urscore-setup");
+        var recipes = Directory.CreateDirectory(Path.Combine(dir.Path, SetupPack.Folder, "recipes")).FullName;
+        File.WriteAllText(Path.Combine(recipes, Clan.Slug + ".state.json"), """{ "inputs": { "clan": "TestClan" }, "metricIdOverride": "clan.battle.points.mine" }""");
+
+        var state = Assert.Single(SetupPack.FromFolder(dir.Path)!.Recipes).State;
+
+        Assert.Equal(new StatChoice(Show: true, Send: true, MetricId: "clan.battle.points.mine"), Assert.Single(state.StatChoices).Value);
+        Assert.Equal("TestClan", state.InputValues["clan"]);
+    }
+
+    /// <summary>Review round 2: a state with no inputs and one with an empty inputs object are the same state.</summary>
+    [Fact]
+    public void NoInputsAndEmptyInputsAreCanonicallyTheSame() =>
+        Assert.Equal(SetupPack.Canonical(new RecipeState()), SetupPack.Canonical(new RecipeState(Inputs: new Dictionary<string, string>())));
+
     [Fact]
     public void AStateOnlyFolderReadsToo()
     {

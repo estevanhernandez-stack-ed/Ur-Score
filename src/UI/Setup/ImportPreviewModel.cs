@@ -90,7 +90,7 @@ public static class ImportPreviewModel
         var aside = applied.AsideFolder is { } folder ? $" Your previous setup is in {System.IO.Path.GetFileName(folder)}." : "";
         if (applied.FailedStep is { } step)
         {
-            var done = Parts(applied.Recipes, applied.Clans, applied.Boards);
+            var done = Parts(applied.Modes, applied.Clans, applied.Boards);
             // Spec §4: the redacted message on screen, the exception's type to the trail. Its own full stop comes
             // off, because a sentence carries on after it here.
             var why = applied.FailureMessage?.TrimEnd().TrimEnd('.') is { Length: > 0 } message
@@ -101,7 +101,7 @@ public static class ImportPreviewModel
                 : $"Imported {Join(done)}, then the {step} could not be written{why}; what was imported before that stands.{aside}";
         }
 
-        var changed = Parts(applied.Recipes, applied.Clans, applied.Boards);
+        var changed = Parts(applied.Modes, applied.Clans, applied.Boards);
         var parts = new List<string> { changed.Count == 0 ? "Nothing new in the setup" : "Imported " + Join(changed) };
         if (applied.KeptClans > 0) parts.Add(applied.KeptClans == 1 ? "1 clan kept as it was" : $"{applied.KeptClans} clans kept as they were");
         if (applied.ModesApplied) parts.Add("mode switches applied");
@@ -112,10 +112,10 @@ public static class ImportPreviewModel
         return line + aside;
     }
 
-    private static List<string> Parts(int recipes, int clans, int boards)
+    private static List<string> Parts(int modes, int clans, int boards)
     {
         var parts = new List<string>();
-        if (recipes > 0) parts.Add(recipes == 1 ? "1 mode" : $"{recipes} modes");
+        if (modes > 0) parts.Add(modes == 1 ? "1 mode" : $"{modes} modes");
         if (clans > 0) parts.Add(clans == 1 ? "1 clan" : $"{clans} clans");
         if (boards > 0) parts.Add(boards == 1 ? "1 board" : $"{boards} boards");
         return parts;
