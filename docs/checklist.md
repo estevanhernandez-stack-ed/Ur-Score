@@ -20,7 +20,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
 
 ## Checklist
 
-- [ ] **1. Tests can't touch the real app or data folder**
+- [x] **1. Tests can't touch the real app or data folder**
   Spec ref: `spec.md > Test infrastructure first (port of K0ii fe8d103)` + `Review round 1 amendments > A10`
   What to build: Record the baseline test count (run the suite on the untouched branch first, trx + exit code). Port
   K0ii's fence: read `C:\Users\estev\Projects\K0ii-Score\tests\TestProcess.cs` (FencedTestFramework is a class inside
