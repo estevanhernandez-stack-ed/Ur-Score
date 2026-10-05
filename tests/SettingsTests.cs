@@ -94,8 +94,9 @@ public class SettingsTests : IDisposable
     [Fact]
     public void AnEmptyObjectYieldsDefaults()
     {
+        // At version 2, not 3: an object with no version is a pre-0.6 file, so BC1 runs and the modes upgrade is still to come.
         Write("{}");
-        Assert.Equal(Settings.Defaults, Settings.Load(File()));
+        Assert.Equal(Settings.Defaults with { SettingsVersion = Settings.StartOnOpenVersion }, Settings.Load(File()));
     }
 
     /// <summary>BC1 (2026-09-23, superseding A31): reading starts on open by default, for a new install.</summary>
@@ -118,7 +119,7 @@ public class SettingsTests : IDisposable
 
         var loaded = Settings.Load(File());
 
-        Assert.Equal(new Settings(false, "pet-sim-99-profile", StartOnOpen: true, SettingsVersion: Settings.CurrentVersion), loaded);
+        Assert.Equal(new Settings(false, "pet-sim-99-profile", StartOnOpen: true, SettingsVersion: Settings.StartOnOpenVersion), loaded);
         Assert.Contains("\"settingsVersion\": 2", System.IO.File.ReadAllText(File()));
     }
 
@@ -145,6 +146,30 @@ public class SettingsTests : IDisposable
         Assert.Equal(saved, Settings.Load(File()));
     }
 
+    /// <summary>
+    /// Review round 2: what the file was decides the modes upgrade, so LoadResult says it and writes nothing. BC1 still
+    /// applies (to version 2, never 3: version 3 is the composition's to write once the modes are decided).
+    /// </summary>
+    [Fact]
+    public void LoadResultSaysMissingUnreadableOrLoadedAndWritesNothing()
+    {
+        var missing = Settings.LoadResult(File());
+        Assert.Equal((SettingsFile.Missing, Settings.Defaults), (missing.File, missing.Settings));
+        Assert.False(System.IO.File.Exists(File()));
+
+        Write("{ not json");
+        var broken = Settings.LoadResult(File());
+        Assert.Equal((SettingsFile.Unreadable, Settings.Defaults), (broken.File, broken.Settings));
+        Write("null");
+        Assert.Equal(SettingsFile.Unreadable, Settings.LoadResult(File()).File);
+
+        Write("""{ "resolveNames": false, "startOnOpen": false }""");
+        var old = Settings.LoadResult(File());
+        Assert.Equal(SettingsFile.Loaded, old.File);
+        Assert.Equal(new Settings(false, StartOnOpen: true, SettingsVersion: Settings.StartOnOpenVersion), old.Settings);
+        Assert.DoesNotContain("settingsVersion", System.IO.File.ReadAllText(File()));
+    }
+
     /// <summary>A migrated file that can't be written still reads on open: the next open tries the write again.</summary>
     [Fact]
     public void MigrateIsPureAndIdempotent()
@@ -152,7 +177,7 @@ public class SettingsTests : IDisposable
         var old = new Settings(false, "x", StartOnOpen: false, SettingsVersion: 0);
         var once = Settings.Migrate(old);
 
-        Assert.Equal(old with { StartOnOpen = true, SettingsVersion = Settings.CurrentVersion }, once);
+        Assert.Equal(old with { StartOnOpen = true, SettingsVersion = Settings.StartOnOpenVersion }, once);
         Assert.Same(once, Settings.Migrate(once));
     }
 }

@@ -18,12 +18,20 @@ namespace Labs626.UrScore.Core;
 /// <c>Modes</c> is the explicit mode switches, keyed "game/mode", plus a bare game id for a game switch (spec "Mode switches", A5). Null means the player was never
 /// asked: every mode falls back to its manifest default. A key a mode lacks also falls back, so a default stays implicit.
 /// </para>
+/// <para>
+/// <c>SettingsVersion</c> 3 marks the modes question answered (review round 2): the upgrade that turns modes on from what
+/// was installed (A5) runs only on a READABLE file below 3, so a missing or broken file can never be mistaken for an
+/// install that had nothing and switch every mode off.
+/// </para>
 /// </summary>
 public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null, bool StartOnOpen = false, int SettingsVersion = 0,
     IReadOnlyDictionary<string, bool>? Modes = null)
 {
     /// <summary>2: BC1's migration has run. A file below it is from before 0.6.</summary>
-    public const int CurrentVersion = 2;
+    public const int StartOnOpenVersion = 2;
+
+    /// <summary>3: the modes question is answered (an upgrade wrote its explicit map, or a fresh install its empty one).</summary>
+    public const int CurrentVersion = 3;
 
     public static Settings Defaults { get; } = new(StartOnOpen: true, SettingsVersion: CurrentVersion);
 
@@ -40,9 +48,46 @@ public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = n
         AllowTrailingCommas = true,
     };
 
-    /// <summary>BC1: an install from before 0.6 reads on open from now on; once migrated, what the player chooses stands.</summary>
+    /// <summary>
+    /// BC1: an install from before 0.6 reads on open from now on; once migrated, what the player chooses stands. It brings a
+    /// file to version 2 and no further: version 3 is the composition's to write, once it has decided the modes.
+    /// </summary>
     public static Settings Migrate(Settings settings) =>
-        settings.SettingsVersion >= CurrentVersion ? settings : settings with { StartOnOpen = true, SettingsVersion = CurrentVersion };
+        settings.SettingsVersion >= StartOnOpenVersion ? settings : settings with { StartOnOpen = true, SettingsVersion = StartOnOpenVersion };
+
+    /// <summary>
+    /// What is on disk, with BC1 applied and nothing written: <see cref="SettingsFile.Missing"/> (no file),
+    /// <see cref="SettingsFile.Unreadable"/> (there, but locked, denied, not JSON or not an object; <see cref="Defaults"/>
+    /// stand in) or <see cref="SettingsFile.Loaded"/>. "Missing" is answered by trying to open the file, as
+    /// <c>SourceStore.LoadResult</c> does, so a file that is there and denied is never mistaken for none.
+    /// </summary>
+    public static SettingsLoad LoadResult(string path)
+    {
+        string text;
+        try
+        {
+            text = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return new SettingsLoad(Defaults, SettingsFile.Missing);
+        }
+        catch (Exception)
+        {
+            return new SettingsLoad(Defaults, SettingsFile.Unreadable);
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Settings>(text, Options) is { } loaded
+                ? new SettingsLoad(Migrate(loaded), SettingsFile.Loaded)
+                : new SettingsLoad(Defaults, SettingsFile.Unreadable);
+        }
+        catch (Exception)
+        {
+            return new SettingsLoad(Defaults, SettingsFile.Unreadable);
+        }
+    }
 
     public static Settings Load(string? path = null)
     {
@@ -86,3 +131,14 @@ public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = n
         File.WriteAllText(file, JsonSerializer.Serialize(settings, Options));
     }
 }
+
+/// <summary>What <see cref="Settings.LoadResult"/> found on disk.</summary>
+public enum SettingsFile
+{
+    Missing,
+    Unreadable,
+    Loaded,
+}
+
+/// <summary>The settings to run with, and what the file was.</summary>
+public sealed record SettingsLoad(Settings Settings, SettingsFile File);

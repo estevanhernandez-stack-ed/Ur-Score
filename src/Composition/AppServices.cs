@@ -31,6 +31,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     public const string SourcesNotWritten =
         "Your sources file couldn't be read when Ur Score started, so it isn't written over. Fix or remove sources.json, then restart Ur Score.";
 
+    public const string SettingsNotWritten =
+        "Your settings file couldn't be read when Ur Score started, so it isn't written over. Fix or remove settings.json, then restart Ur Score.";
+
     /// <summary>
     /// The longest a caller waits for RoRoRo's accounts. Each host call is bounded at 5 s already; this also
     /// covers a watch's fetch holding the shared one. Past it, the saved list stands in.
@@ -110,6 +113,12 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary><c>sources.json</c> was there at start but could not be read: this session never writes over it.</summary>
     private bool _sourcesUnreadable;
 
+    /// <summary><c>settings.json</c> was there at start but could not be read: the defaults run in memory and this session never writes over it.</summary>
+    private bool _settingsUnreadable;
+
+    /// <summary>This start turned a pre-modes install's recipe files into a modes map (A5); <see cref="LoadAtStart"/> reads it.</summary>
+    private bool _upgradedModes;
+
     private static int _ownCompositions;
 
     /// <summary>How many times the app's own composition (the user's real data folder) was built in this process; never in a test.</summary>
@@ -157,7 +166,8 @@ public sealed class AppServices : ISetupServices, IDisposable
         var keys = Keys;
         Redactor = new Redactor(() => keys.Values());
         Store = new RecipeStore(paths.Recipes);
-        _settings = Settings.Load(paths.Settings);
+        var settingsLoad = Settings.LoadResult(paths.Settings);
+        _settings = settingsLoad.Settings;
         _settingsPath = paths.Settings;
 
         // A mode the manifest gets wrong is dropped with a trail line, never a crash at start (spec "GameCatalog").
@@ -165,7 +175,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         _manifestProblems = [.. manifestProblems.Select(p => $"game manifest: {p}")];
         foreach (var problem in _manifestProblems) AddTrail($"MODE DROPPED: {problem}");
         _switches = new ModeSwitches(Catalog, _settings.Modes);
-        DecideUpgradeModes(dataFolderExisted, installedOnDisk);
+        DecideUpgradeModes(settingsLoad.File, dataFolderExisted, installedOnDisk);
 
         // A walk's scratch rules file is never silent: Diagnostics' trail says which file alerts use.
         if (!string.Equals(RulesPath, RulesFile.DefaultPathUnder(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)), StringComparison.OrdinalIgnoreCase))
@@ -582,6 +592,9 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     public void SaveSettings(Settings settings)
     {
+        // Refused before anything changes, as sources.json is: the page says why, and the file stays what the player can fix.
+        if (_settingsUnreadable) throw new InvalidOperationException(SettingsNotWritten);
+
         Core.Settings.Save(settings, _settingsPath);
         var before = _switches;
         _settings = settings;
@@ -632,22 +645,42 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     /// <summary>
     /// The first start of 0.7.0 over a 0.6.3 folder writes an explicit modes map, each mode on iff one of its readers was
-    /// installed (A5), so the upgrade reads exactly what 0.6.3 read. A fresh install, or a folder that already has a map,
-    /// writes nothing. A map that can't be written still applies this session and is decided again next start.
+    /// installed (A5), so the upgrade reads exactly what 0.6.3 read, and marks the file version 3 so it is decided once.
+    /// <para>
+    /// Gated on the FILE, not on the folder (review round 2): only a settings.json that was read and is below version 3
+    /// is an upgrade. A missing one is a fresh start, or a file the player deleted, and both get the defaults (every mode
+    /// at its manifest default) written as version 3; the old rule read a deleted file in a used folder as "an install that
+    /// had nothing" and switched every mode off. An unreadable one runs on the defaults in memory and is never written
+    /// this session, as sources.json is not. A write that fails costs a trail line; the next start decides the same way
+    /// from the same file, never from an absence the failure left behind.
+    /// </para>
     /// </summary>
-    private void DecideUpgradeModes(bool dataFolderExisted, IReadOnlyList<string> installedOnDisk)
+    private void DecideUpgradeModes(SettingsFile file, bool dataFolderExisted, IReadOnlyList<string> installedOnDisk)
     {
+        switch (file)
+        {
+            case SettingsFile.Unreadable:
+                _settingsUnreadable = true;
+                AddTrail($"SETTINGS NOT READ: {SettingsNotWritten}");
+                return;
+            case SettingsFile.Missing:
+                // An empty map says "decided, all defaults" (ModeSwitches reads a missing key as the default).
+                TrySaveSettings(Core.Settings.Defaults with { Modes = new Dictionary<string, bool>() });
+                return;
+        }
+
+        if (_settings.SettingsVersion >= Core.Settings.CurrentVersion) return;
+
+        // A file below 3 that already holds a map (only a pre-release 0.7.0 build wrote one) keeps it; so does a file in a
+        // folder nothing else used, which is a fresh start's.
         if (UpgradeModes.FirstRun(Catalog, dataFolderExisted, installedOnDisk, _settings.Modes) is not { } modes)
         {
-            // A fresh install writes no switch, but it must record that the question was answered: this start writes
-            // sources.json, and on the next one a folder with a sources file, no recipe files and no map is exactly what
-            // an upgrade that had nothing installed looks like, which turns every mode off. An empty map is "decided, all
-            // defaults" (ModeSwitches reads a missing key as the default).
-            if (_settings.Modes is null && !dataFolderExisted) TrySaveSettings(_settings with { Modes = new Dictionary<string, bool>() });
+            TrySaveSettings(_settings with { Modes = _settings.Modes ?? new Dictionary<string, bool>(), SettingsVersion = Core.Settings.CurrentVersion });
             return;
         }
 
-        TrySaveSettings(_settings with { Modes = modes });
+        TrySaveSettings(_settings with { Modes = modes, SettingsVersion = Core.Settings.CurrentVersion });
+        _upgradedModes = true;
         var on = Catalog.Modes.Where(m => _switches.IsOn(m.Key)).Select(m => m.Name).ToList();
         AddTrail($"MODES: set from what was installed before modes. On: {(on.Count == 0 ? "none" : string.Join(", ", on))}.");
     }
@@ -660,6 +693,12 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         _settings = settings;
         _switches = new ModeSwitches(Catalog, settings.Modes);
+        if (_settingsUnreadable)
+        {
+            AddTrail($"SETTINGS NOT SAVED: {SettingsNotWritten}");
+            return;
+        }
+
         try
         {
             Core.Settings.Save(settings, _settingsPath);

@@ -105,9 +105,10 @@ public class AppCompositionTests
     /// startup the app does, done by a test.
     /// <para>
     /// Since games and modes the folder's recipe file is read only for its slug (the text is the built-in one, which this
-    /// fixture's happens to equal) and, there being a sources.json, as a 0.6.3 install: Battle on because its reader was
-    /// installed, Profile off because it wasn't (A5), and Battle's clans list gets the one source a mode's input-less
-    /// reader always gets.
+    /// fixture's happens to equal) and, there being a version 2 settings.json, as a 0.6.3 install: Battle on because its reader
+    /// was installed, Profile off because it wasn't (A5), and Battle's clans list gets the one source a mode's input-less
+    /// reader always gets. The settings file is what makes it an upgrade (review round 2): every 0.6.3 start wrote one, and
+    /// a folder without one takes the defaults.
     /// </para>
     /// </summary>
     [Fact]
@@ -123,6 +124,7 @@ public class AppCompositionTests
         }));
         var source = new Source("s-00000001", recipe.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Mine);
         new SourceStore(paths.Sources).Save([source]);
+        Settings.Save(new Settings(StartOnOpen: true, SettingsVersion: Settings.StartOnOpenVersion), paths.Settings);
         var host = new StubHost(reachable: true, Alt);
         var transport = new FakeTransport()
             .On("https://ps99.biggamesapi.io/api/activeClanBattle", 200, Battle)

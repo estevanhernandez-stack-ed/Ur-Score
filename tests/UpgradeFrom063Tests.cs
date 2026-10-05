@@ -122,7 +122,8 @@ public class UpgradeFrom063Tests
             [("pet-sim-99", true), ("pet-sim-99/battle", true), ("pet-sim-99/profile", true)],
             modes.Select(kv => (kv.Key, kv.Value!.GetValue<bool>())).OrderBy(x => x.Key, StringComparer.Ordinal));
         Assert.Equal(BattleSlug, settings["activeRecipe"]!.GetValue<string>());
-        Assert.Equal(2, settings["settingsVersion"]!.GetValue<int>());
+        // Version 3 is what makes it decided (review round 2): the map alone no longer is.
+        Assert.Equal(Settings.CurrentVersion, settings["settingsVersion"]!.GetValue<int>());
 
         // Decided once: the second start finds the map and writes nothing at all.
         var settled = Files(dir.Path);
@@ -295,6 +296,106 @@ public class UpgradeFrom063Tests
 
         // Past periods: both finals, one per hash.
         Assert.Equal(["OldBattle", "PrevBattle"], reader.Finals(BattleSlug, "clan=testclan").Select(f => f.Period).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>The fixture with Battle's readers alone on disk: the install whose upgrade turns Profile off.</summary>
+    private static TempDir.Scope BattleOnly()
+    {
+        var dir = OldInstallFixtureTests.Copy();
+        File.Delete(Path.Combine(new AppPaths(dir.Path).Recipes, ProfileSlug + ".recipe.json"));
+        return dir;
+    }
+
+    /// <summary>
+    /// Review round 2, HIGH: a settings.json that can't be read is not an install that had nothing. It used to load as the
+    /// defaults with no map, so the upgrade ran over the recipe files and wrote its map on top of the broken file (here:
+    /// Profile off, the player's file gone). Now the file stays byte for byte, every mode runs on its default, and a save
+    /// is refused with the reason, as sources.json's is.
+    /// </summary>
+    [Fact]
+    public async Task AnUnreadableSettingsFileIsLeftAloneAndEveryModeRunsOnItsDefault()
+    {
+        using var dir = BattleOnly();
+        var path = new AppPaths(dir.Path).Settings;
+        File.WriteAllText(path, "{ \"modes\": { broken");
+        var bytes = File.ReadAllBytes(path);
+
+        using var services = Compose(dir);
+        await services.LoadBookAsync();
+
+        Assert.True(services.Switches.IsOn("pet-sim-99/battle"));
+        Assert.True(services.Switches.IsOn("pet-sim-99/profile"));
+        Assert.NotNull(services.Runner.WatchFor("s-a0000005"));
+        Assert.Contains(services.Trail, line => line.Contains("SETTINGS NOT READ", StringComparison.Ordinal));
+        var refused = Assert.Throws<InvalidOperationException>(() => services.SetSwitch("pet-sim-99/profile", false));
+        Assert.Equal(AppServices.SettingsNotWritten, refused.Message);
+        Assert.True(services.Switches.IsOn("pet-sim-99/profile"));
+        Assert.Equal(bytes, File.ReadAllBytes(path));
+    }
+
+    /// <summary>
+    /// A deleted settings.json in a folder 0.6.3 used is not an upgrade either: there is nothing to say what was decided,
+    /// so the defaults stand (every mode on), written as version 3. The old rule saw a used folder with no map and ran
+    /// the upgrade over the recipe files, turning Profile off here.
+    /// </summary>
+    [Fact]
+    public async Task AMissingSettingsFileInAUsedFolderTakesTheDefaultsAsVersionThree()
+    {
+        using var dir = BattleOnly();
+        var path = new AppPaths(dir.Path).Settings;
+        File.Delete(path);
+
+        using (var services = Compose(dir))
+        {
+            await services.LoadBookAsync();
+            Assert.True(services.Switches.IsOn("pet-sim-99/battle"));
+            Assert.True(services.Switches.IsOn("pet-sim-99/profile"));
+        }
+
+        var written = Settings.Load(path);
+        Assert.Equal(Settings.CurrentVersion, written.SettingsVersion);
+        Assert.Empty(written.Modes!);
+    }
+
+    /// <summary>A version 3 file was decided, map or not: no map means the defaults, and the recipe files are never consulted again.</summary>
+    [Fact]
+    public async Task AVersionThreeFileWithNoMapIsNotUpgradedAgain()
+    {
+        using var dir = BattleOnly();
+        var path = new AppPaths(dir.Path).Settings;
+        File.WriteAllText(path, """{ "resolveNames": true, "startOnOpen": true, "settingsVersion": 3 }""");
+        var bytes = File.ReadAllBytes(path);
+
+        using var services = Compose(dir);
+        await services.LoadBookAsync();
+
+        Assert.True(services.Switches.IsOn("pet-sim-99/profile"));
+        Assert.DoesNotContain(services.Trail, line => line.Contains("MODES: set from what was installed", StringComparison.Ordinal));
+        Assert.Equal(bytes, File.ReadAllBytes(path));
+    }
+
+    /// <summary>
+    /// A fresh first start whose settings write failed (here a folder sits where the file goes) still wrote sources.json.
+    /// The second start then saw a used folder with no recipe files and no map, which the old rule read as "an install
+    /// that had nothing" and switched every mode off. Now a missing file is never an upgrade, so both modes read.
+    /// </summary>
+    [Fact]
+    public async Task AFirstStartWhoseSettingsWriteFailedStillReadsEveryModeOnTheNextStart()
+    {
+        using var dir = TempDir.Create("urscore-settings-failed");
+        var paths = new AppPaths(dir.Path);
+        Directory.CreateDirectory(paths.Settings);
+
+        using (var first = Compose(dir)) await first.LoadBookAsync();
+
+        Assert.True(File.Exists(paths.Sources));
+        Directory.Delete(paths.Settings);
+        using var second = Compose(dir);
+        await second.LoadBookAsync();
+
+        Assert.True(second.Switches.IsOn("pet-sim-99/battle"));
+        Assert.True(second.Switches.IsOn("pet-sim-99/profile"));
+        Assert.NotNull(second.Runner.WatchFor(Assert.Single(second.Sources, s => s.Recipe == ProfileSlug).Id));
     }
 
     /// <summary>Answers every fetch with a 404: these tests compose the app and never start a read.</summary>
