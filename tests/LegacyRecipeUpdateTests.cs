@@ -36,7 +36,7 @@ public class LegacyRecipeUpdateTests : IDisposable
         var installed = Load(text);
         var incoming = installed.Recipe with { EverySeconds = 300 };
 
-        var comparison = ImportReview.CompareToInstalled(installed.Recipe, incoming, new NoKeys(), installed.State);
+        var comparison = ReaderDisclosure.CompareToInstalled(installed.Recipe, incoming, new NoKeys(), installed.State);
 
         Assert.True(comparison.AsksAgain);
         Assert.Contains(comparison.Changes, change => change.StartsWith("Review which stats to show and send.", StringComparison.Ordinal));
@@ -55,7 +55,7 @@ public class LegacyRecipeUpdateTests : IDisposable
 
         Assert.Null(installed.State.LegacyStatChoices);
         Assert.All(installed.State.ChoicesForUpdate.Values, choice => Assert.False(choice.Show || choice.Send));
-        Assert.False(ImportReview.CompareToInstalled(installed.Recipe,
+        Assert.False(ReaderDisclosure.CompareToInstalled(installed.Recipe,
             installed.Recipe with { EverySeconds = 300 }, new NoKeys(), installed.State).AsksAgain);
     }
 
@@ -82,7 +82,7 @@ public class LegacyRecipeUpdateTests : IDisposable
             }],
         };
 
-        var comparison = ImportReview.CompareToInstalled(installed.Recipe, incoming, new NoKeys(), installed.State);
+        var comparison = ReaderDisclosure.CompareToInstalled(installed.Recipe, incoming, new NoKeys(), installed.State);
         var rows = StatsTableModel.Build(incoming, installed.State.ChoicesForUpdate, []);
 
         Assert.True(comparison.AsksAgain);
@@ -105,8 +105,8 @@ public class LegacyRecipeUpdateTests : IDisposable
         OnSta(() =>
         {
             var keys = new NoKeys();
-            var comparison = ImportReview.CompareToInstalled(installed.Recipe, incoming, keys, installed.State);
-            var window = new ImportWindow(incoming, ImportReview.Review(incoming, keys), comparison,
+            var comparison = ReaderDisclosure.CompareToInstalled(installed.Recipe, incoming, keys, installed.State);
+            var window = new ImportWindow(incoming, ReaderDisclosure.Review(incoming, keys), comparison,
                 installed.State, [installed], () => [], _ => "", null);
             try
             {
@@ -130,8 +130,8 @@ public class LegacyRecipeUpdateTests : IDisposable
                 window.Close();
             }
 
-            var firstImport = new ImportWindow(installed.Recipe, ImportReview.Review(installed.Recipe, keys),
-                ImportReview.CompareToInstalled(null, installed.Recipe, keys), installed.State,
+            var firstImport = new ImportWindow(installed.Recipe, ReaderDisclosure.Review(installed.Recipe, keys),
+                ReaderDisclosure.CompareToInstalled(null, installed.Recipe, keys), installed.State,
                 [], () => [], _ => "", null);
             try
             {

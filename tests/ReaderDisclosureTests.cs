@@ -2,7 +2,7 @@ using Labs626.UrScore.Recipes;
 
 namespace UrScore.Tests;
 
-public class ImportReviewTests
+public class ReaderDisclosureTests
 {
     private sealed class FakeKeys(params SavedKey[] saved) : IKeyStore
     {
@@ -37,7 +37,7 @@ public class ImportReviewTests
     public void PetSimSendsOnlyTheClanYouEnterToItsSource()
     {
         // A list recipe never sends your user ids anywhere: it finds your rows in what comes back.
-        var review = ImportReview.Review(Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
+        var review = ReaderDisclosure.Review(Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
 
         var host = review.Hosts.Single(h => h.Host == "ps99.biggamesapi.io");
         Assert.Equal(new[] { "the value you enter for Your clan" }, host.Sends);
@@ -47,21 +47,31 @@ public class ImportReviewTests
     [Fact]
     public void AnIconNamesRobloxsTwoPictureHostsAndWhatEach()
     {
-        var review = ImportReview.Review(Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
+        var review = ReaderDisclosure.Review(Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
 
         Assert.Equal(new[] { "ps99.biggamesapi.io", "thumbnails.roblox.com", "tr.rbxcdn.com" }, review.Hosts.Select(h => h.Host).ToArray());
-        Assert.Equal("Receives the picture's id, to find the icon.", ImportReview.SendsText(review.Hosts[1]));
-        Assert.Equal("Sends the picture.", ImportReview.SendsText(review.Hosts[2]));
+        Assert.Equal("Receives the picture's id, to find the icon.", ReaderDisclosure.SendsText(review.Hosts[1]));
+        Assert.Equal("Sends the picture.", ReaderDisclosure.SendsText(review.Hosts[2]));
+    }
+
+    [Fact]
+    public void TheShippedClanRecipeListsItsHostsInFirstAppearanceOrder()
+    {
+        var shipped = BuiltInRecipes.All.Single(b => b.Slug.Contains("clan-battle", StringComparison.Ordinal));
+        var clan = RecipeParser.Parse(shipped.Text).Recipe!;
+
+        Assert.Equal(new[] { "ps99.biggamesapi.io", "thumbnails.roblox.com", "tr.rbxcdn.com" },
+            ReaderDisclosure.Review(clan, new FakeKeys()).Hosts.Select(h => h.Host).ToArray());
     }
 
     [Fact]
     public void APerAccountRecipeSaysItSendsTheUserIdOfEveryAccount()
     {
-        var review = ImportReview.Review(Load("roblox-followers.recipe.json"), new FakeKeys());
+        var review = ReaderDisclosure.Review(Load("roblox-followers.recipe.json"), new FakeKeys());
 
         var host = Assert.Single(review.Hosts);
         Assert.Equal("friends.roblox.com", host.Host);
-        Assert.Equal("Receives the Roblox user id of every account in your RoRoRo list.", ImportReview.SendsText(host));
+        Assert.Equal("Receives the Roblox user id of every account in your RoRoRo list.", ReaderDisclosure.SendsText(host));
     }
 
     [Fact]
@@ -75,16 +85,16 @@ public class ImportReviewTests
             }
             """);
 
-        var review = ImportReview.Review(recipe, new FakeKeys());
+        var review = ReaderDisclosure.Review(recipe, new FakeKeys());
 
-        Assert.Equal(new[] { ImportReview.SendsNothing }, review.Hosts.Single(h => h.Host == "lists.example").Sends);
+        Assert.Equal(new[] { ReaderDisclosure.SendsNothing }, review.Hosts.Single(h => h.Host == "lists.example").Sends);
         Assert.Equal(new[] { "the value you enter for Your clan" }, review.Hosts.Single(h => h.Host == "api.example").Sends);
     }
 
     [Fact]
     public void AKeyedRecipeNamesTheKeyItSends()
     {
-        var review = ImportReview.Review(Parse(Keyed), new FakeKeys());
+        var review = ReaderDisclosure.Review(Parse(Keyed), new FakeKeys());
         Assert.Equal(new[] { "your Tracker key" }, Assert.Single(review.Hosts).Sends);
         Assert.Empty(review.ReusedKeys);
     }
@@ -92,7 +102,7 @@ public class ImportReviewTests
     [Fact]
     public void ASavedKeyForTheSameHostIsReusedAndSaidSo()
     {
-        var review = ImportReview.Review(Parse(Keyed), new FakeKeys(new SavedKey("tracker", "api.tracker.example", "abc123secret")));
+        var review = ReaderDisclosure.Review(Parse(Keyed), new FakeKeys(new SavedKey("tracker", "api.tracker.example", "abc123secret")));
 
         Assert.True(review.CanImport);
         Assert.Equal(new[] { "Uses your saved Tracker key for api.tracker.example." }, review.ReusedKeys);
@@ -102,7 +112,7 @@ public class ImportReviewTests
     public void ASavedKeyBoundElsewhereRefusesTheImportNamingBothHosts()
     {
         // The doctored-copy case: same key id, pointed at a different host.
-        var review = ImportReview.Review(Parse(Keyed), new FakeKeys(new SavedKey("tracker", "tracker.real.example", "abc123secret")));
+        var review = ReaderDisclosure.Review(Parse(Keyed), new FakeKeys(new SavedKey("tracker", "tracker.real.example", "abc123secret")));
 
         Assert.False(review.CanImport);
         Assert.Equal(
@@ -114,7 +124,7 @@ public class ImportReviewTests
     [Fact]
     public void AFirstImportIsNotAnUpdateAndAsks()
     {
-        var comparison = ImportReview.CompareToInstalled(null, Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(null, Load("petsim99-clan-battle.recipe.json"), new FakeKeys());
         Assert.False(comparison.IsUpdate);
         Assert.True(comparison.AsksAgain);
     }
@@ -125,7 +135,7 @@ public class ImportReviewTests
         var installed = Load("petsim99-clan-battle.recipe.json");
         var incoming = installed with { EverySeconds = 300 };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.True(comparison.IsUpdate);
         Assert.False(comparison.AsksAgain);
@@ -138,7 +148,7 @@ public class ImportReviewTests
         var installed = Load("petsim99-clan-battle.recipe.json");
         var incoming = WithValues(installed, installed.LastStep.Values[0] with { MetricId = "clan.points" });
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.True(comparison.IsUpdate);
         Assert.False(comparison.AsksAgain);
@@ -154,7 +164,7 @@ public class ImportReviewTests
             Steps = [installed.Steps[0], installed.Steps[1] with { Url = "https://mirror.example/api/clan/{clan}" }],
         };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.True(comparison.AsksAgain);
         Assert.Contains("New: mirror.example receives the value you enter for Your clan", comparison.Changes);
@@ -168,7 +178,7 @@ public class ImportReviewTests
     {
         var installed = WithValues(Profile, Profile.LastStep.Values[0]);
 
-        var comparison = ImportReview.CompareToInstalled(installed, Profile, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, Profile, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "New stat: Eggs hatched.", "New stat: Player rank." }, comparison.Changes);
@@ -180,7 +190,7 @@ public class ImportReviewTests
         var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["rank"] = new(Show: true, MetricId: "ps99.rank") });
         var incoming = WithValues(Profile, Profile.LastStep.Values[0], Profile.LastStep.Values[1]);
 
-        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
+        var comparison = ReaderDisclosure.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Removed stat: Player rank." }, comparison.Changes);
@@ -193,7 +203,7 @@ public class ImportReviewTests
         var values = Profile.LastStep.Values;
         var incoming = WithValues(Profile, values[0], values[1], values[2] with { Path = "data.views.profile.data.PlayerRank" });
 
-        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
+        var comparison = ReaderDisclosure.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Player rank is read from a different place." }, comparison.Changes);
@@ -206,7 +216,7 @@ public class ImportReviewTests
         var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["rank"] = new(Send: true, MetricId: "ps99.rank") });
         var incoming = WithValues(Profile, Profile.LastStep.Values[0], Profile.LastStep.Values[1]);
 
-        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
+        var comparison = ReaderDisclosure.CompareToInstalled(Profile, incoming, new FakeKeys(), state);
 
         Assert.True(comparison.AsksAgain);
         Assert.Equal(new[] { "Player rank will no longer be read, so RoRoRo stops getting ps99.rank." }, comparison.Changes);
@@ -229,7 +239,7 @@ public class ImportReviewTests
             var saved = store.Find(v2.Slug)!.State;
             var v3 = Profile;
 
-            var comparison = ImportReview.CompareToInstalled(v2, v3, new FakeKeys(), saved);
+            var comparison = ReaderDisclosure.CompareToInstalled(v2, v3, new FakeKeys(), saved);
 
             Assert.False(comparison.AsksAgain);
             Assert.Equal(new[] { "New stat: Player rank." }, comparison.Changes);
@@ -247,7 +257,7 @@ public class ImportReviewTests
         var incoming = Load("petsim99-clan-battle.recipe.json");
         var installed = incoming with { Icon = null };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.True(comparison.AsksAgain);
         Assert.Equal(new[] { "Adds an icon, which asks Roblox for the picture." }, comparison.Changes);
@@ -259,7 +269,7 @@ public class ImportReviewTests
         var values = Profile.LastStep.Values;
         var incoming = WithValues(Profile, values[0], values[1] with { Count = true }, values[2] with { Format = StatFormat.Duration });
 
-        var comparison = ImportReview.CompareToInstalled(Profile, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(Profile, incoming, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Eggs hatched now counts entries.", "Player rank is shown as a duration instead of a number." }, comparison.Changes);
@@ -275,7 +285,7 @@ public class ImportReviewTests
             Steps = [installed.Steps[0], installed.LastStep with { AbsentMessage = "Not in this one." }],
         };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Changes what an empty answer means." }, comparison.Changes);
@@ -287,7 +297,7 @@ public class ImportReviewTests
         var incoming = Load("petsim99-clan-battle.recipe.json");
         var installed = incoming with { Period = null };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Now tracks the current battle.", "Now reads past battles." }, comparison.Changes);
@@ -299,7 +309,7 @@ public class ImportReviewTests
         var recipe = Load("petsim99-clan-battle.recipe.json");
         var incoming = recipe with { Period = recipe.Period! with { Past = null } };
 
-        var comparison = ImportReview.CompareToInstalled(incoming with { Period = null }, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(incoming with { Period = null }, incoming, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Now tracks the current battle." }, comparison.Changes);
@@ -313,7 +323,7 @@ public class ImportReviewTests
         var withHistory = Load("petsim99-clan-battle.recipe.json");
         var withoutHistory = withHistory with { Period = withHistory.Period! with { Past = null } };
 
-        var comparison = ImportReview.CompareToInstalled(adding ? withoutHistory : withHistory,
+        var comparison = ReaderDisclosure.CompareToInstalled(adding ? withoutHistory : withHistory,
             adding ? withHistory : withoutHistory, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
@@ -325,7 +335,7 @@ public class ImportReviewTests
     {
         var installed = Load("petsim99-clan-battle.recipe.json");
 
-        var comparison = ImportReview.CompareToInstalled(installed, installed with { Period = null }, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, installed with { Period = null }, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "No longer tracks the current battle.", "No longer reads past battles. Your score book is kept." }, comparison.Changes);
@@ -337,7 +347,7 @@ public class ImportReviewTests
         var installed = Load("petsim99-clan-battle.recipe.json");
         var incoming = installed with { Period = installed.Period! with { Past = "data.Archive" } };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { "Past battles are read from a different place." }, comparison.Changes);
@@ -361,7 +371,7 @@ public class ImportReviewTests
             },
         };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Equal(new[] { field == "value" ? "Changes how the current season is read." : "Changes how the current battle is read." }, comparison.Changes);
@@ -373,7 +383,7 @@ public class ImportReviewTests
         var recipe = Load("petsim99-clan-battle.recipe.json");
         var incoming = recipe with { Period = recipe.Period! with { Value = "season" } };
 
-        var comparison = ImportReview.CompareToInstalled(incoming with { Period = null }, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(incoming with { Period = null }, incoming, new FakeKeys());
 
         Assert.Equal(new[] { "Now tracks the current season.", "Now reads past seasons." }, comparison.Changes);
     }
@@ -384,7 +394,7 @@ public class ImportReviewTests
         var installed = Load("petsim99-clan-battle.recipe.json");
         var incoming = installed with { Period = installed.Period! with { } };
 
-        var comparison = ImportReview.CompareToInstalled(installed, incoming, new FakeKeys());
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
 
         Assert.False(comparison.AsksAgain);
         Assert.Empty(comparison.Changes);

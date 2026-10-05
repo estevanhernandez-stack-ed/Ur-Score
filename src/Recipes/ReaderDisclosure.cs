@@ -6,7 +6,7 @@ namespace Labs626.UrScore.Recipes;
 /// <summary>One host a recipe contacts, and exactly what goes to it (spec §6.2).</summary>
 public sealed record HostContact(string Host, IReadOnlyList<string> Sends);
 
-public sealed record ImportReviewResult(
+public sealed record ReaderDisclosureResult(
     IReadOnlyList<HostContact> Hosts, IReadOnlyList<string> Refusals, IReadOnlyList<string> ReusedKeys)
 {
     public bool CanImport => Refusals.Count == 0;
@@ -23,7 +23,7 @@ public sealed record UpdateComparison(bool IsUpdate, bool AsksAgain, IReadOnlyLi
 /// What a recipe would do on this PC, worked out before anything runs. Pure: no network, no disk
 /// beyond the key lookup, so the safety screen is testable.
 /// </summary>
-public static class ImportReview
+public static class ReaderDisclosure
 {
     /// <summary>
     /// Every account, not only those with Send on: Send controls what reaches RoRoRo, and a
@@ -39,7 +39,7 @@ public static class ImportReview
     /// <summary>What Roblox's picture host does when a recipe has an icon. Rendered as "Sends the picture."</summary>
     public const string SendsThePicture = "sends the picture";
 
-    public static ImportReviewResult Review(Recipe recipe, IKeyStore keys)
+    public static ReaderDisclosureResult Review(Recipe recipe, IKeyStore keys)
     {
         var sends = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         void Add(string host, string what)
@@ -108,7 +108,17 @@ public static class ImportReview
             list.Remove(SendsNothing);
         }
 
-        return new ImportReviewResult([.. sends.Select(kv => new HostContact(kv.Key, kv.Value))], refusals, reused);
+        // First appearance across steps, then search lists, then the icon hosts (A4), by contract
+        // rather than by the dictionary's enumeration order.
+        var order = RecipeHosts.OrderedContactedBy(recipe).ToList();
+        if (recipe.Icon is not null) order.AddRange([IconClient.ThumbnailsHost, IconClient.PictureHostShown]);
+        var ranked = sends.OrderBy(kv =>
+        {
+            var at = order.FindIndex(h => string.Equals(h, kv.Key, StringComparison.OrdinalIgnoreCase));
+            return at < 0 ? int.MaxValue : at;
+        });
+
+        return new ReaderDisclosureResult([.. ranked.Select(kv => new HostContact(kv.Key, kv.Value))], refusals, reused);
     }
 
     /// <summary>The sentence the import screen shows under a host.</summary>
@@ -264,7 +274,7 @@ public static class ImportReview
         || newStats.Any(kv => oldStats.TryGetValue(kv.Key, out var was) && was.Sum != kv.Value.Sum);
 
     /// <summary>What each host receives, as text. The icon's hosts are left to their own change line.</summary>
-    private static HashSet<string> Flatten(ImportReviewResult review) =>
+    private static HashSet<string> Flatten(ReaderDisclosureResult review) =>
         [.. review.Hosts.SelectMany(h => h.Sends
             .Where(s => s != ReceivesPictureId && s != SendsThePicture)
             .Select(s => $"{h.Host} receives {s}"))];

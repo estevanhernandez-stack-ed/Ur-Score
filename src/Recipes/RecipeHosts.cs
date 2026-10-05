@@ -9,9 +9,16 @@ internal static class RecipeHosts
 
     /// <summary>Every host a recipe contacts on its own: each step's, and each search list's.</summary>
     public static IReadOnlySet<string> ContactedBy(Recipe recipe) =>
-        recipe.Steps.Select(step => HostOf(step.Url))
+        OrderedContactedBy(recipe).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// <see cref="ContactedBy"/> in a fixed order, for anything shown to the reader (A4): each step's
+    /// host in step order, then each search list's, first appearance only.
+    /// </summary>
+    public static IReadOnlyList<string> OrderedContactedBy(Recipe recipe) =>
+        [.. recipe.Steps.Select(step => HostOf(step.Url))
             .Concat(recipe.Inputs.Where(input => input.Search is not null).Select(input => HostOf(input.Search!.Url)))
-            .ToHashSet(StringComparer.Ordinal);
+            .Distinct(StringComparer.Ordinal)];
 
     /// <summary>The authority split into host and whether it carried user info.</summary>
     public static (string Host, bool HasUserInfo) Authority(string url)

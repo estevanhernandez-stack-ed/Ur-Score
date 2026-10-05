@@ -181,7 +181,7 @@ public static class TryCommand
 
     private static TryReport Report(Recipe recipe, IKeyStore keys, RecipeReading reading, IReadOnlySet<string> tracked, IReadOnlyList<long> accounts)
     {
-        var contacts = ImportReview.Review(recipe, keys).Hosts.Select(h => $"{h.Host}: {ImportReview.SendsText(h)}").ToList();
+        var contacts = ReaderDisclosure.Review(recipe, keys).Hosts.Select(h => $"{h.Host}: {ReaderDisclosure.SendsText(h)}").ToList();
 
         var stats = tracked.Order(StringComparer.Ordinal).Select(key =>
         {

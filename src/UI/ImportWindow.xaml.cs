@@ -17,11 +17,11 @@ public partial class ImportWindow : Window
     public sealed record HostItem(string Host, string SendsText);
 
     private readonly Recipe _recipe;
-    private readonly ImportReviewResult _review;
+    private readonly ReaderDisclosureResult _review;
     private readonly RecipeState _existing;
 
     public ImportWindow(
-        Recipe recipe, ImportReviewResult review, UpdateComparison comparison, RecipeState? existing,
+        Recipe recipe, ReaderDisclosureResult review, UpdateComparison comparison, RecipeState? existing,
         IReadOnlyList<InstalledRecipe> installed, Func<IReadOnlyCollection<Guid>> accountIds,
         Func<string, string> ruleSentence, Func<Task<CounterLookup>>? readCounterNames)
     {
@@ -39,7 +39,7 @@ public partial class ImportWindow : Window
             : $"Says it is from {recipe.Author}. This is not verified.";
 
         HostsList.ItemsSource = review.Hosts
-            .Select(h => new HostItem(h.Host, ImportReview.SendsText(h)))
+            .Select(h => new HostItem(h.Host, ReaderDisclosure.SendsText(h)))
             .ToList();
 
         PollLine.Text = $"Asks every {recipe.EffectiveEverySeconds} seconds.";

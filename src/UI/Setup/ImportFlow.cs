@@ -82,8 +82,8 @@ public static class ImportFlow
             return Outcome(services, recipe, $"{recipe.Name} is already installed.");
         }
 
-        var review = ImportReview.Review(recipe, services.Keys);
-        var comparison = ImportReview.CompareToInstalled(installed?.Recipe, recipe, services.Keys, installed?.State);
+        var review = ReaderDisclosure.Review(recipe, services.Keys);
+        var comparison = ReaderDisclosure.CompareToInstalled(installed?.Recipe, recipe, services.Keys, installed?.State);
 
         try
         {
