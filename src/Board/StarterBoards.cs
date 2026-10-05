@@ -46,11 +46,13 @@ public static class StarterBoards
 
     /// <summary>
     /// The empty state shown when no starter has a panel (D4): import a recipe first, then choose the source a starter
-    /// needs, else the first starter's own.
+    /// needs, else the first starter that is not off, whose problem is the real one (an off mode says only "off"). When every starter is off,
+    /// the first one answers and <c>BoardText.EmptyFor</c> reports <see cref="BoardEmpty.NoModes"/> instead.
     /// </summary>
     public static StarterBoard EmptyState(IReadOnlyList<StarterBoard> starters) =>
         starters.FirstOrDefault(s => s.Empty == BoardEmpty.NoRecipes)
         ?? starters.FirstOrDefault(s => s.Empty == BoardEmpty.NoSources)
+        ?? starters.FirstOrDefault(s => s.Empty != BoardEmpty.ModeOff)
         ?? starters[0];
 
     /// <summary>

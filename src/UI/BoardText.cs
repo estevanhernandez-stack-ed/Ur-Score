@@ -338,12 +338,13 @@ public static class BoardText
 
     /// <summary>
     /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
-    /// (D4); a board with no panels, including a following tab being edited; else none.
+    /// (D4), which is NoModes when every mode is off; a board with no panels, including a following tab being edited; else none.
+    /// NoModes never covers an edited board (Follows null) or a board being edited: it stays visible and arrangeable (A2).
     /// </summary>
     /// <param name="bookUnread">The score book couldn't be read, so nothing can run: that covers every board (S1-14.2).</param>
     public static BoardEmpty EmptyFor(IReadOnlyList<StarterBoard> starters, BoardDef board, bool editing = false, bool bookUnread = false) =>
         bookUnread ? BoardEmpty.BookUnread
-        : starters.Count > 0 && starters.All(s => s.Empty == BoardEmpty.ModeOff) ? BoardEmpty.NoModes
+        : !editing && board.Follows is not null && starters.Count > 0 && starters.All(s => s.Empty == BoardEmpty.ModeOff) ? BoardEmpty.NoModes
         : starters.Any(s => s.Empty == BoardEmpty.NoRecipes) ? BoardEmpty.NoRecipes
         : !editing && StarterBoards.Named(starters, board.Follows) is { Empty: not BoardEmpty.None } starter ? starter.Empty
         : board.Panels.Count == 0 ? BoardEmpty.NoPanels

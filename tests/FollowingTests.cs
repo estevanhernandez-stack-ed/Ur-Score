@@ -231,6 +231,19 @@ public class FollowingTests
     }
 
     [Fact]
+    public void NoModesNeverReplacesAnEditedBoardWithPanelsOrAFollowingBoardBeingEdited()
+    {
+        var starters = StarterBoards.All([Installed(Clan, "value")], [MainClan], _ => "Any");
+        var edited = new BoardDef("b-00000001", "Rivals",
+            [new PanelDef("p-00000001", PanelType.Standing, new PanelSize(3), new PanelSettings(Clan.Slug, SourceId: MainClan.Id))]);
+
+        Assert.Equal(BoardEmpty.None, BoardText.EmptyFor(starters, edited));
+        Assert.Equal(BoardEmpty.None, BoardText.EmptyFor(starters, edited, editing: true));
+        Assert.Equal(BoardEmpty.NoPanels, BoardText.EmptyFor(starters, BoardDefs.Following(starters[0]), editing: true));
+        Assert.Equal(BoardEmpty.NoModes, BoardText.EmptyFor(starters, BoardDefs.Following(starters[0])));
+    }
+
+    [Fact]
     public void AFollowingBattleTabSurvivesBattleBeingOffAcrossASave()
     {
         var installed = new[] { Installed(Clan, "value"), Installed(Profile, "diamonds") };
