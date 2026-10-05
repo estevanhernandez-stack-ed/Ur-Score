@@ -1196,7 +1196,11 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
     }
 
-    /// <summary>Counter names from a successful read, kept in the recipe's state for the Stats table.</summary>
+    /// <summary>
+    /// Counter names from a successful read, kept in the recipe's state for the Stats table. A seeded state is written
+    /// without its stats (review round 2): the read is not the person choosing ticks, and writing the seed would freeze it
+    /// into the file. The seeded ticks stay in memory, and the next start seeds again from the file's empty stats.
+    /// </summary>
     private void SaveCounterNames(string sourceId, RecipeSnapshot snapshot)
     {
         if (snapshot.CounterNames.Count == 0) return;
@@ -1206,7 +1210,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         try
         {
             var state = installed.State with { CounterNames = [.. snapshot.CounterNames] };
-            Store.SaveState(installed.Recipe, state);
+            Store.SaveState(installed.Recipe, installed.Seeded ? state with { Stats = null } : state);
             Installed = [.. Installed.Select(i => ReferenceEquals(i, installed) ? i with { State = state } : i)];
         }
         catch (Exception ex)

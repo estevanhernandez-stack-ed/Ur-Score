@@ -29,6 +29,13 @@ public static class RecipeStates
         return saved is null ? new RecipeState(Stats: stats) : saved with { Stats = stats };
     }
 
+    /// <summary>
+    /// Whether <see cref="Effective"/> seeds the ticks for this saved state: none saved, or one with no stats and no legacy
+    /// choices. <see cref="InstalledRecipe.Seeded"/> carries the answer, so a write that isn't the person's leaves them out.
+    /// </summary>
+    public static bool IsSeededFrom(RecipeState? saved) =>
+        saved is null || (saved.Stats is null && saved.ChoicesForUpdate.Count == 0);
+
     private static Dictionary<string, StatChoice> Seed(Recipe recipe, IReadOnlyCollection<string>? extraShows)
     {
         var stats = new Dictionary<string, StatChoice>(RecipeStats.SuggestedChoices(recipe), StringComparer.Ordinal);

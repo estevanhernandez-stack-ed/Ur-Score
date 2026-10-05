@@ -47,8 +47,9 @@ public static class Readers
                     continue;
                 }
 
-                var state = RecipeStates.Effective(recipe, store.TryLoadState(recipe), ShowsFor(mode, slug));
-                installed.Add(new InstalledRecipe(recipe, builtIn.Text, state));
+                var saved = store.TryLoadState(recipe);
+                var state = RecipeStates.Effective(recipe, saved, ShowsFor(mode, slug));
+                installed.Add(new InstalledRecipe(recipe, builtIn.Text, state) { Seeded = RecipeStates.IsSeededFrom(saved) });
             }
         }
 

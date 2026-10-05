@@ -473,6 +473,50 @@ public class AppCompositionTests
         }
     }
 
+    /// <summary>
+    /// Review round 2: the first read that brings counter names writes them to the reader's state, and on a fresh install
+    /// that state is a seed. It used to be written whole, seeded ticks included, so the seed was frozen into the file: a
+    /// later version's better suggestions would never reach it, and it was no longer "unseeded" on the next start. Now the
+    /// names are written with no stats, the ticks stay in memory, and the next start seeds again; the export is still
+    /// empty (nothing the person did).
+    /// </summary>
+    [Fact]
+    public async Task CounterNamesFromAReadDoNotFreezeASeededState()
+    {
+        const string profileSlug = "pet-sim-99-profile";
+        using var dir = TempDir.Create("urscore-app");
+        var paths = new AppPaths(dir.Path);
+        var transport = new FakeTransport().On("https://ps99.biggamesapi.io/v1/players/111?", 200, """
+            { "status": "ok", "data": { "views": { "profile": { "available": true, "data": {
+                "Currency": { "Diamonds": { "_am": 40 } }, "EggsHatched": 7, "Rank": 3,
+                "Statistics": { "Huge Pets Opened": 3, "Eggs Opened": 12 } } } } } }
+            """);
+        string[] names = ["Huge Pets Opened", "Eggs Opened"];
+
+        using (var services = Compose(dir, new StubHost(reachable: true, Alt), transport))
+        {
+            await services.LoadBookAsync();
+            var seeded = Assert.Single(services.Installed, i => i.Recipe.Slug == profileSlug);
+            Assert.True(seeded.Seeded);
+
+            await services.ReadOnceAsync(Assert.Single(services.Sources, s => s.Recipe == profileSlug).Id, CancellationToken.None);
+
+            var read = Assert.Single(services.Installed, i => i.Recipe.Slug == profileSlug);
+            Assert.Equal(names, read.State.SavedCounterNames);
+            Assert.Equal(seeded.State.Stats, read.State.Stats);    // the seeded ticks still drive this session
+            var file = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(paths.Recipes, profileSlug + ".state.json")))!;
+            Assert.Null(file["stats"]);
+            Assert.NotNull(file["counterNames"]);
+            Assert.Null(services.ExportStats(Path.Combine(dir.Path, "export.zip")).Setup);
+        }
+
+        using var again = Compose(dir, new StubHost(reachable: false), new FakeTransport());
+        var reloaded = Assert.Single(again.Installed, i => i.Recipe.Slug == profileSlug);
+        Assert.True(reloaded.Seeded);
+        Assert.Equal(names, reloaded.State.SavedCounterNames);
+        Assert.NotEmpty(reloaded.State.StatChoices);
+    }
+
     /// <summary>A book for a reader no mode names is skipped with the new line, not "No recipe here for".</summary>
     [Fact]
     public async Task ABookForAnOrphanReaderIsSkippedAsNotPartOfAnyMode()

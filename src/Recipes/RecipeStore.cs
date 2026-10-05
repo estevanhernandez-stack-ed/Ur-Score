@@ -79,7 +79,15 @@ public sealed record RecipeState(
     }
 }
 
-public sealed record InstalledRecipe(Recipe Recipe, string Text, RecipeState State);
+public sealed record InstalledRecipe(Recipe Recipe, string Text, RecipeState State)
+{
+    /// <summary>
+    /// The state's ticks are the seed (<see cref="RecipeStates.Effective"/> made them: no saved stats, no legacy choices), not
+    /// the person's. A write that isn't the person changing a choice, such as a read's counter names, writes the state
+    /// without them, so the seed is never frozen into the file and the next start seeds again (review round 2).
+    /// </summary>
+    public bool Seeded { get; init; }
+}
 
 public sealed record RecipeStoreLoad(IReadOnlyList<InstalledRecipe> Recipes, IReadOnlyList<string> Problems);
 
