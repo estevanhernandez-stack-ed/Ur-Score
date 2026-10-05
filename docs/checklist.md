@@ -139,7 +139,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Acceptance: `prd.md > No recipe words anywhere`.
   Verify: the fence test fails on a planted "recipe" string (check once), passes on the tree; count recorded.
 
-- [ ] **13. Smoke walks for the new shape (written, run on owner's return)**
+- [x] **13. Smoke walks for the new shape (written, run on owner's return)**
   Spec ref: `spec.md > File Structure > tools/smoke`
   What to build: retire `uia-import.ps1` and `walk-setup-clans.ps1` (clan assertions move into `walk-game-page.ps1`);
   new `walk-first-run.ps1`; every walk that seeded by importing now seeds by writing state/sources files through the
