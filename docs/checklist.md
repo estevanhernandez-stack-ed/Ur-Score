@@ -68,7 +68,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Acceptance: TryCommand compiles and its tests pass; ImportReviewTests become ReaderDisclosureTests, same count.
   Verify: build + suite green; count unchanged.
 
-- [ ] **6. The game manifest**
+- [x] **6. The game manifest**
   Spec ref: `spec.md > Games` (Game manifest file, GameCatalog, Disclosure line) + `A1` (`shows`) + `A4`
   What to build: `games/pet-sim-99.game.json` (real slugs; Battle `shows` the clan-battle row stat, key resolved from
   `RecipeStats.Offered`), the csproj EmbeddedResource line, `src/Games/GameCatalog.cs`, `ModeLines.cs` (hosts line +
