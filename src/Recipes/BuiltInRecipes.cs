@@ -23,6 +23,9 @@ public static class BuiltInRecipes
 
     public static IReadOnlyList<BuiltInRecipe> All => Loaded.Value;
 
+    /// <summary>The shipped recipes parsed, by slug: what the game manifest is checked against.</summary>
+    public static IReadOnlyDictionary<string, Recipe> BySlug => Parsed.Value;
+
     public static BuiltInRecipe? Find(string slug) =>
         All.FirstOrDefault(r => string.Equals(r.Slug, slug, StringComparison.Ordinal));
 

@@ -24,6 +24,7 @@
        Same files either way, so BuiltInRecipes and the release can never drift. -->
   <ItemGroup>
     <EmbeddedResource Include="recipes\*.recipe.json" />
+    <EmbeddedResource Include="games\*.game.json" />
   </ItemGroup>
 
   <ItemGroup>
