@@ -3,11 +3,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Games;
 using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
-/// <summary>Setup › Your accounts (spec §7.2): Send per account per recipe, and where each account was found.</summary>
+/// <summary>Setup › Your accounts (spec §7.2): Send per account per mode, and where each account was found.</summary>
 public partial class AccountsPage : UserControl, ISetupPage
 {
     private readonly ISetupServices _services;
@@ -40,10 +41,14 @@ public partial class AccountsPage : UserControl, ISetupPage
 
         foreach (var tick in _rows.SelectMany(r => r.Sends)) tick.PropertyChanged -= OnTick;
         var accounts = _services.KnownAccounts;
-        _rows = AccountsModel.Rows(accounts, _services.Installed, _services.Sources, _services.Latest, _services.AvatarFileFor);
+        // The readers of modes that are on only: an off mode reads and sends nothing, so it has no Send column. Columns and
+        // ticks are named by mode (ReaderNames), never by recipe.
+        var labels = _services.Installed.ToDictionary(i => i.Recipe.Slug, i => ReaderNames.For(i.Recipe.Slug, _services.Catalog, _services.Installed), StringComparer.Ordinal);
+        var active = _services.ActiveReaders;
+        _rows = AccountsModel.Rows(accounts, active, _services.ActiveSources, _services.Latest, _services.AvatarFileFor, labels);
         foreach (var tick in _rows.SelectMany(r => r.Sends)) tick.PropertyChanged += OnTick;
 
-        RecipeHeaders.ItemsSource = AccountsModel.SendingRecipes(_services.Installed).Select(r => r.Recipe.Name).ToList();
+        RecipeHeaders.ItemsSource = AccountsModel.SendingRecipes(active).Select(r => labels[r.Recipe.Slug]).ToList();
         AccountsTable.ItemsSource = _rows;
         ShowLine(AccountsEmptyLine, accounts.Count == 0 ? "RoRoRo hasn't shared any accounts yet. Start RoRoRo and add your accounts there." : "");
         ShowMessage();

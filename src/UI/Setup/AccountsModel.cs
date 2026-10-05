@@ -16,7 +16,7 @@ public sealed class SendTick : INotifyPropertyChanged
 
     public required Guid AccountId { get; init; }
 
-    /// <summary>The accessible name: "Send &lt;account&gt; for &lt;recipe&gt;".</summary>
+    /// <summary>The accessible name: "Send &lt;account&gt; for &lt;mode&gt;".</summary>
     public required string Name { get; init; }
 
     public bool On
@@ -50,7 +50,8 @@ public static class AccountsModel
 
     public static IReadOnlyList<AccountRow> Rows(
         IReadOnlyList<HostAccount> accounts, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
-        IReadOnlyDictionary<string, RecipeSnapshot> latest, Func<long, string?>? avatar = null)
+        IReadOnlyDictionary<string, RecipeSnapshot> latest, Func<long, string?>? avatar = null,
+        IReadOnlyDictionary<string, string>? labels = null)
     {
         var sending = SendingRecipes(installed);
         return [.. accounts.Select(account => new AccountRow(
@@ -61,11 +62,11 @@ public static class AccountsModel
             {
                 RecipeSlug = r.Recipe.Slug,
                 AccountId = account.AccountId,
-                Name = $"Send {account.DisplayName} for {r.Recipe.Name}",
+                Name = $"Send {account.DisplayName} for {labels?.GetValueOrDefault(r.Recipe.Slug) ?? r.Recipe.Name}",
                 On = !r.State.Excluded.Contains(account.AccountId),
             })],
             avatar?.Invoke(account.RobloxUserId),
-            PanelText.CannotRead(account.RobloxUserId, installed, sources, latest, nameTheRecipe: true)))];
+            PanelText.CannotRead(account.RobloxUserId, installed, sources, latest, nameTheRecipe: true, labels)))];
     }
 
     /// <summary>Said on the listed line while Ur Score waits on RoRoRo for your accounts (it was the import's line).</summary>

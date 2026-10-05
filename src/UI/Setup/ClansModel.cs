@@ -177,8 +177,13 @@ public static class ClansModel
         return [.. perHost.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => new HostRequests(kv.Key, (int)Math.Round(kv.Value)))];
     }
 
-    public static string RequestsLine(IReadOnlyList<HostRequests> requests) =>
-        string.Join(" ", requests.Select(r => $"Your PC asks {r.Host} about {r.PerHour.ToString("N0", CultureInfo.InvariantCulture)} times an hour."));
+    /// <summary>
+    /// What the PC asks, per host. A host that works out to none an hour (a per-account read with no account yet) is left out rather
+    /// than said as "about 0 times an hour", and a mode that is off says so (<paramref name="offMode"/> names it) because it reads nothing.
+    /// </summary>
+    public static string RequestsLine(IReadOnlyList<HostRequests> requests, string? offMode = null) =>
+        offMode is not null ? $"{offMode} is off, so nothing is read."
+        : string.Join(" ", requests.Where(r => r.PerHour > 0).Select(r => $"Your PC asks {r.Host} about {r.PerHour.ToString("N0", CultureInfo.InvariantCulture)} times an hour."));
 
     public static string ConfirmText(Recipe recipe, IReadOnlyList<HostRequests> after) =>
         $"That makes more than {ConfirmAbove} {RecipeWords.GroupsLower(recipe)}. {RequestsLine(after)} Add it anyway?"

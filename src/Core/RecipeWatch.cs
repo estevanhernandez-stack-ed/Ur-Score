@@ -136,9 +136,9 @@ public sealed class RecipeWatch(
     Func<IReadOnlyList<string>>? myGroups = null,
     Func<FieldMetric, string, bool>? writeLabel = null)
 {
-    internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
+    internal const string RecipeChangedDetail = "The reader changed while it was being read, so nothing was sent this time.";
 
-    internal const string RecipeChangedMidSendDetail = "The recipe changed while this reading was being sent, so the rest of it was not sent.";
+    internal const string RecipeChangedMidSendDetail = "The reader changed while this reading was being sent, so the rest of it was not sent.";
 
     internal const string WatchOnlyDetail = "Watching only: nothing is sent, and no account is kept.";
 
@@ -148,7 +148,7 @@ public sealed class RecipeWatch(
     /// Your accounts were in this read, and another source of the recipe read them first, so that one keeps them (ruling R6).
     /// Saying none were here named a cause that wasn't the cause (backlog S1-6.8).
     /// </summary>
-    internal const string NotRecordingKeptElsewhere = "Your accounts in this read are kept by another source of this recipe, which read them first.";
+    internal const string NotRecordingKeptElsewhere = "Your accounts in this read are kept by another source of this mode, which read them first.";
 
     internal const string NotRecordingEnded = "It has ended, and its final result is saved.";
 
@@ -157,7 +157,7 @@ public sealed class RecipeWatch(
 
     internal const string NotRecordingNothingRead = "Nothing was read this time.";
 
-    internal const string NotRecordingNoText = "The recipe text isn't known, so nothing is kept.";
+    internal const string NotRecordingNoText = "The reader's definition isn't known, so nothing is kept.";
 
     /// <summary>
     /// Said on the board whenever a threat number is held back. Names the cause, because the rules file is the
@@ -518,7 +518,7 @@ public sealed class RecipeWatch(
         if (mine.Count == 0)
         {
             var none = conflicts.Count > 0
-                ? $"Read {seen} row(s); your accounts in this read were already claimed by another source of this recipe."
+                ? $"Read {seen} row(s); your accounts in this read were already claimed by another source of this mode."
                 : $"Read {seen} row(s); none of them are your accounts.";
             if (reading.Detail is not null) none += " " + reading.Detail;
             return Kept(Snapshot(readRecipe, readSource, WatchState.NoMatches, none, seen, unresolved, reading, map));

@@ -314,7 +314,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
             if (saved is null)
             {
                 return (null, RecipeReading.Stop(ReadingOutcome.KeyMissing,
-                    $"This recipe needs your {declared.Label} key. Get one at {RecipeHosts.HostOf(declared.GetOneAt)}."), null);
+                    $"This reader needs your {declared.Label} key. Get one at {RecipeHosts.HostOf(declared.GetOneAt)}."), null);
             }
 
             if (!string.Equals(saved.Host, host, StringComparison.OrdinalIgnoreCase))
@@ -322,7 +322,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                 // Spec §7.2: a key is only ever sent to the host it is bound to. Checked here as well
                 // as at import, because a recipe file on disk can be edited after it was imported.
                 return (null, RecipeReading.Stop(ReadingOutcome.KeyMissing,
-                    $"Your {declared.Label} key is saved for {saved.Host}, and this recipe would send it to {host}. It was not sent."), null);
+                    $"Your {declared.Label} key is saved for {saved.Host}, and this reader would send it to {host}. It was not sent."), null);
             }
 
             if (declared.In == KeyPlacement.Header) headers[declared.Name] = saved.Value;
@@ -366,7 +366,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         if (status is >= 300 and < 400)
         {
             return RecipeReading.Stop(ReadingOutcome.Unreachable,
-                $"{host} redirected to another address. Recipes never follow redirects, so nothing was sent there.");
+                $"{host} redirected to another address. Ur Score never follows redirects, so nothing was sent there.");
         }
 
         if (status == 429)
@@ -382,7 +382,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                 return RecipeReading.Stop(ReadingOutcome.KeyRejected, $"{host} rejected your {labels} key. Change it to try again.");
             }
 
-            return RecipeReading.Stop(ReadingOutcome.SignInRequired, $"{host} requires signing in, which recipes cannot do.");
+            return RecipeReading.Stop(ReadingOutcome.SignInRequired, $"{host} requires signing in, which Ur Score cannot do.");
         }
 
         if (status is 400 or 404)

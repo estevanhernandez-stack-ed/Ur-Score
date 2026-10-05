@@ -126,20 +126,22 @@ public partial class GamePage : UserControl, ISetupPage
         var sends = Line(new Thickness(24, 2, 0, 0));
         var note = Line(new Thickness(24, 4, 0, 0));
 
-        var card = new Border { Child = new StackPanel { Children = { toggle, blurb, reads, sends, note } } };
+        // The clans belong to the mode, so they sit inside its card, under what the mode is, rather than floating below it.
+        var inside = new StackPanel { Children = { toggle, blurb, reads, sends, note } };
+        var card = new Border { Child = inside };
         card.SetResourceReference(StyleProperty, "Card");
 
         var rowPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
         rowPanel.Children.Add(card);
 
         var dimmed = Line(new Thickness(24, 12, 0, 0));
-        rowPanel.Children.Add(dimmed);
+        inside.Children.Add(dimmed);
 
         ClansSection? clans = null;
         if (row.AskingSlug is { } slug)
         {
             clans = new ClansSection(_services, slug) { Margin = new Thickness(24, 14, 0, 0) };
-            rowPanel.Children.Add(clans);
+            inside.Children.Add(clans);
         }
 
         ModesPanel.Children.Add(rowPanel);

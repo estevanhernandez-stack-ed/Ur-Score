@@ -103,7 +103,7 @@ public static partial class AlertCards
     public const string Above = "above";
 
     public const string NextInRoRoRo = "Next, in RoRoRo: Settings › Alerts › turn on Metric alerts and choose where they go (desktop, Discord, phone).";
-    public const string NoRecipe = "Import a recipe first.";
+    public const string NoMode = "Turn on a mode first.";
     public const string NoSentStat = "Nothing is sent to RoRoRo yet. Tick Send on a stat in Setup › Stats, or a number "
         + "under Clan and field on the same page, and it gets a card here.";
     public const string TypeANumber = "Type a number, like 100.";
@@ -598,7 +598,7 @@ public static partial class AlertCards
     // ---- lines around the cards ----
 
     public static string EmptyLine(IReadOnlyList<InstalledRecipe> installed, AlertsView view) =>
-        installed.Count == 0 ? NoRecipe : view.Cards.Count == 0 ? NoSentStat : "";
+        installed.Count == 0 ? NoMode : view.Cards.Count == 0 ? NoSentStat : "";
 
     /// <summary>A result whose card went away (the last alert of a stat you no longer send was removed) shows under the cards (A13).</summary>
     public static string OrphanResult(AlertsView view, AlertsUi ui) =>

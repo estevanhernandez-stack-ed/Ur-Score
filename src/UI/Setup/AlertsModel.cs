@@ -4,7 +4,8 @@ using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.UI;
 
-public sealed record PolicyItem(string RecipeName, string Line, string Counts);
+/// <summary>One card: the mode (or clans list) it is about, never a reader slug or a recipe name.</summary>
+public sealed record PolicyItem(string ModeName, string Line, string Counts);
 
 /// <summary>
 /// Setup › Alerts' report policy card (spec §7.5). The policy line is <see cref="ReportPolicy.Describe"/>'s own sentence.
@@ -16,7 +17,7 @@ public static class AlertsModel
     public static string WatchOnly(Recipe recipe) => $"Nothing is sent to RoRoRo: you only watch its {RecipeWords.GroupsLower(recipe)}.";
 
     /// <summary>
-    /// One report policy card line per recipe, in <see cref="ReportPolicy.Describe"/>'s words, with the allow
+    /// One report policy card line per mode (<paramref name="readerName"/> labels it, <c>ReaderNames.For</c>), in <see cref="ReportPolicy.Describe"/>'s words, with the allow
     /// list the running watches use (<see cref="ReportPolicies.Allowed"/>). A reader whose mode is off
     /// (<paramref name="offModeName"/> names the mode) has no watch, so it says that and nothing more (review round 2).
     /// <para>
@@ -27,7 +28,8 @@ public static class AlertsModel
     /// </summary>
     public static IReadOnlyList<PolicyItem> Policies(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<HostAccount> accounts, IReadOnlyList<Source> sources, bool resolveNames,
-        Func<string, (int Sent, int Dropped, int Held)> counts, Func<string, string?>? offModeName = null) =>
+        Func<string, (int Sent, int Dropped, int Held)> counts, Func<string, string?>? offModeName = null,
+        Func<string, string>? readerName = null) =>
         [.. installed.Select(i =>
         {
             var (sent, dropped, held) = counts(i.Recipe.Slug);
@@ -42,6 +44,6 @@ public static class AlertsModel
             var counted = $"Sent {sent}, dropped {dropped} this session.";
             if (held > 0) counted += $" {held} held back: the alert name couldn't be written.";
 
-            return new PolicyItem(i.Recipe.Name, line, counted);
+            return new PolicyItem(readerName?.Invoke(i.Recipe.Slug) ?? i.Recipe.Name, line, counted);
         })];
 }

@@ -51,6 +51,12 @@ public class GamePageRenderTests
             var clans = page.ClansOf("battle");
             Assert.NotNull(clans);
             Assert.Null(page.ClansOf("profile"));
+
+            // And inside Battle's card, the same border as its switch, not floating below it.
+            Border? card = null;
+            for (DependencyObject? at = clans; at is not null && card is null; at = VisualTreeHelper.GetParent(at)) card = at as Border;
+            while (card is not null && !IsWithin(battle, card)) card = VisualTreeHelper.GetParent(card) is { } up ? FirstBorder(up) : null;
+            Assert.NotNull(card);
             var search = Find<ClanSearchBox>(clans!, "MainClanSearch");
             Assert.True(clans!.IsEnabled);
 
@@ -72,6 +78,8 @@ public class GamePageRenderTests
             Assert.False(services.Switches.IsOn("pet-sim-99/battle"));
             Assert.False(clans.IsEnabled);
             Assert.Contains("Turn Battle on to read these clans.", Texts(page));
+            Assert.Contains("Battle is off, so nothing is read.", Texts(page));
+            Assert.DoesNotContain(Texts(page), t => t.Contains("times an hour", StringComparison.Ordinal));
             Snap(page, "game-page-battle-off.png");
         }
         finally
@@ -135,6 +143,16 @@ public class GamePageRenderTests
 
     private static List<string> Texts(DependencyObject root) =>
         [.. Descendants(root).OfType<TextBlock>().Where(t => t.IsVisible).Select(t => t.Text)];
+
+    private static Border? FirstBorder(DependencyObject from)
+    {
+        for (var at = from; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is Border border) return border;
+        }
+
+        return null;
+    }
 
     private static bool IsWithin(DependencyObject? element, DependencyObject ancestor)
     {

@@ -231,4 +231,25 @@ public class DiagnosticsModelTests
         Assert.Contains("trail-10;", text);
         Assert.Contains("trail-49;", text);
     }
+
+    [Fact]
+    public void ASourceIsNamedByItsModeAndSaysWhenThatModeIsOff()
+    {
+        var source = ForClan;
+        var row = DiagnosticsModel.Sources([Installed], [source], new Dictionary<string, RecipeSnapshot>(), _ => null, running: true, [Main], Now,
+            new Redactor(() => []), readerName: _ => "Battle", offModeName: _ => "Battle").Single();
+
+        Assert.Equal("CCGP · Battle", row.Name);
+        Assert.Equal("Battle is off, so it isn't read.", row.State);
+    }
+
+    [Fact]
+    public void WhatNoModeReadsIsListedByNameAndSlugThenTheFilesThatCouldNotBeRead()
+    {
+        var lines = DiagnosticsModel.NotInAModeLines([Installed], ["bad.json: not valid"]);
+
+        Assert.Equal([$"{Clan.Name} ({Clan.Slug})", "Couldn't read: bad.json: not valid"], lines);
+        Assert.Empty(DiagnosticsModel.NotInAModeLines([], []));
+        Assert.Equal("Not part of any mode (kept, not read)", DiagnosticsModel.NotInAMode);
+    }
 }

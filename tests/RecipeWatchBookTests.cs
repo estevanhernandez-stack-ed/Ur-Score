@@ -245,7 +245,7 @@ public class RecipeWatchBookTests
 
         Assert.True(first.Recorded);
         Assert.False(second.Recorded);
-        Assert.Equal("Your accounts in this read are kept by another source of this recipe, which read them first.", second.NotRecordingReason);
+        Assert.Equal("Your accounts in this read are kept by another source of this mode, which read them first.", second.NotRecordingReason);
         Assert.False(nobody.Recorded);
         Assert.Equal("None of your accounts were in this read.", nobody.NotRecordingReason);
     }

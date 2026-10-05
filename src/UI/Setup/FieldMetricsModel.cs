@@ -79,13 +79,13 @@ public static class FieldMetricsModel
         [.. items.Where(i => i.Send).Select(i => i.Key)];
 
     /// <summary>
-    /// The sentence under the heading: which list the numbers come from, and — when no clan of yours is named on a
+    /// The sentence under the heading: which list (named by its mode, <c>ReaderNames.For</c>) the numbers come from, and — when no clan of yours is named on a
     /// source — what to do about it, because every one of these numbers needs to know which row is yours.
     /// </summary>
-    public static string Line(InstalledRecipe list, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)
+    public static string Line(string listLabel, IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed)
     {
         var mine = SourceRules.MyClanNames(sources, installed);
-        var from = $"From {list.Recipe.Name}, about ";
+        var from = $"From {listLabel}, about ";
         return mine.Count == 0
             ? from + "your clan. " + NoClanSet
             : from + (mine.Count == 1 ? $"{mine[0]}. " : $"the best placed of {AndList(mine)}. ")

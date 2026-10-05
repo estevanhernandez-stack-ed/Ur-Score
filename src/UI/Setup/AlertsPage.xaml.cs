@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Games;
 using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
@@ -32,7 +33,8 @@ public partial class AlertsPage : UserControl, ISetupPage
     public void Refresh()
     {
         var policies = AlertsModel.Policies(
-            _services.Installed, _services.KnownAccounts, _services.ActiveSources, _services.Settings.ResolveNames, _services.PolicyCounts, _services.OffModeOf);
+            _services.ActiveReaders, _services.KnownAccounts, _services.ActiveSources, _services.Settings.ResolveNames, _services.PolicyCounts, _services.OffModeOf,
+            slug => ReaderNames.For(slug, _services.Catalog, _services.Installed));
         PolicyList.ItemsSource = policies;
         PolicyEmptyLine.Visibility = policies.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 

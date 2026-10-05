@@ -197,8 +197,8 @@ public static class PanelText
     /// "Sources" default: the note read "No sources are named here" on a real board until a screenshot caught it
     /// on 2026-09-21. The panel's own recipe carries the input that names them ("plural": "Clans").
     /// </param>
-    public static string GroupNamesNotKept(string groups, Recipe list) =>
-        $"No {groups} are named here: {list.Name} does not say its groups are clans, so no names are kept.";
+    public static string GroupNamesNotKept(string groups, string listLabel) =>
+        $"No {groups} are named here: {listLabel} does not say its groups are clans, so no names are kept.";
 
     /// <summary>
     /// A race whose rival lines stopped: the clans list's latest read kept no names, so the band ends at the last read that
@@ -206,11 +206,12 @@ public static class PanelText
     /// koi") under a note that said no clans were named, above a chart full of named clans. This one says what stopped,
     /// when, in local time like the rest of the board, and why.
     /// </summary>
+    /// <param name="listLabel">The list as a person names it: its mode (<see cref="LiveBoard.LabelOf"/>), never the reader's own name.</param>
     /// <param name="keepsNames">Whether the list's recipe says its groups are clans. When it does, the cause is the read, not the recipe.</param>
-    public static string GroupNamesStopped(string group, string groups, Recipe list, DateTimeOffset lastNamed, TimeZoneInfo zone, bool keepsNames)
+    public static string GroupNamesStopped(string group, string groups, string listLabel, DateTimeOffset lastNamed, TimeZoneInfo zone, bool keepsNames)
     {
         var at = TimeZoneInfo.ConvertTime(lastNamed, zone).ToString("HH:mm 'on' d MMM", CultureInfo.InvariantCulture);
-        var why = keepsNames ? $"the last read of {list.Name} kept no {group} names" : $"{list.Name} no longer keeps {group} names";
+        var why = keepsNames ? $"the last read of {listLabel} kept no {group} names" : $"{listLabel} no longer keeps {group} names";
         return $"Rival {groups} stopped updating at {at}: {why}.";
     }
 

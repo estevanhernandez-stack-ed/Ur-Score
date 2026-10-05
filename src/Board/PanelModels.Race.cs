@@ -278,8 +278,8 @@ public static partial class PanelModels
         // "No clans are named here" only while nothing named was ever read this period: beside a band still drawn from
         // named reads it contradicts the chart, which is the very note the owner learned to ignore (review, 2026-09-24).
         return named is { } last && latest > last
-            ? rivalsDrawn ? PanelText.GroupNamesStopped(group, groups, list, last, live.Time.LocalTimeZone, list.GroupsAreClans) : null
-            : list.GroupsAreClans || named is not null ? null : PanelText.GroupNamesNotKept(groups, list);
+            ? rivalsDrawn ? PanelText.GroupNamesStopped(group, groups, live.LabelOf(list), last, live.Time.LocalTimeZone, list.GroupsAreClans) : null
+            : list.GroupsAreClans || named is not null ? null : PanelText.GroupNamesNotKept(groups, live.LabelOf(list));
     }
 
     /// <summary>The switched-on clans list, whose readings carry the board.</summary>

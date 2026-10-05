@@ -556,7 +556,7 @@ public class RecipeEngineTests
         var reading = await Read(transport, Followers, inputs: NoInputs, ids: [1]);
 
         Assert.Equal(ReadingOutcome.SignInRequired, reading.Outcome);
-        Assert.Equal("friends.roblox.com requires signing in, which recipes cannot do.", reading.Detail);
+        Assert.Equal("friends.roblox.com requires signing in, which Ur Score cannot do.", reading.Detail);
     }
 
     [Fact]
@@ -581,7 +581,7 @@ public class RecipeEngineTests
 
         Assert.Equal(ReadingOutcome.Unreachable, reading.Outcome);
         Assert.Equal(
-            "ps99.biggamesapi.io redirected to another address. Recipes never follow redirects, so nothing was sent there.",
+            "ps99.biggamesapi.io redirected to another address. Ur Score never follows redirects, so nothing was sent there.",
             reading.Detail);
         Assert.Single(transport.Requests);
     }
@@ -611,7 +611,7 @@ public class RecipeEngineTests
         var reading = await Read(transport, KeyedRecipe("header"), inputs: NoInputs);
 
         Assert.Equal(ReadingOutcome.KeyMissing, reading.Outcome);
-        Assert.Equal("This recipe needs your Tracker key. Get one at tracker.example.", reading.Detail);
+        Assert.Equal("This reader needs your Tracker key. Get one at tracker.example.", reading.Detail);
         Assert.Empty(transport.Requests);
     }
 
@@ -624,7 +624,7 @@ public class RecipeEngineTests
         var reading = await Read(transport, KeyedRecipe("header"), inputs: NoInputs, keys: keys);
 
         Assert.Equal(ReadingOutcome.KeyMissing, reading.Outcome);
-        Assert.Equal("Your Tracker key is saved for somewhere.else.example, and this recipe would send it to api.tracker.example. It was not sent.", reading.Detail);
+        Assert.Equal("Your Tracker key is saved for somewhere.else.example, and this reader would send it to api.tracker.example. It was not sent.", reading.Detail);
         Assert.Empty(transport.Requests);
     }
 

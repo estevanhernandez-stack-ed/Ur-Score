@@ -119,7 +119,7 @@ public partial class ClansSection : UserControl
                     + $"Every read keeps where yours stands, how the field is doing, and the top {GroupRows.Top} by name.";
             }
 
-            ShowLine(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.ActiveSources, _services.Installed, accounts.Count)));
+            ShowLine(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.ActiveSources, _services.Installed, accounts.Count), _services.OffModeOf(_slug)));
         }
         finally
         {

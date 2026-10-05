@@ -46,7 +46,7 @@
                  ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                  KeyboardNavigation.TabNavigation="Continue"
-                 AutomationProperties.Name="Stats this recipe offers">
+                 AutomationProperties.Name="Stats this mode offers">
             <ListBox.ItemContainerStyle>
                 <Style TargetType="ListBoxItem">
                     <!-- Each row is named for UI Automation by its stat's label; without this a screen reader read the

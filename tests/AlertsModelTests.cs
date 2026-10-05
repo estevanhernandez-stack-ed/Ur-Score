@@ -155,7 +155,10 @@ public class AlertsModelTests
 
         var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main, Alt], [], resolveNames: false, _ => (7, 0, 0)));
 
-        Assert.Equal("Pet Sim 99 top clans", item.RecipeName);
+        Assert.Equal("Pet Sim 99 top clans", item.ModeName);
+
+        var named = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main, Alt], [], resolveNames: false, _ => (7, 0, 0), readerName: _ => "Battle · clans list"));
+        Assert.Equal("Battle · clans list", named.ModeName);
         Assert.Contains("clan.standing.place", item.Line, StringComparison.Ordinal);
         Assert.Contains("clan.standing.pace-needed", item.Line, StringComparison.Ordinal);
         Assert.Contains("with no account attached", item.Line, StringComparison.Ordinal);

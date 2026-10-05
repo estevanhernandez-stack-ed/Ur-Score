@@ -440,7 +440,7 @@ public class RecipeWatchTests
         var snapshot = await watch.RunOnceAsync(CancellationToken.None);
 
         Assert.Empty(host.Reported);
-        Assert.Equal("The recipe changed while it was being read, so nothing was sent this time.", snapshot.Detail);
+        Assert.Equal("The reader changed while it was being read, so nothing was sent this time.", snapshot.Detail);
         Assert.Equal(PetSim.Slug, snapshot.RecipeSlug);
         Assert.Null(snapshot.Rows);
     }

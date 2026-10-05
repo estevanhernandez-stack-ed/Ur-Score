@@ -38,14 +38,14 @@ public static class ScoreBookModel
 
     /// <summary>
     /// What Export stats did, said beside the button: the counts from the file's own manifest, and the file's name.
-    /// With a setup, the recipes, clans and boards it carried are said too, so the line matches what the other PC's
+    /// With a setup, the modes, clans and boards it carried are said too, so the line matches what the other PC's
     /// preview will offer.
     /// </summary>
     public static string ExportedLine(BookPackManifest manifest, string fileName, SetupPack? setup)
     {
         var readings = manifest.Readings == 1 ? "1 reading" : $"{manifest.Readings:N0} readings";
         var finals = manifest.Finals == 1 ? "1 finished battle" : $"{manifest.Finals:N0} finished battles";
-        var setupPart = setup is null ? "" : $", with {Count(setup.Recipes.Count, "recipe")}, {Count(setup.Sources.Count, "clan")} and {Count(setup.Boards.Count, "board")},";
+        var setupPart = setup is null ? "" : $", with {Count(setup.Recipes.Count, "mode")}, {Count(setup.Sources.Count, "clan")} and {Count(setup.Boards.Count, "board")},";
         return $"Exported {readings} and {finals}{setupPart} to {fileName}. Import it on the other PC from Setup › Score book.";
     }
 
@@ -56,10 +56,16 @@ public static class ScoreBookModel
         : bytes < 1024 * 1024 ? (bytes / 1024.0).ToString("0.#", CultureInfo.InvariantCulture) + " KB"
         : (bytes / 1048576.0).ToString("0.##", CultureInfo.InvariantCulture) + " MB";
 
-    public static string SourceLabel(Recipe recipe, Source source) =>
-        recipe.Inputs.Count == 0 ? recipe.Name : $"{ClansModel.NameOf(recipe, source)} · {recipe.Name}";
+    /// <summary>The source as a person names it: its clan (when it has one) and its mode's name, which <paramref name="reader"/> gives (<c>ReaderNames.For</c>).</summary>
+    public static string SourceLabel(Recipe recipe, Source source, string? reader = null)
+    {
+        var name = reader ?? recipe.Name;
+        return recipe.Inputs.Count == 0 ? name : $"{ClansModel.NameOf(recipe, source)} · {name}";
+    }
 
-    public static IReadOnlyList<BookRecipeItem> Recipes(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, ScoreBookReader reader) =>
+    /// <summary>One row per reader, named by its mode (<paramref name="readerName"/>), kept whether or not its mode is on: turning a mode off keeps its book.</summary>
+    public static IReadOnlyList<BookRecipeItem> Recipes(
+        IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, ScoreBookReader reader, Func<string, string>? readerName = null) =>
         [.. installed.Select(i =>
         {
             var recipe = i.Recipe;
@@ -73,7 +79,7 @@ public static class ScoreBookModel
                 .Sum(key => reader.Finals(slug, key).Select(f => f.Period).Distinct(StringComparer.Ordinal).Count());
 
             return new BookRecipeItem(
-                recipe.Name,
+                readerName?.Invoke(slug) ?? recipe.Name,
                 readings == 1 ? "1 reading kept" : $"{readings.ToString("N0", CultureInfo.InvariantCulture)} readings kept",
                 first is { } at ? $"First reading {at.ToLocalTime().ToString("d MMM yyyy", CultureInfo.CurrentCulture)}" : "No reading yet",
                 // A clans list keeps no finals — it has no account to close a period for — so the row doesn't
@@ -96,7 +102,8 @@ public static class ScoreBookModel
     /// </param>
     public static IReadOnlyList<NotRecordingItem> NotRecording(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest,
-        bool running, bool everStarted, bool accountsEverListed)
+        bool running, bool everStarted, bool accountsEverListed,
+        Func<string, string>? readerName = null)
     {
         var items = new List<NotRecordingItem>();
 
@@ -121,7 +128,7 @@ public static class ScoreBookModel
                 : snapshot.Recorded ? null
                 : snapshot.NotRecordingReason ?? "The last read kept nothing.";
 
-            if (reason is not null) items.Add(new NotRecordingItem(SourceLabel(recipe, source), reason));
+            if (reason is not null) items.Add(new NotRecordingItem(SourceLabel(recipe, source, readerName?.Invoke(recipe.Slug)), reason));
         }
 
         return items;

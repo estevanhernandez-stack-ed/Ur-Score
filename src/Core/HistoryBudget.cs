@@ -69,7 +69,7 @@ public static class HistoryBudget
         }
 
         var line = accountsKnown
-            ? $"{afterCount} of RoRoRo's {Limit} history slots: accounts with Send on times stats with Send on, plus each clan number sent, across your installed recipes."
+            ? $"{afterCount} of RoRoRo's {Limit} history slots: accounts with Send on times stats with Send on, plus each clan number sent, across the modes you have on."
             : $"{afterCount} of RoRoRo's {Limit} history slots so far. RoRoRo hasn't been reached yet, so your accounts count as 0 until it is.";
 
         if (afterCount >= Warn)

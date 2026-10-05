@@ -207,6 +207,8 @@ public class ClansModelTests
         var expected = (int)Math.Round(2 * Clan.Steps.Count * 3600.0 / Clan.EffectiveEverySeconds);
         Assert.Equal(new HostRequests("ps99.biggamesapi.io", expected), Assert.Single(requests));
         Assert.Equal($"Your PC asks ps99.biggamesapi.io about {expected} times an hour.", ClansModel.RequestsLine(requests));
+        Assert.Equal("Battle is off, so nothing is read.", ClansModel.RequestsLine(requests, "Battle"));
+        Assert.Equal("", ClansModel.RequestsLine([new HostRequests("db.biggames.io", 0)]));
     }
 
     [Fact]
