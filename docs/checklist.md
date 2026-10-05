@@ -110,7 +110,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Verify: SetupPack/SetupMerge/ImportPreview/BookImport tests updated + new (old-format export imports; new export has
   no text; orphan skipped); count recorded.
 
-- [ ] **10. The board knows about modes**
+- [x] **10. The board knows about modes**
   Spec ref: `spec.md > Board` (Starter boards, Panel off state, Race note) + `A10`
   What to build: StarterBoards and BoardWindow use the catalog/switches (ModeOff, NoModes, "Pick your clan" opening the
   game page), PanelFrame "{Mode} is off." + Turn on (`TurnOnModeButton`), orphan panels "Not part of any mode.",
