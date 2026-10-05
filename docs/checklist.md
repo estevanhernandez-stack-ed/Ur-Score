@@ -87,7 +87,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Acceptance: `prd.md > Upgrading from 0.6.3`: an upgrade reads exactly what 0.6.3 read; game-off remembers modes.
   Verify: ModeSwitchesTests + upgrade-map tests against the item 2 fixture variants (Battle-only, all three).
 
-- [ ] **8. Readers come from the app, and off modes don't read**
+- [x] **8. Readers come from the app, and off modes don't read**
   Spec ref: `spec.md > Readers` + `spec.md > Composition` + `A3` + `A5` + `A9`
   What to build: `Readers.Compose` (embedded text, saved/seeded state, `shows`, orphans); AppServices: `Catalog`,
   `Switches` derived from Settings, `Orphans`, `ActiveSources`, one `ApplyRunner()` used by both Runner.Apply sites,
