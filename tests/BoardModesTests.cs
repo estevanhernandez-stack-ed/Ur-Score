@@ -232,4 +232,23 @@ public class BoardModesTests
         Assert.Equal(SetupPages.ClansId(Clan.Slug), SetupPages.GamePage("pet-sim-99", Clan.Slug));
         Assert.Equal(SetupPages.Recipes, SetupPages.GamePage("pet-sim-99"));
     }
+
+    /// <summary>
+    /// Item 10 follow-up: + Board offers the starters as the board builds them, so an off mode's starter has nothing to
+    /// copy and says why. The decoy: Battle is fully set up (ticked, a Main clan), so without the switch it offers panels.
+    /// </summary>
+    [Fact]
+    public void AddBoardOffersAnOffModesStarterAsOff()
+    {
+        IReadOnlyList<InstalledRecipe> installed = [Installed(Clan, "value"), Installed(Profile, "diamonds")];
+        IReadOnlyList<Source> sources = [MainClan, ProfileSource];
+
+        var (on, _) = AddBoardWindow.Starters(installed, sources, _ => null);
+        var (off, alts) = AddBoardWindow.Starters(installed, sources, key => key == "battle" ? "Battle" : null);
+
+        Assert.NotEmpty(on.Panels);
+        Assert.Equal((BoardEmpty.ModeOff, 0), (off.Empty, off.Panels.Count));
+        Assert.Equal("Battle: Battle is off", AddBoardWindow.ButtonText(off));
+        Assert.NotEqual(BoardEmpty.ModeOff, alts.Empty);
+    }
 }

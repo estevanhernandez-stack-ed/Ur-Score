@@ -15,14 +15,14 @@ public partial class AddBoardWindow : Window
     private readonly StarterBoard _alts;
     private readonly string _suggestedName;
 
-    public AddBoardWindow(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string suggestedName)
+    /// <param name="offModeName">A starter's key to the name of its mode when that mode is off, as the board builds its tabs.</param>
+    public AddBoardWindow(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string suggestedName, Func<string, string?>? offModeName = null)
     {
         InitializeComponent();
         ThemeService.Attach(this);
 
         _suggestedName = suggestedName;
-        _battle = StarterBoards.Build(installed, sources, StarterBoards.Battle);
-        _alts = StarterBoards.Build(installed, sources, StarterBoards.Alts);
+        (_battle, _alts) = Starters(installed, sources, offModeName);
 
         NewBoardNameBox.Text = suggestedName;
         NewBoardNameBox.MaxLength = BoardDefs.MaxNameLength;
@@ -42,11 +42,29 @@ public partial class AddBoardWindow : Window
     /// <summary>The board to add, once a choice was made.</summary>
     public BoardDef? Result { get; private set; }
 
+    /// <summary>
+    /// The two starters on offer, built as the board builds its tabs: one whose mode is off has no panels to copy
+    /// (review round 2, item 10 follow-up: this window built them without the switches, so an off Battle offered its full board).
+    /// </summary>
+    internal static (StarterBoard Battle, StarterBoard Alts) Starters(
+        IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, Func<string, string?>? offModeName) =>
+        (StarterBoards.Build(installed, sources, StarterBoards.Battle, offModeName),
+         StarterBoards.Build(installed, sources, StarterBoards.Alts, offModeName));
+
+    /// <summary>A starter's button text: its panel count, why it has none, or that its mode is off.</summary>
+    internal static string ButtonText(StarterBoard starter)
+    {
+        var count = starter.Panels.Count;
+        return starter.Empty == BoardEmpty.ModeOff && starter.ModeName is { } mode ? $"{starter.Name}: {mode} is off"
+            : count == 0 ? $"{starter.Name}: nothing to show yet"
+            : $"{starter.Name}: {count} panel{(count == 1 ? "" : "s")}";
+    }
+
     /// <summary>The button's name is its text, so a screen reader hears why a starter can't be picked.</summary>
     private static void Describe(Button button, StarterBoard starter)
     {
         var count = starter.Panels.Count;
-        var text = count == 0 ? $"{starter.Name}: nothing to show yet" : $"{starter.Name}: {count} panel{(count == 1 ? "" : "s")}";
+        var text = ButtonText(starter);
         button.Content = text;
         button.HorizontalContentAlignment = HorizontalAlignment.Left;
         button.IsEnabled = count > 0;

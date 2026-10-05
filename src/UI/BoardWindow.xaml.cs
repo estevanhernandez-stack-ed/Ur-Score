@@ -510,7 +510,7 @@ public partial class BoardWindow : Window
     {
         if (!ButtonStates().AddBoard) return;
 
-        var dialog = new AddBoardWindow(_services.Installed, _services.Sources, BoardEdits.NextName(_services.Boards)) { Owner = this };
+        var dialog = new AddBoardWindow(_services.Installed, _services.Sources, BoardEdits.NextName(_services.Boards), _services.OffModeName) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } board) return;
 
         if (SaveBoards(BoardEdits.Add(_services.Boards, board))) ShowBoard(board.Id);
