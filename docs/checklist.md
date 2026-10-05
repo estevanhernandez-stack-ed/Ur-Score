@@ -120,7 +120,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Verify: BoardText/StarterBoards/RaceBoard/Gallery tests updated + new; count recorded (RaceBoardTests' three update-
   note asserts deleted, named).
 
-- [ ] **11. The game page replaces Recipes and Clans**
+- [x] **11. The game page replaces Recipes and Clans**
   Spec ref: `spec.md > Setup UI` (Page list, GamePage, ClansSection, Removed) + `A11` (focus)
   What to build: GameModel (pure) + GamePage.xaml + ClansSection (ClansPage's behaviour and AutomationIds), StartOnOpen
   checkbox moved, SetupPages/SetupWindow page list and FirstRunPage, first-run focus on the clan search; then delete
