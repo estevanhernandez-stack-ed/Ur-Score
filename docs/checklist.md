@@ -61,7 +61,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Acceptance: `prd.md > Turning modes and games on and off`: the starter tab comes back with the same arrangement.
   Verify: new Following/StarterBoards tests green; existing StarterBoardsTests green.
 
-- [ ] **5. Disclosure without the import window**
+- [x] **5. Disclosure without the import window**
   Spec ref: `spec.md > Review round 1 amendments > A4`
   What to build: rename `src/Recipes/ImportReview.cs` to `ReaderDisclosure.cs` (Review, SendsText kept), update
   TryCommand and callers; make host ordering a list in first-appearance order.
