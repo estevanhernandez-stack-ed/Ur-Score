@@ -32,9 +32,16 @@ public sealed class GameCatalog(IReadOnlyList<GameDef> games)
 {
     public const int SupportedVersion = 1;
 
-    private static readonly Lazy<GameCatalog> Loaded = new(ReadBuiltIn);
+    private static readonly Lazy<(GameCatalog Catalog, IReadOnlyList<string> Problems)> Loaded = new(ReadBuiltIn);
 
-    public static GameCatalog BuiltIn => Loaded.Value;
+    /// <summary>The embedded manifests that parse. One that doesn't is left out and named in <see cref="BuiltInProblems"/>.</summary>
+    public static GameCatalog BuiltIn => Loaded.Value.Catalog;
+
+    /// <summary>
+    /// Each embedded manifest that could not be parsed, by resource name and why. A test keeps it empty for the shipped app;
+    /// the composition says each one in the trail and in Diagnostics, so a broken manifest costs its game and never the start.
+    /// </summary>
+    public static IReadOnlyList<string> BuiltInProblems => Loaded.Value.Problems;
 
     public IReadOnlyList<GameDef> Games { get; } = games;
 
@@ -166,10 +173,10 @@ public sealed class GameCatalog(IReadOnlyList<GameDef> games)
         return problems;
     }
 
-    private static GameCatalog ReadBuiltIn()
+    private static (GameCatalog, IReadOnlyList<string>) ReadBuiltIn()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        var games = new List<GameDef>();
+        var manifests = new List<(string Name, string Text)>();
 
         foreach (var name in assembly.GetManifestResourceNames().Where(n => n.EndsWith(".game.json", StringComparison.Ordinal)).Order(StringComparer.Ordinal))
         {
@@ -177,10 +184,33 @@ public sealed class GameCatalog(IReadOnlyList<GameDef> games)
             if (stream is null) continue;
 
             using var reader = new StreamReader(stream);
-            games.Add(Parse(reader.ReadToEnd()));
+            manifests.Add((name, reader.ReadToEnd()));
         }
 
-        return new GameCatalog(games);
+        return FromManifests(manifests);
+    }
+
+    /// <summary>
+    /// The catalog of every manifest that parses, in the order given, and a problem line for each that doesn't (review round 2:
+    /// <see cref="Parse"/> threw inside the lazy <see cref="BuiltIn"/>, so one bad manifest stopped the app starting).
+    /// </summary>
+    internal static (GameCatalog Catalog, IReadOnlyList<string> Problems) FromManifests(IEnumerable<(string Name, string Text)> manifests)
+    {
+        var games = new List<GameDef>();
+        var problems = new List<string>();
+        foreach (var (name, text) in manifests)
+        {
+            try
+            {
+                games.Add(Parse(text));
+            }
+            catch (GameManifestException ex)
+            {
+                problems.Add($"{name}: {ex.Message}");
+            }
+        }
+
+        return (new GameCatalog(games), problems);
     }
 
     private static string? Text(JsonElement element, string name) =>

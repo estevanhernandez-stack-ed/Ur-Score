@@ -174,8 +174,9 @@ public sealed class AppServices : ISetupServices, IDisposable
         _settingsPath = paths.Settings;
 
         // A mode the manifest gets wrong is dropped with a trail line, never a crash at start (spec "GameCatalog").
+        // A manifest that doesn't parse at all is left out of BuiltIn with its own line (review round 2); same trail, same list.
         (Catalog, var manifestProblems) = Readers.Sound(GameCatalog.BuiltIn, BuiltInRecipes.BySlug);
-        _manifestProblems = [.. manifestProblems.Select(p => $"game manifest: {p}")];
+        _manifestProblems = [.. GameCatalog.BuiltInProblems.Concat(manifestProblems).Select(p => $"game manifest: {p}")];
         foreach (var problem in _manifestProblems) AddTrail($"MODE DROPPED: {problem}");
         _switches = new ModeSwitches(Catalog, _settings.Modes);
         DecideUpgradeModes(settingsLoad.File, dataFolderExisted, installedOnDisk);

@@ -23,6 +23,29 @@ public class ManifestTests
         Assert.Empty(GameCatalog.Validate(GameCatalog.BuiltIn, BuiltInRecipes.BySlug));
     }
 
+    /// <summary>
+    /// Review round 2: a manifest that can't be parsed costs its own game and a problem line naming it, never the start
+    /// (Parse used to throw out of the lazy BuiltIn, inside the composition's constructor). With every manifest broken the
+    /// catalog is empty, which the board already answers with "Turn on a mode".
+    /// </summary>
+    [Fact]
+    public void AManifestThatDoesNotParseIsLeftOutAndNamed()
+    {
+        const string good = """{ "game": 1, "id": "g", "name": "G", "modes": [ { "id": "m", "name": "M", "reads": ["x"] } ] }""";
+
+        var (catalog, problems) = GameCatalog.FromManifests([("a.game.json", "{ not json"), ("b.game.json", good), ("c.game.json", """{ "game": 2 }""")]);
+
+        Assert.Equal(["g"], catalog.Games.Select(g => g.Id));
+        Assert.Equal(2, problems.Count);
+        Assert.StartsWith("a.game.json: ", problems[0], StringComparison.Ordinal);
+        Assert.StartsWith("c.game.json: This game manifest is not format version 1.", problems[1], StringComparison.Ordinal);
+
+        var (none, all) = GameCatalog.FromManifests([("a.game.json", "[]")]);
+        Assert.Empty(none.Games);
+        Assert.Single(all);
+        Assert.Empty(GameCatalog.BuiltInProblems);
+    }
+
     [Fact]
     public void ThePetSimManifestIsWhatTheSpecSays()
     {
