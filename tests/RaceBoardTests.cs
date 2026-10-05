@@ -210,34 +210,15 @@ public class RaceBoardTests
         Assert.StartsWith("Rival clans stopped updating at 12:00 on 19 Sep:",
             StoppedRace(TopClans with { Name = "Old top clans", GroupsAreClans = false }, behind).Head.Note, StringComparison.Ordinal);
 
-        // A list that does say its groups are clans: the read kept none, not the recipe, and there is no update to point at.
+        // A list that does say its groups are clans: the read kept none, not the recipe.
         Assert.Equal("Rival clans stopped updating at 17:00 on 19 Sep: the last read of Pet Sim 99 top clans kept no clan names.",
             StoppedRace(TopClans).Head.Note);
     }
 
     /// <summary>
-    /// When the copy Ur Score ships says its groups are clans and the installed one does not, the fix is one button away in
-    /// Setup › Recipes, and the note says where. One sentence about the cause, one about the fix, never the older
-    /// "No clans are named here" beside them.
-    /// </summary>
-    [Fact]
-    public void ABandThatStoppedPointsAtTheRecipeUpdateWhenOneKeepsNames()
-    {
-        var list = TopClans with { GroupsAreClans = false };
-        Assert.Equal("pet-sim-99-top-clans", list.Slug);
-
-        var race = StoppedRace(list);
-
-        Assert.Equal(
-            "Rival clans stopped updating at 17:00 on 19 Sep: Pet Sim 99 top clans no longer keeps clan names. "
-            + "Setup › Recipes has an update for Pet Sim 99 top clans.",
-            race.Head.Note);
-    }
-
-    /// <summary>
     /// "Rival clans stopped updating" is a claim about lines on the chart, so it needs a rival line to be about. A band line
     /// needs two named reads; with only one before the names stopped there is no band at all, and the sentence spoke of lines
-    /// nobody could see. The update pointer is about the recipe, not the chart, and stays.
+    /// nobody could see.
     /// </summary>
     [Fact]
     public void ARaceWithNoRivalLinesDoesNotSayTheyStopped()
@@ -260,13 +241,13 @@ public class RaceBoardTests
         Assert.Single(race.Series);
         Assert.Equal("", race.Head.Note);
 
-        Assert.Equal("Setup › Recipes has an update for Pet Sim 99 top clans.",
-            OneNamedRead(TopClans with { GroupsAreClans = false }).Head.Note);
+        // The readers come from the app, so a list without the flag has no newer copy to point at: nothing more to say.
+        Assert.Equal("", OneNamedRead(TopClans with { GroupsAreClans = false }).Head.Note);
     }
 
     /// <summary>
     /// A list without the flag whose latest read is still an older named one: the band is drawn and has not stopped yet, so
-    /// "No clans are named here" would contradict the chart above it. Only the update pointer is left to say.
+    /// "No clans are named here" would contradict the chart above it. There is no update pointer any more, so it says nothing.
     /// </summary>
     [Fact]
     public void AListStillOnItsNamedReadsDoesNotClaimNoClansAreNamed()
@@ -287,10 +268,7 @@ public class RaceBoardTests
 
         var race = NamedRace(TopClans with { GroupsAreClans = false });
         Assert.Equal(7, race.Series.Count);
-        Assert.Equal("Setup › Recipes has an update for Pet Sim 99 top clans.", race.Head.Note);
-
-        // With no newer copy to point at, there is nothing to say at all.
-        Assert.Equal("", NamedRace(TopClans with { Name = "Old top clans", GroupsAreClans = false }).Head.Note);
+        Assert.Equal("", race.Head.Note);
     }
 
     /// <summary>Two of your clans keep their own colours, and neither is drawn again as a rival.</summary>

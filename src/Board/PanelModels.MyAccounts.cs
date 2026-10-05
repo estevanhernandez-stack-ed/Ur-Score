@@ -29,6 +29,7 @@ public static partial class PanelModels
     public static MyAccountsModel MyAccounts(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var title = PanelText.Title(PanelType.MyAccounts, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new MyAccountsModel(off, "", "", []);
         if (live.FindRecipe(settings.Recipe) is not { } installed) return new MyAccountsModel(StaleSource(live, settings, title), "", "", []);
 
         var recipe = installed.Recipe;

@@ -17,6 +17,18 @@ public partial class BoardWindow
     /// </summary>
     private readonly BoardUndo _draftUndo = BoardUndo.ForDraft();
 
+    /// <summary>
+    /// Turn on, on a panel of an off mode: flips that mode's switch. Wired on the board and on each pop-out, so the button
+    /// works wherever the panel is drawn. The change redraws every panel through the services' changed event.
+    /// </summary>
+    private void OnTurnOnModeTool(object? sender, PanelToolEventArgs e)
+    {
+        if (e.Tool != PanelTool.TurnOnMode || (e.OriginalSource as FrameworkElement)?.DataContext is not PanelHead { TurnOnMode: { } key }) return;
+
+        e.Handled = true;
+        _services.SetSwitch(key, true);
+    }
+
     private void OnSettingsTool(object? sender, PanelToolEventArgs e)
     {
         if (e.Tool is not (PanelTool.Settings or PanelTool.ChooseAnother) || PanelAt(e.OriginalSource) is not { } def) return;

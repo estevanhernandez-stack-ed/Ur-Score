@@ -19,6 +19,7 @@ public static partial class PanelModels
     public static LeaderboardModel LiveLeaderboard(LiveBoard live, PanelSettings settings, IReadOnlyDictionary<long, string> names)
     {
         var title = PanelText.Title(PanelType.LiveLeaderboard, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new LeaderboardModel(off, [], []);
         var installed = live.FindRecipe(settings.Recipe);
         if (installed is null || live.FindSource(settings.SourceId) is not { } source)
         {

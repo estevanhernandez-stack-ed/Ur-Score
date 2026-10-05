@@ -24,6 +24,7 @@ public static partial class PanelModels
         var groupRecipe = PanelText.GroupRecipe(live.Installed);
         var title = PanelText.Title(PanelType.Top, installed?.Recipe, live.Installed);
         var nameColumn = groupRecipe is null ? "Name" : RecipeWords.Capital(RecipeWords.Group(groupRecipe));
+        if (live.OffHead(settings, title) is { } off) return new TopModel(off, nameColumn, "", []);
 
         if (installed is not { Recipe.IsGroupList: true } || live.FindSource(settings.SourceId) is not { } source)
         {

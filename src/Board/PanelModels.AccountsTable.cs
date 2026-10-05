@@ -20,6 +20,7 @@ public static partial class PanelModels
         LiveBoard live, ScoreBookReader reader, PanelSettings settings, AccountSort? sort = null, long? pickedUserId = null)
     {
         var title = PanelText.Title(PanelType.AccountsTable, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new AccountsTableModel(off, [], []);
         if (live.FindRecipe(settings.Recipe) is not { } installed) return new AccountsTableModel(StaleSource(live, settings, title), [], []);
 
         var recipe = installed.Recipe;

@@ -16,6 +16,7 @@ public static partial class PanelModels
     public static RecordsModel RecordsPanel(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var title = PanelText.Title(PanelType.Records, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new RecordsModel(off, []);
         if (live.FindRecipe(settings.Recipe) is not { } installed) return new RecordsModel(StaleSource(live, settings, title), []);
 
         var recipe = installed.Recipe;

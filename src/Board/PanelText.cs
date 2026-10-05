@@ -165,8 +165,14 @@ public static class PanelText
 
     public static string StaleSource(string group) => $"This panel's {group} was removed.";
 
-    /// <summary>A race whose recipe has no summed headline (backlog S1-13.6): none of its lines was removed, there is simply nothing to race.</summary>
-    public const string NoTotalToRace = "This panel's recipe has no total to race.";
+    /// <summary>A panel whose reader's mode is off. The Turn on button beside it is the way back; nothing was deleted.</summary>
+    public static string ModeIsOff(string mode) => $"{mode} is off.";
+
+    /// <summary>A panel whose reader no mode names (an orphan kept in the data folder): nothing reads it, and there is no switch to flip.</summary>
+    public const string NoMode = "Not part of any mode.";
+
+    /// <summary>A race whose mode has no summed headline (backlog S1-13.6): none of its lines was removed, there is simply nothing to race.</summary>
+    public const string NoTotalToRace = "This mode has no total to race.";
 
     /// <summary>A race drawn without some of its lines (S1-13.6): "One of this race's clans was removed.", "2 of this race's clans were removed."</summary>
     public static string RaceRemoved(int removed, string groups) =>
@@ -207,9 +213,6 @@ public static class PanelText
         var why = keepsNames ? $"the last read of {list.Name} kept no {group} names" : $"{list.Name} no longer keeps {group} names";
         return $"Rival {groups} stopped updating at {at}: {why}.";
     }
-
-    /// <summary>Where the fix for a list that keeps no names is, when the copy Ur Score ships keeps them (2026-09-24).</summary>
-    public static string RecipeUpdate(Recipe recipe) => $"Setup › Recipes has an update for {recipe.Name}.";
 
     /// <summary>
     /// A live-only panel (Live leaderboard, Top, Promotion check) whose source was read this session and brought nothing back: no
@@ -286,13 +289,13 @@ public static class PanelText
     /// (plan A44, A46). One line per recipe that said so, main source first.
     /// <para>
     /// The sentence is the recipe's: <c>unavailable.message</c>, which is the only thing here that knows what it
-    /// reads and what you must do about it. The only words Ur Score adds are the recipe's own name, and only when
+    /// reads and what you must do about it. The only words Ur Score adds are the reader's mode name (<paramref name="labels"/>, else the recipe's own name), and only when
     /// <paramref name="nameTheRecipe"/> — a screen that already shows one recipe at a time doesn't need telling.
     /// </para>
     /// </summary>
     public static string CannotRead(
         long userId, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
-        IReadOnlyDictionary<string, RecipeSnapshot> latest, bool nameTheRecipe)
+        IReadOnlyDictionary<string, RecipeSnapshot> latest, bool nameTheRecipe, IReadOnlyDictionary<string, string>? labels = null)
     {
         if (userId == 0) return "";
 
@@ -302,7 +305,7 @@ public static class PanelText
             if (installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, source.Recipe, StringComparison.Ordinal))?.Recipe is not { } recipe) continue;
             if (latest.GetValueOrDefault(source.Id)?.Unavailable.GetValueOrDefault(userId) is not { Length: > 0 } why) continue;
 
-            var line = nameTheRecipe ? $"{recipe.Name}: {why}" : why;
+            var line = nameTheRecipe ? $"{labels?.GetValueOrDefault(recipe.Slug) ?? recipe.Name}: {why}" : why;
             if (!lines.Contains(line, StringComparer.Ordinal)) lines.Add(line);
         }
 

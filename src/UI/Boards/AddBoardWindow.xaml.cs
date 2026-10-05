@@ -29,7 +29,7 @@ public partial class AddBoardWindow : Window
         Describe(BattleBoardButton, _battle);
         Describe(AltsBoardButton, _alts);
         StarterLine.Text = _battle.Panels.Count == 0 && _alts.Panels.Count == 0
-            ? "The starters fill in once a recipe has ticked stats and a source."
+            ? "The starters fill in once a mode is on and has a clan or account to read."
             : "A starter is built from your sources as they are now, and stays as you arrange it.";
 
         Loaded += (_, _) =>

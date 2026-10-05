@@ -363,7 +363,26 @@ public sealed class AppServices : ISetupServices, IDisposable
         Sources, Installed,
         new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
         new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
-        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered, _sourceIcons.Files);
+        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered, _sourceIcons.Files, OffReaders(), ReaderLabels());
+
+    /// <summary>
+    /// The readers a panel can't draw: those of an off mode (with the switch that turns it back on) and the orphans, which
+    /// belong to no mode. A panel built on one of them says so in place of numbers it isn't reading.
+    /// </summary>
+    private Dictionary<string, string> ReaderLabels() =>
+        Installed.Concat(Orphans).ToDictionary(i => i.Recipe.Slug, i => ReaderNames.For(i.Recipe.Slug, Catalog, Installed), StringComparer.Ordinal);
+
+    private Dictionary<string, ReaderOff> OffReaders()
+    {
+        var off = new Dictionary<string, ReaderOff>(StringComparer.Ordinal);
+        foreach (var installed in Installed)
+        {
+            if (Catalog.ModeOf(installed.Recipe.Slug) is { } mode && !_switches.IsOn(mode.Key)) off[installed.Recipe.Slug] = new ReaderOff(mode.Key, mode.Name);
+        }
+
+        foreach (var orphan in Orphans) off[orphan.Recipe.Slug] = new ReaderOff(null);
+        return off;
+    }
 
     /// <summary>
     /// The boards on screen: the saved ones, with each tab that still follows a starter rebuilt from your sources and

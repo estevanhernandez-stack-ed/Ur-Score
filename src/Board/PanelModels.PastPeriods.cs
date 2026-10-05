@@ -19,6 +19,7 @@ public static partial class PanelModels
     {
         var installed = live.FindRecipe(settings.Recipe);
         var title = PanelText.Title(PanelType.PastPeriods, installed?.Recipe, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new PastPeriodsModel(off, "", []);
         if (installed is null || live.FindSource(settings.SourceId) is not { } source)
         {
             return new PastPeriodsModel(StaleSource(live, settings, title), "", []);

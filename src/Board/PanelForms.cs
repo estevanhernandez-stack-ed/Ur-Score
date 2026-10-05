@@ -158,7 +158,7 @@ public static class PanelForms
 
         var choices = found.SelectMany(f => f.Stats.Select(s => new FormChoice(
             StatKey(f.Installed.Recipe.Slug, s.Key),
-            found.Count > 1 ? $"{s.Label} · {f.Installed.Recipe.Name}" : s.Label))).ToList();
+            found.Count > 1 ? $"{s.Label} · {live.LabelOf(f.Installed.Recipe)}" : s.Label))).ToList();
         if (type == PanelType.PastPeriods && live.FindRecipe(only)?.Recipe is { } recipe && Fits(type, recipe))
         {
             choices.Add(new FormChoice(NoStatKey, "Don't show your best account"));
@@ -323,7 +323,7 @@ public static class PanelForms
         var name = live.SourceName(source);
         var label = PanelText.SourceLabel(name, source.Role);
 
-        if (withRecipe && live.FindRecipe(source.Recipe) is { } installed && installed.Recipe.Name != name) label += $" · {installed.Recipe.Name}";
+        if (withRecipe && live.FindRecipe(source.Recipe) is { } installed && live.LabelOf(installed.Recipe) is var mode && mode != name) label += $" · {mode}";
         return source.Enabled ? label : $"{label} · off";
     }
 
@@ -356,7 +356,7 @@ public static class PanelForms
 
         var sources = ids.Select(live.FindSource).ToList();
         if (sources.Any(s => s is null)) return $"One of this race's {words} was removed. Choose another.";
-        if (sources.Any(s => s!.Recipe != settings.Recipe)) return "Every line in a race comes from the same recipe.";
+        if (sources.Any(s => s!.Recipe != settings.Recipe)) return "Every line in a race comes from the same mode.";
 
         return live.FindRecipe(settings.Recipe) is { } installed && Fits(PanelType.Race, installed.Recipe) ? null : $"These {words} have no total to race.";
     }
@@ -366,7 +366,7 @@ public static class PanelForms
         if (settings.ToSourceId is null) return $"Choose a {word} to compare with.";
         if (live.FindSource(settings.ToSourceId) is not { } to) return $"{PanelText.StaleSource(word)} {ChooseAnother}";
 
-        return to.Recipe != settings.Recipe || to.Id == settings.SourceId ? $"Choose a different {word} of the same recipe to compare with." : null;
+        return to.Recipe != settings.Recipe || to.Id == settings.SourceId ? $"Choose a different {word} of the same mode to compare with." : null;
     }
 
     private static string? StatProblem(PanelType type, PanelSettings settings, InstalledRecipe? installed)

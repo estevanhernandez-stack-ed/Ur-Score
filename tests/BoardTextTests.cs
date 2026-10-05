@@ -81,11 +81,14 @@ public class BoardTextTests
     {
         var noRecipes = BoardText.EmptyState(BoardEmpty.NoRecipes, null);
         var noStats = BoardText.EmptyState(BoardEmpty.NoStats, Clan);
-        var noSources = BoardText.EmptyState(BoardEmpty.NoSources, Clan);
+        var noSources = BoardText.EmptyState(BoardEmpty.NoSources, Clan, modeName: "Battle");
 
-        Assert.Equal(("Import a recipe to start", "Import recipe…"), (noRecipes.Line, noRecipes.Button));
+        // No reader at all says what every-mode-off says: the answer is a mode, never an import.
+        Assert.Equal(("Turn on a mode", "Open setup"), (noRecipes.Line, noRecipes.Button));
         Assert.Equal(("No stats turned on yet", "Choose stats"), (noStats.Line, noStats.Button));
-        Assert.Equal(("Choose your main clan", "Choose your main clan"), (noSources.Line, noSources.Button));
+        // The Pick your clan state (A2 / spec "Starter boards"): the mode's board fills once a clan is chosen.
+        Assert.Equal(("Pick your clan", "Pick clan"), (noSources.Line, noSources.Button));
+        Assert.Equal("Choose your clan and the Battle board fills on the next read.", noSources.Detail);
     }
 
     [Fact]

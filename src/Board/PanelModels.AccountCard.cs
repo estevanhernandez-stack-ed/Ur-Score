@@ -30,6 +30,7 @@ public static partial class PanelModels
     public static AccountCardModel AccountCard(LiveBoard live, ScoreBookReader reader, PanelSettings settings, long? pickedUserId = null)
     {
         var title = PanelText.Title(PanelType.AccountCard, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return EmptyCard(off);
         if (live.FindRecipe(settings.Recipe) is not { } installed) return EmptyCard(StaleSource(live, settings, title));
 
         var recipe = installed.Recipe;

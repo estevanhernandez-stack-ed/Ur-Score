@@ -7,7 +7,7 @@ using Labs626.UrScore.Board;
 namespace Labs626.UrScore.UI;
 
 /// <summary>Every tool a panel's header can raise (spec §9.2, §9.3, §9.4).</summary>
-public enum PanelTool { PopOut, Settings, ChooseAnother, DragStart, Remove }
+public enum PanelTool { PopOut, Settings, ChooseAnother, DragStart, Remove, TurnOnMode }
 
 public sealed class PanelToolEventArgs(RoutedEvent routedEvent, PanelTool tool) : RoutedEventArgs(routedEvent)
 {
@@ -133,7 +133,7 @@ public partial class PanelFrame : UserControl
         }
         PopOutButton.Visibility = GetShowPopOut(this) && !editing ? Visibility.Visible : Visibility.Collapsed;
         PanelSettingsButton.Visibility = settings ? Visibility.Visible : Visibility.Collapsed;
-        ChooseAnotherButton.Visibility = settings && DataContext is PanelHead { HasStale: true } ? Visibility.Visible : Visibility.Collapsed;
+        ChooseAnotherButton.Visibility = settings && DataContext is PanelHead { HasStale: true, TurnOnMode: null } ? Visibility.Visible : Visibility.Collapsed;
 
     }
 

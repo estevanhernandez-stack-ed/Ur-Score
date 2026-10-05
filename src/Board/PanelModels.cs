@@ -23,8 +23,11 @@ public sealed record PanelSettings(
 /// </summary>
 public sealed record PanelHead(
     string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "",
-    bool Remembered = false)
+    bool Remembered = false, string? TurnOnMode = null)
 {
+    /// <summary>A panel of an off mode carries that mode's key, so its Turn on button knows which switch to flip.</summary>
+    public bool HasTurnOn => TurnOnMode is not null && Stale is not null;
+
     public string Chip => ChipRole is { } role ? PanelText.Chip(role) : "";
 
     public bool HasBody => Stale is null;
@@ -38,6 +41,9 @@ public sealed record PanelHead(
     public bool HasNote => Note.Length > 0 && Stale is null;
 }
 
+/// <summary>A reader that can't show right now: <paramref name="ModeKey"/> is its off mode's switch key, or null for a reader no mode names.</summary>
+public sealed record ReaderOff(string? ModeKey, string ModeName = "");
+
 /// <summary>Everything live a panel may use. Other players' rows live here in memory only.</summary>
 public sealed record LiveBoard(
     IReadOnlyList<Source> Sources,
@@ -49,8 +55,30 @@ public sealed record LiveBoard(
     bool Running,
     IReadOnlyDictionary<long, string>? Avatars = null,
     IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null,
-    IReadOnlyDictionary<string, string>? Icons = null)
+    IReadOnlyDictionary<string, string>? Icons = null,
+    IReadOnlyDictionary<string, ReaderOff>? Offs = null,
+    IReadOnlyDictionary<string, string>? Labels = null)
 {
+    /// <summary>What a reader is called to a person: its mode's name (<see cref="Games.ReaderNames"/>), else the recipe's own name where the app gave no labels.</summary>
+    public string LabelOf(Recipe recipe) => Labels?.GetValueOrDefault(recipe.Slug) ?? recipe.Name;
+
+    /// <summary>
+    /// Why a panel of these settings can't show: its reader's mode is off ("Battle is off." with a Turn on button), or its
+    /// reader is part of no mode ("Not part of any mode.", no button). Null when the panel's reader is on. The reader is the
+    /// settings' recipe, else its source's recipe, else the first race line's.
+    /// </summary>
+    public PanelHead? OffHead(PanelSettings settings, string title)
+    {
+        if (Offs is not { Count: > 0 }) return null;
+
+        var slug = settings.Recipe.Length > 0
+            ? settings.Recipe
+            : FindSource(settings.SourceId ?? settings.SourceIds?.FirstOrDefault())?.Recipe;
+        if (slug is null || !Offs.TryGetValue(slug, out var off)) return null;
+
+        return new PanelHead(title, Stale: off.ModeKey is null ? PanelText.NoMode : PanelText.ModeIsOff(off.ModeName), TurnOnMode: off.ModeKey);
+    }
+
     public DateTimeOffset Now => Time.GetUtcNow();
 
     /// <summary>

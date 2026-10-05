@@ -377,7 +377,7 @@ public class PanelModelsTests
         RaceModel Race(string recipe, params string[] ids) => PanelModels.Race(live, Reader(), new PanelSettings(recipe, SourceIds: ids));
 
         // A recipe with no summed total has nothing to race, whichever lines it names.
-        Assert.Equal("This panel's recipe has no total to race.", Race(Profile.Slug, clans[0].Id, clans[1].Id).Head.Stale);
+        Assert.Equal("This mode has no total to race.", Race(Profile.Slug, clans[0].Id, clans[1].Id).Head.Stale);
 
         var oneGone = Race(Clan.Slug, clans[0].Id, "s-gone0000", clans[1].Id);
         Assert.Null(oneGone.Head.Stale);

@@ -77,6 +77,7 @@ public static class PacePanel
     public static PaceModel Of(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var title = PanelText.Title(PanelType.Pace, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new PaceModel(off, []);
         if (live.FindRecipe(settings.Recipe) is not { } installed || live.FindSource(settings.SourceId) is not { } source)
         {
             return new PaceModel(PanelModels.StaleSource(live, settings, title), []);

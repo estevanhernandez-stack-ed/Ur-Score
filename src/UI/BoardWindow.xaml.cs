@@ -8,6 +8,7 @@ using Labs626.UrScore.Board;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Theming;
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Games;
 
 namespace Labs626.UrScore.UI;
 
@@ -57,6 +58,9 @@ public partial class BoardWindow : Window
     private string? _anchorSourceId;
     private string? _emptyRecipe;
 
+    /// <summary>The mode the empty state speaks for (the off one, or the one asking for a clan), for its button.</summary>
+    private ModeDef? _emptyMode;
+
     /// <summary>Why a board change couldn't be saved, only while its message box is open; the box is the notification.</summary>
     private string? _boardsNote;
 
@@ -75,12 +79,6 @@ public partial class BoardWindow : Window
     /// </summary>
     private bool _failed;
 
-    /// <summary>
-    /// What the empty state's Import recipe… said: its wait for RoRoRo, then what it did or why it couldn't. Kept for the detail
-    /// line until the next import or the next Start, Stop or Test now, instead of being drawn over by the next redraw (S1-12.4).
-    /// </summary>
-    private string? _importNote;
-
     private BoardEmpty _empty;
 
     /// <summary>The tabs are being set from the boards, not by a click.</summary>
@@ -91,9 +89,6 @@ public partial class BoardWindow : Window
 
     /// <summary>A Test now read is in flight. Pausing still works; see <see cref="BoardButtons"/>.</summary>
     private bool _testing;
-
-    /// <summary>The empty state's Import recipe… is in flight.</summary>
-    private bool _importing;
 
     /// <summary>
     /// Whether any source was switched on at the last draw, so the first one to come on asks start-on-open again (§3.6).
@@ -111,6 +106,7 @@ public partial class BoardWindow : Window
         // Panel tools raise one routed event; each concern handles its own tools (Tasks 6-8).
         PanelFrame.SetShowSettings(BoardPanels, true);
         BoardPanels.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnSettingsTool));
+        BoardPanels.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnTurnOnModeTool));
         HookEditing();
         HookPopOuts();
         HookAccounts();
@@ -154,7 +150,7 @@ public partial class BoardWindow : Window
     {
         if (!await ReadBookAsync() || _popOutLifecycle.ClosingApp) return;
 
-        // Spec §7.1: a recipe with inputs and no sources opens Setup on its Clans page.
+        // Spec §7.1: a mode that asks for a clan and has no source opens Setup on its game page.
         var firstRun = SetupPages.FirstRunPage(_services.Installed, _services.Sources);
         if (firstRun is not null) OpenSetup(firstRun);
 
@@ -170,7 +166,7 @@ public partial class BoardWindow : Window
             return;
         }
 
-        _services.AddTrail("START ON OPEN: reading started because Setup > Recipes has it ticked.");
+        _services.AddTrail("START ON OPEN: reading started because Start reading when Ur Score opens is ticked.");
         await StartReadingAsync();
     }
 
@@ -385,7 +381,7 @@ public partial class BoardWindow : Window
             // Why the score book couldn't be read comes first (S1-14.2); else why your boards aren't showing, said from the first
             // draw (R3).
             StateLine.Text = BoardText.BookStateLine(unread: _bookProblem is not null);
-            DetailLine.Text = _bookProblem ?? boardsProblem ?? _importNote ?? "";
+            DetailLine.Text = _bookProblem ?? boardsProblem ?? "";
             // Arranging keeps the banner in the lines' place (spec §4.2).
             StateLines.Visibility = Editing ? Visibility.Collapsed : Visibility.Visible;
             return;
@@ -394,7 +390,7 @@ public partial class BoardWindow : Window
         // Worked out on every redraw from what the window is doing, never written once, so no redraw wipes it (S1-14.3, S1-14.5).
         var activity = new BoardActivity(_starting, _testing, _services.AskedReadAt, _services.StoppedAt, _failed);
         StateLine.Text = BoardText.StateLine(live, _services.EverStarted, activity);
-        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem, _failed ? BoardText.UnexpectedDetail : _importNote);
+        DetailLine.Text = BoardText.DetailLine(live, _services.BudgetWarning, boardsProblem, _failed ? BoardText.UnexpectedDetail : null);
 
         // BC3: the pair shows only when it has something to say; the card always has the lot. While arranging the
         // banner holds their slot (spec §4.2).
@@ -434,14 +430,20 @@ public partial class BoardWindow : Window
 
     private void RenderEmpty(BoardDef board)
     {
-        var starters = StarterBoards.All(_services.Installed, _services.Sources);
+        var starters = StarterBoards.All(_services.Installed, _services.Sources, _services.OffModeName);
         // A draft is a board being shaped, not a tab following your sources: with no panels it says so and offers Add panel.
         // A score book that couldn't be read covers every board, with Try again (S1-14.2).
         _empty = BoardText.EmptyFor(starters, board, Editing, bookUnread: _bookProblem is not null && !_services.ReaderLoaded);
-        _emptyRecipe = (StarterBoards.Named(starters, board.Follows) ?? StarterBoards.EmptyState(starters)).RecipeSlug;
+        var shown = StarterBoards.Named(starters, board.Follows) ?? StarterBoards.EmptyState(starters);
+        _emptyRecipe = shown.RecipeSlug;
+
+        // The mode the empty state speaks for: the off one a ModeOff board is about, else the one whose reader has no source.
+        _emptyMode = shown.ModeName is { } offName
+            ? _services.Catalog.Modes.FirstOrDefault(m => m.Name == offName)
+            : _emptyRecipe is null ? null : _services.Catalog.ModeOf(_emptyRecipe);
 
         var recipe = _services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, _emptyRecipe, StringComparison.Ordinal))?.Recipe;
-        var (line, detail, button) = BoardText.EmptyState(_empty, recipe, Editing);
+        var (line, detail, button) = BoardText.EmptyState(_empty, recipe, Editing, _emptyMode?.Name);
         var empty = _empty != BoardEmpty.None;
 
         EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
@@ -787,7 +789,7 @@ public partial class BoardWindow : Window
         }
 
         // The button is disabled for these; this only catches a press already on its way.
-        if (!BoardButtons.For(_services.ReaderLoaded, running: false, _starting, _testing, _importing).StartStop) return;
+        if (!BoardButtons.For(_services.ReaderLoaded, running: false, _starting, _testing, importing: false).StartStop) return;
 
         await StartReadingAsync();
     }
@@ -818,8 +820,8 @@ public partial class BoardWindow : Window
     {
         if (_services.Installed.Count == 0)
         {
-            StateLine.Text = "No recipe to run.";
-            DetailLine.Text = "Import a recipe first.";
+            StateLine.Text = "No mode to run.";
+            DetailLine.Text = "Turn on a mode first.";
             return;
         }
 
@@ -845,11 +847,11 @@ public partial class BoardWindow : Window
 
     private async void OnTestNowClick(object sender, RoutedEventArgs e)
     {
-        if (!BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing).TestNow) return;
+        if (!BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, importing: false).TestNow) return;
         if (_services.Installed.Count == 0)
         {
-            StateLine.Text = "No recipe to test.";
-            DetailLine.Text = "Import a recipe first.";
+            StateLine.Text = "No mode to test.";
+            DetailLine.Text = "Turn on a mode first.";
             return;
         }
 
@@ -897,16 +899,16 @@ public partial class BoardWindow : Window
     }
 
     /// <summary>What every button, tab and tab menu item takes right now, for <see cref="ApplyButtons"/> and the press guards.</summary>
-    /// <remarks>Try again holds the empty state's button for its read the way Import recipe… does for its import.</remarks>
+    /// <remarks>Try again holds the empty state's button while the book is being read.</remarks>
     private BoardButtonStates ButtonStates() =>
-        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _importing || _readingBook, _services.Boards.Count, Editing,
+        BoardButtons.For(_services.ReaderLoaded, _services.Running, _starting, _testing, _readingBook, _services.Boards.Count, Editing,
             ShownBoard(_services.Boards));
 
     private void OnSetupClick(object sender, RoutedEventArgs e) => OpenSetup(null);
 
     private async void OnEmptyStateClick(object sender, RoutedEventArgs e)
     {
-        if (_importing || _readingBook) return;
+        if (_readingBook) return;
 
         if (_empty == BoardEmpty.NoPanels)
         {
@@ -920,9 +922,16 @@ public partial class BoardWindow : Window
             return;
         }
 
+        if (_empty == BoardEmpty.ModeOff && _emptyMode is { } off)
+        {
+            _services.SetSwitch(off.Key, true);
+            return;
+        }
+
+        // Pick your clan: the game page of the mode that asks (A11 focuses its clan search once item 11 builds it).
         if (_empty == BoardEmpty.NoSources && _emptyRecipe is { } slug)
         {
-            OpenSetup(SetupPages.ClansId(slug));
+            OpenSetup(SetupPages.GamePage(_services.Catalog.ModeOf(slug)?.GameId, slug));
             return;
         }
 
@@ -932,30 +941,8 @@ public partial class BoardWindow : Window
             return;
         }
 
-        if (_empty != BoardEmpty.NoRecipes) return;
-
-        _importing = true;
-        ApplyButtons();
-        var before = new ImportLines(_importNote ?? "", "");
-        try
-        {
-            // Kept, and drawn from, so neither the wait for RoRoRo nor what the import did is drawn over by the next redraw (S1-12.4).
-            var outcome = await ImportFlow.RunAsync(this, _services, text =>
-            {
-                _importNote = text.Length > 0 ? text : before.News.Length > 0 ? before.News : null;
-                RenderLines();
-            });
-
-            var after = ImportFlow.LinesAfter(before, outcome);
-            _importNote = after.Problem.Length > 0 ? after.Problem : after.News.Length > 0 ? after.News : null;
-            RenderLines();
-            if (outcome is { ChooseSources: true }) OpenSetup(SetupPages.ClansId(outcome.Slug), outcome.Message);
-        }
-        finally
-        {
-            _importing = false;
-            ApplyButtons();
-        }
+        // Nothing to read at all, or every mode off: the game page is where a mode comes on.
+        if (_empty is BoardEmpty.NoModes or BoardEmpty.NoRecipes) OpenSetup(SetupPages.GamePage(_services.Catalog.Games.FirstOrDefault()?.Id));
     }
 
     /// <param name="note">What the page opens saying, such as an import's result on the Clans page it goes on to (S1-12.4).</param>
@@ -990,11 +977,10 @@ public partial class BoardWindow : Window
         RenderLines();
     }
 
-    /// <summary>A Start, Stop or Test now press is newer than whatever the last one, or the empty state's import, said.</summary>
+    /// <summary>A Start, Stop or Test now press is newer than whatever the last one said.</summary>
     private void ClearPressNotes()
     {
         _failed = false;
-        _importNote = null;
     }
 
     /// <summary>

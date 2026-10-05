@@ -21,6 +21,7 @@ public static partial class PanelModels
     public static ProfileStatModel ProfileStat(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var title = PanelText.Title(PanelType.ProfileStat, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new ProfileStatModel(off, "", []);
         if (live.FindRecipe(settings.Recipe) is not { } installed) return new ProfileStatModel(StaleSource(live, settings, title), "", []);
 
         var recipe = installed.Recipe;

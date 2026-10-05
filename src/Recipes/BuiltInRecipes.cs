@@ -51,18 +51,6 @@ public static class BuiltInRecipes
     public static bool CanUpdate(InstalledRecipe installed, BuiltInRecipe? shipped) =>
         shipped is not null && CanUpdate(installed, shipped, RecipeParser.Parse(shipped.Text).Recipe);
 
-    /// <summary>
-    /// Whether Setup › Recipes offers an update that makes this clans list keep clan names: the installed copy does not say
-    /// its groups are clans, and the copy Ur Score ships does. A copy imported before names became opt-in keeps only the
-    /// field's numbers, and the race's rival lines stop without it (2026-09-24). Parsed once per run, since the board asks
-    /// on every render while the note is up.
-    /// </summary>
-    public static bool HasGroupNamesUpdate(InstalledRecipe installed) =>
-        installed.Recipe is { IsGroupList: true, GroupsAreClans: false }
-        && Find(installed.Recipe.Slug) is { } shipped
-        && Parsed.Value.GetValueOrDefault(shipped.Slug) is { GroupsAreClans: true } recipe
-        && CanUpdate(installed, shipped, recipe);
-
     private static bool CanUpdate(InstalledRecipe installed, BuiltInRecipe shipped, Recipe? recipe) =>
         recipe is not null
         && !string.Equals(installed.Text, shipped.Text, StringComparison.Ordinal)

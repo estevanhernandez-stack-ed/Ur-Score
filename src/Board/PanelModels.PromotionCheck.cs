@@ -19,6 +19,7 @@ public static partial class PanelModels
     public static PromotionModel PromotionCheck(LiveBoard live, PanelSettings settings)
     {
         var title = PanelText.Title(PanelType.PromotionCheck, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new PromotionModel(off, "", Dash, "", []);
         var installed = live.FindRecipe(settings.Recipe);
         var from = live.FindSource(settings.SourceId);
         var to = live.FindSource(settings.ToSourceId);

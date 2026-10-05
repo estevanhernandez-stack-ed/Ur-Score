@@ -30,6 +30,14 @@ public static class SetupPages
 
     public static string ClansId(string slug) => ClansPrefix + slug;
 
+    /// <summary>
+    /// Where the board sends you to turn a mode on or pick a clan: the game's page (<c>game:{gameId}</c>). Item 11 builds that
+    /// page; until then this returns today's best fit, the clans page of the reader that asks, else Recipes. One place to repoint.
+    /// </summary>
+    /// <param name="askingSlug">The reader that asks for a clan, when the board is sending you to pick one.</param>
+    public static string GamePage(string? gameId, string? askingSlug = null) =>
+        askingSlug is not null ? ClansId(askingSlug) : Recipes;
+
     public static bool HasClansPage(InstalledRecipe installed) => installed.Recipe.Inputs.Count > 0 && !installed.Recipe.IsGroupList;
 
     /// <summary>A Clans page per recipe with inputs, titled by its plural, then the fixed pages.</summary>

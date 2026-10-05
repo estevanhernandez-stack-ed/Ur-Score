@@ -337,7 +337,7 @@ public static class BoardText
         string.IsNullOrWhiteSpace(title) ? "Remove panel" : $"Remove {title.Trim()}";
 
     /// <summary>
-    /// Which empty state a board shows: no recipes over every board; a starter's own state on a tab that follows it
+    /// Which empty state a board shows: no readers over every board; a starter's own state on a tab that follows it
     /// (D4), which is NoModes when every mode is off; a board with no panels, including a following tab being edited; else none.
     /// NoModes never covers an edited board (Follows null) or a board being edited: it stays visible and arrangeable (A2).
     /// </summary>
@@ -351,21 +351,22 @@ public static class BoardText
         : BoardEmpty.None;
 
     /// <param name="editing">While arranging, an empty board is told to press Done, not Arrange, which is where you are.</param>
-    /// <param name="modeName">The off mode's name for <see cref="BoardEmpty.ModeOff"/>, supplied by the caller.</param>
+    /// <param name="modeName">The mode's name: the off mode for <see cref="BoardEmpty.ModeOff"/>, the asking mode for <see cref="BoardEmpty.NoSources"/>. Supplied by the caller.</param>
     public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe, bool editing = false, string? modeName = null)
     {
         var group = recipe is null ? "source" : RecipeWords.Group(recipe);
         return empty switch
         {
-            BoardEmpty.NoRecipes => ("Import a recipe to start",
-                "A recipe says where numbers are. Ur Score reads them, keeps them in your score book, and hands the ones you choose to RoRoRo.",
-                "Import recipe…"),
+            // No reader at all reads as no mode on: the answer is the same one NoModes gives.
+            BoardEmpty.NoRecipes => ("Turn on a mode",
+                "Pick what Ur Score shows for your game.",
+                "Open setup"),
             BoardEmpty.NoStats => ("No stats turned on yet",
                 "Choose which stats to show and send, and the board fills in from the next read.",
                 "Choose stats"),
-            BoardEmpty.NoSources => ($"Choose your main {group}",
-                "Type a few letters of its name in Setup, and Ur Score finds which of your accounts are in it.",
-                $"Choose your main {group}"),
+            BoardEmpty.NoSources => ($"Pick your {group}",
+                $"Choose your {group} and the {(string.IsNullOrEmpty(modeName) ? "board" : modeName + " board")} fills on the next read.",
+                $"Pick {group}"),
             // The state line above already says the book couldn't be read, and why: the board says what that stops (V3-S.21).
             BoardEmpty.BookUnread => ("Reading is off",
                 "It comes back once Ur Score can read your score book. The line above says what stopped it.",
