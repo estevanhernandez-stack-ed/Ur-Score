@@ -79,7 +79,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Acceptance: `prd.md > The game page`: the disclosure line is derived, never typed. NoHostnameFenceTests green.
   Verify: tests green; count = previous + new.
 
-- [ ] **7. Mode switches and the upgrade map**
+- [x] **7. Mode switches and the upgrade map**
   Spec ref: `spec.md > Mode switches` + `A5`
   What to build: `Settings.Modes`; `ModeSwitches` (IsGameOn, IsModeSet, IsOn, IsReaderOn false for orphans, With);
   the one-time upgrade map: existing data folder + no `modes` → each mode on iff any of its readers had a
