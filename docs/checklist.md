@@ -43,7 +43,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Acceptance: fixture loads under current code; no real handles or ids.
   Verify: suite green; `grep` the fixture for Este's handles from docs (none).
 
-- [ ] **3. Reader state seeding and legacy states**
+- [x] **3. Reader state seeding and legacy states**
   Spec ref: `spec.md > Readers > Readers.Compose` + `A1` + `A8`
   What to build: `RecipeStats.SuggestedChoices(recipe)` (StatsTableModel.Suggested delegates to it, behaviour
   identical); `RecipeStore.LoadState(Recipe)` reachable from Readers (it needs the recipe for the legacy branch); a
