@@ -3,6 +3,49 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## 0.7.0 - 2026-10-05
+
+Recipes are gone. Pet Sim 99's modes are built in and update with the app.
+
+### Added
+
+- **A game page.** **Setup › Pet Sim 99** replaces the Recipes and Clans pages. A switch for the game and one for
+  each mode (Battle, Profile), a line on each saying what it reads and how often ("Reads ps99.biggamesapi.io every
+  3 min"), and Battle's clan search, with Make main and Watch it instead, where it belongs. A mode that is off
+  reads nothing, records nothing and sends nothing; its starter board says "Battle is off." with a **Turn on**
+  button, and your clans and ticks are kept for when it comes back. Panels of an off mode say so too.
+- **A first run with no file picker.** A fresh install has Battle and Profile on, and the first time Setup opens it
+  lands on the game page with the clan search ready. There is no file to find and nothing to import.
+- **Diagnostics lists what no mode reads.** A reader file an older version saved in your data folder, and that no
+  mode names, shows under "Not part of any mode (kept, not read)". It is never read, changed or deleted.
+- **`modes` and `settingsVersion` in settings.json**, documented in the README's settings reference.
+
+### Changed
+
+- **Readers update with the app.** Battle and Profile read from files built into Ur Score, so a new Ur Score brings
+  their newest form. Your choices (ticks, metric ids, clans) are kept apart from them. The race's "Setup ›
+  Recipes has an update for ..." note is gone with the thing it pointed at.
+- **Upgrading from 0.6.3 reads what 0.6.3 read.** A mode comes on if 0.6.3 had any of its readers installed, and
+  off if it had none, so a player who only read Battle stays on Battle and nothing new starts reading. A fresh
+  install gets both on. The decision is made once, marked by `settingsVersion` 3; a settings file that is missing
+  or unreadable never runs it. Alert rules, metric ids and the score book carry over: a book read under the old
+  text and new lines under the built-in text show as one series.
+- **A setup export carries ticks, modes and clans, never reader text.** A setup file is now a version 3 file,
+  which an Ur Score older than 0.7.0 refuses as made by a newer version; a stats-only file stays version 2 and stays
+  readable by both. A 0.6.3 export still imports: its reader text is ignored and its choices are kept. A setup's
+  readers that no mode names are skipped, and the summary says "not part of any mode".
+- **Stats, Alerts, Your accounts, Score book and Diagnostics speak in modes**, not in readers' names.
+- **No player-facing text uses the word recipe.** A test fences it across the UI.
+- **The tests can no longer start the app or touch your real data folder.** The test process refuses both, and a
+  run fails if either happens, which is what let two suites touch a live data folder before.
+
+### Removed
+
+- **Import recipe.** There is no import window, no review screen and no file or URL to bring in.
+- **The Recipes page**, with its Update buttons and its Remove.
+- **Custom recipes.** A mode reads the readers built into Ur Score, and only those. The developer's
+  `--try` command stays, for checking a reader file against its live source.
+
 ## 0.6.3 - 2026-09-27
 
 The battle race and the pace panel, fixed from a real battle, and Done in Arrange counting every change.
