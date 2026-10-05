@@ -5,6 +5,7 @@ using Grpc.Core;
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Games;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.Theming;
@@ -141,6 +142,11 @@ public sealed class AppServices : ISetupServices, IDisposable
         _ui = ui;
         _time = time;
         _paths = paths;
+
+        // Before ANYTHING below writes to the folder (settings.json, sources.json on a fresh start): whether this is an
+        // upgrade, and what it had installed, is a fact about the folder as the last version left it (A5).
+        var dataFolderExisted = UpgradeModes.DataFolderExisted(paths);
+        var installedOnDisk = UpgradeModes.InstalledSlugs(paths);
         _pipe = host is null ? new HostClient(PluginId) : null;
         _host = host ?? _pipe!;
         RulesPath = rulesPath;
@@ -151,8 +157,15 @@ public sealed class AppServices : ISetupServices, IDisposable
         var keys = Keys;
         Redactor = new Redactor(() => keys.Values());
         Store = new RecipeStore(paths.Recipes);
-        Settings = Settings.Load(paths.Settings);
+        _settings = Settings.Load(paths.Settings);
         _settingsPath = paths.Settings;
+
+        // A mode the manifest gets wrong is dropped with a trail line, never a crash at start (spec "GameCatalog").
+        (Catalog, var manifestProblems) = Readers.Sound(GameCatalog.BuiltIn, BuiltInRecipes.BySlug);
+        _manifestProblems = [.. manifestProblems.Select(p => $"game manifest: {p}")];
+        foreach (var problem in _manifestProblems) AddTrail($"MODE DROPPED: {problem}");
+        _switches = new ModeSwitches(Catalog, _settings.Modes);
+        DecideUpgradeModes(dataFolderExisted, installedOnDisk);
 
         // A walk's scratch rules file is never silent: Diagnostics' trail says which file alerts use.
         if (!string.Equals(RulesPath, RulesFile.DefaultPathUnder(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)), StringComparison.OrdinalIgnoreCase))
@@ -203,13 +216,43 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     public IReadOnlyList<Source> Sources { get; private set; } = [];
 
+    /// <summary>The games and modes this version knows, less any mode its manifest got wrong (dropped at start with a trail line).</summary>
+    public GameCatalog Catalog { get; }
+
+    /// <summary>Which modes are on, from <see cref="Settings"/>; rebuilt whenever the settings change, so the two can't disagree.</summary>
+    public ModeSwitches Switches => _switches;
+
+    /// <summary>Data-folder recipes no mode names: kept on disk, listed in Diagnostics, never read (spec "Readers").</summary>
+    public IReadOnlyList<InstalledRecipe> Orphans { get; private set; } = [];
+
+    /// <summary>
+    /// The sources the runner may read: those whose reader's mode is on. Mode-off is a gate above <see cref="Source.Enabled"/>
+    /// (spec decision 3), applied here and never by flipping sources, so a clan's own on/off survives any number of toggles.
+    /// An orphan's sources are never active.
+    /// </summary>
+    public IReadOnlyList<Source> ActiveSources
+    {
+        get
+        {
+            var switches = _switches;
+            return [.. Sources.Where(s => switches.IsReaderOn(s.Recipe))];
+        }
+    }
+
     public RecipeStore Store { get; }
 
     public IKeyStore Keys { get; }
 
     public Redactor Redactor { get; }
 
-    public Settings Settings { get; private set; }
+    public Settings Settings => _settings;
+
+    private Settings _settings;
+
+    private ModeSwitches _switches;
+
+    /// <summary>What the startup check of the game manifest found, already in the trail; part of <see cref="RecipeProblems"/>.</summary>
+    private readonly IReadOnlyList<string> _manifestProblems;
 
     public SharedAccounts Accounts { get; }
 
@@ -326,7 +369,19 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// The boards on screen: the saved ones, with each tab that still follows a starter rebuilt from your sources and
     /// shown while it has panels; with nothing saved, every starter follows (D1–D4). Never empty.
     /// </summary>
-    public IReadOnlyList<BoardDef> Boards => Following.Shown(_savedBoards, StarterBoards.All(Installed, Sources));
+    public IReadOnlyList<BoardDef> Boards => Following.Shown(_savedBoards, Starters());
+
+    /// <summary>
+    /// The starters, each built with its mode's state: an off mode's starter is still built (A2), empty and
+    /// <see cref="BoardEmpty.ModeOff"/>, so a following tab hides rather than being forgotten by the next save.
+    /// </summary>
+    private IReadOnlyList<StarterBoard> Starters() => StarterBoards.All(Installed, Sources, OffModeName);
+
+    /// <summary>The name of the mode a starter board belongs to when that mode is off, else null (a starter no mode names is never off).</summary>
+    public string? OffModeName(string starterKey) =>
+        Catalog.Modes.FirstOrDefault(m => string.Equals(m.Board, starterKey, StringComparison.Ordinal)) is { } mode && !_switches.IsOn(mode.Key)
+            ? mode.Name
+            : null;
 
     /// <summary>Why the saved boards aren't showing, or null.</summary>
     public string? BoardsProblem { get; private set; }
@@ -339,7 +394,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     public void SaveBoards(IReadOnlyList<BoardDef> boards)
     {
-        var clean = BoardDefs.Sanitize(Following.ToSave(_savedBoards, StarterBoards.All(Installed, Sources), boards), LiveBoard.UserIdsOf(KnownAccounts));
+        var clean = BoardDefs.Sanitize(Following.ToSave(_savedBoards, Starters(), boards), LiveBoard.UserIdsOf(KnownAccounts));
 
         var kept = _boardsFile.Save(clean, keepExisting: _boardsUnread);
         _boardsUnread = false;
@@ -359,7 +414,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     public void SaveImportedBoards(IReadOnlyList<BoardDef> saved)
     {
-        var clean = BoardDefs.Sanitize(Following.KeepFollowing(_savedBoards, StarterBoards.All(Installed, Sources), saved), LiveBoard.UserIdsOf(KnownAccounts));
+        var clean = BoardDefs.Sanitize(Following.KeepFollowing(_savedBoards, Starters(), saved), LiveBoard.UserIdsOf(KnownAccounts));
 
         var kept = _boardsFile.Save(clean, keepExisting: _boardsUnread);
         _boardsUnread = false;
@@ -413,7 +468,7 @@ public sealed class AppServices : ISetupServices, IDisposable
 
         ReaderLoaded = true;
         _book.Written += OnWritten;
-        Runner.Apply(Sources);
+        ApplyRunner();
         AddTrail($"BOOK: loaded from {root}.");
         // The reader and the index count the same bad lines from the same pass; one count, the larger.
         if (skipped > 0) AddTrail(SkippedLines(skipped));
@@ -501,14 +556,99 @@ public sealed class AppServices : ISetupServices, IDisposable
     }
 
     /// <summary>
-    /// Writes <c>settings.json</c> and redraws. Nothing running changes: the only key a page writes is read when the
-    /// board next opens (plan A33). Qualified as <c>Core.Settings</c> because the property beside it has that name.
+    /// Writes <c>settings.json</c> and redraws. The switches are derived from the settings here, so whatever writes them
+    /// (a toggle, an imported setup, A7) turns modes on and off live: reading follows at once. Otherwise nothing running
+    /// changes: the other keys are read when the board next opens (plan A33). Qualified as <c>Core.Settings</c> because
+    /// the property beside it has that name.
     /// </summary>
     public void SaveSettings(Settings settings)
     {
         Core.Settings.Save(settings, _settingsPath);
-        Settings = settings;
+        var before = _switches;
+        _settings = settings;
+        _switches = new ModeSwitches(Catalog, settings.Modes);
+
+        if (Catalog.Modes.Any(m => before.IsOn(m.Key) != _switches.IsOn(m.Key)))
+        {
+            ModesChanged(before);
+            return;
+        }
+
         RaiseChanged();
+    }
+
+    /// <summary>
+    /// Turns a game or a mode on or off (spec "Composition"): saved, applied to the runner at once, redrawn. Off cancels
+    /// the watch of every source the mode reads, exactly as a disabled source's; nothing about the sources, their ticks or
+    /// their book changes, so on brings back the same reading. Throws when settings.json can't be written, and nothing
+    /// changes then.
+    /// </summary>
+    public void SetSwitch(string key, bool on) => SaveSettings(_settings with { Modes = _switches.With(key, on) });
+
+    /// <summary>
+    /// After the switches changed: a reader newly on that has no inputs and no source gets its one source, as an import
+    /// did (<see cref="SourceRules.ForNewRecipes"/>); a Battle-only upgrader who turns Profile on would otherwise have no
+    /// screen that can make one. Then the runner follows, with a trail line naming what changed.
+    /// </summary>
+    private void ModesChanged(ModeSwitches before)
+    {
+        var sources = SourceRules.ForNewRecipes(Sources, ReadersOn(before), ReadersOn(_switches));
+        if (!ReferenceEquals(sources, Sources))
+        {
+            Sources = sources;
+            TrySaveSources(sources);
+        }
+
+        foreach (var mode in Catalog.Modes.Where(m => before.IsOn(m.Key) != _switches.IsOn(m.Key)))
+        {
+            AddTrail($"MODES: {mode.Name} is {(_switches.IsOn(mode.Key) ? "on" : "off")}.");
+        }
+
+        ApplySources();
+    }
+
+    /// <summary>The readers a set of switches lets read.</summary>
+    private IReadOnlyList<InstalledRecipe> ReadersOn(ModeSwitches switches) =>
+        [.. Installed.Where(i => switches.IsReaderOn(i.Recipe.Slug))];
+
+    /// <summary>
+    /// The first start of 0.7.0 over a 0.6.3 folder writes an explicit modes map, each mode on iff one of its readers was
+    /// installed (A5), so the upgrade reads exactly what 0.6.3 read. A fresh install, or a folder that already has a map,
+    /// writes nothing. A map that can't be written still applies this session and is decided again next start.
+    /// </summary>
+    private void DecideUpgradeModes(bool dataFolderExisted, IReadOnlyList<string> installedOnDisk)
+    {
+        if (UpgradeModes.FirstRun(Catalog, dataFolderExisted, installedOnDisk, _settings.Modes) is not { } modes)
+        {
+            // A fresh install writes no switch, but it must record that the question was answered: this start writes
+            // sources.json, and on the next one a folder with a sources file, no recipe files and no map is exactly what
+            // an upgrade that had nothing installed looks like, which turns every mode off. An empty map is "decided, all
+            // defaults" (ModeSwitches reads a missing key as the default).
+            if (_settings.Modes is null && !dataFolderExisted) TrySaveSettings(_settings with { Modes = new Dictionary<string, bool>() });
+            return;
+        }
+
+        TrySaveSettings(_settings with { Modes = modes });
+        var on = Catalog.Modes.Where(m => _switches.IsOn(m.Key)).Select(m => m.Name).ToList();
+        AddTrail($"MODES: set from what was installed before modes. On: {(on.Count == 0 ? "none" : string.Join(", ", on))}.");
+    }
+
+    /// <summary>
+    /// The start's own settings write: applied this session whether or not it reaches disk, and a failure is a trail line,
+    /// never a failed start. The decision is simply made again next start.
+    /// </summary>
+    private void TrySaveSettings(Settings settings)
+    {
+        _settings = settings;
+        _switches = new ModeSwitches(Catalog, settings.Modes);
+        try
+        {
+            Core.Settings.Save(settings, _settingsPath);
+        }
+        catch (Exception ex)
+        {
+            AddTrail($"MODES NOT SAVED: {ex.GetType().Name}; this session reads with them anyway.");
+        }
     }
 
     /// <summary>
@@ -517,10 +657,11 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// </summary>
     public void ReloadRecipes()
     {
-        var before = Installed;
+        var before = ReadersOn(_switches);
         LoadInstalled();
 
-        var sources = SourceRules.ForNewRecipes(Sources, before, Installed);
+        // Only readers of on modes count: a reader of an off mode gets its source when the mode is turned on (A5).
+        var sources = SourceRules.ForNewRecipes(Sources, before, ReadersOn(_switches));
         if (!ReferenceEquals(sources, Sources))
         {
             Sources = sources;
@@ -895,15 +1036,25 @@ public sealed class AppServices : ISetupServices, IDisposable
         watch.UpdatePolicy(wanted.SentStats, wanted.AllowedSubjects, wanted.SentFieldMetrics);
     }
 
+    /// <summary>
+    /// The one place the runner is told what to read (A3): the active sources only, so an enabled source of an off mode
+    /// is dropped exactly like a disabled one (its watch cancelled). The book's first load and every later change both
+    /// come through here; a second call site with all of <see cref="Sources"/> would read an off mode at start.
+    /// </summary>
+    private void ApplyRunner() => Runner.Apply(ActiveSources);
+
     private void ApplySources()
     {
         if (ReaderLoaded)
         {
-            Runner.Apply(Sources);
+            ApplyRunner();
             RefreshWatches();
         }
 
-        foreach (var gone in _latest.Keys.Where(id => Sources.All(s => s.Id != id)).ToList())
+        // Against the active sources: an off mode's last reading goes with its watch, so nothing it read before the switch
+        // is still shown as live (A3). The book keeps it.
+        var active = ActiveSources;
+        foreach (var gone in _latest.Keys.Where(id => active.All(s => s.Id != id)).ToList())
         {
             _latest.Remove(gone);
             _lastRead.Remove(gone);
@@ -914,7 +1065,9 @@ public sealed class AppServices : ISetupServices, IDisposable
         // A source that is gone, or whose recipe was updated or removed so it names no icon, loses its picture now and at the
         // next start (S1-14.1). Every path that reloads recipes or saves sources comes through here. Not while sources.json
         // couldn't be read: there are no sources this session, and that is no reason to forget every clan's picture.
-        if (!_sourcesUnreadable) _sourceIcons.Keep(IconChoice.SourcesWithIcons(Sources, Installed));
+        // Over ALL sources, orphans' included, never just the active ones (A3): turning a mode off must not forget its
+        // clans' pictures, and an orphan is kept, not removed.
+        if (!_sourcesUnreadable) _sourceIcons.Keep(IconChoice.SourcesWithIcons(Sources, [.. Installed, .. Orphans]));
 
         RememberLastNumbers();
         WarnPastBudget();
@@ -1009,7 +1162,8 @@ public sealed class AppServices : ISetupServices, IDisposable
         {
             var ids = KnownAccounts.Select(a => a.AccountId).ToList();
             // Lists included: their clan numbers count now (V3-S.28). They were left out when they counted as nothing.
-            var over = ids.Count == 0 ? null : HistoryBudget.AfterSeed(Installed, ids);
+            // Only readers that read (A3): an off mode sends nothing, so it holds no history slot.
+            var over = ids.Count == 0 ? null : HistoryBudget.AfterSeed(ReadersOn(_switches), ids);
             BudgetWarning = over?.Line;
             if (over is null || _budgetWarnedCount == over.Count) return;
 
@@ -1123,7 +1277,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         var load = _sourceStore.LoadResult();
         if (!load.Exists)
         {
-            var migrated = SourceRules.Migrate(Installed, []);
+            var migrated = SourceRules.Migrate(ReadersOn(_switches), []);
             Sources = migrated;
             TrySaveSources(migrated);
             return;
@@ -1137,8 +1291,9 @@ public sealed class AppServices : ISetupServices, IDisposable
             return;
         }
 
-        // Nothing counts as installed before, so every input-less recipe without a source is treated as new.
-        var sources = SourceRules.ForNewRecipes(load.Sources, [], Installed);
+        // Nothing counts as installed before, so every input-less reader without a source is treated as new. Only readers
+        // of on modes (A5): a Battle-only upgrader does not wake up with a profile source.
+        var sources = SourceRules.ForNewRecipes(load.Sources, [], ReadersOn(_switches));
         Sources = sources;
         if (!ReferenceEquals(sources, load.Sources)) TrySaveSources(sources);
     }
@@ -1180,14 +1335,19 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
     }
 
+    /// <summary>
+    /// The readers come from the app (<see cref="Readers.Compose"/>): the embedded text, with each one's saved choices or
+    /// its seed. A data-folder recipe no mode names is an orphan, listed and never read. Seeding writes nothing.
+    /// </summary>
     private void LoadInstalled()
     {
-        var load = Store.LoadAll();
+        var load = Readers.Compose(Catalog, Readers.BuiltIn, Store);
         // Under the refresh gate, so a refresh already reading the old list finishes applying it before the
         // new one is seen, and the refresh that follows this load is the one that lands last (S1-14.13).
-        lock (_refreshGate) Installed = load.Recipes;
-        RecipeProblems = [.. load.Problems.Select(p => Redactor.Redact(p))];
-        foreach (var problem in RecipeProblems) AddTrail($"RECIPE FILE SKIPPED: {problem}");
+        lock (_refreshGate) Installed = load.Installed;
+        Orphans = load.Orphans;
+        RecipeProblems = [.. _manifestProblems.Concat(load.Problems).Select(p => Redactor.Redact(p))];
+        foreach (var problem in load.Problems) AddTrail($"READER SKIPPED: {Redactor.Redact(problem)}");
     }
 
     private InstalledRecipe? FindInstalled(string? slug) =>

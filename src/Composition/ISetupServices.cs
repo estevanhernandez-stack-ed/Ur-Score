@@ -23,6 +23,18 @@ public interface ISetupServices
 
     IReadOnlyList<Source> Sources { get; }
 
+    /// <summary>The games and modes this version knows (spec "Games").</summary>
+    Games.GameCatalog Catalog { get; }
+
+    /// <summary>Which modes are on, derived from <see cref="Settings"/>.</summary>
+    Games.ModeSwitches Switches { get; }
+
+    /// <summary>The sources whose mode is on: the only ones read, and the only ones a request count is about (A3).</summary>
+    IReadOnlyList<Source> ActiveSources { get; }
+
+    /// <summary>Data-folder recipes no mode names: kept, listed in Diagnostics, never read.</summary>
+    IReadOnlyList<InstalledRecipe> Orphans { get; }
+
     RecipeStore Store { get; }
 
     IKeyStore Keys { get; }
@@ -107,6 +119,9 @@ public interface ISetupServices
     /// changes then; no page edits that file itself.
     /// </summary>
     void SaveSettings(Settings settings);
+
+    /// <summary>Turns a game (its id) or a mode (its key) on or off: saved, applied to reading at once, redrawn.</summary>
+    void SetSwitch(string key, bool on);
 
     /// <summary>Reloads recipes from disk, migrates sources for any new recipe, applies, and raises <see cref="Changed"/>.</summary>
     void ReloadRecipes();

@@ -110,6 +110,16 @@ public class ImportFlowTests : IDisposable
 
         public IReadOnlyList<Source> Sources => [];
 
+        public Labs626.UrScore.Games.GameCatalog Catalog => throw new NotSupportedException();
+
+        public Labs626.UrScore.Games.ModeSwitches Switches => throw new NotSupportedException();
+
+        public IReadOnlyList<Source> ActiveSources => [];
+
+        public IReadOnlyList<InstalledRecipe> Orphans => [];
+
+        public void SetSwitch(string key, bool on) => throw new NotSupportedException();
+
         public RecipeStore Store { get; } = new(recipesFolder);
 
         public IKeyStore Keys { get; } = new NoKeys();

@@ -126,7 +126,9 @@ public class SourceIconFenceTests
         var app = File.ReadAllText(Path.Combine(RepoRoot(), "src", "Composition", "AppServices.cs"));
 
         Assert.Contains("_sourceIcons.Restore(IconHostsFor);", app, StringComparison.Ordinal);
-        Assert.Contains("_sourceIcons.Keep(IconChoice.SourcesWithIcons(Sources, Installed));", app, StringComparison.Ordinal);
+        // Over ALL sources, never ActiveSources (games-and-modes A3: a mode toggle must not forget its clans' pictures), and
+        // the orphans' recipes beside the installed ones (an orphan is kept, not removed).
+        Assert.Contains("_sourceIcons.Keep(IconChoice.SourcesWithIcons(Sources, [.. Installed, .. Orphans]));", app, StringComparison.Ordinal);
         Assert.Contains("_avatars.Files, _remembered, _sourceIcons.Files);", app, StringComparison.Ordinal);
 
         // Restored in the constructor, which runs before BoardWindow reads WindowIcon at open.

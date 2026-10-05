@@ -30,7 +30,7 @@ public class OldInstallFixtureTests
     private static readonly DateTimeOffset Now = new(2026, 9, 21, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>A copy of the fixture in a folder of the test's own: loading writes (settings, sources migration), the fixture never changes.</summary>
-    private static TempDir.Scope Copy()
+    internal static TempDir.Scope Copy()
     {
         var dir = TempDir.Create("urscore-old-install");
         var source = Path.Combine(AppContext.BaseDirectory, "Fixtures", "old-install-0.6.3");
@@ -190,6 +190,12 @@ public class OldInstallFixtureTests
     /// The whole app composed over the fixture, as the seams constructor allows (a stub host that is not there, a fake
     /// transport that answers nothing): what it installs, which sources it holds, the boards the window would show, and a
     /// book the reader has loaded. Nothing in the fixture is a problem under today's code.
+    /// <para>
+    /// Changed by games and modes item 8: the readers are the built-in three, the hand-imported roblox-followers is an
+    /// orphan (listed, not installed), and the following Battle tab now SHOWS, because the legacy <c>metricIdOverride</c>
+    /// state is read through <c>RecipeStates.Effective</c> (A8) and ticks the battle points, where before it ticked
+    /// nothing. The upgrade itself is <c>UpgradeFrom063Tests</c>' subject.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task ComposedOverTheFixtureTheAppHoldsEverythingAndTheBookLoads()
@@ -198,17 +204,17 @@ public class OldInstallFixtureTests
         using var services = new AppServices(Dispatcher.CurrentDispatcher, new AppPaths(dir.Path), new StubHost(reachable: false),
             new NothingTransport(), new ManualTime(Now), Path.Combine(dir.Path, "metric-rules.json"));
 
-        Assert.Equal(new[] { BattleSlug, ProfileSlug, TopSlug, RobloxSlug }, services.Installed.Select(i => i.Recipe.Slug).Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { BattleSlug, ProfileSlug, TopSlug }, services.Installed.Select(i => i.Recipe.Slug).Order(StringComparer.Ordinal));
+        Assert.Equal(RobloxSlug, Assert.Single(services.Orphans).Recipe.Slug);
         Assert.Empty(services.RecipeProblems);
         Assert.Equal(6, services.Sources.Count);
         Assert.Contains(services.Sources, s => s.Role == SourceRole.Main);
         Assert.Equal(3, services.SavedBoards.Count);
 
-        // The saved following Battle tab is NOT shown today: its starter builds from ticked stats, and the legacy state
-        // ticks none (Stats is null; the legacy choices are read only on an update), so Battle comes out empty and
-        // hidden (spec A8 changes this). The following Alts tab shows: the profile recipe has ticked stats. The edited
-        // board shows as it was saved.
-        Assert.DoesNotContain(services.Boards, b => b.Follows == "battle");
+        // The saved following Battle tab shows: its starter builds from ticked stats, and the legacy state's choices are
+        // its ticks now (A8). Until item 8 it ticked none and Battle came out empty and hidden. The following Alts tab
+        // shows: the profile recipe has ticked stats. The edited board shows as it was saved.
+        Assert.Contains(services.Boards, b => b.Follows == "battle");
         Assert.Contains(services.Boards, b => b.Follows == "alts");
         Assert.Contains(services.Boards, b => b.Name == "My watch");
         Assert.Equal(BattleSlug, services.Settings.ActiveRecipe);

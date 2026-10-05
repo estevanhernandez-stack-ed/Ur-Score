@@ -100,7 +100,7 @@ public partial class ClansPage : UserControl, ISetupPage
                     + $"Every read keeps where yours stands, how the field is doing, and the top {GroupRows.Top} by name.";
             }
 
-            ShowLine(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.Sources, _services.Installed, accounts.Count)));
+            ShowLine(RequestsLine, ClansModel.RequestsLine(ClansModel.RequestsPerHour(_services.ActiveSources, _services.Installed, accounts.Count)));
         }
         finally
         {

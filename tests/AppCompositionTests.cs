@@ -63,19 +63,25 @@ public class AppCompositionTests
     }
 
     /// <summary>
-    /// An empty folder composes to nothing installed, nothing listed, the starter boards following, and a book that
-    /// loads empty — and every file the composition makes is under that folder. RoRoRo is a stub that is not there,
-    /// so the account list is the saved one, which is none.
+    /// An empty folder composes to the readers built into the app (games and modes: nothing is installed by hand any
+    /// more), each input-less one with its source as an import gave it (the clans list watched, the profile yours),
+    /// an empty modes map (a fresh install writes no switch and takes the manifest defaults, A5; empty records that it
+    /// decided), nothing listed, the starter boards following, and a book that loads empty — and every file the composition makes is under that folder. RoRoRo is a
+    /// stub that is not there, so the account list is the saved one, which is none.
     /// </summary>
     [Fact]
-    public async Task AnEmptyFolderComposesToNothingInstalledAndWritesOnlyThere()
+    public async Task AnEmptyFolderComposesToTheBuiltInReadersAndWritesOnlyThere()
     {
         using var dir = TempDir.Create("urscore-app");
         var host = new StubHost(reachable: false);
         using var services = Compose(dir, host, new FakeTransport());
 
-        Assert.Empty(services.Installed);
-        Assert.Empty(services.Sources);
+        Assert.Equal(["pet-sim-99-clan-battle-points", "pet-sim-99-top-clans", "pet-sim-99-profile"], services.Installed.Select(i => i.Recipe.Slug));
+        Assert.Equal(
+            [("pet-sim-99-top-clans", SourceRole.Watch), ("pet-sim-99-profile", SourceRole.Mine)],
+            services.Sources.Select(s => (s.Recipe, s.Role)));
+        Assert.Empty(services.Settings.Modes!);
+        Assert.Empty(services.Orphans);
         Assert.Empty(services.KnownAccounts);
         Assert.False(services.ReaderLoaded);
         Assert.NotEmpty(services.Boards);
@@ -97,6 +103,12 @@ public class AppCompositionTests
     /// account, the book keeps the line on disk under the test's folder, the reader has it, the window's snapshot
     /// names the source — and nothing is sent, because the state ticks the stat to show and not to send. This is the
     /// startup the app does, done by a test.
+    /// <para>
+    /// Since games and modes the folder's recipe file is read only for its slug (the text is the built-in one, which this
+    /// fixture's happens to equal) and, there being a sources.json, as a 0.6.3 install: Battle on because its reader was
+    /// installed, Profile off because it wasn't (A5), and Battle's clans list gets the one source a mode's input-less
+    /// reader always gets.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task ARecipeAndASourceComposeToAWatchThatReadsAndKeepsALine()
@@ -117,8 +129,12 @@ public class AppCompositionTests
             .On("https://ps99.biggamesapi.io/api/clan/K0i2", 200, ClanResponse);
         using var services = Compose(dir, host, transport);
 
-        Assert.Equal(recipe.Slug, Assert.Single(services.Installed).Recipe.Slug);
-        Assert.Equal("s-00000001", Assert.Single(services.Sources).Id);
+        Assert.Equal(BuiltInRecipes.Find(recipe.Slug)!.Text, Assert.Single(services.Installed, i => i.Recipe.Slug == recipe.Slug).Text);
+        Assert.True(services.Switches.IsOn("pet-sim-99/battle"));
+        Assert.False(services.Switches.IsOn("pet-sim-99/profile"));
+        Assert.Equal(
+            [("s-00000001", recipe.Slug), (null, "pet-sim-99-top-clans")],
+            services.Sources.Select(s => (s.Id == "s-00000001" ? s.Id : null, s.Recipe)));
         await services.LoadBookAsync();
         Assert.NotNull(services.Runner.WatchFor("s-00000001"));
 
@@ -154,6 +170,11 @@ public class AppCompositionTests
     /// book (a generated one, under the clan-battle recipe) goes into one file; the second PC, with the same recipe
     /// and a source for one of the clans, imports it and keeps that clan's readings under its OWN source id while the
     /// other clan is named as not set up.
+    /// <para>
+    /// Since games and modes the second PC, having a sources.json, starts as a 0.6.3 install with Battle on, so Battle's
+    /// clans list has its watched source there too and the first PC's list readings land under it: two thirds of the
+    /// readings arrive (Clan0's and the list's), where before the list's were named "No recipe here for".
+    /// </para>
     /// <para>
     /// Since 2026-09-22 the file may also carry this PC's setup, so a <c>setup/</c> folder is allowed here — though
     /// there is none in this one, <c>first</c> installing no recipe and saving no source before exporting
@@ -195,23 +216,32 @@ public class AppCompositionTests
         var outcome = BookImport.RunFile(file, importer);
 
         Assert.Equal("", outcome.Problem);
-        // The generator writes two clan sources and a clans list, a reading each per tick: a third of the readings are Clan0's.
-        Assert.Equal((written.Lines - written.Finals) / 3, outcome.Added);
+        // The generator writes two clan sources and a clans list, a reading each per tick: a third of the readings are Clan0's
+        // and a third are the list's.
+        var third = (written.Lines - written.Finals) / 3;
+        Assert.Equal(2 * third, outcome.Added);
         Assert.Contains("Clan1", outcome.Message, StringComparison.Ordinal);
-        Assert.Contains($"No recipe here for: {BookGenerator.ListSlug}", outcome.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("No recipe here for", outcome.Message, StringComparison.Ordinal);
+        Assert.Equal(third, BookFiles.ReadAll(paths.Book, BookGenerator.ListSlug).Count());
         var lines = BookFiles.ReadAll(paths.Book, recipe.Slug).ToList();
-        Assert.Equal(outcome.Added, lines.Count);
+        Assert.Equal(third, lines.Count);
         Assert.All(lines, line => Assert.Equal("s-0000beef", line.Source));
         Assert.All(lines, line => Assert.Equal("Clan0", line.Inputs["clan"]));
     }
 
     /// <summary>
-    /// A PC with nothing set up exports nothing to set up: the manifest says <c>setup: false</c>, the zip has no
-    /// <c>setup/</c> folder, and the receiving side opens it as the stats-only file it is — so no preview opens on
-    /// the other PC to offer a person their own empty setup back (spec §1, final review's ruling on finding 3).
+    /// What a PC with nothing set up exports. Until games and modes it was nothing: <c>setup: false</c>, no <c>setup/</c>
+    /// folder, opened as a stats-only file, so no preview offered a person their own empty setup back (spec §1, final
+    /// review's ruling on finding 3; this test was <c>APristinePcsExportCarriesNoSetupAndOpensAsAStatsOnlyFile</c>).
+    /// <para>
+    /// A pristine PC now HAS a setup: the built-in readers with their seeded ticks, and the two sources every install
+    /// gets (the clans list watched, the profile yours), so <see cref="SetupPack.IsEmpty"/> is false and the file carries
+    /// it, every item "same as here" on a pristine PC at the other end. Pinned as it is, so the change shows; item 9
+    /// (text-free transfer, A7) owns restoring "pristine carries nothing" or retiring the rule.
+    /// </para>
     /// </summary>
     [Fact]
-    public void APristinePcsExportCarriesNoSetupAndOpensAsAStatsOnlyFile()
+    public void APristinePcsExportNowCarriesTheBuiltInReadersAndTheirTwoSources()
     {
         using var dir = TempDir.Create("urscore-app-pristine");
         BookGenerator.Write(new AppPaths(dir.Path).Book, clanSources: 1, days: 1);
@@ -220,20 +250,16 @@ public class AppCompositionTests
         {
             var exported = exporter.ExportStats(file);
 
-            Assert.False(exported.Manifest.Setup);
-            Assert.Null(exported.Setup);
-        }
-
-        using (var zip = System.IO.Compression.ZipFile.OpenRead(file))
-        {
-            Assert.DoesNotContain(zip.Entries, entry => entry.FullName.StartsWith("setup/", StringComparison.Ordinal));
+            Assert.True(exported.Manifest.Setup);
+            Assert.Equal(["pet-sim-99-clan-battle-points", "pet-sim-99-top-clans", "pet-sim-99-profile"], exported.Setup!.Recipes.Select(r => r.Slug));
+            Assert.Equal(["pet-sim-99-top-clans", "pet-sim-99-profile"], exported.Setup.Sources.Select(s => s.Recipe));
         }
 
         var opened = BookPack.Open(file);
         try
         {
-            Assert.False(opened.Manifest!.Setup);
-            Assert.Null(opened.Setup);
+            Assert.True(opened.Manifest!.Setup);
+            Assert.NotNull(opened.Setup);
         }
         finally
         {
@@ -249,6 +275,13 @@ public class AppCompositionTests
     /// deletes nothing), the unreadable boards file does not survive the import, and the stats travel too, through
     /// the same book merge the stats-only import uses. Then into a B that already WATCHES one of the clans: the
     /// plan says Replace, and afterward B has one such clan, not two.
+    /// <para>
+    /// Since games and modes both PCs read the built-in text, so A's two recipes (whose fixture top-clans text is older
+    /// than the shipped one) export the shipped text and compare "same as here" by text on B: no recipe is applied (0,
+    /// was 2), so A's ticks do not travel until item 9 compares states (A7). B, a fresh install, already watches the
+    /// clans list (the source every install gets), so that clan is "same as here" too: 2 clans applied, was 3. B ends
+    /// with the three built-in readers (was 2) and four sources: its own two plus A's two clans (was 3).
+    /// </para>
     /// </summary>
     [Fact]
     public async Task TheWholeSetupTravelsAndArrivesUnderTheOtherPcsOwnIds()
@@ -293,13 +326,13 @@ public class AppCompositionTests
             var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), importer.SetupWriter, Start);
 
             Assert.Null(applied.FailedStep);
-            Assert.Equal((2, 3, 1), (applied.Recipes, applied.Clans, applied.Boards));
-            Assert.Equal(2, importer.Installed.Count);
+            Assert.Equal((0, 2, 1), (applied.Recipes, applied.Clans, applied.Boards));
+            Assert.Equal(3, importer.Installed.Count);
             Assert.All(importer.Installed.SelectMany(i => i.State.StatChoices.Values), choice => Assert.False(choice.Send));
             // The second send list too: A's clans list ticks a clan-and-field number, and B must arrive with
             // none — PolicyFor hands FieldMetricKeys to every ReportPolicy whatever the clan's role.
             Assert.All(importer.Installed, i => Assert.Empty(i.State.FieldMetricKeys));
-            Assert.Equal(3, importer.Sources.Count);
+            Assert.Equal(4, importer.Sources.Count);
             Assert.All(importer.Sources, s => Assert.DoesNotContain(s.Id, sourcesA.Select(x => x.Id)));
             var k0i2 = Assert.Single(importer.Sources, s => s.InputsKey == "clan=k0i2");
             Assert.NotNull(importer.Runner.WatchFor(k0i2.Id));
