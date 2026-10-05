@@ -27,15 +27,27 @@ public sealed record AppPaths(string Root)
     /// <see cref="RefuseDefault"/> has been called, which the test assembly does before any test runs, so nothing in a test
     /// process can resolve it: every store's default path and the app's own composition read it here.
     /// </summary>
-    public static AppPaths Default => Volatile.Read(ref _refused) == 1
-        ? throw new InvalidOperationException("The real data folder is refused in a test process: compose over new AppPaths(<a folder of the test's own>).")
-        : Real.Value;
+    public static AppPaths Default
+    {
+        get
+        {
+            ThrowIfRefused();
+            return Real.Value;
+        }
+    }
 
     /// <summary>
     /// Latches <see cref="Default"/> shut for the rest of the process; it can't be undone. Called by the test assembly's module
     /// initializer (port of K0ii Score's fe8d103: its harness had started the app for real inside every suite run). Never by the app.
     /// </summary>
     internal static void RefuseDefault() => Interlocked.Exchange(ref _refused, 1);
+
+    /// <summary>Throws the refusal when the latch is set: the same gate <see cref="Default"/> uses, for other real paths (RoRoRo's rules file).</summary>
+    internal static void ThrowIfRefused()
+    {
+        if (Volatile.Read(ref _refused) == 1)
+            throw new InvalidOperationException("The real data folder is refused in a test process: compose over new AppPaths(<a folder of the test's own>).");
+    }
 
     public string Keys => Path.Combine(Root, "keys.dat");
 

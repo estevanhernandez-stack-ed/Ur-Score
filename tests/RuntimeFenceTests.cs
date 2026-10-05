@@ -13,8 +13,9 @@ namespace UrScore.Tests;
 /// test runs, every default path resolves through it, and the app's own composition fails before it builds anything.
 /// Ported from K0ii Score's fence (fe8d103), where the harness had started the app for real inside every suite run.
 /// <para>
-/// Not RoRoRo's rules file (<c>RulesFile.DefaultPath</c>): that is RoRoRo's, in RoRoRo's folder, and Ur Score only reads
-/// it. K0ii moved its rules under its own folder, so its fence covers them; here they stay outside it.
+/// RoRoRo's rules file (<c>RulesFile.DefaultPath</c>) is fenced too, though it is RoRoRo's, in RoRoRo's folder: Ur Score
+/// reads it and also writes it (<c>RulesFile.TurnOn</c>, <c>Change</c>, <c>Remove</c>), so a test resolving the real one
+/// could edit the user's live alert rules. A test checks the path computation through <c>RulesFile.DefaultPathUnder</c>.
 /// </para>
 /// </summary>
 public class RuntimeFenceTests
@@ -41,6 +42,8 @@ public class RuntimeFenceTests
             () => BoardsFile.DefaultPath,
             () => BookFiles.DefaultRoot,
             () => IconClient.DefaultCacheDirectory,
+            () => RulesFile.DefaultPath,
+            () => RulesFile.ResolvePath(null),
         ];
 
         Assert.All(defaults, resolve => Assert.Contains("test process", Assert.Throws<InvalidOperationException>(resolve).Message));

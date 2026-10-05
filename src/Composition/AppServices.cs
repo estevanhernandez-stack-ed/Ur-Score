@@ -155,7 +155,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         _settingsPath = paths.Settings;
 
         // A walk's scratch rules file is never silent: Diagnostics' trail says which file alerts use.
-        if (!string.Equals(RulesPath, RulesFile.DefaultPath, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(RulesPath, RulesFile.DefaultPathUnder(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)), StringComparison.OrdinalIgnoreCase))
         {
             AddTrail($"RULES: alerts use the file {RulesFile.PathVariable} names, not RoRoRo's.");
         }
