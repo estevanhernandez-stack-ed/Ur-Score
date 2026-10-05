@@ -946,4 +946,100 @@ public class RecipeWatchBookTests
         Assert.False(snapshot.Recorded);
         Assert.Equal(RecipeWatch.NotRecordingEnded, snapshot.NotRecordingReason);
     }
+    /// <summary>
+    /// A clock that cancels a token the first time it is read after <see cref="Arm"/>: the watch reads its clock only
+    /// once the fetch is done and the S1-8.3 check has passed, while it builds the line, so this lands a mode-off (a
+    /// cancelled source) in exactly the window A9 closes: after the read, before the book.
+    /// </summary>
+    private sealed class CancelOnRead(DateTimeOffset now, CancellationTokenSource stop) : TimeProvider
+    {
+        private bool _armed;
+
+        public void Arm() => _armed = true;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            if (_armed) stop.Cancel();
+            return now;
+        }
+    }
+
+    /// <summary>A9: a source switched off after its read returned writes no line and sends nothing, rather than one last of each.</summary>
+    [Fact]
+    public async Task AReadCancelledAfterItsFetchKeepsNoLineAndSendsNothing()
+    {
+        using var stop = new CancellationTokenSource();
+        var clock = new CancelOnRead(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero), stop);
+        var book = new MemoryBook();
+        var host = new StubHost(true, AltAccount);
+        var engine = new StubEngine(() =>
+        {
+            clock.Arm();
+            return Reading(EngineRow(111, 4200));
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Watch(engine, host, book, SourceOf(SourceRole.Mine), time: clock).RunOnceAsync(stop.Token));
+
+        Assert.True(stop.IsCancellationRequested);
+        Assert.Empty(book.Lines);
+        Assert.Empty(host.Reported);
+    }
+
+    /// <summary>A9: an idle read's backfill of finished battles is a write too, and is not made for a source switched off.</summary>
+    [Fact]
+    public async Task ABackfillCancelledAfterItsFetchKeepsNoFinal()
+    {
+        using var stop = new CancellationTokenSource();
+        var clock = new CancelOnRead(new DateTimeOffset(2026, 9, 19, 18, 0, 0, TimeSpan.Zero), stop);
+        var book = new MemoryBook();
+        var finals = new FinalsIndex();
+        var past = new PastPeriodReading("Arcade2026", [EngineRow(111, 4200)],
+            [new HeadlineValue("Clan place", "14") { Id = "clan-place", Number = 14 }], RowsReadable: true);
+        var engine = new StubEngine(() =>
+        {
+            clock.Arm();
+            return RecipeReading.Stop(ReadingOutcome.Idle, "No clan battle running") with { Past = [past] };
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Watch(engine, new StubHost(true, AltAccount), book, SourceOf(SourceRole.Mine), finals: finals, time: clock).RunOnceAsync(stop.Token));
+
+        Assert.Empty(book.Lines);
+        Assert.False(finals.HasAccount(Clan.Slug, Source.KeyOf(Inputs), "Arcade2026", 111));
+    }
+
+    /// <summary>A9, the clans list's own line: asking which clans are yours is the last thing it does before writing.</summary>
+    [Fact]
+    public async Task AClansListCancelledBeforeItsLineKeepsNoLineAndSendsNoClanNumber()
+    {
+        var text = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
+        var recipe = RecipeParser.Parse(text).Recipe!;
+        using var stop = new CancellationTokenSource();
+        var book = new MemoryBook();
+        var host = new StubHost(true, AltAccount);
+        var engine = new StubEngine(() => new RecipeReading(ReadingOutcome.Read, null, [], [], "battle=B", 2)
+        {
+            Period = new ReadingPeriod("B", null, null),
+            Groups =
+            [
+                new GroupRow("UN0", new Dictionary<string, double> { ["value"] = 21_000_000_000 }, 1),
+                new GroupRow("K0i2", new Dictionary<string, double> { ["value"] = 8_000_000_000, ["members"] = 74, ["capacity"] = 75 }, 2),
+            ],
+        });
+        var watch = new RecipeWatch(engine, host, new NoKeys(),
+            new ReportPolicy([], new HashSet<Guid>(), FieldMetrics.Offered([FieldMetrics.Points])), recipe, new Dictionary<string, string>(),
+            new HashSet<string> { "value" }, book, new Source("s-00000009", recipe.Slug, new Dictionary<string, string>(), SourceRole.Watch),
+            recipeText: text, time: new ManualTime(new DateTimeOffset(2026, 9, 20, 18, 0, 0, TimeSpan.Zero)),
+            myGroups: () =>
+            {
+                stop.Cancel();
+                return ["K0i2"];
+            });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch.RunOnceAsync(stop.Token));
+
+        Assert.Empty(book.Lines);
+        Assert.Empty(host.Reported);
+    }
 }
