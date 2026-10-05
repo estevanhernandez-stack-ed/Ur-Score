@@ -32,7 +32,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Verify: count after = baseline + new fence tests; exit code 0; the breach test fails when the latch is removed
   (check once, then restore).
 
-- [ ] **2. A synthesized 0.6.3 install to test the upgrade against**
+- [x] **2. A synthesized 0.6.3 install to test the upgrade against**
   Spec ref: `spec.md > Review round 1 amendments > A6`
   What to build: `tests/Fixtures/old-install-0.6.3/` (recipes/*.recipe.json + *.state.json, sources.json,
   settings.json without `modes`, boards.json, a scorebook folder): old top-clans text without `groupsAreClans`, a
