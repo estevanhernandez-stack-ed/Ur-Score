@@ -14,8 +14,13 @@ namespace Labs626.UrScore.Core;
 /// new install writes. It is about this app's own window, not about RoRoRo launching the plugin, which is the
 /// manifest's <c>autostartDefault</c> and stays off (A33).
 /// </para>
+/// <para>
+/// <c>Modes</c> is the explicit mode switches, keyed "game/mode", plus a bare game id for a game switch (spec "Mode switches", A5). Null means the player was never
+/// asked: every mode falls back to its manifest default. A key a mode lacks also falls back, so a default stays implicit.
+/// </para>
 /// </summary>
-public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null, bool StartOnOpen = false, int SettingsVersion = 0)
+public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null, bool StartOnOpen = false, int SettingsVersion = 0,
+    IReadOnlyDictionary<string, bool>? Modes = null)
 {
     /// <summary>2: BC1's migration has run. A file below it is from before 0.6.</summary>
     public const int CurrentVersion = 2;

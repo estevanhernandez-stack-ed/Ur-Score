@@ -34,6 +34,21 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void ModesRoundTripAndAnOldFileLoadsWithNone()
+    {
+        Settings.Save(new Settings(SettingsVersion: Settings.CurrentVersion, Modes: new Dictionary<string, bool> { ["pet-sim-99"] = false, ["pet-sim-99/battle"] = true }), File());
+        Assert.Contains("\"modes\"", System.IO.File.ReadAllText(File()));
+
+        var loaded = Settings.Load(File());
+        Assert.NotNull(loaded.Modes);
+        Assert.False(loaded.Modes["pet-sim-99"]);
+        Assert.True(loaded.Modes["pet-sim-99/battle"]);
+
+        Write("""{ "resolveNames": true, "startOnOpen": true, "settingsVersion": 2 }""");
+        Assert.Null(Settings.Load(File()).Modes);
+    }
+
+    [Fact]
     public void SavedJsonUsesCamelCaseKeys()
     {
         Settings.Save(new Settings(false, "x"), File());
