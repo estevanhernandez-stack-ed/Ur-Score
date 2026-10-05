@@ -52,7 +52,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Suggested.
   Verify: tests green, count = previous + new.
 
-- [ ] **4. Starter tabs survive being hidden**
+- [x] **4. Starter tabs survive being hidden**
   Spec ref: `spec.md > Board > Starter boards` + `A2`
   What to build: `BoardEmpty.ModeOff` and `BoardEmpty.NoModes` with their texts (BoardText) and buttons; StarterBoards
   builds an off starter with no panels and `ModeOff` (driven by a predicate passed in, so this item has no dependency
