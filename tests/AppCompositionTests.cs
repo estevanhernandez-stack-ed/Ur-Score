@@ -173,7 +173,7 @@ public class AppCompositionTests
     /// <para>
     /// Since games and modes the second PC, having a sources.json, starts as a 0.6.3 install with Battle on, so Battle's
     /// clans list has its watched source there too and the first PC's list readings land under it: two thirds of the
-    /// readings arrive (Clan0's and the list's), where before the list's were named "No recipe here for".
+    /// readings arrive (Clan0's and the list's), where before the list's were named as having no recipe here.
     /// </para>
     /// <para>
     /// Since 2026-09-22 the file may also carry this PC's setup, so a <c>setup/</c> folder is allowed here — though
@@ -221,7 +221,7 @@ public class AppCompositionTests
         var third = (written.Lines - written.Finals) / 3;
         Assert.Equal(2 * third, outcome.Added);
         Assert.Contains("Clan1", outcome.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("No recipe here for", outcome.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Not part of any mode", outcome.Message, StringComparison.Ordinal);
         Assert.Equal(third, BookFiles.ReadAll(paths.Book, BookGenerator.ListSlug).Count());
         var lines = BookFiles.ReadAll(paths.Book, recipe.Slug).ToList();
         Assert.Equal(third, lines.Count);
@@ -230,18 +230,14 @@ public class AppCompositionTests
     }
 
     /// <summary>
-    /// What a PC with nothing set up exports. Until games and modes it was nothing: <c>setup: false</c>, no <c>setup/</c>
-    /// folder, opened as a stats-only file, so no preview offered a person their own empty setup back (spec §1, final
-    /// review's ruling on finding 3; this test was <c>APristinePcsExportCarriesNoSetupAndOpensAsAStatsOnlyFile</c>).
-    /// <para>
-    /// A pristine PC now HAS a setup: the built-in readers with their seeded ticks, and the two sources every install
-    /// gets (the clans list watched, the profile yours), so <see cref="SetupPack.IsEmpty"/> is false and the file carries
-    /// it, every item "same as here" on a pristine PC at the other end. Pinned as it is, so the change shows; item 9
-    /// (text-free transfer, A7) owns restoring "pristine carries nothing" or retiring the rule.
-    /// </para>
+    /// What a PC with nothing set up exports: nothing. <c>setup: false</c>, no <c>setup/</c> folder, opened as a
+    /// stats-only file, so no preview offers a person their own empty setup back (spec §1, final review's ruling on
+    /// finding 3; <see cref="SetupPack.IsEmpty"/>). Since games and modes a pristine PC holds the shipped readers and the
+    /// two sources every install gets, so "empty" is "nothing the person made" (item 9): no changed tick, no clan, no
+    /// board of their own, no switch away from its default. The file is still a v:2 stats file 0.6.3 reads.
     /// </summary>
     [Fact]
-    public void APristinePcsExportNowCarriesTheBuiltInReadersAndTheirTwoSources()
+    public void APristinePcsExportCarriesNoSetupAndOpensAsAStatsOnlyFile()
     {
         using var dir = TempDir.Create("urscore-app-pristine");
         BookGenerator.Write(new AppPaths(dir.Path).Book, clanSources: 1, days: 1);
@@ -250,16 +246,21 @@ public class AppCompositionTests
         {
             var exported = exporter.ExportStats(file);
 
-            Assert.True(exported.Manifest.Setup);
-            Assert.Equal(["pet-sim-99-clan-battle-points", "pet-sim-99-top-clans", "pet-sim-99-profile"], exported.Setup!.Recipes.Select(r => r.Slug));
-            Assert.Equal(["pet-sim-99-top-clans", "pet-sim-99-profile"], exported.Setup.Sources.Select(s => s.Recipe));
+            Assert.False(exported.Manifest.Setup);
+            Assert.Equal(BookPack.StatsOnlyVersion, exported.Manifest.V);
+            Assert.Null(exported.Setup);
+        }
+
+        using (var zip = System.IO.Compression.ZipFile.OpenRead(file))
+        {
+            Assert.DoesNotContain(zip.Entries, entry => entry.FullName.StartsWith("setup/", StringComparison.Ordinal));
         }
 
         var opened = BookPack.Open(file);
         try
         {
-            Assert.True(opened.Manifest!.Setup);
-            Assert.NotNull(opened.Setup);
+            Assert.False(opened.Manifest!.Setup);
+            Assert.Null(opened.Setup);
         }
         finally
         {
@@ -276,11 +277,12 @@ public class AppCompositionTests
     /// the same book merge the stats-only import uses. Then into a B that already WATCHES one of the clans: the
     /// plan says Replace, and afterward B has one such clan, not two.
     /// <para>
-    /// Since games and modes both PCs read the built-in text, so A's two recipes (whose fixture top-clans text is older
-    /// than the shipped one) export the shipped text and compare "same as here" by text on B: no recipe is applied (0,
-    /// was 2), so A's ticks do not travel until item 9 compares states (A7). B, a fresh install, already watches the
-    /// clans list (the source every install gets), so that clan is "same as here" too: 2 clans applied, was 3. B ends
-    /// with the three built-in readers (was 2) and four sources: its own two plus A's two clans (was 3).
+    /// Since games and modes both PCs read the built-in text, and since item 9 the file carries no text at all: a reader
+    /// travels as its ticks and B compares them by state (A7). A's clan-battle reader has a tick changed from the seed, so
+    /// it is one Update (one mode, was 2 recipes); the clans list holds nothing but a sent field list, which never
+    /// travels, so it is not in the file. B, a fresh install, already watches the clans list (the source every install
+    /// gets), so that clan is "same as here": 2 clans applied, was 3. B ends with the three built-in readers (was 2)
+    /// and four sources: its own two plus A's two clans (was 3).
     /// </para>
     /// </summary>
     [Fact]
@@ -295,7 +297,7 @@ public class AppCompositionTests
             var topText = RecipeParserTests.Fixture("petsim99-top-clans.recipe.json");
             var top = RecipeParser.Parse(topText).Recipe!;
             var pathsA = new AppPaths(a.Path);
-            new RecipeStore(pathsA.Recipes).Save(clan, clanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") }));
+            new RecipeStore(pathsA.Recipes).Save(clan, clanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points.mine") }));   // a pinned id away from the seed
             new RecipeStore(pathsA.Recipes).Save(top, topText, new RecipeState(SentFieldMetrics: [FieldMetrics.ThreatGap]));
             var sourcesA = new List<Source>
             {
@@ -326,7 +328,10 @@ public class AppCompositionTests
             var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), importer.SetupWriter, Start);
 
             Assert.Null(applied.FailedStep);
-            Assert.Equal((0, 2, 1), (applied.Recipes, applied.Clans, applied.Boards));
+            Assert.Equal((1, 2, 1), (applied.Recipes, applied.Clans, applied.Boards));
+            Assert.Equal(SetupOutcome.Update, Assert.Single(plan.Items, i => i.Kind == SetupKind.Recipe).Outcome);
+            var arrived = importer.Installed.Single(i => i.Recipe.Slug == clan.Slug).State.StatChoices["value"];
+            Assert.Equal((true, false, "clan.battle.points.mine"), (arrived.Show, arrived.Send, arrived.MetricId));                // the tick travelled; the send did not
             Assert.Equal(3, importer.Installed.Count);
             Assert.All(importer.Installed.SelectMany(i => i.State.StatChoices.Values), choice => Assert.False(choice.Send));
             // The second send list too: A's clans list ticks a clan-and-field number, and B must arrive with
@@ -378,6 +383,116 @@ public class AppCompositionTests
             // so it survives a failed assertion above unless this cleanup runs whatever the outcome (finding 5c).
             foreach (var aside in Directory.GetDirectories(Path.GetTempPath(), "urscore-app-*.before-import-*")) Directory.Delete(aside, true);
         }
+    }
+
+    /// <summary>
+    /// A 0.6.3 export holds a .recipe.json beside each state. Its text is ignored (B reads its own copy) and its ticks
+    /// apply; the same ticks between two PCs that both carry the identical embedded text are an Update by state, which
+    /// comparing by text could never see (A7).
+    /// </summary>
+    [Fact]
+    public async Task AnOldExportWithRecipeTextImportsItsTicksAndIgnoresTheText()
+    {
+        using var a = TempDir.Create("urscore-app-a");
+        using var b = TempDir.Create("urscore-app-b");
+        var file = Path.Combine(a.Path, "old.zip");
+        BookGenerator.Write(new AppPaths(a.Path).Book, clanSources: 1, days: 1);
+        using (var exporter = Compose(a, new StubHost(reachable: false), new FakeTransport()))
+        {
+            var ticked = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: false, Send: true, MetricId: "clan.battle.points") });
+            exporter.SaveRecipeState(exporter.Installed.Single(i => i.Recipe.Slug == "pet-sim-99-clan-battle-points").Recipe, ticked);
+            Assert.True(exporter.ExportStats(file).Manifest.Setup);
+        }
+
+        // Make it the old shape: the sender's text beside the state, and an activeRecipe, as 0.6.3 wrote.
+        using (var zip = System.IO.Compression.ZipFile.Open(file, System.IO.Compression.ZipArchiveMode.Update))
+        {
+            Assert.DoesNotContain(zip.Entries, e => e.FullName.EndsWith(".recipe.json", StringComparison.Ordinal));
+            using var writer = new StreamWriter(zip.CreateEntry("setup/recipes/pet-sim-99-clan-battle-points.recipe.json").Open());
+            writer.Write("this text is the old sender's and must never be read");
+        }
+
+        using var importer = Compose(b, new StubHost(reachable: false), new FakeTransport());
+        await importer.LoadBookAsync();
+        var opened = BookPack.Open(file);
+        try
+        {
+            Assert.Equal("", opened.Problem);
+            var plan = SetupMerge.Plan(opened.Setup!, importer.SetupWriter.Here, 0, 0);
+            Assert.Equal(SetupOutcome.Update, Assert.Single(plan.Items, i => i.Kind == SetupKind.Recipe).Outcome);
+
+            var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), importer.SetupWriter, Start);
+
+            Assert.Null(applied.FailedStep);
+            Assert.False(importer.Installed.Single(i => i.Recipe.Slug == "pet-sim-99-clan-battle-points").State.StatChoices["value"].Show);
+            Assert.False(File.Exists(Path.Combine(new AppPaths(b.Path).Recipes, "pet-sim-99-clan-battle-points.recipe.json")), "no recipe text is ever saved by a merge");
+        }
+        finally
+        {
+            BookPack.Discard(opened);
+            foreach (var aside in Directory.GetDirectories(Path.GetTempPath(), "urscore-app-*.before-import-*")) Directory.Delete(aside, true);
+        }
+    }
+
+    /// <summary>modes.json round trips and applies live: the receiving PC's switch is off at once, saved, and its watch is gone.</summary>
+    [Fact]
+    public async Task ModeSwitchesTravelAndApplyLiveOnTheOtherPc()
+    {
+        using var a = TempDir.Create("urscore-app-a");
+        using var b = TempDir.Create("urscore-app-b");
+        var file = Path.Combine(a.Path, "modes.zip");
+        BookGenerator.Write(new AppPaths(a.Path).Book, clanSources: 1, days: 1);
+        using (var exporter = Compose(a, new StubHost(reachable: false), new FakeTransport()))
+        {
+            exporter.SetSwitch("pet-sim-99/profile", false);
+            var exported = exporter.ExportStats(file);
+            Assert.True(exported.Manifest.Setup);
+            Assert.Equal(false, exported.Setup!.Settings.Modes!["pet-sim-99/profile"]);
+        }
+
+        using var importer = Compose(b, new StubHost(reachable: false), new FakeTransport());
+        await importer.LoadBookAsync();
+        Assert.True(importer.Switches.IsOn("pet-sim-99/profile"));
+        var opened = BookPack.Open(file);
+        try
+        {
+            var plan = SetupMerge.Plan(opened.Setup!, importer.SetupWriter.Here, 0, 0);
+            Assert.Equal(SetupOutcome.Update, Assert.Single(plan.Items, i => i.Kind == SetupKind.Mode).Outcome);
+
+            var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), importer.SetupWriter, Start);
+
+            Assert.Null(applied.FailedStep);
+            Assert.True(applied.ModesApplied);
+            Assert.False(importer.Switches.IsOn("pet-sim-99/profile"));                                   // live, without a restart
+            Assert.False(Settings.Load(new AppPaths(b.Path).Settings).Modes!["pet-sim-99/profile"]);      // and saved
+        }
+        finally
+        {
+            BookPack.Discard(opened);
+            foreach (var aside in Directory.GetDirectories(Path.GetTempPath(), "urscore-app-*.before-import-*")) Directory.Delete(aside, true);
+        }
+    }
+
+    /// <summary>A book for a reader no mode names is skipped with the new line, not "No recipe here for".</summary>
+    [Fact]
+    public async Task ABookForAnOrphanReaderIsSkippedAsNotPartOfAnyMode()
+    {
+        using var a = TempDir.Create("urscore-app-a");
+        using var b = TempDir.Create("urscore-app-b");
+        var book = new AppPaths(a.Path).Book;
+        BookGenerator.Write(book, clanSources: 1, days: 1);
+        var orphan = Path.Combine(book, "roblox-followers");
+        Directory.CreateDirectory(orphan);
+        foreach (var month in Directory.EnumerateFiles(Path.Combine(book, BookGenerator.ClanSlug), "*.jsonl")) File.Copy(month, Path.Combine(orphan, Path.GetFileName(month)));
+
+        using var importer = Compose(b, new StubHost(reachable: false), new FakeTransport());
+        await importer.LoadBookAsync();
+
+        var outcome = BookImport.Run(Path.GetDirectoryName(book)!, importer);
+
+        Assert.Contains("Not part of any mode: roblox-followers.", outcome.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("No recipe here", outcome.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(new AppPaths(b.Path).Book, "roblox-followers")));
     }
 
     private sealed class FakeTransport : IRecipeTransport

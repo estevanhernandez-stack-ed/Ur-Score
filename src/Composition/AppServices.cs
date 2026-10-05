@@ -279,7 +279,7 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         _book.Flush();
         var version = typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        var built = SetupPack.FromHere(Installed, Sources, SavedBoards, Settings, KnownAccounts);
+        var built = SetupPack.FromHere(Installed, Sources, SavedBoards, Settings, KnownAccounts, Catalog);
         var setup = built.IsEmpty ? null : built;
         return new BookExport(BookPack.Write(_book.Root, path, version, _time.GetUtcNow(), setup), setup);
     }
@@ -828,17 +828,16 @@ public sealed class AppServices : ISetupServices, IDisposable
     {
         public string DataRoot => owner._paths.Root;
 
-        public Core.SetupHere Here => new(owner.Installed, owner.Sources, owner.SavedBoards, owner.KnownAccounts, owner.Settings);
+        public Core.SetupHere Here => new(owner.Installed, owner.Sources, owner.SavedBoards, owner.KnownAccounts, owner.Settings, owner.Catalog);
 
-        public void SaveRecipe(Recipe recipe, string text, RecipeState state) => owner.Store.Save(recipe, text, state);
+        public void SaveState(string slug, RecipeState state) =>
+            owner.SaveRecipeState(owner.FindInstalled(slug)?.Recipe ?? throw new InvalidOperationException($"no reader {slug} here"), state);
 
         public void SaveSources(IReadOnlyList<Source> sources) => owner.SaveSources(sources);
 
         public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) => owner.SaveImportedBoards(saved);
 
         public void SaveSettings(Settings settings) => owner.SaveSettings(settings);
-
-        public void ReloadRecipes() => owner.ReloadRecipes();
     }
 
     // ---- watches ----

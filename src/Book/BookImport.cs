@@ -63,8 +63,8 @@ public static class BookImport
 
         foreach (var slug in BookFiles.Slugs(root))
         {
-            // A recipe this PC hasn't installed has no text to write beside its lines, and no source to match them
-            // to either: it is named so it can be imported, not quietly dropped.
+            // A reader no mode names (an orphan) has no source here to match its lines to and nothing reads it: it is
+            // named so it is not quietly dropped, and skipped.
             if (services.Installed.FirstOrDefault(i => string.Equals(i.Recipe.Slug, slug, StringComparison.Ordinal)) is not { } installed)
             {
                 noRecipe.Add(slug);
@@ -100,7 +100,7 @@ public static class BookImport
 
         if (already > 0) parts.Add(already == 1 ? "1 was already here." : $"{already:N0} were already here.");
         if (notSetUp.Count > 0) parts.Add($"Not set up on this PC, so left alone: {string.Join(", ", notSetUp)}.");
-        if (noRecipe.Count > 0) parts.Add($"No recipe here for: {string.Join(", ", noRecipe)}.");
+        if (noRecipe.Count > 0) parts.Add($"Not part of any mode: {string.Join(", ", noRecipe)}.");
 
         return string.Join(" ", parts);
     }

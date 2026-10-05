@@ -82,7 +82,7 @@ public static class Readers
         return (new GameCatalog(games), problems);
     }
 
-    private static IReadOnlyList<string> ShowsFor(ModeDef mode, string slug)
+    internal static IReadOnlyList<string> ShowsFor(ModeDef mode, string slug)
     {
         var prefix = slug + ":";
         return [.. mode.Shows.Where(s => s.StartsWith(prefix, StringComparison.Ordinal)).Select(s => s[prefix.Length..])];

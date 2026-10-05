@@ -19,7 +19,12 @@ public class SetupPackTests
         Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") },
         ExcludedAccountIds: [AltOne.AccountId.ToString(), "00000000-0000-0000-0000-00000000dead"]));
 
-    private static InstalledRecipe ProfileInstalled() => new(Profile, RecipeParserTests.Fixture("petsim99-profile.recipe.json"), new RecipeState());
+    private static InstalledRecipe ProfileInstalled() => new(Profile, RecipeParserTests.Fixture("petsim99-profile.recipe.json"), new RecipeState(
+        Stats: new Dictionary<string, StatChoice> { ["rank"] = new(Show: true, MetricId: "profile.rank") }));
+
+    /// <summary>A reader as a fresh install runs it: the seed and nothing the person did.</summary>
+    private static InstalledRecipe Pristine(Recipe recipe, string text) =>
+        new(recipe, text, RecipeStates.Effective(recipe, null, Labs626.UrScore.Games.Readers.ShowsFor(Labs626.UrScore.Games.GameCatalog.BuiltIn.ModeOf(recipe.Slug)!, recipe.Slug)));
 
     /// <summary>Neither shipped fixture declares a key (grep confirms it), so this one is built here for the key tests.</summary>
     private const string KeyedRecipeText = """
@@ -39,15 +44,19 @@ public class SetupPackTests
         using var dir = TempDir.Create("urscore-setup");
         var boards = new List<BoardDef> { new("b-1", "Battle", [new PanelDef("p-1", PanelType.Standing, new PanelSize(6), new PanelSettings(Clan.Slug, SourceId: MainClan.Id))]) };
         var pack = SetupPack.FromHere([ClanInstalled(), ProfileInstalled()], [MainClan, Rival], boards,
-            new Settings(ResolveNames: false, ActiveRecipe: Clan.Slug, StartOnOpen: true), [Main, AltOne]);
+            new Settings(ResolveNames: false, ActiveRecipe: Clan.Slug, StartOnOpen: true, Modes: new Dictionary<string, bool> { ["pet-sim-99/battle"] = false }), [Main, AltOne]);
 
         pack.ToFolder(dir.Path);
         var back = SetupPack.FromFolder(dir.Path);
 
         Assert.NotNull(back);
-        Assert.Equal(pack.Recipes.Select(r => (r.Slug, r.Name, r.Text)), back.Recipes.Select(r => (r.Slug, r.Name, r.Text)));
-        Assert.Equal(pack.Recipes[0].State.StatChoices["value"], back.Recipes[0].State.StatChoices["value"]);
-        Assert.Equal(pack.Recipes[0].ExcludedUserIds, back.Recipes[0].ExcludedUserIds);
+        // Names and text are not carried (A7): a reader travels as its slug and its choices.
+        Assert.Equal(pack.Recipes.Select(r => r.Slug).Order(StringComparer.Ordinal), back.Recipes.Select(r => r.Slug));
+        Assert.All(pack.Recipes.Concat(back.Recipes), r => Assert.Null(r.Text));
+        var packClan = pack.Recipes.Single(r => r.Slug == Clan.Slug);
+        var backClan = back.Recipes.Single(r => r.Slug == Clan.Slug);
+        Assert.Equal(packClan.State.StatChoices["value"], backClan.State.StatChoices["value"]);
+        Assert.Equal(packClan.ExcludedUserIds, backClan.ExcludedUserIds);
 
         Assert.Equal(
             pack.Sources.Select(s => (s.Id, s.Recipe, s.Role, s.Enabled, s.InputsKey)),
@@ -70,7 +79,8 @@ public class SetupPackTests
             }
         }
 
-        Assert.Equal((false, Clan.Slug), (back.Settings.ResolveNames, back.Settings.ActiveRecipe));
+        Assert.Equal((false, null), (back.Settings.ResolveNames, back.Settings.ActiveRecipe));   // activeRecipe is never written (A7)
+        Assert.Equal(new Dictionary<string, bool> { ["pet-sim-99/battle"] = false }, back.Settings.Modes);
         Assert.Equal(pack.Keys, back.Keys);
         Assert.True(Directory.Exists(Path.Combine(dir.Path, SetupPack.Folder)));
     }
@@ -125,5 +135,85 @@ public class SetupPackTests
     {
         using var dir = TempDir.Create("urscore-setup");
         Assert.Null(SetupPack.FromFolder(dir.Path));
+    }
+
+    /// <summary>A new export holds state and modes and no reader text, and settings.json drops activeRecipe.</summary>
+    [Fact]
+    public void ANewExportHasNoReaderTextAndNoActiveRecipe()
+    {
+        using var dir = TempDir.Create("urscore-setup");
+        var modes = new Dictionary<string, bool> { ["pet-sim-99/profile"] = false };
+        var pack = SetupPack.FromHere([ClanInstalled()], [MainClan], [], new Settings(ActiveRecipe: Clan.Slug, Modes: modes), [Main]);
+
+        pack.ToFolder(dir.Path);
+
+        var folder = Path.Combine(dir.Path, SetupPack.Folder);
+        Assert.Empty(Directory.EnumerateFiles(folder, "*.recipe.json", SearchOption.AllDirectories));
+        Assert.True(File.Exists(Path.Combine(folder, "recipes", Clan.Slug + ".state.json")));
+        Assert.DoesNotContain("activeRecipe", File.ReadAllText(Path.Combine(folder, "settings.json")), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pet-sim-99/profile", File.ReadAllText(Path.Combine(folder, "modes.json")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A 0.6.3 export holds a .recipe.json and a .state.json per reader and an activeRecipe: the text is ignored, the state
+    /// read, and a folder with only states (or only old recipe files) enumerates the same readers.
+    /// </summary>
+    [Fact]
+    public void AnOldExportWithRecipeTextStillReadsItsStatesAndIgnoresTheText()
+    {
+        using var dir = TempDir.Create("urscore-setup");
+        var recipes = Directory.CreateDirectory(Path.Combine(dir.Path, SetupPack.Folder, "recipes")).FullName;
+        File.WriteAllText(Path.Combine(recipes, Clan.Slug + ".recipe.json"), RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json"));
+        File.WriteAllText(Path.Combine(recipes, Clan.Slug + ".state.json"), RecipeStore.SerializeState(ClanInstalled().State));
+        File.WriteAllText(Path.Combine(recipes, "old-only.recipe.json"), "not even json");   // no state file: still a reader the file names
+        File.WriteAllText(Path.Combine(dir.Path, SetupPack.Folder, "settings.json"), """{"resolveNames":false,"activeRecipe":"pet-sim-99-clan-battle-points"}""");
+
+        var back = SetupPack.FromFolder(dir.Path)!;
+
+        Assert.Equal(["old-only", Clan.Slug], back.Recipes.Select(r => r.Slug).Order(StringComparer.Ordinal));
+        Assert.All(back.Recipes, r => Assert.Null(r.Text));
+        Assert.True(back.Recipes.Single(r => r.Slug == Clan.Slug).State.StatChoices["value"].Show);
+        Assert.False(back.Settings.ResolveNames);
+        Assert.Null(back.Settings.ActiveRecipe);
+        Assert.Null(back.Settings.Modes);   // no modes.json: nothing to apply
+    }
+
+    [Fact]
+    public void AStateOnlyFolderReadsToo()
+    {
+        using var dir = TempDir.Create("urscore-setup");
+        SetupPack.FromHere([ClanInstalled()], [], [], Settings.Defaults, [Main]).ToFolder(dir.Path);
+
+        Assert.Equal(Clan.Slug, Assert.Single(SetupPack.FromFolder(dir.Path)!.Recipes).Slug);
+    }
+
+    /// <summary>A pristine PC (the shipped readers as seeded, their automatic sources, default switches) has nothing to carry.</summary>
+    [Fact]
+    public void APristinePcExportsNothing()
+    {
+        var recipes = new[] { Pristine(Clan, RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")), Pristine(Profile, RecipeParserTests.Fixture("petsim99-profile.recipe.json")) };
+        var automatic = new Source("s-auto0001", Profile.Slug, new Dictionary<string, string>(), SourceRole.Main);
+        var defaults = new Dictionary<string, bool> { ["pet-sim-99"] = true, ["pet-sim-99/battle"] = true, ["pet-sim-99/profile"] = true };
+
+        var pack = SetupPack.FromHere(recipes, [automatic], [], new Settings(StartOnOpen: true, Modes: defaults), [Main]);
+
+        Assert.True(pack.IsEmpty);
+        Assert.Empty(pack.Recipes);
+        Assert.Null(pack.Settings.Modes);   // switches equal to their defaults are not a choice
+    }
+
+    /// <summary>Each thing a person can make un-empties it: a clan, a tick, a board of their own, a switch away from its default.</summary>
+    [Fact]
+    public void AnythingThePersonMadeMakesTheExportNonEmpty()
+    {
+        var clan = Pristine(Clan, RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json"));
+        var typed = new Source("s-clan0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main);
+        var board = new BoardDef("b-1", "Mine", []);
+
+        Assert.False(SetupPack.FromHere([clan], [typed], [], Settings.Defaults, [Main]).IsEmpty);                                       // one clan
+        Assert.False(SetupPack.FromHere([clan with { State = clan.State with { Stats = new Dictionary<string, StatChoice>(clan.State.Stats!) { ["rank"] = new(true, false, "clan.battle.rank") } } }], [], [], Settings.Defaults, [Main]).IsEmpty);   // a tick
+        Assert.False(SetupPack.FromHere([clan], [], [board], Settings.Defaults, [Main]).IsEmpty);                                      // a board
+        Assert.False(SetupPack.FromHere([clan], [], [], new Settings(Modes: new Dictionary<string, bool> { ["pet-sim-99/battle"] = false }), [Main]).IsEmpty);   // a switch
+        Assert.True(SetupPack.FromHere([clan with { State = clan.State with { CounterNames = ["Points"] } }], [], [new BoardDef("b-s", "Alts", [], Follows: "alts")], Settings.Defaults, [Main]).IsEmpty);   // a read's counter names and a following tab are not
     }
 }
