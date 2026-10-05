@@ -343,13 +343,15 @@ public static class BoardText
     /// <param name="bookUnread">The score book couldn't be read, so nothing can run: that covers every board (S1-14.2).</param>
     public static BoardEmpty EmptyFor(IReadOnlyList<StarterBoard> starters, BoardDef board, bool editing = false, bool bookUnread = false) =>
         bookUnread ? BoardEmpty.BookUnread
+        : starters.Count > 0 && starters.All(s => s.Empty == BoardEmpty.ModeOff) ? BoardEmpty.NoModes
         : starters.Any(s => s.Empty == BoardEmpty.NoRecipes) ? BoardEmpty.NoRecipes
         : !editing && StarterBoards.Named(starters, board.Follows) is { Empty: not BoardEmpty.None } starter ? starter.Empty
         : board.Panels.Count == 0 ? BoardEmpty.NoPanels
         : BoardEmpty.None;
 
     /// <param name="editing">While arranging, an empty board is told to press Done, not Arrange, which is where you are.</param>
-    public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe, bool editing = false)
+    /// <param name="modeName">The off mode's name for <see cref="BoardEmpty.ModeOff"/>, supplied by the caller.</param>
+    public static (string Line, string Detail, string Button) EmptyState(BoardEmpty empty, Recipe? recipe, bool editing = false, string? modeName = null)
     {
         var group = recipe is null ? "source" : RecipeWords.Group(recipe);
         return empty switch
@@ -367,6 +369,12 @@ public static class BoardText
             BoardEmpty.BookUnread => ("Reading is off",
                 "It comes back once Ur Score can read your score book. The line above says what stopped it.",
                 "Try again"),
+            BoardEmpty.ModeOff => ($"{modeName} is off",
+                "Turn it on to read it again. Nothing was deleted.",
+                "Turn on"),
+            BoardEmpty.NoModes => ("Turn on a mode",
+                "Pick what Ur Score shows for your game.",
+                "Open setup"),
             BoardEmpty.NoPanels => ("This board has no panels yet",
                 editing ? "Add panels from the gallery with Add panel, then press Done." : "Add panels from the gallery, then arrange them with Arrange.",
                 "Add panel"),

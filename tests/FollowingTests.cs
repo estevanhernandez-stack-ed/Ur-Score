@@ -203,4 +203,52 @@ public class FollowingTests
         Assert.Equal(saved, Following.ToSave(saved, Both(), shown));
         Assert.DoesNotContain("follows", BoardsFile.Serialize(Following.ToSave(saved, Both(), shown)));
     }
+
+    private static string? BattleOff(string key) => key == "battle" ? "Battle" : null;
+
+    [Fact]
+    public void AnOffStarterIsStillBuiltWithNoPanelsAndTheModeOffState()
+    {
+        var starters = StarterBoards.All([Installed(Clan, "value"), Installed(Profile, "diamonds")], [MainClan, AltClan, ProfileSource], BattleOff);
+
+        var battle = StarterBoards.Named(starters, "battle")!;
+        Assert.Equal((BoardEmpty.ModeOff, 0, "Battle"), (battle.Empty, battle.Panels.Count, battle.ModeName));
+        Assert.Equal(BoardEmpty.None, StarterBoards.Named(starters, "alts")!.Empty);
+        Assert.Equal(Both()[1].Panels, starters[1].Panels);
+        Assert.Equal(BoardEmpty.ModeOff, BoardText.EmptyFor(starters, BoardDefs.Following(battle)));
+        Assert.Equal(("Battle is off", "Turn it on to read it again. Nothing was deleted.", "Turn on"),
+            BoardText.EmptyState(BoardEmpty.ModeOff, null, modeName: "Battle"));
+    }
+
+    [Fact]
+    public void EveryModeOffIsNoModesAndSaysSo()
+    {
+        var starters = StarterBoards.All([Installed(Clan, "value")], [MainClan], _ => "Any");
+
+        Assert.All(starters, s => Assert.Equal(BoardEmpty.ModeOff, s.Empty));
+        Assert.Equal(BoardEmpty.NoModes, BoardText.EmptyFor(starters, BoardDefs.Following(starters[0])));
+        Assert.Equal(("Turn on a mode", "Pick what Ur Score shows for your game.", "Open setup"), BoardText.EmptyState(BoardEmpty.NoModes, null));
+    }
+
+    [Fact]
+    public void AFollowingBattleTabSurvivesBattleBeingOffAcrossASave()
+    {
+        var installed = new[] { Installed(Clan, "value"), Installed(Profile, "diamonds") };
+        Source[] sources = [MainClan, AltClan, ProfileSource];
+        var on = StarterBoards.All(installed, sources);
+        var off = StarterBoards.All(installed, sources, BattleOff);
+
+        // Saved while on, then Battle goes off: the tab is hidden, and saving (an unrelated rename) keeps it.
+        var saved = BoardsFile.Parse(BoardsFile.Serialize(Following.ToSave(null, on, Following.Shown(null, on))));
+        Assert.Equal(new[] { "b-starter-alts" }, Following.Shown(saved, off).Select(b => b.Id).ToArray());
+
+        var whileOff = Following.ToSave(saved, off, BoardEdits.Rename(Following.Shown(saved, off), "b-starter-alts", "Grinding"));
+        var reloaded = BoardsFile.Parse(BoardsFile.Serialize(whileOff));
+        Assert.Contains(reloaded, b => b.Id == "b-starter-battle" && b.Follows == "battle" && b.Panels.Count == 0);
+
+        // Battle on again: the tab and its arrangement come back.
+        var back = Following.Shown(reloaded, on).Single(b => b.Id == "b-starter-battle");
+        Assert.Equal(Following.Shown(null, on).Single(b => b.Id == "b-starter-battle").Panels, back.Panels);
+        Assert.NotEmpty(back.Panels);
+    }
 }
