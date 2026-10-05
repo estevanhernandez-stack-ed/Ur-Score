@@ -42,21 +42,24 @@ public class AppCompositionTests
     /// The nine places that each worked out the data folder for themselves now read one record, and the record
     /// says what they said. A default that drifted from the app's own composition would be a file the app wrote
     /// somewhere it never reads.
+    /// <para>
+    /// Since the runtime fence (RuntimeFenceTests, port of K0ii's fe8d103) a test process can't resolve
+    /// <c>AppPaths.Default</c> at all, so the nine can no longer be compared with it as strings. What stays provable here:
+    /// every one of them reads it, because every one refuses exactly when it does, with its message. A default that
+    /// worked its folder out on its own again would resolve here instead of throwing.
+    /// </para>
     /// </summary>
     [Fact]
     public void EveryDefaultPathIsTheOneAppPathsNames()
     {
-        var paths = AppPaths.Default;
+        var refusal = Assert.Throws<InvalidOperationException>(() => AppPaths.Default).Message;
 
-        Assert.EndsWith(AppPaths.FolderName, paths.Root, StringComparison.Ordinal);
-        Assert.Equal(paths.Keys, KeyStore.DefaultPath);
-        Assert.Equal(paths.Recipes, RecipeStore.DefaultDirectory);
-        Assert.Equal(paths.Settings, Settings.DefaultPath);
-        Assert.Equal(paths.Accounts, AccountsCache.DefaultPath);
-        Assert.Equal(paths.Sources, SourceStore.DefaultPath);
-        Assert.Equal(paths.Boards, BoardsFile.DefaultPath);
-        Assert.Equal(paths.Book, BookFiles.DefaultRoot);
-        Assert.Equal(paths.IconCache, IconClient.DefaultCacheDirectory);
+        Func<object>[] defaults =
+        [
+            () => KeyStore.DefaultPath, () => RecipeStore.DefaultDirectory, () => Settings.DefaultPath, () => AccountsCache.DefaultPath,
+            () => SourceStore.DefaultPath, () => BoardsFile.DefaultPath, () => BookFiles.DefaultRoot, () => IconClient.DefaultCacheDirectory,
+        ];
+        Assert.All(defaults, resolve => Assert.Equal(refusal, Assert.Throws<InvalidOperationException>(resolve).Message));
     }
 
     /// <summary>

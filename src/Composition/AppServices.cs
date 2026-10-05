@@ -109,11 +109,20 @@ public sealed class AppServices : ISetupServices, IDisposable
     /// <summary><c>sources.json</c> was there at start but could not be read: this session never writes over it.</summary>
     private bool _sourcesUnreadable;
 
-    /// <summary>The app's own composition: the user's data folder, RoRoRo's pipe, the network, the wall clock.</summary>
+    private static int _ownCompositions;
+
+    /// <summary>How many times the app's own composition (the user's real data folder) was built in this process; never in a test.</summary>
+    internal static int OwnCompositions => Volatile.Read(ref _ownCompositions);
+
+    /// <summary>
+    /// The app's own composition: the user's data folder, RoRoRo's pipe, the network, the wall clock. In a test process it
+    /// throws before building anything, since <see cref="AppPaths.Default"/> is refused there.
+    /// </summary>
     public AppServices(Dispatcher ui)
         : this(ui, AppPaths.Default, host: null, transport: null, TimeProvider.System,
             RulesFile.ResolvePath(Environment.GetEnvironmentVariable(RulesFile.PathVariable)))
     {
+        Interlocked.Increment(ref _ownCompositions);
     }
 
     /// <summary>

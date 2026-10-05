@@ -107,6 +107,15 @@ internal static class UiThread
         }
     }
 
+    private static Labs626.UrScore.App? _app;
+
+    /// <summary>The harness's one application, built on first use (<see cref="RunInApp"/>).</summary>
+    public static Labs626.UrScore.App App()
+    {
+        _ = Application.Value;
+        return _app!;
+    }
+
     private static readonly Lazy<System.Windows.Threading.Dispatcher> Application = new(() =>
     {
         var ready = new TaskCompletionSource<System.Windows.Threading.Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -114,7 +123,11 @@ internal static class UiThread
         {
             try
             {
+                // Before the constructor, which queues the app's start onto this dispatcher: a test process never starts Ur Score
+                // (the mutex, the real data folder, the board). TestProcess sets it first; this keeps the harness safe on its own.
+                Labs626.UrScore.App.HostedByTests = true;
                 var application = new Labs626.UrScore.App { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
+                _app = application;
                 application.InitializeComponent();
                 ready.SetResult(System.Windows.Threading.Dispatcher.CurrentDispatcher);
             }
