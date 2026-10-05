@@ -197,12 +197,20 @@ public sealed class RecipeStore(string directory)
     /// (needs the recipe for that). A missing file gives an empty state; an unreadable one costs the choices, not the recipe.
     /// Readers.Compose calls this per built-in recipe (games-and-modes A8).
     /// </summary>
-    internal RecipeState LoadState(Recipe recipe)
+    internal RecipeState LoadState(Recipe recipe) => TryLoadState(recipe) ?? new RecipeState();
+
+    /// <summary>
+    /// As <see cref="LoadState"/>, but null when there is no usable saved state, so <c>RecipeStates.Effective</c> reaches its
+    /// "no saved state" branch and seeds a fresh install's ticks (A1). A missing file is null. So is an unreadable or corrupt
+    /// one: its choices are lost either way, and treating it as unseeded gives the user the mode's defaults back instead of a
+    /// board stuck on "No stats turned on yet" forever.
+    /// </summary>
+    internal RecipeState? TryLoadState(Recipe recipe)
     {
         try
         {
             var file = StatePath(recipe.Slug);
-            if (!File.Exists(file)) return new RecipeState();
+            if (!File.Exists(file)) return null;
 
             using var document = JsonDocument.Parse(File.ReadAllText(file));
             var state = document.RootElement.Deserialize<RecipeState>(Options) ?? new RecipeState();
@@ -232,7 +240,7 @@ public sealed class RecipeStore(string directory)
         catch (Exception)
         {
             // A hand-edited state file that no longer parses costs the choices, not the recipe.
-            return new RecipeState();
+            return null;
         }
     }
 
