@@ -23,7 +23,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
 - [x] **1. Tests can't touch the real app or data folder**
   Spec ref: `spec.md > Test infrastructure first (port of K0ii fe8d103)` + `Review round 1 amendments > A10`
   What to build: Record the baseline test count (run the suite on the untouched branch first, trx + exit code). Port
-  K0ii's fence: read `C:\Users\estev\Projects\K0ii-Score\tests\TestProcess.cs` (FencedTestFramework is a class inside
+  K0ii's fence: read the fork's `tests/TestProcess.cs` (FencedTestFramework is a class inside
   it), `src/App.xaml.cs` (HostedByTests), `src/Core/AppPaths.cs` (RefuseDefault latch). Adapt to Ur Score's
   namespaces; add InternalsVisibleTo if needed. Add a deliberate-breach test that proves resolving the default data
   folder throws inside tests.
@@ -41,7 +41,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   board. Synthetic account ids only. Plus a characterization test loading it through today's `AppServices` seams
   (fenced) that pins current behaviour, so later items show exactly what changed.
   Acceptance: fixture loads under current code; no real handles or ids.
-  Verify: suite green; `grep` the fixture for Este's handles from docs (none).
+  Verify: suite green; `grep` the fixture for the owner's handles from docs (none).
 
 - [x] **3. Reader state seeding and legacy states**
   Spec ref: `spec.md > Readers > Readers.Compose` + `A1` + `A8`
@@ -146,9 +146,9 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   existing data-folder helpers; tools/smoke/README.md updated. Parse-check every script (PowerShell parser, no run).
   Acceptance: scripts parse; README lists the run order and the RoRoRo-quit rule.
   Verify: `[System.Management.Automation.Language.Parser]::ParseFile` reports no errors for every changed script. Running
-  them is deferred to Este (they move the real data folder aside).
+  them is deferred to the owner (they move the real data folder aside).
 
-- [ ] **14. Documentation, version and security pass**
+- [x] **14. Documentation, version and security pass**
   Spec ref: `prd.md > What We're Building` + `spec.md > Runtime & Deployment`
   What to build: README rewritten around games and modes (What leaves your machine per mode; settings reference with
   `modes`, no `activeRecipe`); recipes/README.md reframed as the reader format for developers; CHANGELOG 0.7.0 ("Recipes

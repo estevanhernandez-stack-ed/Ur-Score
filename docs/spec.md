@@ -237,7 +237,7 @@ Delete the `NamesNote` update branch (PanelModels.Race.cs ~271-285) and `PanelTe
 
 ## Test infrastructure first (port of K0ii fe8d103)
 
-Port from `C:\Users\estev\Projects\K0ii-Score` (read its tests/TestProcess.cs, FencedTestFramework, App.HostedByTests,
+Port from the private clan-edition fork (read its tests/TestProcess.cs, FencedTestFramework, App.HostedByTests,
 AppPaths.RefuseDefault in that merge): a ModuleInitializer in the test assembly sets `App.HostedByTests = true` and
 latches `AppPaths.RefuseDefault`, so `App.OnStartup` returns early and any resolution of the real default data folder
 throws; `FencedTestFramework` fails the run if a real startup or composition happened. Adapt names to Ur Score's

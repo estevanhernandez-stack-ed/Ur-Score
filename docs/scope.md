@@ -9,7 +9,7 @@ next cycle as the first mode built natively on this shell. The recipe engine sta
 ## Who It's For
 
 The Pet Sim 99 player running Ur Score through RoRoRo, most often one main plus a few alts, who wants their clan's
-battle and their accounts' numbers on a board without learning a data-file format. Este is the first such user and the
+battle and their accounts' numbers on a board without learning a data-file format. The owner is the first such user and the
 owner; his own verdict on recipes after a month of daily use was "I still don't get that." If the owner doesn't get the
 concept, a new player won't either.
 
@@ -18,14 +18,14 @@ Clans page per recipe, and a fix to a shipped recipe needed a manual Setup > Rec
 
 ## Inspiration & References
 
-- Este, 2026-10-05: "We have the api, we know what we can measure. We scaffold modes and offer them for known games."
+- the owner, 2026-10-05: "We have the api, we know what we can measure. We scaffold modes and offer them for known games."
 - The approved brainstorm, logged decision by decision in the 626 dashboard (RoRoRo Plugins umbrella,
   Rp2A2gIjIFpdnsuw7dVa, entries of 2026-10-05: games-and-modes direction, manifest choice, Recipes page removal,
   design sections 1 to 3).
 - docs/2026-09-13-recipes-design.md: why recipes exist (no vendor host in the binary; NoHostnameFenceTests).
 - docs/2026-09-15-default-views-design.md: the Battle and Alts starter boards.
 - docs/2026-09-22-setup-transfer-design.md: SetupPack, which carries recipe text today.
-- K0ii Score (Projects/K0ii-Score, fe8d103): the test-harness fence to port first.
+- The private clan-edition fork (fe8d103): the test-harness fence to port first.
 - No external web research: this is an internal reshaping of a shipped app, and the references are its own docs.
   (default — confirm on next interactive run)
 
@@ -48,11 +48,11 @@ ps99.biggamesapi.io every N min" worked out from its recipes, Battle's clan box,
 note. Turning a mode off stops its reads, hides its starter tab, and shows "Battle is off" with a Turn on button on its
 panels on custom boards; the book is kept and the off period stays an honest gap. An upgrade from 0.6.3 lands with
 modes on, everything else as it was. A fresh install opens on the game page with no file picker. Release 0.7.0 is
-ready on the branch; merge, tag and catalog bump wait for Este.
+ready on the branch; merge, tag and catalog bump wait for the owner.
 
 ## What's Explicitly Cut
 
-- **Custom recipe import, outright** (Este's call B): no Recipes page, no hidden Diagnostics link. Only manifest games
+- **Custom recipe import, outright** (the owner's call B): no Recipes page, no hidden Diagnostics link. Only manifest games
   exist. Revisit if someone wants a game Ur Score doesn't ship.
 - **Ripping out the recipe engine** (option B of "moving away"): the engine and the no-hostname fence stay; game
   knowledge stays in shipped data files.
