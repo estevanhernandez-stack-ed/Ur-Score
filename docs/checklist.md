@@ -100,7 +100,7 @@ Ur Score games-and-modes shell. Spec: docs/spec.md, including the binding "Revie
   Acceptance: `prd.md > Readers that stay current`, `> Upgrading from 0.6.3`, `> Turning modes and games on and off`.
   Verify: tests green; count = previous + new; diff of AppCompositionTests explained in the commit body.
 
-- [ ] **9. Moving a setup between PCs without reader text**
+- [x] **9. Moving a setup between PCs without reader text**
   Spec ref: `spec.md > Setup transfer` + `A7`
   What to build: `SetupRecipe.Text` optional; ToFolder writes state only + `modes.json`, drops `activeRecipe`;
   FromFolder reads `*.state.json` or `*.recipe.json`; merge compares states by serialized JSON; `ISetupWriter.SaveState`;
