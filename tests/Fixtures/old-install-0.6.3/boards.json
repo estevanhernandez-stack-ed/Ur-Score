@@ -6,6 +6,12 @@
     "panels": []
   },
   {
+    "id": "b-starter-alts",
+    "name": "Alts",
+    "follows": "alts",
+    "panels": []
+  },
+  {
     "id": "b-c0ffee01",
     "name": "My watch",
     "panels": [

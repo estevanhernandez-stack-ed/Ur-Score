@@ -82,7 +82,8 @@ public class RecipeStatesTests
         var choice = Assert.Single(effective.StatChoices.Values);
         Assert.True(choice.Show);
         Assert.True(choice.Send);
-        Assert.Equal("clan.battle.points", choice.MetricId);
+        // The fixture's override differs from the recipe's own id (clan.battle.points): the override must survive.
+        Assert.Equal("clan.battle.points.mine", choice.MetricId);
     }
 
     [Fact]

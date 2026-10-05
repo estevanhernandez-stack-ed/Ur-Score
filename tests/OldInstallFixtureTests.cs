@@ -65,7 +65,7 @@ public class OldInstallFixtureTests
         var boards = new BoardsFile(paths.Boards, new ManualTime(Now)).Load();
         Assert.True(boards.Exists);
         Assert.True(boards.Readable);
-        Assert.Equal(2, boards.Boards.Count);
+        Assert.Equal(3, boards.Boards.Count);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class OldInstallFixtureTests
         Assert.Empty(state.StatChoices);
         var legacy = Assert.Single(state.LegacyStatChoices!);
         Assert.Equal("value", legacy.Key);
-        Assert.Equal(new StatChoice(Show: true, Send: true, MetricId: "clan.battle.points"), legacy.Value);
+        Assert.Equal(new StatChoice(Show: true, Send: true, MetricId: "clan.battle.points.mine"), legacy.Value);
         Assert.Equal(legacy.Value, Assert.Single(state.ChoicesForUpdate).Value);
         Assert.Equal("TestClan", state.InputValues["clan"]);
         Assert.Single(state.Excluded);
@@ -155,14 +155,14 @@ public class OldInstallFixtureTests
     }
 
     [Fact]
-    public void BoardsHoldAFollowingBattleTabAndOneEditedBoard()
+    public void BoardsHoldFollowingBattleAndAltsTabsAndOneEditedBoard()
     {
         using var dir = Copy();
         var boards = new BoardsFile(new AppPaths(dir.Path).Boards, new ManualTime(Now)).Load().Boards;
 
-        var following = Assert.Single(boards, b => b.Follows is not null);
-        Assert.Equal("battle", following.Follows);
-        Assert.Empty(following.Panels);
+        // A real 0.6.3 save writes one following entry per following starter.
+        Assert.Equal(new[] { "battle", "alts" }, boards.Where(b => b.Follows is not null).Select(b => b.Follows));
+        Assert.All(boards.Where(b => b.Follows is not null), b => Assert.Empty(b.Panels));
 
         var edited = Assert.Single(boards, b => b.Follows is null);
         Assert.Equal("My watch", edited.Name);
@@ -202,12 +202,14 @@ public class OldInstallFixtureTests
         Assert.Empty(services.RecipeProblems);
         Assert.Equal(6, services.Sources.Count);
         Assert.Contains(services.Sources, s => s.Role == SourceRole.Main);
-        Assert.Equal(2, services.SavedBoards.Count);
+        Assert.Equal(3, services.SavedBoards.Count);
 
         // The saved following Battle tab is NOT shown today: its starter builds from ticked stats, and the legacy state
         // ticks none (Stats is null; the legacy choices are read only on an update), so Battle comes out empty and
-        // hidden (spec A8 changes this). The edited board shows as it was saved.
-        Assert.DoesNotContain(services.Boards, b => b.Follows is not null);
+        // hidden (spec A8 changes this). The following Alts tab shows: the profile recipe has ticked stats. The edited
+        // board shows as it was saved.
+        Assert.DoesNotContain(services.Boards, b => b.Follows == "battle");
+        Assert.Contains(services.Boards, b => b.Follows == "alts");
         Assert.Contains(services.Boards, b => b.Name == "My watch");
         Assert.Equal(BattleSlug, services.Settings.ActiveRecipe);
 
