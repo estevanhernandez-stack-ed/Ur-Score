@@ -3,6 +3,28 @@
 All notable changes to RoRoRo Ur Score are documented here. Format roughly follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Keep score in the tray when RoRoRo starts Ur Score with Autostart.** With Autostart on for Ur Score in RoRoRo's
+  Plugins list (RoRoRo 1.33 or newer), Ur Score starts with RoRoRo, keeps its board hidden and reads and reports from
+  the tray. Click the tray icon, which wears your main clan's picture, or choose **Open board** to see the board;
+  right-click for **Pause reading** / **Resume reading** and **Quit**. Closing a tray start's board hides it back to the
+  tray. A tray start reads even with **Start reading when Ur Score opens** unticked, since a hidden board has no chip to
+  press. A first run always opens the window.
+- **A tick for it on the game page:** **When RoRoRo starts Ur Score with Autostart, keep score in the tray**, on by
+  default, under **WHEN UR SCORE OPENS**. Untick it and an autostart opens the window instead.
+- **`autostartInTray` and `lastMode` in settings.json.** `lastMode` is how Ur Score was last running, so RoRoRo
+  restarting it after an update brings it back the same way. Both are per PC and never travel in a setup file.
+
+### Changed
+
+- **Starting Ur Score again while it runs brings its board forward** instead of doing nothing. RoRoRo opening it again
+  with Autostart never does.
+- **Opened yourself, installed, or by a RoRoRo older than 1.33, nothing changes:** the window, and closing it ends Ur
+  Score. The README's "doesn't run itself in the background" now says when it does.
+
 ## 0.7.0 - 2026-10-05
 
 Recipes are gone. Pet Sim 99's modes are built in and update with the app.

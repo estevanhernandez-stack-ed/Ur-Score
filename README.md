@@ -166,7 +166,9 @@ reinstalling never touches your clans, boards, choices or score book.
    URL**, pasting the release URL you were given), or by hand (see *Install by hand* above). Walk
    the consent screen — it lists `host.metrics.report` and `host.queries.accounts` — and click
    Install. Ur Score then runs as its own window, launched from RoRoRo's Plugins page (autostart is
-   off by default, so it won't launch itself the next time you boot).
+   off by default, so it won't launch itself the next time you boot). Turn Autostart on for Ur Score
+   in that list and, with RoRoRo 1.33 or newer, it keeps score from the tray whenever RoRoRo is open
+   (see *Autostart and the tray* below).
 2. **Pick your clan.** Ur Score already knows Pet Sim 99's modes, so there is nothing to import. The
    first time Setup opens it lands on **Setup › Pet Sim 99** with the clan search ready: search for
    yours by name, **Make main** marks the one the board leads with, and **Watch it instead** follows
@@ -301,14 +303,16 @@ Pet Sim 99**, **Stats** and **Your accounts**. Which sources exist and which are
 in `sources.json`, and your boards and panels in `boards.json`, both beside the settings file.
 Thresholds aren't here at all: RoRoRo does the judging, and you write those in **Setup › Alerts**.
 
-`%LOCALAPPDATA%\626labs.ur-score\settings.json` holds four keys, and only the first is worth
+`%LOCALAPPDATA%\626labs.ur-score\settings.json` holds six keys, and only the first is worth
 touching by hand:
 
 | Key | Default | What it does |
 | --- | --- | --- |
 | `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. There is no checkbox for this. |
-| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Pet Sim 99**; no reason to edit it by hand. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet, and reading still happens only while the window is open. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
+| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Pet Sim 99**; no reason to edit it by hand. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet, and reading happens only while Ur Score is open, in its window or in the tray. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
 | `modes` | *(none)* | The switches on the game page. A key is a game (`"pet-sim-99"`) or a mode (`"pet-sim-99/battle"`, `"pet-sim-99/profile"`), the value `true` or `false`. A missing key means the default, which is on, so a fresh install writes none. A mode reads only when its game and the mode itself are both on. Use the switches on the game page rather than editing this by hand. |
+| `autostartInTray` | `true` | Whether Ur Score keeps score in the tray, with its board hidden, when RoRoRo starts it with Autostart. Ticked as **When RoRoRo starts Ur Score with Autostart, keep score in the tray** under **Setup › Pet Sim 99**. Per PC: a setup file never carries it. See *Autostart and the tray*. |
+| `lastMode` | *(none)* | `"tray"` or `"window"`: how Ur Score was running last, so that when RoRoRo restarts it after an update it comes back the same way. Missing means the window. Ur Score writes it; leave it alone. |
 | `settingsVersion` | `3` | Ur Score's own marker that the modes decision has been made. It is 3 once 0.7.0 has looked at your install. Leave it alone. |
 
 **Upgrading from 0.6.3 keeps what you had.** The first time 0.7.0 starts over an existing data
@@ -348,10 +352,36 @@ reader text is ignored and its choices are kept for the readers a mode names.
 - **Set thresholds, cooldowns, or send notifications.** RoRoRo owns all of that.
 - **Touch Roblox itself.** Ur Score reads https and writes to a local pipe. It cannot click, type,
   or otherwise act inside a Roblox client.
-- **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur
-  Score reads only while its own window is open. Ur Score starts reading as soon as it opens;
-  untick **Start reading when Ur Score opens** in **Setup › Pet Sim 99** if you'd rather start it
-  yourself from the status chip. Either way, it never watches anything you haven't opened it for.
+- **Run itself in the background, unless you turn Autostart on.** This used to be a flat no: Ur
+  Score read only while its own window was open. That changed with tray mode. RoRoRo's Autostart
+  for this plugin is still off by default, and nothing changes until you turn it on. With it on
+  (RoRoRo 1.33 or newer), Ur Score starts with RoRoRo and keeps score from the tray, reading and
+  reporting with no window open, until you quit it from the tray icon or RoRoRo closes it. Untick
+  **When RoRoRo starts Ur Score with Autostart, keep score in the tray** in **Setup › Pet Sim 99**
+  to have an autostart open the window instead. Opened any other way, Ur Score is a window, starts
+  reading as soon as it opens (untick **Start reading when Ur Score opens** to start it yourself
+  from the status chip), and closing the window ends it.
+
+## Autostart and the tray
+
+RoRoRo 1.33 tells Ur Score why it started it. Ur Score uses that once, at start:
+
+- **Autostart** (RoRoRo opening with Autostart on for Ur Score): the tray, with the board hidden,
+  and reading starts at once, even with **Start reading when Ur Score opens** unticked, since a
+  hidden board has no chip to press. Untick the tray box on the game page to get the window
+  instead.
+- **You opened it** from RoRoRo's Plugins list, or **RoRoRo just installed it**: the window, as
+  always.
+- **RoRoRo restarted it after an update**: the way it was running before, tray or window.
+- **An older RoRoRo**, which says nothing: the window, as always.
+- **A first run** (Setup needs your clan) always opens the window, whatever the reason.
+
+In the tray, click the icon (it wears your main clan's picture) or choose **Open board** to see
+the board. Right-click for **Pause reading** / **Resume reading**, the same as the status card's
+Pause, and **Quit**, which ends Ur Score. The tooltip says "Ur Score · keeping score" or
+"Ur Score · paused". Closing the board of a tray start hides it back to the tray and keeps reading;
+closing the board of a window start ends Ur Score, as before. Starting Ur Score again while it
+runs, from RoRoRo's Plugins list for instance, brings its board forward.
 
 ## Troubleshooting
 
