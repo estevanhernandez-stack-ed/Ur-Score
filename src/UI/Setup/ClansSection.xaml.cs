@@ -192,7 +192,11 @@ public partial class ClansSection : UserControl
         var name = picked.Trim();
         var line = role switch { SourceRole.Main => MainFoundLine, SourceRole.Mine => MineFoundLine, _ => WatchFoundLine };
         var watchInstead = role switch { SourceRole.Main => MainWatchInsteadButton, SourceRole.Mine => MineWatchInsteadButton, _ => null };
-        if (watchInstead is not null) watchInstead.Visibility = Visibility.Collapsed;
+        if (watchInstead is not null)
+        {
+            watchInstead.Visibility = Visibility.Collapsed;
+            watchInstead.Content = ClansModel.WatchInsteadText(name);
+        }
 
         var before = _services.Sources;
         SourceChange change;
@@ -429,6 +433,7 @@ public partial class ClansSection : UserControl
         if (members is not null) Placed(recipe, members, rest);
         ShowLine(PlaceAccountsLine, _services.Redactor.Redact(probe.Text));
         _otherProbeId = probe.OfferWatch ? change.SourceId : null;
+        OtherWatchInsteadButton.Content = ClansModel.WatchInsteadText(name);
         OtherWatchInsteadButton.Visibility = probe.OfferWatch ? Visibility.Visible : Visibility.Collapsed;
         Refresh();
     }

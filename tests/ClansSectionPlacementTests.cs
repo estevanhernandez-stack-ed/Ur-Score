@@ -46,6 +46,8 @@ public class ClansSectionPlacementTests
         Wait(section.PickOtherAsync("NovaForge"));
         Assert.Equal("None of the rest are in NovaForge. You can still watch it.", section.PlaceAccountsLine.Text);
         Assert.Equal(Visibility.Visible, section.OtherWatchInsteadButton.Visibility);
+        Assert.StartsWith("Watch ", (string)section.OtherWatchInsteadButton.Content);
+        Assert.NotEqual("Watch it instead", (string)section.OtherWatchInsteadButton.Content);
         Assert.Equal("1 of your accounts isn't in K0i2 or NovaForge yet. Is it in another clan?", section.RemainingAccountsLine.Text);
 
         // For eyes, as the game page is (artifacts/smoke, ignored by git): the question with its search, Watch and That's all.

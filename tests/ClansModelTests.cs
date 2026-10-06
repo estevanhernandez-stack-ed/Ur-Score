@@ -180,6 +180,13 @@ public class ClansModelTests
     }
 
     [Fact]
+    public void WatchInsteadNamesTheClanItWouldWatch()
+    {
+        Assert.Equal("Watch NovaForge instead", ClansModel.WatchInsteadText(" NovaForge "));
+        Assert.Equal("Watch it instead", ClansModel.WatchInsteadText("  "));
+    }
+
+    [Fact]
     public void WatchInsteadAndTheSwitchChangeOnlyTheirSource()
     {
         Source[] sources = [ClanSource("s-00000001", "CCGP", SourceRole.Main), ClanSource("s-00000002", "K0i2", SourceRole.Mine)];

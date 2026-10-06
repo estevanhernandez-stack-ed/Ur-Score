@@ -196,6 +196,13 @@ public static class ClansModel
             : new SourceChange(added, id, null);
     }
 
+    /// <summary>
+    /// The button names the clan it would watch: under the "is it in another clan?" question it sits beside a line
+    /// about a different clan, and a bare "it" read as the question's clan (owner's pass, 2026-10-05).
+    /// </summary>
+    public static string WatchInsteadText(string? clan) =>
+        string.IsNullOrWhiteSpace(clan) ? "Watch it instead" : $"Watch {clan.Trim()} instead";
+
     public static IReadOnlyList<Source> WatchInstead(IReadOnlyList<Source> sources, string sourceId) =>
         [.. sources.Select(s => s.Id == sourceId ? s with { Role = SourceRole.Watch } : s)];
 
