@@ -1,5 +1,6 @@
 using System.IO;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Core;
 using Labs626.UrScore.Games;
 using Labs626.UrScore.Recipes;
 using Labs626.UrScore.UI;
@@ -123,5 +124,146 @@ public class GameModelTests
             "Your settings file couldn't be read, so switches can't be saved this session.",
             GameModel.SwitchProblem(new InvalidOperationException(AppServices.SettingsNotWritten)));
         Assert.Equal("Could not save that: The disk is full.", GameModel.SwitchProblem(new IOException("The disk is full.")));
+    }
+
+    // ---- The two things Profile needs (accounts from RoRoRo; each linked on the site with its Profile view public) ----
+
+    private const string ProfileSlug = "pet-sim-99-profile";
+
+    private static readonly Source ProfileSource = new("s-profile1", ProfileSlug, new Dictionary<string, string>(), SourceRole.Mine);
+
+    private static HostAccount Account(long userId, string name) => new(Guid.NewGuid(), userId, name);
+
+    private static readonly IReadOnlyList<HostAccount> Eight =
+        [.. Enumerable.Range(1, 8).Select(i => Account(i, $"Alt{i}"))];
+
+    /// <summary>A live Profile read: these ids came back with data, these were unavailable for these reasons.</summary>
+    private static Dictionary<string, RecipeSnapshot> Read(long[] read, params (long Id, UnavailableReason Why)[] unavailable) =>
+        new()
+        {
+            [ProfileSource.Id] = new RecipeSnapshot(WatchState.Showing, null, [], [], read.Length + unavailable.Length, null,
+                [.. read.Select(id => new RecipeRow(id, new Dictionary<string, double> { ["rank"] = 1 }))])
+            {
+                Unavailable = unavailable.ToDictionary(u => u.Id, u => $"message for {u.Id}"),
+                UnavailableReasons = unavailable.ToDictionary(u => u.Id, u => u.Why),
+            },
+        };
+
+    private static GameModeRow ProfileRow(
+        IReadOnlyList<HostAccount> accounts, IReadOnlyDictionary<string, RecipeSnapshot> latest, ModeSwitches? switches = null) =>
+        GameModel.For(Game, switches ?? Switches(), Shipped, accounts, [ProfileSource], latest).Modes.Single(m => m.Id == "profile");
+
+    [Theory]
+    [InlineData(8, "Ur Score uses the 8 accounts saved in RoRoRo.")]
+    [InlineData(1, "Ur Score uses the 1 account saved in RoRoRo.")]
+    [InlineData(0, "Add your Roblox accounts in RoRoRo first. Ur Score reads the list from there; it never signs in to anything itself.")]
+    public void TheAccountsLineSaysHowManyAccountsRoRoRoHolds(int count, string line)
+    {
+        var row = GameModel.For(Game, Switches(), Shipped, [.. Eight.Take(count)], [], new Dictionary<string, RecipeSnapshot>());
+
+        Assert.Equal(line, row.AccountsLine);
+    }
+
+    [Fact]
+    public void ProfileCountsLinkedAccountsAndNamesTheUnlinkedAndThePrivateApart()
+    {
+        // 1-5 read; 6 and 7 not linked (404); 8 linked but private. Linked counts the private one: it IS linked.
+        var status = ProfileRow(Eight, Read([1, 2, 3, 4, 5], (6, UnavailableReason.NotFound), (7, UnavailableReason.NotFound),
+            (8, UnavailableReason.Declared))).LinkStatus!;
+
+        Assert.Equal(new[]
+        {
+            "6 of 8 accounts are linked.",
+            "Not linked: Alt6, Alt7.",
+            "Linked, but the Profile view is private: Alt8.",
+        }, status.Lines);
+        Assert.True(status.ShowButton);
+        Assert.Equal(new ModeLink("Link on db.biggames.io", new Uri("https://db.biggames.io")), status.Link);
+    }
+
+    [Fact]
+    public void EveryAccountLinkedSaysSoAndHidesTheButton()
+    {
+        var all = ProfileRow(Eight, Read([1, 2, 3, 4, 5, 6, 7, 8])).LinkStatus!;
+        var one = ProfileRow([Eight[0]], Read([1])).LinkStatus!;
+
+        Assert.Equal(new[] { "All 8 accounts are linked." }, all.Lines);
+        Assert.Equal(new[] { "Your account is linked." }, one.Lines);
+        Assert.False(all.ShowButton || one.ShowButton);
+    }
+
+    [Fact]
+    public void OneLinkedAccountOfSeveralReadsInTheSingular()
+    {
+        var status = ProfileRow([.. Eight.Take(2)], Read([1], (2, UnavailableReason.NotFound))).LinkStatus!;
+
+        Assert.Equal(new[] { "1 of 2 accounts is linked.", "Not linked: Alt2." }, status.Lines);
+    }
+
+    /// <summary>
+    /// A 400 is neither "not linked" nor "private" (the source's own trouble with that account), so it is counted in neither
+    /// group and not in the total: the line never claims to know what it doesn't.
+    /// </summary>
+    [Fact]
+    public void AnAccountTheSourceRefusedForAnotherReasonIsInNeitherGroup()
+    {
+        var status = ProfileRow([.. Eight.Take(3)], Read([1], (2, UnavailableReason.NotFound), (3, UnavailableReason.BadRequest))).LinkStatus!;
+
+        Assert.Equal(new[] { "1 of 2 accounts is linked.", "Not linked: Alt2." }, status.Lines);
+    }
+
+    [Fact]
+    public void BeforeTheFirstProfileReadItSaysNotReadYetAndOffersTheLink()
+    {
+        var status = ProfileRow(Eight, new Dictionary<string, RecipeSnapshot>()).LinkStatus!;
+
+        Assert.Equal(new[] { "Not read yet." }, status.Lines);
+        Assert.True(status.ShowButton);
+    }
+
+    /// <summary>The score book's remembered numbers say nothing about linking: only a live read does.</summary>
+    [Fact]
+    public void ARememberedSnapshotIsNotARead()
+    {
+        var latest = Read([1, 2, 3, 4, 5, 6, 7, 8]);
+        latest[ProfileSource.Id] = latest[ProfileSource.Id] with { RememberedAt = DateTimeOffset.UnixEpoch };
+
+        Assert.Equal(new[] { "Not read yet." }, ProfileRow(Eight, latest).LinkStatus!.Lines);
+    }
+
+    [Fact]
+    public void AReadThatFailedWholeSaysItCouldNotTell()
+    {
+        var latest = new Dictionary<string, RecipeSnapshot>
+        {
+            [ProfileSource.Id] = new RecipeSnapshot(WatchState.SourceUnreachable, "Could not reach the source.", [], [], 0),
+        };
+
+        var status = ProfileRow(Eight, latest).LinkStatus!;
+
+        Assert.Equal(new[] { "The last read couldn't tell which accounts are linked." }, status.Lines);
+        Assert.True(status.ShowButton);
+    }
+
+    [Fact]
+    public void TheLinkStatusIsHiddenWhenProfileIsOffAndBattleNeverHasOne()
+    {
+        var latest = Read([1], (2, UnavailableReason.NotFound));
+
+        Assert.Null(ProfileRow(Eight, latest, Switches(("pet-sim-99/profile", false))).LinkStatus);
+        Assert.Null(ProfileRow(Eight, latest, Switches(("pet-sim-99", false))).LinkStatus);
+        Assert.Null(GameModel.For(Game, Switches(), Shipped, Eight, [ProfileSource], latest).Modes.Single(m => m.Id == "battle").LinkStatus);
+    }
+
+    /// <summary>The button's words and address are the manifest's: a mode whose manifest says otherwise gets exactly that.</summary>
+    [Fact]
+    public void TheButtonsTextAndAddressComeFromTheManifest()
+    {
+        var link = new ModeLink("Somewhere else", new Uri("https://example.com/x"));
+        var game = Game with { Modes = [.. Game.Modes.Select(m => m.Id == "profile" ? m with { Link = link } : m)] };
+
+        var row = GameModel.For(game, Switches(), Shipped, Eight, [ProfileSource], new Dictionary<string, RecipeSnapshot>());
+
+        Assert.Equal(link, row.Modes.Single(m => m.Id == "profile").LinkStatus!.Link);
     }
 }

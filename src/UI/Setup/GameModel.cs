@@ -1,5 +1,6 @@
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Core;
 using Labs626.UrScore.Games;
 using Labs626.UrScore.Recipes;
 
@@ -12,9 +13,17 @@ namespace Labs626.UrScore.UI;
 /// </summary>
 public sealed record GameModeRow(
     string Id, string Key, string Name, bool IsSet, bool IsOn, string Blurb,
-    string? Reads, string? Sends, string? Note, string? AskingSlug, string? DimmedLine);
+    string? Reads, string? Sends, string? Note, string? AskingSlug, string? DimmedLine,
+    ModeLinkStatus? LinkStatus = null);
 
-public sealed record GameRow(string Id, string Name, bool IsOn, IReadOnlyList<GameModeRow> Modes);
+/// <summary>
+/// Which of your accounts a mode with a <see cref="ModeLink"/> can read, from its latest live read: one sentence per line,
+/// and whether the link button is worth showing (anything not linked, private, or not known yet).
+/// </summary>
+public sealed record ModeLinkStatus(IReadOnlyList<string> Lines, bool ShowButton, ModeLink Link);
+
+/// <summary><see cref="AccountsLine"/> is where the accounts every mode reads come from: RoRoRo's list.</summary>
+public sealed record GameRow(string Id, string Name, bool IsOn, IReadOnlyList<GameModeRow> Modes, string AccountsLine = "");
 
 /// <summary>
 /// The game page as data (spec "Setup UI > GamePage"): built from the catalog, the switches and the readers, so every line on
@@ -25,8 +34,21 @@ public static class GameModel
     /// <summary>What the page says when a switch can't be saved because settings.json was unreadable at start.</summary>
     public const string SettingsUnreadable = "Your settings file couldn't be read, so switches can't be saved this session.";
 
-    public static GameRow For(GameDef game, ModeSwitches switches, IReadOnlyList<InstalledRecipe> installed)
+    public const string NoAccounts =
+        "Add your Roblox accounts in RoRoRo first. Ur Score reads the list from there; it never signs in to anything itself.";
+
+    public const string NotReadYet = "Not read yet.";
+
+    public const string CouldNotTell = "The last read couldn't tell which accounts are linked.";
+
+    /// <param name="accounts">RoRoRo's list (<see cref="ISetupServices.KnownAccounts"/>); null reads as none.</param>
+    /// <param name="sources">The saved sources, to find which snapshots belong to a mode's readers.</param>
+    /// <param name="latest">The newest snapshot per source id (<see cref="ISetupServices.Latest"/>).</param>
+    public static GameRow For(
+        GameDef game, ModeSwitches switches, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<HostAccount>? accounts = null,
+        IReadOnlyList<Source>? sources = null, IReadOnlyDictionary<string, RecipeSnapshot>? latest = null)
     {
+        accounts ??= [];
         var gameOn = switches.IsGameOn(game.Id);
         var modes = game.Modes.Select(mode =>
         {
@@ -36,10 +58,72 @@ public static class GameModel
 
             return new GameModeRow(
                 mode.Id, mode.Key, mode.Name, switches.IsModeSet(mode.Key), on, mode.Blurb,
-                ModeLines.Reads(mode, installed), ModeLines.Sends(mode, installed), mode.Note, asking, dimmed);
+                ModeLines.Reads(mode, installed), ModeLines.Sends(mode, installed), mode.Note, asking, dimmed,
+                on && mode.Link is { } link ? LinkStatus(mode, link, accounts, sources ?? [], latest) : null);
         }).ToList();
 
-        return new GameRow(game.Id, game.Name, gameOn, modes);
+        return new GameRow(game.Id, game.Name, gameOn, modes, AccountsLine(accounts));
+    }
+
+    /// <summary>
+    /// Every mode reads the accounts saved in RoRoRo, never a sign-in of Ur Score's own, so the page says how many there are,
+    /// or where to add them when there are none.
+    /// </summary>
+    public static string AccountsLine(IReadOnlyList<HostAccount> accounts) => accounts.Count switch
+    {
+        0 => NoAccounts,
+        1 => "Ur Score uses the 1 account saved in RoRoRo.",
+        var n => $"Ur Score uses the {n} accounts saved in RoRoRo.",
+    };
+
+    /// <summary>
+    /// Linked or not, from the mode's latest LIVE reads (a remembered snapshot is the score book's, which knows nothing of
+    /// linking): an account that came back with data is linked; the source's 404 (<see cref="UnavailableReason.NotFound"/>) is
+    /// not linked; the reader's own <c>unavailable</c> (<see cref="UnavailableReason.Declared"/>) is linked but private. By the
+    /// typed reason, never by the message, so rewording a reader can't move an account between groups. A 400 is neither and
+    /// counts in neither. "Profile view" is the mode's name: only Profile carries a link today.
+    /// </summary>
+    private static ModeLinkStatus LinkStatus(
+        ModeDef mode, ModeLink link, IReadOnlyList<HostAccount> accounts, IReadOnlyList<Source> sources,
+        IReadOnlyDictionary<string, RecipeSnapshot>? latest)
+    {
+        var snapshots = sources
+            .Where(s => mode.Reads.Contains(s.Recipe, StringComparer.Ordinal))
+            .Select(s => latest?.GetValueOrDefault(s.Id))
+            .OfType<RecipeSnapshot>()
+            .Where(s => s.RememberedAt is null)
+            .ToList();
+
+        if (snapshots.Count == 0) return new ModeLinkStatus([NotReadYet], ShowButton: true, link);
+
+        var read = snapshots.SelectMany(s => s.Rows ?? []).Select(r => r.UserId).ToHashSet();
+        var reasons = new Dictionary<long, UnavailableReason>();
+        foreach (var (id, why) in snapshots.SelectMany(s => s.UnavailableReasons)) reasons.TryAdd(id, why);
+
+        // Your accounts in RoRoRo's order, then any id a read named that the list no longer holds.
+        var order = accounts.Where(a => a.RobloxUserId > 0).Select(a => a.RobloxUserId).ToList();
+        var ids = order.Concat(read.Concat(reasons.Keys).Where(id => !order.Contains(id)).Order()).Distinct()
+            .Where(id => read.Contains(id) || reasons.ContainsKey(id))
+            .ToList();
+        string Name(long id) => accounts.FirstOrDefault(a => a.RobloxUserId == id)?.DisplayName ?? id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var notLinked = ids.Where(id => !read.Contains(id) && reasons.GetValueOrDefault(id, UnavailableReason.BadRequest) == UnavailableReason.NotFound).ToList();
+        var hidden = ids.Where(id => !read.Contains(id) && reasons.GetValueOrDefault(id, UnavailableReason.BadRequest) == UnavailableReason.Declared).ToList();
+        var linked = ids.Count(read.Contains) + hidden.Count;
+        var total = linked + notLinked.Count;
+
+        if (total == 0) return new ModeLinkStatus([CouldNotTell], ShowButton: true, link);
+
+        var lines = new List<string>
+        {
+            linked == total
+                ? total == 1 ? "Your account is linked." : $"All {total} accounts are linked."
+                : $"{linked} of {total} {(total == 1 ? "account" : "accounts")} {(linked == 1 ? "is" : "are")} linked.",
+        };
+        if (notLinked.Count > 0) lines.Add($"Not linked: {string.Join(", ", notLinked.Select(Name))}.");
+        if (hidden.Count > 0) lines.Add($"Linked, but the {mode.Name} view is private: {string.Join(", ", hidden.Select(Name))}.");
+
+        return new ModeLinkStatus(lines, ShowButton: notLinked.Count + hidden.Count > 0, link);
     }
 
     /// <summary>

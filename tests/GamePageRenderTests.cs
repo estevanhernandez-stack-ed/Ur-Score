@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -69,6 +70,23 @@ public class GamePageRenderTests
             var texts = Texts(page);
             Assert.Contains("Reads ps99.biggamesapi.io, thumbnails.roblox.com, tr.rbxcdn.com every 3 min", texts);
             Assert.Contains("Needs each account linked on db.biggames.io with its Profile view public.", texts);
+
+            // The two things Profile needs: accounts from RoRoRo (none in a fresh folder) and each linked on the site. Before
+            // the first Profile read, the link line says so and the button offers the manifest's link, inside Profile's card.
+            Assert.Equal(GameModel.NoAccounts, Find<TextBlock>(page, "RoRoRoAccountsLine").Text);
+            var linkLine = Find<TextBlock>(page, "ProfileLinkLine");
+            Assert.Equal((GameModel.NotReadYet, true), (linkLine.Text, linkLine.IsVisible));
+            var linkButton = Find<Button>(page, "LinkAccountsButton");
+            Assert.True(linkButton.IsVisible);
+            Assert.Equal("Link on db.biggames.io", AutomationProperties.GetName(linkButton));
+            Assert.True(IsWithin(linkButton, FirstBorder(VisualTreeHelper.GetParent(profile))!), "the link button is not in Profile's card");
+            Assert.Single(Descendants(page).OfType<Button>(), b => AutomationProperties.GetAutomationId(b) == "LinkAccountsButton");
+
+            // A click opens the manifest's address through the page's seam, never a real browser in a test.
+            var opened = new List<Uri>();
+            page.OpenLink = opened.Add;
+            linkButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Assert.Equal(new Uri("https://db.biggames.io"), Assert.Single(opened));
             Assert.DoesNotContain("Turn Battle on to read these clans.", texts);
             Snap(page, "game-page.png");
 
@@ -81,6 +99,12 @@ public class GamePageRenderTests
             Assert.Contains("Battle is off, so nothing is read.", Texts(page));
             Assert.DoesNotContain(Texts(page), t => t.Contains("times an hour", StringComparison.Ordinal));
             Snap(page, "game-page-battle-off.png");
+
+            // Profile off: its link line and button go, with the mode's other lines.
+            profile.IsChecked = false;
+            Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Background);
+            Assert.False(Find<TextBlock>(page, "ProfileLinkLine").IsVisible);
+            Assert.False(Find<Button>(page, "LinkAccountsButton").IsVisible);
         }
         finally
         {

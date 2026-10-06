@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -18,11 +19,17 @@ public partial class GamePage : UserControl, ISetupPage
     /// <summary>The controls of one mode's row, built once; <see cref="Refresh"/> only updates them.</summary>
     private sealed record ModeControls(
         string Key, CheckBox Switch, TextBlock Blurb, TextBlock Reads, TextBlock Sends, TextBlock Note, TextBlock Dimmed,
-        ClansSection? Clans);
+        ClansSection? Clans, TextBlock? LinkLine = null, Button? LinkButton = null);
 
     private readonly ISetupServices _services;
     private readonly string _gameId;
     private readonly List<ModeControls> _modes = [];
+
+    /// <summary>
+    /// Opens a mode's link in the browser. A seam so a test can click the button without launching one; the address is always
+    /// the manifest's (<see cref="ModeLink"/>), https only, checked when the manifest was read.
+    /// </summary>
+    internal Action<Uri> OpenLink { get; set; } = url => Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
 
     /// <summary>The boxes are being set from the saved settings, not by a click, so the handlers don't write them back.</summary>
     private bool _settingBox;
@@ -39,7 +46,7 @@ public partial class GamePage : UserControl, ISetupPage
 
         if (Game is { } game)
         {
-            foreach (var row in GameModel.For(game, _services.Switches, _services.Installed).Modes) _modes.Add(BuildMode(row));
+            foreach (var row in Model(game).Modes) _modes.Add(BuildMode(row, game.Modes.First(m => m.Key == row.Key).Link));
         }
 
         Refresh();
@@ -50,6 +57,9 @@ public partial class GamePage : UserControl, ISetupPage
             Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Input, focus.FocusMainSearch);
         }
     }
+
+    private GameRow Model(GameDef game) =>
+        GameModel.For(game, _services.Switches, _services.Installed, _services.KnownAccounts, _services.Sources, _services.Latest);
 
     private GameDef? Game => _services.Catalog.Games.FirstOrDefault(g => string.Equals(g.Id, _gameId, StringComparison.Ordinal));
 
@@ -66,7 +76,7 @@ public partial class GamePage : UserControl, ISetupPage
             return;
         }
 
-        var model = GameModel.For(game, _services.Switches, _services.Installed);
+        var model = Model(game);
 
         _settingBox = true;
         try
@@ -74,6 +84,7 @@ public partial class GamePage : UserControl, ISetupPage
             GameTitle.Text = model.Name;
             AutomationProperties.SetName(GameSwitch, model.Name);
             GameSwitch.IsChecked = model.IsOn;
+            ShowLine(RoRoRoAccountsLine, model.AccountsLine);
 
             foreach (var row in model.Modes)
             {
@@ -85,6 +96,11 @@ public partial class GamePage : UserControl, ISetupPage
                 ShowLine(controls.Sends, row.Sends ?? "");
                 ShowLine(controls.Note, row.Note ?? "");
                 ShowLine(controls.Dimmed, row.DimmedLine ?? "");
+                if (controls.LinkLine is { } linkLine) ShowLine(linkLine, row.LinkStatus is { } status ? string.Join('\n', status.Lines) : "");
+                if (controls.LinkButton is { } linkButton)
+                {
+                    linkButton.Visibility = row.LinkStatus?.ShowButton == true ? Visibility.Visible : Visibility.Collapsed;
+                }
 
                 if (controls.Clans is { } clans)
                 {
@@ -104,7 +120,8 @@ public partial class GamePage : UserControl, ISetupPage
         }
     }
 
-    private ModeControls BuildMode(GameModeRow row)
+    /// <param name="link">The mode's manifest link; a mode with one gets the link line and the button, shown as the model says.</param>
+    private ModeControls BuildMode(GameModeRow row, ModeLink? link)
     {
         var name = new TextBlock { Text = row.Name, FontWeight = FontWeights.SemiBold };
         var toggle = new CheckBox { Content = name, Tag = row.Key, VerticalContentAlignment = VerticalAlignment.Center };
@@ -128,6 +145,30 @@ public partial class GamePage : UserControl, ISetupPage
 
         // The clans belong to the mode, so they sit inside its card, under what the mode is, rather than floating below it.
         var inside = new StackPanel { Children = { toggle, blurb, reads, sends, note } };
+
+        // Which accounts this mode can read and where to link the rest (only Profile carries a link today, so the ids are its).
+        TextBlock? linkLine = null;
+        Button? linkButton = null;
+        if (link is not null)
+        {
+            linkLine = Line(new Thickness(24, 8, 0, 0));
+            linkLine.TextWrapping = TextWrapping.Wrap;
+            AutomationProperties.SetAutomationId(linkLine, "ProfileLinkLine");
+
+            linkButton = new Button
+            {
+                Content = link.Text, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(24, 8, 0, 0),
+                Padding = new Thickness(10, 3, 10, 3), Visibility = Visibility.Collapsed, ToolTip = link.Url.AbsoluteUri,
+            };
+            AutomationProperties.SetAutomationId(linkButton, "LinkAccountsButton");
+            AutomationProperties.SetName(linkButton, link.Text);
+            AutomationProperties.SetHelpText(linkButton, $"Opens {link.Url.AbsoluteUri} in your browser.");
+            linkButton.Click += (_, _) => Open(link.Url);
+
+            inside.Children.Add(linkLine);
+            inside.Children.Add(linkButton);
+        }
+
         var card = new Border { Child = inside };
         card.SetResourceReference(StyleProperty, "Card");
 
@@ -145,7 +186,21 @@ public partial class GamePage : UserControl, ISetupPage
         }
 
         ModesPanel.Children.Add(rowPanel);
-        return new ModeControls(row.Key, toggle, blurb, reads, sends, note, dimmed, clans);
+        return new ModeControls(row.Key, toggle, blurb, reads, sends, note, dimmed, clans, linkLine, linkButton);
+    }
+
+    /// <summary>A browser that can't be started says so on the page, never in a box and never as an exception out of a click.</summary>
+    private void Open(Uri url)
+    {
+        try
+        {
+            OpenLink(url);
+            ShowLine(SwitchProblemLine, "");
+        }
+        catch (Exception ex)
+        {
+            ShowLine(SwitchProblemLine, _services.Redactor.Redact($"Could not open your browser: {ex.Message}"));
+        }
     }
 
     private void OnGameSwitched(object sender, RoutedEventArgs e)

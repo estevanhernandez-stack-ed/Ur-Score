@@ -9,6 +9,9 @@
         </CheckBox>
         <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
                    Text="Turn on what Ur Score reads. Changes apply at once, and turning something off keeps its score book." />
+        <!-- Where every mode's accounts come from: RoRoRo's list, never a sign-in of Ur Score's own (GameModel.AccountsLine). -->
+        <TextBlock x:Name="RoRoRoAccountsLine" AutomationProperties.AutomationId="RoRoRoAccountsLine" Style="{StaticResource Muted}"
+                   TextWrapping="Wrap" Margin="0,4,0,0" />
         <!-- A switch that couldn't be saved says why here, under the switches, never in a box. -->
         <TextBlock x:Name="SwitchProblemLine" Style="{StaticResource Refusal}" Margin="0,8,0,0" Visibility="Collapsed" />
 
