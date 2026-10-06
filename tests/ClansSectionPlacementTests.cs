@@ -39,6 +39,8 @@ public class ClansSectionPlacementTests
         Wait(section.PickAsync("K0i2", SourceRole.Main));
         Assert.Equal("Found 2 of your 3 accounts in K0i2: BirchMain, AshAlt.", section.MainFoundLine.Text);
         Assert.Equal("1 of your accounts isn't in K0i2 yet. Is it in another clan?", section.RemainingAccountsLine.Text);
+        // The clan's row says who is in it from the same list, with no battle running (backlog V3-S.20).
+        Assert.Equal("★ K0i2 · 2 accounts: BirchMain, AshAlt", section.MainCurrentLine.Text);
         Assert.Equal(Visibility.Visible, section.OtherClanSearch.Visibility);
         Assert.Equal(Visibility.Visible, section.ThatsAllButton.Visibility);
 
@@ -137,6 +139,11 @@ public class ClansSectionPlacementTests
         section.Activate();
         Wait(section.Placement);
         Assert.True(transport.MemberReads >= 2, "the flow never read a members list");
+
+        // membership.json is in the sweep below, and holds your accounts (backlog V3-S.20): the file the board groups by on open.
+        var membership = new AppPaths(dir.Path).Membership;
+        Assert.True(File.Exists(membership), "membership.json was never written, so the sweep below would not cover it");
+        Assert.Contains(Ash.RobloxUserId.ToString(), File.ReadAllText(membership), StringComparison.Ordinal);
 
         var strangers = Strangers(1).Concat(Strangers(2)).Concat(Strangers(3)).Select(id => id.ToString()).ToList();
         var files = Directory.EnumerateFiles(dir.Path, "*", SearchOption.AllDirectories).ToList();

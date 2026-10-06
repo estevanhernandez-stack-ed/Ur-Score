@@ -67,8 +67,19 @@ public partial class ClansSection : UserControl
         if (_namesAsked) return;
         _namesAsked = true;
         Unawaited.TrailFailures(LoadNamesAsync(), _services.AddTrail, "CLAN NAMES");
-        Placement = PlaceSavedClansAsync();
+        Placement = PlaceThenRefreshAsync();
         Unawaited.TrailFailures(Placement, _services.AddTrail, "CLAN MEMBERS");
+    }
+
+    /// <summary>
+    /// The placement question first, then every clan's members list not read in the last half hour, so the rows say who is in
+    /// each clan when the page opens (backlog V3-S.20). In that order: a list the question just read is not due, so it isn't asked twice.
+    /// </summary>
+    private async Task PlaceThenRefreshAsync()
+    {
+        await PlaceSavedClansAsync();
+        await _services.RefreshMembershipAsync(onlyDue: true, _closing.Token);
+        Refresh();
     }
 
     /// <summary>The members reads <see cref="Activate"/> started, for a test to wait on.</summary>
@@ -94,7 +105,8 @@ public partial class ClansSection : UserControl
         var group = RecipeWords.Group(recipe);
         var groups = RecipeWords.Groups(recipe);
         var accounts = _services.KnownAccounts;
-        var lists = ClansModel.Lists(recipe, _services.Sources, _services.Latest, accounts);
+        // Each row says who is in the clan from its members list, scoring as a detail (backlog V3-S.20).
+        var lists = ClansModel.Lists(recipe, _services.Sources, _services.Latest, accounts, _services.Members);
 
         _rendering = true;
         try

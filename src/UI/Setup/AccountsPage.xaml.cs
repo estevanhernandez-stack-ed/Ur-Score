@@ -45,7 +45,8 @@ public partial class AccountsPage : UserControl, ISetupPage
         // ticks are named by mode (ReaderNames), never by recipe.
         var labels = _services.Installed.ToDictionary(i => i.Recipe.Slug, i => ReaderNames.For(i.Recipe.Slug, _services.Catalog, _services.Installed), StringComparer.Ordinal);
         var active = _services.ActiveReaders;
-        _rows = AccountsModel.Rows(accounts, active, _services.ActiveSources, _services.Latest, _services.AvatarFileFor, labels);
+        // Placed by each clan's members list as well as by who scored this battle (backlog V3-S.20).
+        _rows = AccountsModel.Rows(accounts, active, _services.ActiveSources, _services.Latest, _services.AvatarFileFor, labels, _services.Members);
         foreach (var tick in _rows.SelectMany(r => r.Sends)) tick.PropertyChanged += OnTick;
 
         RecipeHeaders.ItemsSource = AccountsModel.SendingRecipes(active).Select(r => labels[r.Recipe.Slug]).ToList();

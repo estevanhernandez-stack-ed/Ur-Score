@@ -143,6 +143,12 @@ public interface ISetupServices
     /// </summary>
     void SaveSettledAccounts(Recipe recipe, IReadOnlyList<string> accountIds);
 
+    /// <summary>Which of your accounts each clan's members list held, per source id; a clan not in it hasn't been read (backlog V3-S.20).</summary>
+    IReadOnlyDictionary<string, IReadOnlySet<long>> Members { get; }
+
+    /// <summary>Reads each active clan's members list; with <paramref name="onlyDue"/>, only those not read in the last half hour.</summary>
+    Task RefreshMembershipAsync(bool onlyDue, CancellationToken cancellationToken);
+
     /// <summary>One read with every recipe value asked for, so the response can offer its counter names. Sends nothing.</summary>
     Task<CounterLookup> ReadCounterNamesAsync(Recipe recipe, CancellationToken cancellationToken);
 

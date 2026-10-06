@@ -71,6 +71,15 @@ public sealed class AppServices : ISetupServices, IDisposable
     private readonly SourceIcons _sourceIcons;
     private readonly SearchLists _searchLists;
     private readonly MemberLists _memberLists;
+
+    /// <summary>Which of your accounts each clan's members list held (backlog V3-S.20), kept in membership.json.</summary>
+    private readonly Membership _membership;
+
+    /// <summary>
+    /// The members reads in flight, by reader and clan, so a battle read's refresh and Setup opening at the same moment share one
+    /// GET rather than each asking. A read is removed when it ends; the next one is a new GET.
+    /// </summary>
+    private readonly Dictionary<string, Task<MembersResult>> _membersInFlight = new(StringComparer.Ordinal);
     private readonly SourceStore _sourceStore;
     private readonly BoardsFile _boardsFile;
 
@@ -195,6 +204,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         _engine = new RecipeEngine(transport, Keys);
         _searchLists = new SearchLists(transport);
         _memberLists = new MemberLists(transport);
+        _membership = new Membership(paths.Membership);
 
         AccountsCache = new AccountsCache(paths.Accounts);
         _savedAccounts = LoadSavedAccounts(AccountsCache);
@@ -377,7 +387,7 @@ public sealed class AppServices : ISetupServices, IDisposable
         Sources, Installed,
         new Dictionary<string, RecipeSnapshot>(_latest, StringComparer.Ordinal),
         new Dictionary<string, DateTimeOffset>(_lastRead, StringComparer.Ordinal),
-        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered, _sourceIcons.Files, OffReaders(), ReaderLabels());
+        KnownAccounts, _time, Runner.Running, _avatars.Files, _remembered, _sourceIcons.Files, OffReaders(), ReaderLabels(), _membership.Ids);
 
     /// <summary>
     /// The readers a panel can't draw: those of an off mode (with the switch that turns it back on) and the orphans, which
@@ -548,6 +558,20 @@ public sealed class AppServices : ISetupServices, IDisposable
         RememberLastNumbers();
         AddTrail($"OPENED ON: {_remembered.Count} source(s) drawing their last kept numbers.");
         RaiseChanged();
+
+        // Now that RoRoRo has said who your accounts are: every clan's members list, so the board groups by who is in each clan
+        // rather than by who has scored this battle (backlog V3-S.20). What membership.json kept groups it until this lands.
+        try
+        {
+            await RefreshMembershipAsync(onlyDue: false, _closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            AddTrail($"MEMBERS NOT READ AT START: {ex.GetType().Name}.");
+        }
     }
 
     public async Task StartAsync()
@@ -754,35 +778,116 @@ public sealed class AppServices : ISetupServices, IDisposable
 
     /// <summary>
     /// The trail gets counts and the redacted problem, never an id: the members list is other players, and other players never
-    /// reach disk, the trail or Diagnostics (README "What leaves your machine").
+    /// reach disk, the trail or Diagnostics (README "What leaves your machine"). What it finds is kept for the clan's source
+    /// (<see cref="Members"/>), so Setup's pick groups the board and the clan's row at once.
     /// </summary>
     public async Task<MembersResult?> FindOwnMembersAsync(Recipe recipe, string value, CancellationToken cancellationToken)
     {
-        if (RecipeWords.MainInput(recipe) is not { Members: { } members } input) return null;
+        if (RecipeWords.MainInput(recipe) is not { Members: not null } input) return null;
 
         await RefreshAccountsAsync(cancellationToken);
-        var yours = KnownAccounts.Where(a => a.RobloxUserId != 0).Select(a => a.RobloxUserId).ToHashSet();
-        var inputs = new Dictionary<string, string>(StringComparer.Ordinal) { [input.Id] = value.Trim() };
+        return await ReadMembersAsync(recipe, input, value, cancellationToken);
+    }
 
-        MembersResult result;
+    /// <summary>Which of your accounts each clan's members list held, per source id; a clan not in it hasn't been read (backlog V3-S.20).</summary>
+    public IReadOnlyDictionary<string, IReadOnlySet<long>> Members => _membership.Ids;
+
+    /// <summary>
+    /// Reads the members list of every active clan whose reader has one (backlog V3-S.20): at start once RoRoRo has listed your
+    /// accounts, when Setup's game page opens, and while reading, from each battle read. <paramref name="onlyDue"/> keeps it to
+    /// one read per clan per <see cref="Membership.Every"/>, a failed try included, which is the rate the requests line counts.
+    /// Active sources only, so an off mode's clans are never asked (A3); and nothing at all while RoRoRo has listed no accounts,
+    /// since there would be nothing to find, and an empty answer then would read as "none of yours are in it".
+    /// </summary>
+    public async Task RefreshMembershipAsync(bool onlyDue, CancellationToken cancellationToken)
+    {
+        if (LiveBoard.UserIdsOf(KnownAccounts).Count == 0) return;
+
+        var now = _time.GetUtcNow();
+        foreach (var source in ActiveSources.Where(s => s.Enabled))
+        {
+            if (FindInstalled(source.Recipe)?.Recipe is not { } recipe || RecipeWords.MainInput(recipe) is not { Members: not null } input) continue;
+            if (!source.Inputs.TryGetValue(input.Id, out var value) || value.Trim().Length == 0) continue;
+            if (onlyDue && !_membership.IsDue(source.Id, now)) continue;
+
+            await ReadMembersAsync(recipe, input, value, cancellationToken);
+        }
+    }
+
+    /// <summary>One members read for a clan, shared with any read of the same clan already in flight (<see cref="_membersInFlight"/>).</summary>
+    private Task<MembersResult> ReadMembersAsync(Recipe recipe, RecipeInput input, string value, CancellationToken cancellationToken)
+    {
+        var inputs = new Dictionary<string, string>(StringComparer.Ordinal) { [input.Id] = value.Trim() };
+        var key = recipe.Slug + "|" + Source.KeyOf(inputs);
+
+        Task<MembersResult> read;
+        lock (_membersInFlight)
+        {
+            if (!_membersInFlight.TryGetValue(key, out read!))
+            {
+                // A read that finished before this line (no accounts, a bad address) is not kept: its own removal already ran.
+                read = ReadMembersOnceAsync(recipe, input.Members!, inputs, key);
+                if (!read.IsCompleted) _membersInFlight[key] = read;
+            }
+        }
+
+        return read.WaitAsync(cancellationToken);
+    }
+
+    private async Task<MembersResult> ReadMembersOnceAsync(Recipe recipe, RecipeMembers members, Dictionary<string, string> inputs, string key)
+    {
         try
         {
-            result = await _memberLists.FindAsync(members, inputs, yours, cancellationToken);
+            var yours = LiveBoard.UserIdsOf(KnownAccounts);
+            var inputsKey = Source.KeyOf(inputs);
+            bool OfThisClan(Source s) =>
+                string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal) && string.Equals(s.InputsKey, inputsKey, StringComparison.Ordinal);
+            foreach (var source in Sources.Where(OfThisClan)) _membership.Tried(source.Id, _time.GetUtcNow());
+
+            MembersResult result;
+            try
+            {
+                // On the app's own token: a read shared by two callers must not end because one of them stopped waiting.
+                result = await _memberLists.FindAsync(members, inputs, yours, _closing.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                result = new MembersResult(new HashSet<long>(), $"Could not read the members ({ex.GetType().Name}).");
+            }
+
+            result = result with { Problem = result.Problem is null ? null : Redactor.Redact(result.Problem) };
+            AddTrail(result.Problem is null
+                ? $"MEMBERS READ: {result.Found.Count} of your {yours.Count} account(s) found."
+                : $"MEMBERS NOT READ: {result.Problem}");
+
+            // Kept only for a read that asked about some of your accounts: with none, "found none" is no answer.
+            if (result.Problem is null && yours.Count > 0) KeepMembers([.. Sources.Where(OfThisClan)], result.Found, yours);
+            return result;
         }
-        catch (OperationCanceledException)
+        finally
         {
-            throw;
+            lock (_membersInFlight) _membersInFlight.Remove(key);
+        }
+    }
+
+    /// <summary>What a read found, for each source of that clan. A write that fails costs the file, never this session's grouping.</summary>
+    private void KeepMembers(IReadOnlyList<Source> sources, IReadOnlySet<long> found, IReadOnlySet<long> yours)
+    {
+        var keep = Sources.Select(s => s.Id).ToList();
+        try
+        {
+            foreach (var source in sources) _membership.Set(source.Id, found, _time.GetUtcNow(), yours, keep);
         }
         catch (Exception ex)
         {
-            result = new MembersResult(new HashSet<long>(), $"Could not read the members ({ex.GetType().Name}).");
+            AddTrail($"MEMBERS NOT SAVED: {ex.GetType().Name}; this session groups by them anyway.");
         }
 
-        result = result with { Problem = result.Problem is null ? null : Redactor.Redact(result.Problem) };
-        AddTrail(result.Problem is null
-            ? $"MEMBERS READ: {result.Found.Count} of your {yours.Count} account(s) found."
-            : $"MEMBERS NOT READ: {result.Problem}");
-        return result;
+        RaiseChanged();
     }
 
     public void SaveSettledAccounts(Recipe recipe, IReadOnlyList<string> accountIds)
@@ -1207,6 +1312,8 @@ public sealed class AppServices : ISetupServices, IDisposable
         // Not awaited, and not lost: the icon fetch never throws past a stop by contract, and if that contract
         // ever breaks the break is a trail line rather than a task nobody heard from (S1-14.6).
         Unawaited.TrailFailures(ApplyIconAsync(sourceId, snapshot), AddTrail, "ICON NOT APPLIED");
+        // While reading, the members lists follow on the reads' own clock, each clan at most once per Membership.Every (V3-S.20).
+        if (Runner.Running) Unawaited.TrailFailures(RefreshMembershipAsync(onlyDue: true, _closing.Token), AddTrail, "MEMBERS NOT READ");
         RaiseChanged();
     }
 

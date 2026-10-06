@@ -145,7 +145,9 @@ public class AppCompositionTests
         Assert.True(snapshot.Recorded, snapshot.NotRecordingReason);
         Assert.Equal(2, snapshot.RowsSeen);
         Assert.Equal(Alt, Assert.Single(services.KnownAccounts));
-        Assert.Equal(2, transport.Requests.Count);
+        // The recipe's two steps. The members read at start (backlog V3-S.20) asks the clan's address too, and is not this read.
+        Assert.Equal(2, transport.Requests.Count - transport.MemberReads);
+        Assert.InRange(transport.MemberReads, 0, 1);
 
         // The book writes on its own thread; wait for the line to reach the disk. (Its word to the reader goes through
         // the window's dispatcher, which nothing pumps here, so the reader is not what this test reads.)
@@ -545,6 +547,9 @@ public class AppCompositionTests
 
         public List<Uri> Requests { get; } = [];
 
+        /// <summary>Members reads among <see cref="Requests"/>: the one at start, which asks the clan's own address.</summary>
+        public int MemberReads { get; private set; }
+
         public FakeTransport On(string urlStart, int status, string body)
         {
             _routes.Add((urlStart, new FetchResult(status, body, null)));
@@ -554,6 +559,7 @@ public class AppCompositionTests
         public Task<FetchResult> GetAsync(Uri url, IReadOnlyDictionary<string, string> headers, string label, CancellationToken cancellationToken)
         {
             Requests.Add(url);
+            if (label == MemberLists.Label) MemberReads++;
             var route = _routes.FirstOrDefault(r => url.AbsoluteUri.StartsWith(r.UrlStart, StringComparison.Ordinal));
             return Task.FromResult(route.Result ?? new FetchResult(404, "{}", null));
         }
