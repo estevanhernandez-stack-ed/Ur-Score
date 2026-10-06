@@ -64,8 +64,10 @@ which of your RoRoRo accounts are in it ("Found 3 of your 8 accounts in K0i2: ..
 battle. If some aren't, it asks "5 of your accounts aren't in K0i2 yet. Are they in another clan?"
 with a second search; a clan you pick there is added as one your accounts are in and checked for
 the rest only. **That's all** stops the question, and it comes back only when RoRoRo lists an
-account Ur Score hasn't placed. The member list holds everyone in the clan: other members' ids are
-compared with yours on your PC and dropped, never written, logged or shown.
+account Ur Score hasn't placed. Each clan's member list is read again when Ur Score starts, when Setup
+opens and every 30 minutes while reading, and it decides which clan each account sits under on the board
+and in Setup, whether or not that account has scored this battle. The member list holds everyone in the
+clan: other members' ids are compared with yours on your PC and dropped, never written, logged or shown.
 
 **What each mode needs.** Every mode reads the accounts saved in RoRoRo, and the line under the
 game's name says how many ("Ur Score uses the 8 accounts saved in RoRoRo."). With none, it says to
@@ -324,7 +326,8 @@ Beside those, in the same folder: `recipes\` (the ticks and metric ids you chose
 reader file an older version saved there is ignored, since the readers come from the app now, and
 Setup › Diagnostics lists one that no mode names under "Not part of any mode (kept, not read)"),
 `scorebook\`, `accounts.json` (RoRoRo's last account list, so the window has names before RoRoRo
-answers), `icon-cache\` (the pictures, and `source-icons.json`, which says which clan each icon
+answers), `membership.json` (which of your own accounts each clan's member list held, and when; never
+anyone else's id), `icon-cache\` (the pictures, and `source-icons.json`, which says which clan each icon
 belongs to), and `keys.dat` — any key a reader asked you to save, encrypted for your Windows
 account. Ur Score masks every saved key as `[key hidden]` in anything it shows, saves or copies.
 
