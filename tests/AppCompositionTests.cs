@@ -449,7 +449,7 @@ public class AppCompositionTests
             exporter.SetSwitch("pet-sim-99/profile", false);
             var exported = exporter.ExportStats(file);
             Assert.True(exported.Manifest.Setup);
-            Assert.Equal(false, exported.Setup!.Settings.Modes!["pet-sim-99/profile"]);
+            Assert.False(exported.Setup!.Settings.Modes!["pet-sim-99/profile"]);
         }
 
         using var importer = Compose(b, new StubHost(reachable: false), new FakeTransport());
