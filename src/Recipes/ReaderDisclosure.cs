@@ -272,12 +272,13 @@ public static class ReaderDisclosure
         _ => "a number",
     };
 
-    /// <summary><c>absentMessage</c>, <c>unavailable</c>, <c>sum</c> or <c>placeLabel</c>: what the data means, never what happens with it.</summary>
+    /// <summary><c>absentMessage</c>, <c>unavailable</c>, <c>notFound</c>, <c>sum</c> or <c>placeLabel</c>: what the data means, never what happens with it.</summary>
     private static bool MeaningChanged(
         Recipe installed, Recipe incoming,
         IReadOnlyDictionary<string, RecipeStat> oldStats, IReadOnlyDictionary<string, RecipeStat> newStats) =>
         !installed.Steps.Select(s => s.AbsentMessage).SequenceEqual(incoming.Steps.Select(s => s.AbsentMessage))
         || installed.LastStep.Unavailable != incoming.LastStep.Unavailable
+        || installed.LastStep.NotFound != incoming.LastStep.NotFound
         || !string.Equals(installed.PlaceLabel, incoming.PlaceLabel, StringComparison.Ordinal)
         || !installed.Headline.Select(h => h.Sum).SequenceEqual(incoming.Headline.Select(h => h.Sum))
         || newStats.Any(kv => oldStats.TryGetValue(kv.Key, out var was) && was.Sum != kv.Value.Sum);

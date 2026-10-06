@@ -72,6 +72,13 @@ public sealed record PastPeriodReading(string Value, IReadOnlyList<RecipeRow> Ro
 /// read, and <see cref="CellMisses"/> is one stat missing for one row while other rows had it.
 /// </para>
 /// </summary>
+/// <summary>
+/// What made one account unreadable in a per-account step: the source answered 404 for it (<see cref="NotFound"/>; for PS99,
+/// not linked on Big Games' site), its answer matched the recipe's <c>unavailable</c> (<see cref="Declared"/>; for PS99, the
+/// Profile view is private), or the source answered 400 (<see cref="BadRequest"/>), which is neither.
+/// </summary>
+public enum UnavailableReason { NotFound, Declared, BadRequest }
+
 public sealed record RecipeReading(
     ReadingOutcome Outcome,
     string? Detail,
@@ -82,6 +89,12 @@ public sealed record RecipeReading(
 {
     /// <summary>Per-account steps only: a user id the source answered 404 for, or whose answer matched <c>unavailable</c>, and the message to show.</summary>
     public IReadOnlyDictionary<long, string> Unavailable { get; init; } = new Dictionary<long, string>();
+
+    /// <summary>
+    /// Why each <see cref="Unavailable"/> account is, as a type rather than as words: the game page tells "not linked" from
+    /// "private" by this, so rewording a recipe's message can never move an account between the two.
+    /// </summary>
+    public IReadOnlyDictionary<long, UnavailableReason> UnavailableReasons { get; init; } = new Dictionary<long, UnavailableReason>();
 
     /// <summary>A stat key that missed on every row or account read this cycle, and the first miss, naming the keys present.</summary>
     public IReadOnlyDictionary<string, string> StatMisses { get; init; } = new Dictionary<string, string>();
@@ -514,6 +527,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         var tally = new StatTally(stats);
         var rows = new List<RecipeRow>();
         var unavailable = new Dictionary<long, string>();
+        var reasons = new Dictionary<long, UnavailableReason>();
         var asOf = new Dictionary<long, AsOfStamp>();
         IReadOnlyList<string>? counterNames = null;
         string? firstMiss = null;
@@ -536,8 +550,11 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                     // Spec §3.2 / controller ruling (fix round 1): only a 404 means "this account
                     // isn't there", which the recipe's own unavailable message may describe. A 400
                     // usually means something else went wrong for this account, so it keeps part 1's
-                    // text naming the host regardless of what the recipe declares.
-                    unavailable[userId] = status == 404 ? step.Unavailable?.Message ?? stop.Detail! : stop.Detail!;
+                    // text naming the host regardless of what the recipe declares. A recipe's own notFound
+                    // message says it best (PS99: not linked), else its unavailable message as before.
+                    var notFound = status == RecipeNotFound.Only;
+                    unavailable[userId] = notFound ? step.NotFound?.Message ?? step.Unavailable?.Message ?? stop.Detail! : stop.Detail!;
+                    reasons[userId] = notFound ? UnavailableReason.NotFound : UnavailableReason.BadRequest;
                     firstUnavailable ??= unavailable[userId];
                     continue;
                 }
@@ -554,6 +571,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
                     && rule.Matches(said.Value))
                 {
                     unavailable[userId] = rule.Message;
+                    reasons[userId] = UnavailableReason.Declared;
                     firstUnavailable ??= rule.Message;
                     continue;
                 }
@@ -595,6 +613,7 @@ public sealed class RecipeEngine(IRecipeTransport transport, IKeyStore keys) : I
         return new RecipeReading(ReadingOutcome.Read, detail, rows, [], context, ids.Count)
         {
             Unavailable = unavailable,
+            UnavailableReasons = reasons,
             StatMisses = tally.StatMisses(rows.Count),
             CellMisses = tally.CellMisses(rows.Count),
             CounterNames = counterNames ?? [],

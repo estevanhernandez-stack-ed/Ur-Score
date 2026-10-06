@@ -117,7 +117,8 @@ public sealed record RecipeStep(
     string? AbsentMessage = null,
     string? GroupName = null,
     string? Rank = null,
-    RecipeAsOf? AsOf = null);
+    RecipeAsOf? AsOf = null,
+    RecipeNotFound? NotFound = null);
 
 /// <summary>
 /// One stat the user can tick. <see cref="MetricId"/> is only a suggestion: the name RoRoRo gets is
@@ -158,6 +159,17 @@ public sealed record RecipeUnavailable(string Path, JsonValueKind IsKind, string
                                 && number == expected,
         _ => false,
     };
+}
+
+/// <summary>
+/// What a 404 for one account means, in the source's words: the PS99 API answers an account that isn't linked on its site
+/// with a 404, which is a different fix from a private Profile (<see cref="RecipeUnavailable"/>). <see cref="Status"/> is
+/// always 404, the only answer that says an account isn't there (spec §3.2); it is written out so the recipe reads as what
+/// it handles. Describes the data only, like <c>unavailable</c>.
+/// </summary>
+public sealed record RecipeNotFound(int Status, string Message)
+{
+    public const int Only = 404;
 }
 
 /// <summary><see cref="Id"/> is how the score book keeps this value; the parser always fills it.</summary>

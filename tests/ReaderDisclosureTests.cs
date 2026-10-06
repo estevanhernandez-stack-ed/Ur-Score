@@ -313,6 +313,19 @@ public class ReaderDisclosureTests
         Assert.Equal(new[] { "Changes what an empty answer means." }, comparison.Changes);
     }
 
+    /// <summary>A notFound message says what a 404 means for an account, as <c>unavailable</c> does for a private one.</summary>
+    [Fact]
+    public void AddingANotFoundMessageIsAChangeInMeaningWithoutAsking()
+    {
+        var installed = Load("petsim99-profile.recipe.json");
+        var incoming = installed with { Steps = [installed.LastStep with { NotFound = new RecipeNotFound(404, "Not linked.") }] };
+
+        var comparison = ReaderDisclosure.CompareToInstalled(installed, incoming, new FakeKeys());
+
+        Assert.False(comparison.AsksAgain);
+        Assert.Equal(new[] { "Changes what an empty answer means." }, comparison.Changes);
+    }
+
     [Fact]
     public void AddingPeriodTrackingAndPastHistoryListsBothWithoutAsking()
     {

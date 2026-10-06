@@ -27,6 +27,9 @@ public sealed record RecipeSnapshot(
 {
     public IReadOnlyDictionary<long, string> Unavailable { get; init; } = new Dictionary<long, string>();
 
+    /// <summary>Why each <see cref="Unavailable"/> account is, typed (<see cref="RecipeReading.UnavailableReasons"/>).</summary>
+    public IReadOnlyDictionary<long, UnavailableReason> UnavailableReasons { get; init; } = new Dictionary<long, UnavailableReason>();
+
     public IReadOnlyDictionary<string, string> StatMisses { get; init; } = new Dictionary<string, string>();
 
     public IReadOnlyDictionary<long, string> ClaimConflicts { get; init; } = new Dictionary<long, string>();
@@ -1011,6 +1014,7 @@ public sealed class RecipeWatch(
         return new(state, detail, lines, unresolved, seen, reading?.Context ?? context, reading?.Rows, reading?.Headline)
         {
             Unavailable = reading?.Unavailable ?? new Dictionary<long, string>(),
+            UnavailableReasons = reading?.UnavailableReasons ?? new Dictionary<long, UnavailableReason>(),
             StatMisses = reading?.StatMisses ?? new Dictionary<string, string>(),
             CellMisses = reading is null || map is null
                 ? new Dictionary<(long UserId, string Stat), string>()

@@ -363,7 +363,8 @@ public static class RecipeParser
                     ParseAbsentMessage(item, where, problems),
                     OptionalString(item, "groupName"),
                     OptionalString(item, "rank"),
-                    ParseAsOf(item, where, problems)));
+                    ParseAsOf(item, where, problems),
+                    ParseNotFound(item, where, problems)));
             }
         }
 
@@ -471,6 +472,28 @@ public static class RecipeParser
         return path is not null && message is not null && isText is not null
             ? new RecipeUnavailable(path, isKind, isText, message)
             : null;
+    }
+
+    private static RecipeNotFound? ParseNotFound(JsonElement step, string where, List<string> problems)
+    {
+        if (!Present(step, "notFound", out var notFound)) return null;
+
+        if (notFound.ValueKind != JsonValueKind.Object)
+        {
+            problems.Add($"{Capitalize(where)}'s 'notFound' must be an object with a status and a message.");
+            return null;
+        }
+
+        var message = RequiredString(notFound, "message", $"{where}'s notFound", problems);
+        var statusOk = JsonNav.TryGet(notFound, "status", out var status)
+                       && status.ValueKind == JsonValueKind.Number
+                       && status.TryGetInt32(out var number) && number == RecipeNotFound.Only;
+        if (!statusOk)
+        {
+            problems.Add($"{Capitalize(where)}'s notFound 'status' must be {RecipeNotFound.Only}, the only answer that means an account isn't there.");
+        }
+
+        return statusOk && message is not null ? new RecipeNotFound(RecipeNotFound.Only, message) : null;
     }
 
     private static string? ParseAbsentMessage(JsonElement step, string where, List<string> problems)
@@ -622,6 +645,11 @@ public static class RecipeParser
             if (step.Unavailable is not null && !step.PerAccount)
             {
                 problems.Add($"{Capitalize(where)} has 'unavailable', but only a perAccount step can.");
+            }
+
+            if (step.NotFound is not null && !step.PerAccount)
+            {
+                problems.Add($"{Capitalize(where)} has 'notFound', but only a perAccount step can.");
             }
 
             if (step.AsOf is not null && !isLast)

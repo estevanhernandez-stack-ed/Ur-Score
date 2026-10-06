@@ -441,6 +441,47 @@ public class RecipeParserTests
     }
 
     [Fact]
+    public void NotFoundOnAPerAccountStepParsesItsStatusAndMessage()
+    {
+        var steps = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": { "status": 404, "message": "Not linked." } }]""";
+        var result = RecipeParser.Parse(With(steps));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        Assert.Equal(new RecipeNotFound(404, "Not linked."), result.Recipe!.LastStep.NotFound);
+    }
+
+    [Fact]
+    public void NotFoundOnAListStepIsRefused()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score", "notFound": { "status": 404, "message": "Gone." } }]""";
+        Assert.Contains("Step 1 has 'notFound', but only a perAccount step can.", Problems(With(steps)));
+    }
+
+    /// <summary>
+    /// Only a 404 says "this account isn't there" (spec §3.2, fix round 1): a 400 keeps the host's own text, so a recipe
+    /// can't rename one, and any other status is not an account's problem at all.
+    /// </summary>
+    [Theory]
+    [InlineData("400")]
+    [InlineData("500")]
+    [InlineData("\"404\"")]
+    public void NotFoundOnlyDescribesA404(string status)
+    {
+        var steps = $$"""[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": { "status": {{status}}, "message": "Gone." } }]""";
+        Assert.Contains("Step 1's notFound 'status' must be 404, the only answer that means an account isn't there.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void NotFoundNeedsAnObjectWithAMessage()
+    {
+        var noMessage = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": { "status": 404 } }]""";
+        var notObject = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": "Gone." }]""";
+
+        Assert.Contains("Step 1's notFound has no 'message'.", Problems(With(noMessage)));
+        Assert.Contains("Step 1's 'notFound' must be an object with a status and a message.", Problems(With(notObject)));
+    }
+
+    [Fact]
     public void AnAbsentMessageThatIsNotTextIsNamed()
     {
         var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score", "absentMessage": true }]""";

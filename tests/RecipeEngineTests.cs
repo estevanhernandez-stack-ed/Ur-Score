@@ -430,6 +430,38 @@ public class RecipeEngineTests
         Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", Assert.Single(reading.Unavailable).Value);
     }
 
+    /// <summary>The profile fixture with a <c>notFound</c> on its step, as the shipped profile reader carries it.</summary>
+    private static Recipe ProfileWithNotFound => Parse(RecipeParserTests.Fixture("petsim99-profile.recipe.json").Replace(
+        "\"perAccount\": true,", "\"perAccount\": true, \"notFound\": { \"status\": 404, \"message\": \"Not linked on db.biggames.io.\" },",
+        StringComparison.Ordinal));
+
+    /// <summary>
+    /// The live PS99 API answers an account that isn't linked on db.biggames.io with a 404 (player_not_found), and a linked one
+    /// whose Profile view is private with a 200 that says so. Each costs only its account, says its own message, and carries a
+    /// typed reason, so the game page can tell "not linked" from "private" without reading the words.
+    /// </summary>
+    [Fact]
+    public async Task ANotFoundSaysTheRecipesNotFoundMessageWhileOtherAccountsStillRead()
+    {
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 404, """{ "status": "error", "error": { "code": "player_not_found" } }""")
+            .On(ProfileUrl2, 200, ProfileResponse(FullProfile))
+            .On("https://ps99.biggamesapi.io/v1/players/3?", 200, PrivateProfile)
+            .On("https://ps99.biggamesapi.io/v1/players/4?", 400, """{ "error": "bad" }""");
+
+        var reading = await Read(transport, ProfileWithNotFound, inputs: NoInputs, ids: [1, 2, 3, 4], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(2, Assert.Single(reading.Rows).UserId);
+        Assert.Equal("Not linked on db.biggames.io.", reading.Unavailable[1]);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", reading.Unavailable[3]);
+        Assert.Equal("ps99.biggamesapi.io has nothing for user id 4.", reading.Unavailable[4]);
+        Assert.Equal(UnavailableReason.NotFound, reading.UnavailableReasons[1]);
+        Assert.Equal(UnavailableReason.Declared, reading.UnavailableReasons[3]);
+        Assert.Equal(UnavailableReason.BadRequest, reading.UnavailableReasons[4]);
+        Assert.Equal("3 of your accounts could not be read: Not linked on db.biggames.io.", reading.Detail);
+    }
+
     [Fact]
     public async Task ABadRequestOnARecipeWithUnavailableKeepsTheHostsTextNotTheRecipesMessage()
     {
