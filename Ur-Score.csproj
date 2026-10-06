@@ -32,6 +32,16 @@
     <PackageReference Include="Grpc.Net.Client" Version="2.70.0" />
   </ItemGroup>
 
+  <!-- The tray icon of a start in tray mode (src/UI/Tray.cs). Same package and version RoRoRo's tray and K0ii Score's use. -->
+  <ItemGroup>
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+  </ItemGroup>
+
+  <!-- The tray's own picture: the same icon.ico the EXE carries, as a WPF resource so Tray can read it by pack URI. -->
+  <ItemGroup>
+    <Resource Include="icon.ico" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Ur-Score.Tests" />
   </ItemGroup>

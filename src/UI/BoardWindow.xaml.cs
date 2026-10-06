@@ -127,6 +127,7 @@ public partial class BoardWindow : Window
         Loaded += OnLoaded;
         Closed += (_, _) =>
         {
+            _closed = true;
             _clock.Stop();
             _toastClock.Stop();
             _services.Changed -= Render;
@@ -139,23 +140,66 @@ public partial class BoardWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _services.StartFollowingTheme();
         _clock.Start();
-        await OpenOnTheBookAsync();
+        await OpenOnceAsync(hidden: false);
     }
+
+    /// <summary>
+    /// Ur Score started in the tray (<see cref="LaunchMode"/>, RoRoRo 1.33's autostart): closing the board then hides it to the
+    /// tray instead of ending Ur Score, and opening reads whether or not "Start reading when Ur Score opens" is ticked
+    /// (<see cref="ReadsOnOpen"/>). Set once by the app, before the board opens shown or hidden; settable rather than init-only
+    /// because the app makes the tray icon from the built board first, and a tray that can't be made leaves this false.
+    /// </summary>
+    public bool StartedInTray { get; set; }
+
+    /// <summary>
+    /// A tray start: the board does what opening does (the book, start on open) without being shown, so reading doesn't wait
+    /// for the first Open board. Showing it later doesn't open it again. Everything opening needs is the services' and the
+    /// board's own state and its dispatcher timers, none of which wait for the window to be on screen.
+    /// </summary>
+    public async void OpenHidden()
+    {
+        _clock.Start();
+        await OpenOnceAsync(hidden: true);
+    }
+
+    /// <summary>Opening has run, shown or hidden: Loaded on a board first opened hidden doesn't run it twice.</summary>
+    private bool _opened;
+
+    private Task OpenOnceAsync(bool hidden)
+    {
+        if (_opened) return Task.CompletedTask;
+        _opened = true;
+        _services.StartFollowingTheme();
+        return OpenOnTheBookAsync(hidden);
+    }
+
+    /// <summary>
+    /// Whether opening starts reading by itself: the player's tick, or a tray start. Keeping score in the tray is the whole
+    /// point of a tray start, and with the board hidden there is no chip to press, so a tray start that waited for the tick
+    /// would sit in the tray reading nothing and saying nothing. The tick still decides for every start that shows the board.
+    /// </summary>
+    private bool ReadsOnOpen => _services.Settings.StartOnOpen || StartedInTray;
 
     /// <summary>
     /// Reads the score book, then does what opening does once it is read. At open, and again from the empty state's Try again
     /// when it couldn't be read (S1-14.2): the window never finished opening, so a book read on the second try gets the same
     /// first-run page and start-on-open the first try would have.
     /// </summary>
-    private async Task OpenOnTheBookAsync()
+    /// <param name="hidden">Opened into the tray. The app never starts in the tray when a first run is due
+    /// (<see cref="LaunchMode.Decide"/>); should one turn up here anyway, the board is shown for it, since a Setup page asking
+    /// for a clan behind a hidden board is a first run nobody sees.</param>
+    private async Task OpenOnTheBookAsync(bool hidden = false)
     {
         if (!await ReadBookAsync() || _popOutLifecycle.ClosingApp) return;
 
         // First run: an on mode that asks for a clan and has no source opens Setup on its game page, its clan search focused (A11).
         var firstRun = SetupPages.FirstRun(_services.Catalog, _services.Switches, _services.Installed, _services.Sources);
-        if (firstRun is { } first) OpenSetup(SetupPages.GamePage(first.GameId), first.AskingSlug);
+        if (firstRun is { } first)
+        {
+            if (hidden && !IsVisible && !ClosedOrQuitting) Show();
+            OpenSetup(SetupPages.GamePage(first.GameId), first.AskingSlug);
+        }
 
         // Sources already on at open are not "the first one came on" (§3.6); RenderBoard asks again only on none-to-some.
         _hadSources = _services.Sources.Any(s => s.Enabled);
@@ -163,13 +207,15 @@ public partial class BoardWindow : Window
         // Plan A33: with "Start reading when Ur Score opens" ticked, the board starts reading itself — after
         // the book is read, and never while Setup has just opened on a recipe that has no source yet.
         if (!BoardButtons.StartsOnOpen(
-                _services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
+                ReadsOnOpen, _services.ReaderLoaded, _services.Running,
                 _services.Installed.Count, _services.Sources.Any(s => s.Enabled), firstRun is not null))
         {
             return;
         }
 
-        _services.AddTrail("START ON OPEN: reading started because Start reading when Ur Score opens is ticked.");
+        _services.AddTrail(_services.Settings.StartOnOpen
+            ? "START ON OPEN: reading started because Start reading when Ur Score opens is ticked."
+            : "START ON OPEN: reading started because Ur Score started in the tray.");
         await StartReadingAsync();
     }
 
@@ -771,7 +817,10 @@ public partial class BoardWindow : Window
     }
 
     /// <summary>Pause or Resume, from the status card (BC2); Pause lasts until Ur Score closes (BC7).</summary>
-    private async void OnPauseResumeClick(object sender, RoutedEventArgs e)
+    private async void OnPauseResumeClick(object sender, RoutedEventArgs e) => await PauseOrResumeAsync();
+
+    /// <summary>The status card's Pause/Resume, also the tray's Pause reading / Resume reading: one path, so the two can't differ.</summary>
+    public async Task PauseOrResumeAsync()
     {
         if (_services.Running)
         {
@@ -805,7 +854,7 @@ public partial class BoardWindow : Window
     private async Task StartIfOpenWouldHaveAsync(string when)
     {
         if (_popOutLifecycle.ClosingApp) return;
-        if (!BoardButtons.StartsLater(_services.Settings.StartOnOpen, _services.ReaderLoaded, _services.Running,
+        if (!BoardButtons.StartsLater(ReadsOnOpen, _services.ReaderLoaded, _services.Running,
                 _services.EverStarted, _starting, _testing, _services.Installed.Count, _services.Sources.Any(s => s.Enabled)))
         {
             return;
@@ -1032,6 +1081,17 @@ public partial class BoardWindow : Window
     /// </summary>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        // Tray mode: a board that started in the tray hides back to it and everything keeps running. Before the ask below,
+        // which is about ending the app, and before edit mode's and the pop-outs' Closing handlers, which are about the
+        // window going (base.OnClosing raises them, and is never reached here).
+        if (LaunchMode.HidesOnClose(StartedInTray, App.EndingSession, _quitting))
+        {
+            e.Cancel = true;
+            Hide();
+            HiddenToTray?.Invoke();
+            return;
+        }
+
         if (!App.EndingSession
             && BoardText.AsksBeforeClose(_services.Running, BoardText.Sending(_services.Installed, _services.Sources))
             && !ConfirmWindow.Ask(this, BoardText.CloseWhileSending))
@@ -1041,5 +1101,54 @@ public partial class BoardWindow : Window
         }
 
         base.OnClosing(e);
+    }
+
+    /// <summary>The board was closed into the tray (not quit): the app shows the first-time balloon.</summary>
+    public event Action? HiddenToTray;
+
+    /// <summary>The tray's Quit is closing: the board closes instead of hiding.</summary>
+    private bool _quitting;
+
+    private bool _closed;
+
+    /// <summary>The board has closed, or the tray's Quit is closing it: nothing shows it again.</summary>
+    public bool ClosedOrQuitting => _closed || _quitting;
+
+    /// <summary>What the tray draws: the status chip's state, and whether the status card's Pause/Resume takes a press.</summary>
+    public TrayState TrayNow()
+    {
+        var running = _services.Running;
+        var trouble = BoardText.InTrouble(_services.CurrentBoard());
+        return new TrayState(
+            StatusChip.StateOf(running, _services.EverStarted, _starting, trouble),
+            running,
+            BoardButtons.For(_services.ReaderLoaded, running, _starting, _testing, importing: false).StartStop);
+    }
+
+    /// <summary>
+    /// The tray's Quit: the board closes for real, and the app with it. While something is sending the close still asks
+    /// (BC8), so a hidden board is shown first to ask from; Keep running leaves it open and returns false.
+    /// </summary>
+    public bool Quit()
+    {
+        if (_closed) return true;
+
+        _quitting = true;
+        try
+        {
+            if (!IsVisible && BoardText.AsksBeforeClose(_services.Running, BoardText.Sending(_services.Installed, _services.Sources)))
+            {
+                Show();
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Activate();
+            }
+
+            Close();
+            return _closed;
+        }
+        finally
+        {
+            _quitting = false;
+        }
     }
 }
