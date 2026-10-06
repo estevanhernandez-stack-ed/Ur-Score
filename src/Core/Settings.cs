@@ -23,9 +23,15 @@ namespace Labs626.UrScore.Core;
 /// was installed (A5) runs only on a READABLE file below 3, so a missing or broken file can never be mistaken for an
 /// install that had nothing and switch every mode off.
 /// </para>
+/// <para>
+/// <c>AutostartInTray</c> and <c>LastMode</c> are tray mode's (<see cref="LaunchMode"/>): when RoRoRo autostarts Ur Score it keeps
+/// score in the tray unless this is off, and an update starts it the way it was (<c>LastMode</c>, "tray" or "window"; absent is
+/// the window). Both are per PC, as <c>StartOnOpen</c> is, and never travel in a setup file. Absent from a file means their
+/// defaults, so adding them needed no <c>SettingsVersion</c>: the version gates only the modes upgrade.
+/// </para>
 /// </summary>
 public sealed record Settings(bool ResolveNames = true, string? ActiveRecipe = null, bool StartOnOpen = false, int SettingsVersion = 0,
-    IReadOnlyDictionary<string, bool>? Modes = null)
+    IReadOnlyDictionary<string, bool>? Modes = null, bool AutostartInTray = true, string? LastMode = null)
 {
     /// <summary>2: BC1's migration has run. A file below it is from before 0.6.</summary>
     public const int StartOnOpenVersion = 2;

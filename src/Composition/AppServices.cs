@@ -742,6 +742,37 @@ public sealed class AppServices : ISetupServices, IDisposable
         }
     }
 
+    /// <summary>
+    /// Setup would open on its game page to ask for a clan (<see cref="SetupPages.FirstRun"/>, A11): the board does that as it
+    /// opens, so a start that hid the board would read nothing and say nothing. Tray mode yields to it.
+    /// </summary>
+    public bool FirstRunDue => SetupPages.FirstRun(Catalog, _switches, Installed, Sources) is not null;
+
+    /// <summary>Window or tray for this start (<see cref="LaunchMode.Decide"/>), from why RoRoRo started Ur Score.</summary>
+    public AppMode StartMode(LaunchReason reason) => LaunchMode.Decide(reason, _settings, FirstRunDue);
+
+    /// <summary>
+    /// The mode Ur Score is in, kept in settings.json as <c>lastMode</c> so an update starts it the same way. Written only when it
+    /// changes, never over a file that couldn't be read (as no settings write is), and a write that fails is a trail line: an
+    /// update that then opens the window is the old behaviour, not a failure. No redraw: nothing on screen shows it.
+    /// </summary>
+    public void RememberMode(AppMode mode)
+    {
+        var word = LaunchMode.Word(mode);
+        if (_settingsUnreadable || string.Equals(_settings.LastMode, word, StringComparison.Ordinal)) return;
+
+        var settings = _settings with { LastMode = word };
+        try
+        {
+            Core.Settings.Save(settings, _settingsPath);
+            _settings = settings;
+        }
+        catch (Exception ex)
+        {
+            AddTrail($"LAST MODE NOT SAVED: {ex.GetType().Name}; an update opens the window.");
+        }
+    }
+
     public void SaveRecipeState(Recipe recipe, RecipeState state)
     {
         Store.SaveState(recipe, state);

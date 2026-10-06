@@ -180,4 +180,27 @@ public class SettingsTests : IDisposable
         Assert.Equal(old with { StartOnOpen = true, SettingsVersion = Settings.StartOnOpenVersion }, once);
         Assert.Same(once, Settings.Migrate(once));
     }
+
+    /// <summary>
+    /// Tray mode's two keys (RoRoRo 1.33's launch reason): a file from before them keeps score in the tray on autostart and
+    /// has no last mode, which an update reads as the window. Adding them needs no version: absent is the default.
+    /// </summary>
+    [Fact]
+    public void AFileWithoutTheTrayKeysLoadsWithTheirDefaultsAndTheyRoundTrip()
+    {
+        Write("""{ "resolveNames": true, "startOnOpen": true, "settingsVersion": 3, "modes": {} }""");
+        var old = Settings.Load(File());
+        Assert.True(old.AutostartInTray);
+        Assert.Null(old.LastMode);
+        Assert.Equal(Settings.CurrentVersion, old.SettingsVersion);
+
+        Settings.Save(old with { AutostartInTray = false, LastMode = "tray" }, File());
+        var json = System.IO.File.ReadAllText(File());
+        Assert.Contains("\"autostartInTray\": false", json);
+        Assert.Contains("\"lastMode\": \"tray\"", json);
+
+        var loaded = Settings.Load(File());
+        Assert.False(loaded.AutostartInTray);
+        Assert.Equal("tray", loaded.LastMode);
+    }
 }
