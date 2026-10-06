@@ -51,13 +51,13 @@ public static class AccountsModel
     public static IReadOnlyList<AccountRow> Rows(
         IReadOnlyList<HostAccount> accounts, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
         IReadOnlyDictionary<string, RecipeSnapshot> latest, Func<long, string?>? avatar = null,
-        IReadOnlyDictionary<string, string>? labels = null)
+        IReadOnlyDictionary<string, string>? labels = null, IReadOnlyDictionary<string, IReadOnlySet<long>>? members = null)
     {
         var sending = SendingRecipes(installed);
         return [.. accounts.Select(account => new AccountRow(
             account.AccountId,
             account.DisplayName,
-            FoundIn(account, installed, sources, latest),
+            FoundIn(account, installed, sources, latest, members),
             [.. sending.Select(r => new SendTick
             {
                 RecipeSlug = r.Recipe.Slug,
@@ -73,14 +73,14 @@ public static class AccountsModel
     public const string AskingForAccounts = "Asking RoRoRo for your accounts…";
 
     /// <summary>
-    /// The main and mine sources whose last read had this account, main first. Else where it is, in the words My accounts heads
+    /// The main and mine sources whose members list or last read had this account, main first (backlog V3-S.20). Else where it is, in the words My accounts heads
     /// the same accounts with (PanelText.NotFound): only in groups you watch, or how much has been read and whether what was read
     /// was between periods (backlog S1-12.7, V3-S.18).
     /// <paramref name="latest"/> holds this session's readings only, so "not in" waits for every source to be read.
     /// </summary>
     public static string FoundIn(
         HostAccount account, IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources,
-        IReadOnlyDictionary<string, RecipeSnapshot> latest)
+        IReadOnlyDictionary<string, RecipeSnapshot> latest, IReadOnlyDictionary<string, IReadOnlySet<long>>? members = null)
     {
         // The readers you pick clans for: they have an input and are not a clans list (the Clans page's old test, kept here).
         var withInputs = installed.Where(i => i.Recipe.Inputs.Count > 0 && !i.Recipe.IsGroupList).ToList();
@@ -90,7 +90,11 @@ public static class AccountsModel
         var ofRecipes = sources
             .Where(s => s.Enabled && withInputs.Any(i => string.Equals(i.Recipe.Slug, s.Recipe, StringComparison.Ordinal)))
             .ToList();
-        bool Holds(Source source) => latest.GetValueOrDefault(source.Id)?.Rows is { } rows && rows.Any(r => r.UserId == account.RobloxUserId);
+        // On the clan's members list, or in its last read's rows (backlog V3-S.20): the list is who is in it, scored or not.
+        bool Listed(Source source) => members?.GetValueOrDefault(source.Id) is not null;
+        bool Holds(Source source) =>
+            members?.GetValueOrDefault(source.Id)?.Contains(account.RobloxUserId) == true
+            || latest.GetValueOrDefault(source.Id)?.Rows is { } rows && rows.Any(r => r.UserId == account.RobloxUserId);
 
         var names = new List<string>();
         foreach (var source in ofRecipes.Where(s => s.Role != SourceRole.Watch).OrderBy(s => s.Role == SourceRole.Main ? 0 : 1))
@@ -107,7 +111,8 @@ public static class AccountsModel
         var (group, groups, period) = Words(withInputs);
         if (ofRecipes.Any(s => s.Role == SourceRole.Watch && Holds(s))) return PanelText.OnlyWatched(groups);
 
-        var read = ofRecipes.Count(s => latest.GetValueOrDefault(s.Id)?.Rows is not null);
+        // A clan whose members list was read counts as read: the list is everyone in it, battle or not.
+        var read = ofRecipes.Count(s => latest.GetValueOrDefault(s.Id)?.Rows is not null || Listed(s));
         return PanelText.NotFound($"Not in a watched {group}", group, groups, period, inHand: read, readNow: read,
             idleNow: ofRecipes.Count(s => PanelText.ReadIdle(latest.GetValueOrDefault(s.Id))), sources: ofRecipes.Count);
     }

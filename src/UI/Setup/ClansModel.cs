@@ -53,21 +53,45 @@ public static class ClansModel
             .Distinct(StringComparer.Ordinal)];
     }
 
-    public static string Who(Recipe recipe, Source source, RecipeSnapshot? snapshot, IReadOnlyList<HostAccount> accounts)
+    public static string Who(Recipe recipe, Source source, RecipeSnapshot? snapshot, IReadOnlyList<HostAccount> accounts, IReadOnlySet<long>? members = null)
     {
         if (source.Role == SourceRole.Watch) return $"{RecipeWords.Group(recipe)}-level numbers only";
+
+        // The members list is who is in the clan (backlog V3-S.20); who scored this battle is a detail after it. The row said only
+        // the scorers, so a clan holding five of the owner's accounts read "CCGP · ELeonDog, CECPapa" mid-battle.
+        if (members is not null)
+        {
+            var inIt = Listed(accounts).Where(a => members.Contains(a.RobloxUserId)).Select(a => a.DisplayName).Distinct(StringComparer.Ordinal).ToList();
+            var scoring = snapshot?.Rows is null ? ""
+                : FoundAccounts(snapshot, accounts).Count is var n and > 0 ? $" · {n} scoring this {RecipeWords.Period(recipe)}"
+                : $" · none scoring this {RecipeWords.Period(recipe)}";
+            return inIt.Count == 0
+                ? "None of your accounts are members" + scoring
+                : $"{Count(inIt.Count, "account")}: {Shortened(inIt)}{scoring}";
+        }
+
         if (snapshot?.Rows is null) return "Not read yet";
 
         var found = FoundAccounts(snapshot, accounts);
         return found.Count == 0 ? "None of your accounts found in the last read" : string.Join(", ", found);
     }
 
+    /// <summary>The most names a clan row lists before it says how many more: a row is one line, and eight names don't fit one.</summary>
+    public const int RowNames = 5;
+
+    /// <summary>Every name up to <see cref="RowNames"/>; past that, the first few and "and N more".</summary>
+    private static string Shortened(IReadOnlyList<string> names) =>
+        names.Count <= RowNames
+            ? string.Join(", ", names)
+            : $"{string.Join(", ", names.Take(RowNames - 1))} and {names.Count - (RowNames - 1)} more";
+
     /// <summary>The main source, the sources your accounts are in (main first), and the watched ones.</summary>
     public static ClanLists Lists(
-        Recipe recipe, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest, IReadOnlyList<HostAccount> accounts)
+        Recipe recipe, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest, IReadOnlyList<HostAccount> accounts,
+        IReadOnlyDictionary<string, IReadOnlySet<long>>? members = null)
     {
         var own = sources.Where(s => string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal)).ToList();
-        ClanRow Row(Source s) => new(s.Id, NameOf(recipe, s), s.Role, Who(recipe, s, latest.GetValueOrDefault(s.Id), accounts));
+        ClanRow Row(Source s) => new(s.Id, NameOf(recipe, s), s.Role, Who(recipe, s, latest.GetValueOrDefault(s.Id), accounts, members?.GetValueOrDefault(s.Id)));
 
         var main = own.FirstOrDefault(s => s.Role == SourceRole.Main);
         return new ClanLists(
@@ -222,7 +246,7 @@ public static class ClansModel
     public static bool NeedsConfirmation(IReadOnlyList<Source> sources, string recipeSlug) =>
         sources.Count(s => s.Enabled && string.Equals(s.Recipe, recipeSlug, StringComparison.Ordinal)) >= ConfirmAbove;
 
-    /// <summary>Requests an hour per host: every step once a cycle, a per-account step once per account.</summary>
+    /// <summary>Requests an hour per host: every step once a cycle, a per-account step once per account, and each clan's members list.</summary>
     public static IReadOnlyList<HostRequests> RequestsPerHour(IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, int accountCount)
     {
         var perHost = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -237,6 +261,15 @@ public static class ClansModel
                 var host = RecipeHosts.HostOf(step.Url);
                 perHost.TryGetValue(host, out var sofar);
                 perHost[host] = sofar + cycles * (step.PerAccount ? accountCount : 1);
+            }
+
+            // Its members list, once per Membership.Every (backlog V3-S.20), and only with accounts to look for: with none
+            // listed, nothing is asked.
+            if (accountCount > 0 && RecipeWords.MainInput(recipe)?.Members is { } members)
+            {
+                var host = RecipeHosts.HostOf(members.Url);
+                perHost.TryGetValue(host, out var sofar);
+                perHost[host] = sofar + 3600.0 / Membership.Every.TotalSeconds;
             }
         }
 
