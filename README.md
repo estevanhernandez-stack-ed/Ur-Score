@@ -65,9 +65,18 @@ battle. If some aren't, it asks "5 of your accounts aren't in K0i2 yet. Are they
 with a second search; a clan you pick there is added as one your accounts are in and checked for
 the rest only. **That's all** stops the question, and it comes back only when RoRoRo lists an
 account Ur Score hasn't placed. The member list holds everyone in the clan: other members' ids are
-compared with yours on your PC and dropped, never written, logged or shown. Profile asks nothing; it reads the accounts you saved in RoRoRo, and it only
-has numbers for an account that is linked on db.biggames.io with its Profile view public. An
-account that isn't linked reads as empty, and Ur Score shows dashes and says why beside them.
+compared with yours on your PC and dropped, never written, logged or shown.
+
+**What each mode needs.** Every mode reads the accounts saved in RoRoRo, and the line under the
+game's name says how many ("Ur Score uses the 8 accounts saved in RoRoRo."). With none, it says to
+add them in RoRoRo first: Ur Score never signs in to anything itself. Profile asks nothing more of
+Ur Score, but it has numbers only for an account that is linked on db.biggames.io with its Profile
+view public. Under Profile, after its first read, the page says how many are linked ("6 of 8
+accounts are linked."), names the ones that aren't ("Not linked: ...") and the ones whose Profile
+view is private, and a **Link on db.biggames.io** button opens that site in your browser until every
+account is linked. On the board, an account that isn't linked shows dashes with "Not linked on
+db.biggames.io." beside them, and a private one says so. Battle needs no linking: it reads the clan's
+own points, linked or not.
 
 **A mode that is off reads nothing.** No request leaves your PC for it, nothing is recorded or
 sent, and its starter board says "Battle is off." with a **Turn on** button. Your choices inside it
