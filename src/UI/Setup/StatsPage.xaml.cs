@@ -35,15 +35,26 @@ public partial class StatsPage : UserControl, ISetupPage
         Refresh();
     }
 
+    /// <summary>
+    /// Why a clans list has no rows here, in plain words: it reads other clans, not your accounts (owner's pass,
+    /// 2026-10-05, after the old line read as jargon). Empty when no clans list is on.
+    /// </summary>
+    public static string GroupListLine(IReadOnlyList<string> groupLists) => groupLists.Count switch
+    {
+        0 => "",
+        1 => $"{groupLists[0]} reads other clans, not your accounts, so it has no stats to tick here. "
+             + "What it can send is under Clan and field, below.",
+        _ => $"{string.Join(", ", groupLists.Take(groupLists.Count - 1))} and {groupLists[^1]} read other clans, not your "
+             + "accounts, so they have no stats to tick here. What they can send is under Clan and field, below.",
+    };
+
     public void Refresh()
     {
         // Only the readers of modes that are on: an off mode reads nothing, so it has nothing to tick here.
         var active = _services.ActiveReaders;
         var groupLists = active.Where(i => i.Recipe.IsGroupList)
             .Select(i => ReaderNames.For(i.Recipe.Slug, _services.Catalog, _services.Installed)).ToList();
-        ShowLine(StatsGroupListLine, groupLists.Count == 0 ? ""
-            : $"{string.Join(", ", groupLists)} {(groupLists.Count == 1 ? "has" : "have")} no account stats to tick — its rows are "
-              + "other people's clans. What it can send is in Clan and field, below.");
+        ShowLine(StatsGroupListLine, GroupListLine(groupLists));
 
         // Outside the early return below: the clan-and-field section stands on its own, and it has to show even
         // when a clans list is the only recipe installed and the Stats table has nothing to draw.

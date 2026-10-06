@@ -126,12 +126,16 @@ public partial class StatsTable : UserControl
         _rows = StatsTableModel.Build(_recipe!, choices, _counterNames);
         foreach (var row in _rows) row.PropertyChanged += OnRowChanged;
 
+        var searchable = StatsTableModel.ShowsSearch(_rows.Count);
+        if (!searchable && StatsSearchBox.Text.Length > 0) StatsSearchBox.Text = "";
+        StatsSearchArea.Visibility = searchable ? Visibility.Visible : Visibility.Collapsed;
         ApplyFilter();
         Refresh();
     }
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e)
     {
+        StatsSearchHint.Visibility = StatsSearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_recipe is not null) ApplyFilter();
     }
 
