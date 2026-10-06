@@ -90,6 +90,22 @@ public class ShippedRecipesTests
     }
 
     /// <summary>
+    /// The two things Profile needs, told apart (probed live, 2026-10-05): an account not linked on db.biggames.io is a 404
+    /// (player_not_found), and a linked one whose Profile view is private is a 200 that says so. Each has its own message, so
+    /// an account's row says which fix it needs.
+    /// </summary>
+    [Fact]
+    public void TheProfileRecipeSaysNotLinkedOnA404AndPrivateOnAPrivateProfile()
+    {
+        var file = Files().Single(f => Path.GetFileName(f) == "pet-sim-99-profile.recipe.json");
+        var step = RecipeParser.Parse(File.ReadAllText(file)).Recipe!.LastStep;
+
+        Assert.Equal(new RecipeNotFound(404, "Not linked on db.biggames.io."), step.NotFound);
+        Assert.Equal("Profile view is private. Turn it on at db.biggames.io.", step.Unavailable!.Message);
+        Assert.Equal("data.views.profile.available", step.Unavailable.Path);
+    }
+
+    /// <summary>
     /// The recipes inside the binary are the recipes beside the release: embedded at build time from the same files,
     /// so a clan member who adds a built-in one gets exactly what the download would have given them.
     /// </summary>
