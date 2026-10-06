@@ -113,6 +113,7 @@ public partial class GamePage : UserControl, ISetupPage
             }
 
             StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
+            AutostartInTrayBox.IsChecked = _services.Settings.AutostartInTray;
         }
         finally
         {
@@ -251,6 +252,28 @@ public partial class GamePage : UserControl, ISetupPage
             ShowLine(StartOnOpenProblemLine, _services.Redactor.Redact($"Could not save that: {ex.Message}"));
             _settingBox = true;
             StartOnOpenBox.IsChecked = _services.Settings.StartOnOpen;
+            _settingBox = false;
+        }
+    }
+
+    /// <summary>
+    /// Tray mode's tick (<see cref="Core.LaunchMode"/>): read at the next autostart, so it saves and changes nothing running. A
+    /// write that fails is said here and the box goes back to what is saved, as Start reading's does.
+    /// </summary>
+    private void OnAutostartInTrayChanged(object sender, RoutedEventArgs e)
+    {
+        if (_settingBox) return;
+
+        try
+        {
+            _services.SaveSettings(_services.Settings with { AutostartInTray = AutostartInTrayBox.IsChecked == true });
+            ShowLine(AutostartInTrayProblemLine, "");
+        }
+        catch (Exception ex)
+        {
+            ShowLine(AutostartInTrayProblemLine, _services.Redactor.Redact($"Could not save that: {ex.Message}"));
+            _settingBox = true;
+            AutostartInTrayBox.IsChecked = _services.Settings.AutostartInTray;
             _settingBox = false;
         }
     }

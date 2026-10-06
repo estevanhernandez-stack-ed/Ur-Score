@@ -28,7 +28,16 @@
              session that hasn't started reading yet (BoardButtons.StartsLater, spec 3.6), so it says so where the eye
              already is. A tooltip would be invisible to exactly the person who is confused. -->
         <TextBlock Style="{StaticResource Muted}" Margin="24,4,0,0"
-                   Text="On unless you turn it off. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet. Reading happens only while the window is open, and Pause still pauses it, until Ur Score closes." />
+                   Text="On unless you turn it off. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet. Reading happens only while Ur Score is open, in its window or in the tray, and Pause still pauses it, until Ur Score closes." />
         <TextBlock x:Name="StartOnOpenProblemLine" Style="{StaticResource Refusal}" Margin="24,4,0,0" Visibility="Collapsed" />
+
+        <!-- Tray mode (RoRoRo 1.33's launch reason, Core.LaunchMode): per PC, like the tick above, and never in a setup file. -->
+        <CheckBox x:Name="AutostartInTrayBox" Content="When RoRoRo starts Ur Score with Autostart, keep score in the tray"
+                  Checked="OnAutostartInTrayChanged" Unchecked="OnAutostartInTrayChanged" Margin="0,12,0,0"
+                  AutomationProperties.AutomationId="AutostartInTrayBox"
+                  AutomationProperties.Name="When RoRoRo starts Ur Score with Autostart, keep score in the tray" />
+        <TextBlock Style="{StaticResource Muted}" Margin="24,4,0,0" TextWrapping="Wrap"
+                   Text="Turn on Autostart for Ur Score in RoRoRo's Plugins list. Ur Score then reads Big Games whenever RoRoRo is open; click the tray icon to see the board. Needs RoRoRo 1.33 or newer." />
+        <TextBlock x:Name="AutostartInTrayProblemLine" Style="{StaticResource Refusal}" Margin="24,4,0,0" Visibility="Collapsed" />
     </StackPanel>
 </UserControl>

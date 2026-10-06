@@ -48,6 +48,12 @@ public class GamePageRenderTests
             var start = Find<CheckBox>(page, "StartOnOpenBox");
             Assert.Equal("Start reading when Ur Score opens", AutomationProperties.GetName(start));
 
+            // Tray mode (RoRoRo 1.33): beside it, on by default, with the line that says where Autostart is and what it needs.
+            var tray = Find<CheckBox>(page, "AutostartInTrayBox");
+            Assert.Equal(TrayBox, AutomationProperties.GetName(tray));
+            Assert.True(tray.IsChecked);
+            Assert.Contains(TrayLine, Texts(page));
+
             // The clan search is Battle's: inside its section, and Profile, which asks nothing, has none.
             var clans = page.ClansOf("battle");
             Assert.NotNull(clans);
@@ -105,6 +111,35 @@ public class GamePageRenderTests
             Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Background);
             Assert.False(Find<TextBlock>(page, "ProfileLinkLine").IsVisible);
             Assert.False(Find<Button>(page, "LinkAccountsButton").IsVisible);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    private const string TrayBox = "When RoRoRo starts Ur Score with Autostart, keep score in the tray";
+
+    private const string TrayLine =
+        "Turn on Autostart for Ur Score in RoRoRo's Plugins list. Ur Score then reads Big Games whenever RoRoRo is open; click the tray icon to see the board. Needs RoRoRo 1.33 or newer.";
+
+    /// <summary>The tick saves at once and goes back to what is saved when the write fails, as Start reading's does.</summary>
+    [Fact]
+    public void TheTrayTickSavesAtOnce() => UiThread.RunInApp(() =>
+    {
+        using var dir = TempDir.Create("urscore-game-page-tray");
+        using var services = Services(dir.Path);
+        var page = new GamePage(services, "pet-sim-99", focusSlug: null);
+        var window = Show(page);
+        try
+        {
+            var tray = Find<CheckBox>(page, "AutostartInTrayBox");
+            tray.IsChecked = false;
+            Assert.False(services.Settings.AutostartInTray);
+            Assert.False(Settings.Load(new AppPaths(dir.Path).Settings).AutostartInTray);
+
+            tray.IsChecked = true;
+            Assert.True(Settings.Load(new AppPaths(dir.Path).Settings).AutostartInTray);
         }
         finally
         {
