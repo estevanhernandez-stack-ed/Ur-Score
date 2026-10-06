@@ -16,11 +16,17 @@ public sealed class GameManifestException(string message) : Exception(message);
 /// </summary>
 public sealed record ModeDef(
     string GameId, string Id, string Name, string Blurb, IReadOnlyList<string> Reads, string? Asks,
-    string? Note, string? Board, bool OnByDefault, IReadOnlyList<string> Shows)
+    string? Note, string? Board, bool OnByDefault, IReadOnlyList<string> Shows, ModeLink? Link = null)
 {
     /// <summary>The key a mode's switch and its board travel under: "pet-sim-99/battle".</summary>
     public string Key => $"{GameId}/{Id}";
 }
+
+/// <summary>
+/// Where a mode's accounts get linked so it can read them (the Profile mode's site), and what the button says. From the
+/// manifest, never from code, so Ur Score names no host; https only, because the page opens it in the browser.
+/// </summary>
+public sealed record ModeLink(string Text, Uri Url);
 
 public sealed record GameDef(string Id, string Name, IReadOnlyList<ModeDef> Modes);
 
@@ -97,7 +103,7 @@ public sealed class GameCatalog(IReadOnlyList<GameDef> games)
                     id, modeId, modeName, Text(mode, "blurb") ?? "", Strings(mode, "reads", $"{id}/{modeId}"),
                     Text(mode, "asks"), Text(mode, "note"), Text(mode, "board"),
                     !mode.TryGetProperty("onByDefault", out var on) || on.ValueKind != JsonValueKind.False,
-                    Strings(mode, "shows", $"{id}/{modeId}")));
+                    Strings(mode, "shows", $"{id}/{modeId}"), Link(mode, $"{id}/{modeId}")));
             }
 
             return new GameDef(id, name, list);
@@ -217,6 +223,24 @@ public sealed class GameCatalog(IReadOnlyList<GameDef> games)
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
             ? value.GetString()
             : null;
+
+    private static ModeLink? Link(JsonElement mode, string where)
+    {
+        if (!mode.TryGetProperty("link", out var link) || link.ValueKind == JsonValueKind.Null) return null;
+        if (link.ValueKind != JsonValueKind.Object)
+        {
+            throw new GameManifestException($"The mode '{where}' has a 'link' that must be an object with a text and a url.");
+        }
+
+        var text = Text(link, "text") ?? throw new GameManifestException($"The mode '{where}' has a link that has no text.");
+        if (Text(link, "url") is not { } url || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps
+            || string.IsNullOrEmpty(uri.Host))
+        {
+            throw new GameManifestException($"The mode '{where}' has a link whose url must be an https address.");
+        }
+
+        return new ModeLink(text, uri);
+    }
 
     private static IReadOnlyList<string> Strings(JsonElement element, string name, string where)
     {

@@ -116,4 +116,45 @@ public class ManifestTests
             """{"game": 1, "id": "g", "name": "G", "modes": [{"id": "a", "name": "A"}, {"id": "a", "name": "A"}]}""")).Message);
         Assert.Throws<GameManifestException>(() => GameCatalog.Parse("not json"));
     }
+
+    /// <summary>
+    /// Where a mode's accounts get linked comes from the manifest, never from code (spec 2: Ur Score knows no game's hosts). The
+    /// shipped Profile mode carries it; Battle needs no linking and has none.
+    /// </summary>
+    [Fact]
+    public void TheShippedProfileModeCarriesItsLinkAndBattleHasNone()
+    {
+        var game = GameCatalog.BuiltIn.Games.Single();
+
+        Assert.Equal(new ModeLink("Link on db.biggames.io", new Uri("https://db.biggames.io")), game.Modes.Single(m => m.Id == "profile").Link);
+        Assert.Null(game.Modes.Single(m => m.Id == "battle").Link);
+    }
+
+    private static string WithLink(string link) =>
+        $$"""{"game": 1, "id": "g", "name": "G", "modes": [{"id": "a", "name": "A", "reads": ["x"], "link": {{link}} }]}""";
+
+    [Fact]
+    public void ALinkParsesItsTextAndItsAddress()
+    {
+        var mode = GameCatalog.Parse(WithLink("""{ "text": "Link here", "url": "https://example.com/link" }""")).Modes.Single();
+
+        Assert.Equal(new ModeLink("Link here", new Uri("https://example.com/link")), mode.Link);
+    }
+
+    /// <summary>The page opens this address in the browser, so it is https and nothing else: no http, no file, no relative path.</summary>
+    [Theory]
+    [InlineData("""{ "text": "Link", "url": "http://example.com" }""", "must be an https address")]
+    [InlineData("""{ "text": "Link", "url": "file:///C:/Windows/notepad.exe" }""", "must be an https address")]
+    [InlineData("""{ "text": "Link", "url": "/relative" }""", "must be an https address")]
+    [InlineData("""{ "text": "Link" }""", "must be an https address")]
+    [InlineData("""{ "url": "https://example.com" }""", "has no text")]
+    [InlineData("""{ "text": " ", "url": "https://example.com" }""", "has no text")]
+    [InlineData("\"https://example.com\"", "must be an object with a text and a url")]
+    public void ABadLinkIsRefusedAndNamesTheMode(string link, string why)
+    {
+        var message = Assert.Throws<GameManifestException>(() => GameCatalog.Parse(WithLink(link))).Message;
+
+        Assert.Contains("'g/a'", message);
+        Assert.Contains(why, message);
+    }
 }

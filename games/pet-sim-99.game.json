@@ -19,6 +19,7 @@
       "blurb": "Rank, diamonds, hatches and playtime for each of your accounts.",
       "reads": ["pet-sim-99-profile"],
       "note": "Needs each account linked on db.biggames.io with its Profile view public.",
+      "link": { "text": "Link on db.biggames.io", "url": "https://db.biggames.io" },
       "board": "alts",
       "onByDefault": true
     }
