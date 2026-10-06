@@ -61,6 +61,9 @@ public sealed record AppPaths(string Root)
 
     public string Boards => Path.Combine(Root, "boards.json");
 
+    /// <summary>Which of your own accounts each clan's members list held (backlog V3-S.20). Your ids only, never another member's.</summary>
+    public string Membership => Path.Combine(Root, "membership.json");
+
     public string Book => Path.Combine(Root, "scorebook");
 
     public string IconCache => Path.Combine(Root, "icon-cache");
