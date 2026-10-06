@@ -15,6 +15,10 @@ Recipes are gone. Pet Sim 99's modes are built in and update with the app.
   reads nothing, records nothing and sends nothing; its starter board says "Battle is off." with a **Turn on**
   button, and your clans and ticks are kept for when it comes back. Panels of an off mode say so too.
 - **Name your clan once: Ur Score finds which of your accounts are in it and asks only about the rest.**
+- **Your accounts are grouped by the clans they're in, not only by who has scored this battle.** Each clan's
+  member list is read when Ur Score starts, when Setup opens and every 30 minutes while reading, so My accounts,
+  the clan's chip, Setup's clan rows ("5 accounts: ... · 2 scoring this battle") and Setup › Your accounts place
+  every account, between battles too. Only your own accounts are kept, in membership.json.
 - **The game page shows what Profile needs.** It says how many accounts it uses from RoRoRo (or to add them
   there first), and under Profile which are linked on db.biggames.io, which aren't, and which are linked with the
   Profile view private, with a **Link on db.biggames.io** button. An unlinked account's row now says "Not linked on
