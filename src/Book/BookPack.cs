@@ -33,7 +33,9 @@ public sealed record BookPackOpened(string? Folder, BookPackManifest? Manifest, 
 /// </para>
 /// <para>
 /// Since 2026-09-22 it also carries the setup (<see cref="SetupPack"/>) under <c>setup/</c>; <c>v: 2</c>. A
-/// <c>v: 1</c> file is 0.5.5's stats-only file and opens as such.
+/// <c>v: 1</c> file is 0.5.5's stats-only file and opens as such. Since games-and-modes (A7) the setup holds reader
+/// state and <c>modes.json</c> and no reader text, which a 0.6.3 import would misread, so a file WITH a setup says
+/// <c>v: 3</c> and 0.6.3 refuses it as "newer". A stats-only file keeps <c>v: 2</c> and stays readable by both.
 /// </para>
 /// <para>
 /// Written through a temp file and one move, like every other writer here, so a save that fails leaves no
@@ -43,7 +45,10 @@ public sealed record BookPackOpened(string? Folder, BookPackManifest? Manifest, 
 /// </summary>
 public static class BookPack
 {
-    public const int Version = 2;
+    public const int Version = 3;
+
+    /// <summary>What a file with no setup says: the shape 0.6.3 reads, so it is not locked out of a plain stats file.</summary>
+    public const int StatsOnlyVersion = 2;
 
     public const string ManifestName = "manifest.json";
 
@@ -73,7 +78,7 @@ public static class BookPack
             }
         }
 
-        var manifest = new BookPackManifest(Version, now, appVersion, readings, finals, setup is not null);
+        var manifest = new BookPackManifest(setup is not null ? Version : StatsOnlyVersion, now, appVersion, readings, finals, setup is not null);
         var temp = path + ".tmp";
         var staging = setup is not null
             ? Path.Combine(Path.GetTempPath(), "626labs.ur-score", "export-" + Guid.NewGuid().ToString("N"))

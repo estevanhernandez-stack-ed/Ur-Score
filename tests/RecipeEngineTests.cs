@@ -430,6 +430,38 @@ public class RecipeEngineTests
         Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", Assert.Single(reading.Unavailable).Value);
     }
 
+    /// <summary>The profile fixture with a <c>notFound</c> on its step, as the shipped profile reader carries it.</summary>
+    private static Recipe ProfileWithNotFound => Parse(RecipeParserTests.Fixture("petsim99-profile.recipe.json").Replace(
+        "\"perAccount\": true,", "\"perAccount\": true, \"notFound\": { \"status\": 404, \"message\": \"Not linked on db.biggames.io.\" },",
+        StringComparison.Ordinal));
+
+    /// <summary>
+    /// The live PS99 API answers an account that isn't linked on db.biggames.io with a 404 (player_not_found), and a linked one
+    /// whose Profile view is private with a 200 that says so. Each costs only its account, says its own message, and carries a
+    /// typed reason, so the game page can tell "not linked" from "private" without reading the words.
+    /// </summary>
+    [Fact]
+    public async Task ANotFoundSaysTheRecipesNotFoundMessageWhileOtherAccountsStillRead()
+    {
+        var transport = new FakeTransport()
+            .On(ProfileUrl1, 404, """{ "status": "error", "error": { "code": "player_not_found" } }""")
+            .On(ProfileUrl2, 200, ProfileResponse(FullProfile))
+            .On("https://ps99.biggamesapi.io/v1/players/3?", 200, PrivateProfile)
+            .On("https://ps99.biggamesapi.io/v1/players/4?", 400, """{ "error": "bad" }""");
+
+        var reading = await Read(transport, ProfileWithNotFound, inputs: NoInputs, ids: [1, 2, 3, 4], tracked: ProfileStats);
+
+        Assert.Equal(ReadingOutcome.Read, reading.Outcome);
+        Assert.Equal(2, Assert.Single(reading.Rows).UserId);
+        Assert.Equal("Not linked on db.biggames.io.", reading.Unavailable[1]);
+        Assert.Equal("Profile is private. Link this account on db.biggames.io and turn on its Profile view.", reading.Unavailable[3]);
+        Assert.Equal("ps99.biggamesapi.io has nothing for user id 4.", reading.Unavailable[4]);
+        Assert.Equal(UnavailableReason.NotFound, reading.UnavailableReasons[1]);
+        Assert.Equal(UnavailableReason.Declared, reading.UnavailableReasons[3]);
+        Assert.Equal(UnavailableReason.BadRequest, reading.UnavailableReasons[4]);
+        Assert.Equal("3 of your accounts could not be read: Not linked on db.biggames.io.", reading.Detail);
+    }
+
     [Fact]
     public async Task ABadRequestOnARecipeWithUnavailableKeepsTheHostsTextNotTheRecipesMessage()
     {
@@ -556,7 +588,7 @@ public class RecipeEngineTests
         var reading = await Read(transport, Followers, inputs: NoInputs, ids: [1]);
 
         Assert.Equal(ReadingOutcome.SignInRequired, reading.Outcome);
-        Assert.Equal("friends.roblox.com requires signing in, which recipes cannot do.", reading.Detail);
+        Assert.Equal("friends.roblox.com requires signing in, which Ur Score cannot do.", reading.Detail);
     }
 
     [Fact]
@@ -581,7 +613,7 @@ public class RecipeEngineTests
 
         Assert.Equal(ReadingOutcome.Unreachable, reading.Outcome);
         Assert.Equal(
-            "ps99.biggamesapi.io redirected to another address. Recipes never follow redirects, so nothing was sent there.",
+            "ps99.biggamesapi.io redirected to another address. Ur Score never follows redirects, so nothing was sent there.",
             reading.Detail);
         Assert.Single(transport.Requests);
     }
@@ -611,7 +643,7 @@ public class RecipeEngineTests
         var reading = await Read(transport, KeyedRecipe("header"), inputs: NoInputs);
 
         Assert.Equal(ReadingOutcome.KeyMissing, reading.Outcome);
-        Assert.Equal("This recipe needs your Tracker key. Get one at tracker.example.", reading.Detail);
+        Assert.Equal("This reader needs your Tracker key. Get one at tracker.example.", reading.Detail);
         Assert.Empty(transport.Requests);
     }
 
@@ -624,7 +656,7 @@ public class RecipeEngineTests
         var reading = await Read(transport, KeyedRecipe("header"), inputs: NoInputs, keys: keys);
 
         Assert.Equal(ReadingOutcome.KeyMissing, reading.Outcome);
-        Assert.Equal("Your Tracker key is saved for somewhere.else.example, and this recipe would send it to api.tracker.example. It was not sent.", reading.Detail);
+        Assert.Equal("Your Tracker key is saved for somewhere.else.example, and this reader would send it to api.tracker.example. It was not sent.", reading.Detail);
         Assert.Empty(transport.Requests);
     }
 

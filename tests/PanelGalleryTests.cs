@@ -28,7 +28,7 @@ public class PanelGalleryTests
         Assert.All(cards, c => Assert.True(c.CanAdd, c.Title));
         Assert.All(cards, c => Assert.Equal("", c.WhyNot));
         Assert.Equal("Needs a clan.", Card(cards, PanelType.Standing).Needs);
-        Assert.Equal("Needs 1 to 5 clans of one recipe.", Card(cards, PanelType.Race).Needs);
+        Assert.Equal("Needs 1 to 5 clans of one mode.", Card(cards, PanelType.Race).Needs);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class PanelGalleryTests
         var totalless = Card(PanelGallery.Cards(Live([MainClan, ProfileSource], [Installed(noTotal, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
         Assert.False(totalless.CanAdd);
         // Nothing installed can race, so there is no card recipe to name the group: the word comes from the clan that is on.
-        Assert.Equal("Needs a clan whose recipe has a total.", totalless.WhyNot);
+        Assert.Equal("Needs a clan whose mode has a total.", totalless.WhyNot);
 
         // A new player: only a profile source on, and the clan recipe installed, which can race. What is missing is a clan.
         var profileOnly = Card(PanelGallery.Cards(Live([ProfileSource], [Installed(Clan, "value"), Installed(Profile, "diamonds")], NoReads)), PanelType.Race);
@@ -148,10 +148,10 @@ public class PanelGalleryTests
             [Installed(Guild, "value"), Installed(Clan, "value"), Installed(TopRound)], NoReads));
 
         Assert.Equal(new[] { "Clan standing", "Needs a clan.", "Place, total, the last hour's gain and the battle line.", "" }, Lines(cards, PanelType.Standing));
-        Assert.Equal(new[] { "Battle race", "Needs 1 to 5 clans of one recipe.", "Each clan's total over the current battle, one line each.", "" }, Lines(cards, PanelType.Race));
+        Assert.Equal(new[] { "Battle race", "Needs 1 to 5 clans of one mode.", "Each clan's total over the current battle, one line each.", "" }, Lines(cards, PanelType.Race));
         Assert.Equal(new[] { "Past battles", "Needs a clan.", "Finished battles newest first: place, total and your best account.", "" }, Lines(cards, PanelType.PastPeriods));
         // Top reads the list's own period, and names groups the way its panel's name column does.
-        Assert.Equal(new[] { "Top of the round", "Needs a recipe that lists groups.", "The top of the round live, with your guilds placed where they'd rank.", "" },
+        Assert.Equal(new[] { "Top of the round", "Needs a mode that lists groups.", "The top of the round live, with your guilds placed where they'd rank.", "" },
             Lines(cards, PanelType.Top));
     }
 
@@ -240,14 +240,14 @@ public class PanelGalleryTests
             new[] { "Guild standing", "Needs a guild.", "Place, total, the last hour's gain and the season line.", "Add a guild in Setup first." },
             Lines(cards, PanelType.Standing));
         Assert.Equal(
-            new[] { "Season race", "Needs 1 to 5 guilds of one recipe.", "Each guild's total over the current season, one line each.", "Add a guild in Setup first." },
+            new[] { "Season race", "Needs 1 to 5 guilds of one mode.", "Each guild's total over the current season, one line each.", "Add a guild in Setup first." },
             Lines(cards, PanelType.Race));
         // Only the clan recipe keeps past periods.
         Assert.Equal(
-            new[] { "Past battles", "Needs a clan.", "Finished battles newest first: place, total and your best account.", "Needs a clan whose recipe keeps past battles." },
+            new[] { "Past battles", "Needs a clan.", "Finished battles newest first: place, total and your best account.", "Needs a clan whose mode keeps past battles." },
             Lines(cards, PanelType.PastPeriods));
         Assert.Equal(
-            new[] { "Top of the season", "Needs a recipe that lists groups.", "The top of the season live, with your guilds placed where they'd rank.", "Import a recipe that lists groups, and turn it on in Setup." },
+            new[] { "Top of the season", "Needs a mode that lists groups.", "The top of the season live, with your guilds placed where they'd rank.", "Turn on a mode that lists groups." },
             Lines(cards, PanelType.Top));
     }
 

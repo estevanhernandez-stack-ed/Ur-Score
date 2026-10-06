@@ -1,0 +1,34 @@
+<UserControl x:Class="Labs626.UrScore.UI.GamePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+        <!-- The game's own switch is its heading: what it is called and whether it reads, in one control. Checked and Unchecked,
+             not Click: a UI Automation toggle changes IsChecked without a click. -->
+        <CheckBox x:Name="GameSwitch" Checked="OnGameSwitched" Unchecked="OnGameSwitched" VerticalContentAlignment="Center">
+            <TextBlock x:Name="GameTitle" Style="{StaticResource Heading}" />
+        </CheckBox>
+        <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                   Text="Turn on what Ur Score reads. Changes apply at once, and turning something off keeps its score book." />
+        <!-- Where every mode's accounts come from: RoRoRo's list, never a sign-in of Ur Score's own (GameModel.AccountsLine). -->
+        <TextBlock x:Name="RoRoRoAccountsLine" AutomationProperties.AutomationId="RoRoRoAccountsLine" Style="{StaticResource Muted}"
+                   TextWrapping="Wrap" Margin="0,4,0,0" />
+        <!-- A switch that couldn't be saved says why here, under the switches, never in a box. -->
+        <TextBlock x:Name="SwitchProblemLine" Style="{StaticResource Refusal}" Margin="0,8,0,0" Visibility="Collapsed" />
+
+        <!-- One row per mode, in manifest order, built from GameModel once; each redraw only updates them, so a clan
+             section keeps what it is in the middle of (a search typed, a pick's result line). -->
+        <StackPanel x:Name="ModesPanel" Margin="0,14,0,0" />
+
+        <TextBlock Text="WHEN UR SCORE OPENS" Style="{StaticResource SectionLabel}" Margin="0,22,0,6" />
+        <!-- Checked and Unchecked, not Click: a UI Automation toggle changes IsChecked without a click. -->
+        <CheckBox x:Name="StartOnOpenBox" Content="Start reading when Ur Score opens"
+                  Checked="OnStartOnOpenChanged" Unchecked="OnStartOnOpenChanged"
+                  AutomationProperties.Name="Start reading when Ur Score opens" />
+        <!-- The sentence has to be true as it is read: the tick saves now and reads next time, or as Setup closes in a
+             session that hasn't started reading yet (BoardButtons.StartsLater, spec 3.6), so it says so where the eye
+             already is. A tooltip would be invisible to exactly the person who is confused. -->
+        <TextBlock Style="{StaticResource Muted}" Margin="24,4,0,0"
+                   Text="On unless you turn it off. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet. Reading happens only while the window is open, and Pause still pauses it, until Ur Score closes." />
+        <TextBlock x:Name="StartOnOpenProblemLine" Style="{StaticResource Refusal}" Margin="24,4,0,0" Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>

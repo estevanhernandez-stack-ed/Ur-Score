@@ -81,6 +81,10 @@
                    Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVisible}}" />
         <TextBlock x:Name="PanelStale" Text="{Binding Stale}" TextWrapping="Wrap" Margin="0,10,0,0"
                    Visibility="{Binding HasStale, Converter={StaticResource BoolToVisible}}" />
+        <!-- A panel of an off mode: the note above says "Battle is off." and this turns it back on (PanelHead.TurnOnMode). -->
+        <Button x:Name="TurnOnModeButton" Content="Turn on" Tag="TurnOnMode" Style="{StaticResource FlatButton}"
+                AutomationProperties.AutomationId="TurnOnModeButton" HorizontalAlignment="Left" Margin="0,6,0,0"
+                Visibility="{Binding HasTurnOn, Converter={StaticResource BoolToVisible}}" Click="OnToolClick" />
         <Button x:Name="ChooseAnotherButton" Content="Choose another" Tag="ChooseAnother" Style="{StaticResource FlatButton}"
             HorizontalAlignment="Left" Margin="0,6,0,0" Visibility="Collapsed" Click="OnToolClick" />
     </StackPanel>

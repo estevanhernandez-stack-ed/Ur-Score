@@ -90,9 +90,18 @@ public static class RulesFile
     /// reports-land-and-nothing-alerts failure this class exists to close.
     /// </para>
     /// </summary>
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ROROROblox", "metric-rules.json");
+    public static string DefaultPath
+    {
+        get
+        {
+            // Ur Score writes this file (TurnOn, Change, Remove), so a test process can't resolve it any more than its own folder.
+            AppPaths.ThrowIfRefused();
+            return DefaultPathUnder(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        }
+    }
+
+    /// <summary>The path computation alone, with no refusal: what <see cref="DefaultPath"/> is under a given Local AppData.</summary>
+    internal static string DefaultPathUnder(string localAppData) => Path.Combine(localAppData, "ROROROblox", "metric-rules.json");
 
     /// <summary>The environment variable the Setup › Alerts walk sets to point Ur Score at a scratch rules file (A1).</summary>
     public const string PathVariable = "UR_SCORE_RULES_FILE";
@@ -113,10 +122,15 @@ public static class RulesFile
     /// A fully qualified override naming a file (the walk's scratch file), else RoRoRo's own file (A1). A drive root or a folder
     /// ending in a separator names no file, so it falls back like a blank or relative override.
     /// </summary>
-    public static string ResolvePath(string? overridePath) =>
+    public static string ResolvePath(string? overridePath) => OverrideOrNull(overridePath) ?? DefaultPath;
+
+    /// <summary>As <see cref="ResolvePath(string?)"/> with the fallback given, so no real path is resolved (tests).</summary>
+    internal static string ResolvePath(string? overridePath, string fallback) => OverrideOrNull(overridePath) ?? fallback;
+
+    private static string? OverrideOrNull(string? overridePath) =>
         overridePath?.Trim() is { Length: > 0 } candidate && Path.IsPathFullyQualified(candidate) && NamesAFile(candidate)
             ? candidate
-            : DefaultPath;
+            : null;
 
     /// <summary>Every rule RoRoRo can read in the file at <paramref name="path"/>. Never throws for a file problem: it says which.</summary>
     public static RulesRead Read(string path) => File.Exists(path) ? Load(path).Read : RulesRead.NoFile;

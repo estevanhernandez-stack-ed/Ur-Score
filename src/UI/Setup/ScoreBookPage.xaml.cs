@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Labs626.UrScore.Book;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Games;
 using Microsoft.Win32;
 using static Labs626.UrScore.UI.TextLines;
 
@@ -26,6 +27,8 @@ public partial class ScoreBookPage : UserControl, ISetupPage
         Refresh();
     }
 
+    private string ModeName(string slug) => ReaderNames.For(slug, _services.Catalog, _services.Installed);
+
     public void Refresh()
     {
         BookFolderLine.Text = _services.Book.Root;
@@ -34,11 +37,11 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
         BookLoadingLine.Visibility = _services.ReaderLoaded ? Visibility.Collapsed : Visibility.Visible;
         BookRecipesList.ItemsSource = _services.ReaderLoaded
-            ? ScoreBookModel.Recipes(_services.Installed, _services.Sources, _services.Reader)
+            ? ScoreBookModel.Recipes(_services.Installed, _services.Sources, _services.Reader, ModeName)
             : [];
 
         var everListed = _services.AccountsCache.SavedAt() is not null || _services.Accounts.Last is { Accounts.Count: > 0 };
-        var items = ScoreBookModel.NotRecording(_services.Installed, _services.Sources, _services.Latest, _services.Running, _services.EverStarted, everListed);
+        var items = ScoreBookModel.NotRecording(_services.Installed, _services.Sources, _services.Latest, _services.Running, _services.EverStarted, everListed, ModeName);
         NotRecordingList.ItemsSource = items;
         AllRecordingLine.Visibility = items.Count == 0 && _services.Sources.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -64,7 +67,7 @@ public partial class ScoreBookPage : UserControl, ISetupPage
 
         await TransferAsync("Writing the file…", "That file could not be written", async () =>
         {
-            // The pack ExportStats wrote comes back with the manifest, so the line's counts — recipes, clans and
+            // The pack ExportStats wrote comes back with the manifest, so the line's counts — modes, clans and
             // boards — are the file's own and match what the other PC's preview will offer.
             var exported = await Task.Run(() => _services.ExportStats(dialog.FileName));
             return (ScoreBookModel.ExportedLine(exported.Manifest, Path.GetFileName(dialog.FileName), exported.Setup), "", false);

@@ -1,10 +1,9 @@
 # RoRoRo Ur Score
 
-> A [RoRoRo](https://github.com/estevanhernandez-stack-ed/ROROROblox) plugin that watches the
-> numbers a recipe describes, shows you the board whether or not you ever set up an alert, and
-> hands RoRoRo the stats you choose — one number per account per stat — so RoRoRo can decide
-> whether that number is worth ringing your phone. Ur Score knows no game of its own: it reads
-> whatever a recipe file describes.
+> A [RoRoRo](https://github.com/estevanhernandez-stack-ed/ROROROblox) plugin that knows a game's
+> modes, shows you the board whether or not you ever set up an alert, and hands RoRoRo the stats
+> you choose — one number per account per stat — so RoRoRo can decide whether that number is worth
+> ringing your phone. Pet Sim 99's two modes, Battle and Profile, are built in.
 
 **You can install this.** The newest release is always on the
 [releases page](https://github.com/estevanhernandez-stack-ed/Ur-Score/releases). In RoRoRo, use
@@ -22,60 +21,103 @@ the version you are running. That is correct behaviour, not a bug to work around
 RoRoRo shipped metric alerts with a gap in the middle on purpose: RoRoRo keeps history, applies
 rules, and routes a breach to a toast, a Discord channel, or a phone — but nothing in RoRoRo
 gathers a number, because gathering one means naming somebody's API, and RoRoRo names none. Ur
-Score fills that gap without naming one either. A **recipe** — a `.recipe.json` file you import —
-says which https address to read, how to find the rows in the answer, and what each number is
-called. Ur Score runs it and knows nothing else: no host is written anywhere in its own code except
-Roblox's username and picture services, and a test (`NoHostnameFenceTests`) keeps it that way.
+Score fills that gap. It knows a game as a list of **modes**, and a mode is one thing worth
+watching: for Pet Sim 99, **Battle** is your clan's battle (place, race, pace, the top of the
+battle) and **Profile** is each of your accounts' rank, diamonds, hatches and playtime. Under each
+mode sit small reader files that say which https address to read, how to find the rows in the
+answer, and what each number is called. They ship inside the app, so a mode is as current as the
+Ur Score you run, and there is nothing to import. Every host a mode reads is written in those files
+and shown on the game page, not in Ur Score's code: apart from Roblox's username and picture
+services, no host appears in the code, and a test (`NoHostnameFenceTests`) keeps it that way.
 
-**It's a scoreboard on its own, even if you never touch an alert.** Ur Score reads each source on
-its recipe's own schedule — never faster than once a minute, whatever the recipe asks for — and
-draws the answer as panels you arrange yourself: standing, a race between groups, your accounts by
-a stat, a promotion check, an account card, past periods, records, the top of the period, a profile
-stat, an accounts table, and the live leaderboard. The tabs across the top are boards; **Arrange**
-and **+ Add panel** arrange them, and any panel pops out into a window of its own. Each of
-your own accounts shows its Roblox avatar; no other player's picture is ever asked for or kept.
-When a recipe reads a group's icon, that group's standing panel shows it, and your main group's icon
-is the window and taskbar icon. After its first read, it's there as soon as Ur Score opens.
+**It's a scoreboard on its own, even if you never touch an alert.** Ur Score reads each mode on its
+own schedule — never faster than once a minute — and draws the answer as panels you arrange
+yourself: standing, a race between groups, your accounts by a stat, a promotion check, an account
+card, past periods, records, the top of the period, a profile stat, an accounts table, and the live
+leaderboard. The tabs across the top are boards; **Arrange** and **+ Add panel** arrange them, and
+any panel pops out into a window of its own. Each of your own accounts shows its Roblox avatar; no
+other player's picture is ever asked for or kept. When Battle reads a clan's icon, that clan's
+standing panel shows it, and your main clan's icon is the window and taskbar icon. After its first
+read, it's there as soon as Ur Score opens.
 
 **Every good read is kept.** Your own accounts' numbers and each source's headline go into a score
-book under `%LOCALAPPDATA%\626labs.ur-score\scorebook`. Nothing is thinned or deleted, and removing
-a recipe keeps its book. That is also why the window opens on the last numbers it saw rather than
+book under `%LOCALAPPDATA%\626labs.ur-score\scorebook`. Nothing is thinned or deleted, and turning a
+mode off keeps its book. That is also why the window opens on the last numbers it saw rather than
 on empty panels: those panels are tagged `remembered`, and the state line says how old they are —
 "The numbers on screen are the last ones Ur Score read, from 2 h ago."
 
 **And it feeds RoRoRo's alert pipeline**, for the stats and the accounts you tick. It matches the
-rows a recipe reads against the Roblox accounts you've saved in RoRoRo, and for each match hands
+rows a mode reads against the Roblox accounts you've saved in RoRoRo, and for each match hands
 RoRoRo that account's raw value under the metric id you chose. RoRoRo decides whether that number,
 or the rate it derives from it over time, is worth an alert. Ur Score sets no thresholds and cannot
 tell whether anything it reported made your phone ring — that part is entirely RoRoRo's.
 
+## The game page
+
+**Setup › Pet Sim 99** is where a game lives. A switch at the top turns the whole game on or off,
+and each mode below it has its own switch, a line saying what it is, and a line saying exactly
+what it contacts and how often ("Reads ps99.biggamesapi.io every 3 min"). Battle also asks the one
+thing it can't know, which clan is yours: search for it by name, **Make main** marks the one the
+board leads with, and **Watch it instead** follows one your accounts aren't in, which is read and
+shown but never sent. You name your clan once: Ur Score reads that clan's member list and says
+which of your RoRoRo accounts are in it ("Found 3 of your 8 accounts in K0i2: ..."), battle or no
+battle. If some aren't, it asks "5 of your accounts aren't in K0i2 yet. Are they in another clan?"
+with a second search; a clan you pick there is added as one your accounts are in and checked for
+the rest only. **That's all** stops the question, and it comes back only when RoRoRo lists an
+account Ur Score hasn't placed. Each clan's member list is read again when Ur Score starts, when Setup
+opens and every 30 minutes while reading, and it decides which clan each account sits under on the board
+and in Setup, whether or not that account has scored this battle. The member list holds everyone in the
+clan: other members' ids are compared with yours on your PC and dropped, never written, logged or shown.
+
+**What each mode needs.** Every mode reads the accounts saved in RoRoRo, and the line under the
+game's name says how many ("Ur Score uses the 8 accounts saved in RoRoRo."). With none, it says to
+add them in RoRoRo first: Ur Score never signs in to anything itself. Profile asks nothing more of
+Ur Score, but it has numbers only for an account that is linked on db.biggames.io with its Profile
+view public. Under Profile, after its first read, the page says how many are linked ("6 of 8
+accounts are linked."), names the ones that aren't ("Not linked: ...") and the ones whose Profile
+view is private, and a **Link on db.biggames.io** button opens that site in your browser until every
+account is linked. On the board, an account that isn't linked shows dashes with "Not linked on
+db.biggames.io." beside them, and a private one says so. Battle needs no linking: it reads the clan's
+own points, linked or not.
+
+**A mode that is off reads nothing.** No request leaves your PC for it, nothing is recorded or
+sent, and its starter board says "Battle is off." with a **Turn on** button. Your choices inside it
+(which clans, which stats are ticked) are kept while it's off and are there when you switch it back
+on. Both modes are on in a fresh install.
+
+**A new install walks you to the one question.** The first time Setup opens with Battle on and no
+clan picked, it opens on the game page with the clan search ready. There is no file to find.
+
 ## What leaves your machine
 
-Four destinations, and they're not the same boundary:
+Each mode has its own boundary, and so does the pipe to RoRoRo:
 
 | Destination | What goes | What doesn't |
 | --- | --- | --- |
+| **Battle**: `ps99.biggamesapi.io` every 3 minutes, plus `thumbnails.roblox.com` and the picture host it names on `rbxcdn.com` for clan icons | The clan name you searched for, as part of a request for that clan's battle and its member list, and a request for the clans list and the current battle. For a clan's icon, the icon id the answer names. Icons are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Your accounts' ids: Battle reads whole clans and compares them with your accounts on your PC. |
+| **Profile**: `ps99.biggamesapi.io` every 30 minutes | Your own accounts' Roblox user ids, one account at a time, since a profile is looked up by id. | Anyone else's. |
 | **RoRoRo**, over a local pipe on your own PC | Only your own saved accounts' values, only under a metric id you set to send, only if the number is a real finite value. This is the whole point of the plugin and it is checked at one gate in the code (`ReportPolicy`), not scattered around. | Anything about anyone else. Other rows' ids and values are read off the source, compared against your accounts, and dropped — never reported, never written to a file, never logged. |
-| **Whatever hosts your recipes name** — always https, never anything Ur Score chose | What that recipe's own steps carry: the inputs you filled in, a key you saved for it if it declares one, and your own accounts' Roblox user ids when it reads one account at a time. The import screen lists every host and what each one receives, under **YOUR PC WILL CONTACT**, before the recipe is added. | Anything a step doesn't name. Ur Score adds nothing of its own to a recipe's requests but its User-Agent, `UrScore/<version> (RoRoRo plugin)`. |
-| **Roblox's own public username lookup** (`users.roblox.com`) | Other members' Roblox user ids, so the live leaderboard can show names instead of a column of numbers. Those ids came from the recipe's source in the first place, and only names come back. | Your own accounts' ids — their names are already known locally, from RoRoRo, so they never need this call. |
-| **Roblox's own public picture service** (`thumbnails.roblox.com`, and the picture host it names on `rbxcdn.com`) | Your own accounts' Roblox user ids, so each of your rows can show that account's avatar, and the icon id a group's own answer names, when its recipe reads one. The pictures are kept in `%LOCALAPPDATA%\626labs.ur-score\icon-cache` and asked for again after seven days. | Any other player's id. The leaderboard and the top of the period show other members by name only, and no picture of anyone else is ever asked for or kept. |
+| **Roblox's own public username lookup** (`users.roblox.com`) | Other members' Roblox user ids, so the live leaderboard can show names instead of a column of numbers. Those ids came from the source in the first place, and only names come back. | Your own accounts' ids — their names are already known locally, from RoRoRo, so they never need this call. |
+| **Roblox's own public picture service** (`thumbnails.roblox.com`, and the picture host it names on `rbxcdn.com`) | Your own accounts' Roblox user ids, so each of your rows can show that account's avatar. The pictures are kept in the same `icon-cache` and asked for again after seven days. | Any other player's id. The leaderboard and the top of the period show other members by name only, and no picture of anyone else is ever asked for or kept. |
 
-**You can turn the third one off.** Set `resolveNames` to `false` in settings (see *Settings
+A mode that is switched off contacts none of the first two. The game page states each mode's hosts
+and cadence on the mode itself, worked out from the same reader files, so the page and this table
+can't drift apart quietly.
+
+**You can turn the username lookup off.** Set `resolveNames` to `false` in settings (see *Settings
 reference* below) and the leaderboard still shows positions and values, with everyone but your own
-accounts shown as `Member 12345` instead of a name. How many requests the rest of it makes is up to
-your recipes, not to Ur Score: the Setup page where you pick what a recipe reads ends with a line
-like "Your PC asks example.com about 20 times an hour," counted from that recipe's steps, its
-schedule and your account count.
+accounts shown as `Member 12345` instead of a name. How many requests Battle makes is also on the
+game page: the line under the clan search ends with something like "Your PC asks
+ps99.biggamesapi.io about 20 times an hour," counted from the schedule and your clans.
 
 Ur Score has no webhook of its own, posts nothing anywhere, and cannot type or click inside Roblox.
-Its only outbound calls are the ones above — your recipes' own hosts, the username lookup, and
-Roblox's picture service for your accounts' avatars and your groups' icons — and its only inbound
-connection is the local pipe to RoRoRo.
+Its only outbound calls are the ones above, and its only inbound connection is the local pipe to
+RoRoRo.
 
-**Credit where it's due:** the data is somebody else's, and each recipe carries its own credit
-sentence, which Ur Score prints along the bottom of the board for as long as that recipe's source
-is switched on. Ur Score is not made by, endorsed by, or affiliated with Roblox or with any service
-a recipe reads.
+**Credit where it's due:** the data is Big Games' public Pet Simulator 99 API, and each reader
+carries its own credit sentence, which Ur Score prints along the bottom of the board for as long as
+that mode is on. Ur Score is not made by, endorsed by, or affiliated with Roblox, Big Games or any
+service a mode reads.
 
 ## What it needs
 
@@ -88,7 +130,6 @@ a recipe reads.
   screen when you install the plugin. Without them Ur Score can neither find your accounts nor
   report anything for them — decline either and the window tells you plainly, rather than sitting
   quietly broken.
-- **A recipe**, imported. Ur Score ships with none and reads nothing until you add one.
 - **A RoRoRo alert rule for a metric id you're reporting**, if you actually want a phone alert out
   of this (see *Actually getting an alert* below). Without one, Ur Score still runs the board — it's
   the "phone rings" half specifically that needs it.
@@ -116,36 +157,35 @@ what is there).
 
 Either way, start RoRoRo and launch Ur Score from its Plugins page: the first launch asks for its permissions,
 exactly as a marketplace install does. Your data lives elsewhere (`%LOCALAPPDATA%\626labs.ur-score\`), so
-reinstalling never touches your recipes, clans, boards or score book.
+reinstalling never touches your clans, boards, choices or score book.
+
 
 ## Setup
 
 1. **Install it.** In RoRoRo: **Plugins**, where the marketplace offers Ur Score (or **Install from
-   URL**, pasting the release URL you were given), or by hand (see *Install by hand* below). Walk the consent screen — it lists `host.metrics.report` and `host.queries.accounts` —
-   and click Install. Ur Score then runs as its own window, launched from RoRoRo's Plugins page
-   (autostart is off by default, so it won't launch itself the next time you boot).
-2. **Import a recipe, then pick what it reads.** Ur Score knows no game on its own — a recipe file
-   tells it what to read. In Ur Score: **Setup › Recipes › Import recipe…**, pick the
-   `.recipe.json` file, and walk the review screen, which lists every host that recipe will make
-   your PC contact, and what each one receives, before anything is added. A recipe that needs an
-   input of its own then gets a Setup page named by its own word for what it reads — **Clans**, for
-   a clan recipe — and Setup opens straight on it the first time. Search for yours by name;
-   **Make main** marks the one the board leads with, and **Watch it instead** follows one your
-   accounts aren't in, which is read and shown but never sent. No file editing, and no restart.
+   URL**, pasting the release URL you were given), or by hand (see *Install by hand* above). Walk
+   the consent screen — it lists `host.metrics.report` and `host.queries.accounts` — and click
+   Install. Ur Score then runs as its own window, launched from RoRoRo's Plugins page (autostart is
+   off by default, so it won't launch itself the next time you boot).
+2. **Pick your clan.** Ur Score already knows Pet Sim 99's modes, so there is nothing to import. The
+   first time Setup opens it lands on **Setup › Pet Sim 99** with the clan search ready: search for
+   yours by name, **Make main** marks the one the board leads with, and **Watch it instead** follows
+   one your accounts aren't in. Turn a mode off on the same page if you don't want it. No file
+   editing, and no restart.
 3. **Choose your stats.** In **Setup › Stats**, tick **Show** to put a stat on your board and in
    your score book, and **Send** to also report it to RoRoRo. The **Name RoRoRo uses** box beside
-   each stat is the metric id RoRoRo will see; a recipe suggests one, and you can change it. Press
+   each stat is the metric id RoRoRo will see; a mode suggests one, and you can change it. Press
    **Save stats**.
 4. **Reading starts on its own.** Ur Score starts reading as soon as it opens (turn that off in
-   **Setup › Recipes**, under **Start reading when Ur Score opens**); if it hasn't, click the status
-   chip's **▶ Start reading**. The board fills in within a few seconds of the first read — its
-   panels, the state line above them, and the line along the top naming the period being read (or
-   how often this reads) and when the next read is due. If nothing fills in, press **⟳** (or
-   **F5**): it reads every source once, and **Setup › Diagnostics** then says per source what
+   **Setup › Pet Sim 99**, under **Start reading when Ur Score opens**); if it hasn't, click the
+   status chip's **▶ Start reading**. The board fills in within a few seconds of the first read —
+   its panels, the state line above them, and the line along the top naming the period being read
+   (or how often this reads) and when the next read is due. If nothing fills in, press **⟳** (or
+   **F5**): it reads every source once, and **Setup › Diagnostics** then says per mode what
    happened, when it last read, when it reads next, and which of your accounts a source couldn't
    read and why.
 5. **Pick which accounts actually send.** The **Send** checkbox on each row in **Setup › Your
-   accounts** controls whether that account's numbers go to RoRoRo, one checkbox per recipe. Every
+   accounts** controls whether that account's numbers go to RoRoRo, one checkbox per mode. Every
    account starts on; untick one and it keeps being read, kept and shown, but stops sending — and
    the choice survives a restart.
 
@@ -252,30 +292,53 @@ Discord, phone)." Without that, a rule that matches exactly still returns before
 Set `"resolveNames": false` in `settings.json` (see *Settings reference* below). See *What leaves
 your machine* for what that changes.
 
+
 ## Settings reference
 
-Almost everything is set in the **Setup** window. What a particular source reads — its inputs,
-which stats it shows and sends and under what metric id, and which of your accounts send — belongs
-to that recipe and lives beside it, set under **Setup › Recipes**, **Stats**, its own group page
-and **Your accounts**. Which sources exist and which are switched on lives in `sources.json`, and
-your boards and panels in `boards.json`, both beside the settings file. Thresholds aren't here at
-all: RoRoRo does the judging, and you write those in **Setup › Alerts**.
+Almost everything is set in the **Setup** window. What a mode reads — its clans, which stats it
+shows and sends and under what metric id, and which of your accounts send — is set on **Setup ›
+Pet Sim 99**, **Stats** and **Your accounts**. Which sources exist and which are switched on lives
+in `sources.json`, and your boards and panels in `boards.json`, both beside the settings file.
+Thresholds aren't here at all: RoRoRo does the judging, and you write those in **Setup › Alerts**.
 
-`%LOCALAPPDATA%\626labs.ur-score\settings.json` holds three keys, and only the first is worth
+`%LOCALAPPDATA%\626labs.ur-score\settings.json` holds four keys, and only the first is worth
 touching by hand:
 
 | Key | Default | What it does |
 | --- | --- | --- |
 | `resolveNames` | `true` | Whether other members' Roblox ids are sent to Roblox to look up their usernames for the leaderboard. See *What leaves your machine*. There is no checkbox for this. |
-| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Recipes**; no reason to edit it by hand. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet, and reading still happens only while the window is open. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
-| `activeRecipe` | *(none)* | Nothing reads it. It is left over from before recipes had sources of their own; which sources are on lives in `sources.json`. Leave it alone. |
+| `startOnOpen` | `true` | Whether Ur Score starts reading as its window opens. Ticked as **Start reading when Ur Score opens** under **Setup › Pet Sim 99**; no reason to edit it by hand. It takes effect the next time you open Ur Score, or when you close Setup if reading hasn't started yet, and reading still happens only while the window is open. Pausing from the status chip lasts only until Ur Score closes; the next open reads again. |
+| `modes` | *(none)* | The switches on the game page. A key is a game (`"pet-sim-99"`) or a mode (`"pet-sim-99/battle"`, `"pet-sim-99/profile"`), the value `true` or `false`. A missing key means the default, which is on, so a fresh install writes none. A mode reads only when its game and the mode itself are both on. Use the switches on the game page rather than editing this by hand. |
+| `settingsVersion` | `3` | Ur Score's own marker that the modes decision has been made. It is 3 once 0.7.0 has looked at your install. Leave it alone. |
 
-Beside those, in the same folder: `recipes\` (the recipe files you imported and their state),
+**Upgrading from 0.6.3 keeps what you had.** The first time 0.7.0 starts over an existing data
+folder whose settings are below version 3, it writes the `modes` map once: a mode comes on if 0.6.3
+had any of its readers installed, and off if it had none. A player who only ever read Battle stays
+on Battle, with Profile off and no profile source added; nothing starts reading that wasn't
+reading before. A fresh install gets both modes on. If `settings.json` is missing or can't be read,
+Ur Score does not guess: it runs on the defaults and writes nothing until you change something.
+
+Older settings files may still carry an `activeRecipe` key. Nothing reads it (it has been inert
+since sources moved to `sources.json`), 0.7.0 no longer writes it, and you can leave it or delete
+it.
+
+Beside those, in the same folder: `recipes\` (the ticks and metric ids you chose per reader; any
+reader file an older version saved there is ignored, since the readers come from the app now, and
+Setup › Diagnostics lists one that no mode names under "Not part of any mode (kept, not read)"),
 `scorebook\`, `accounts.json` (RoRoRo's last account list, so the window has names before RoRoRo
-answers), `icon-cache\` (the pictures, and `source-icons.json`, which says which group each icon
-belongs to), and `keys.dat` — any key a recipe asked you to save, encrypted for your
-Windows account. Ur Score masks every saved key as `[key hidden]` in anything it shows, saves or
-copies.
+answers), `membership.json` (which of your own accounts each clan's member list held, and when; never
+anyone else's id), `icon-cache\` (the pictures, and `source-icons.json`, which says which clan each icon
+belongs to), and `keys.dat` — any key a reader asked you to save, encrypted for your Windows
+account. Ur Score masks every saved key as `[key hidden]` in anything it shows, saves or copies.
+
+### Moving your setup to another PC
+
+**Setup › Score book** exports your score book, and with it your setup: which modes are on, your
+clans, your ticks and metric ids, and your boards. Reader text isn't carried, because both PCs
+get their readers from the app. A file that carries a setup is a version 3 file, and an Ur Score
+older than 0.7.0 refuses it as made by a newer version; a stats-only file (a score book with no
+setup) stays version 2 and any Ur Score reads it. An export from 0.6.3 still imports: its saved
+reader text is ignored and its choices are kept for the readers a mode names.
 
 ## What it doesn't do
 
@@ -287,7 +350,7 @@ copies.
   or otherwise act inside a Roblox client.
 - **Run itself in the background.** RoRoRo's autostart for this plugin is off by default, and Ur
   Score reads only while its own window is open. Ur Score starts reading as soon as it opens;
-  untick **Start reading when Ur Score opens** in **Setup › Recipes** if you'd rather start it
+  untick **Start reading when Ur Score opens** in **Setup › Pet Sim 99** if you'd rather start it
   yourself from the status chip. Either way, it never watches anything you haven't opened it for.
 
 ## Troubleshooting
@@ -319,26 +382,26 @@ your accounts it couldn't read.
 
 | You see | What it means |
 | --- | --- |
-| Waiting for a value to be set. | The recipe has an input nobody filled in. Set it on that recipe's page in Setup. Nothing is being read. |
+| Waiting for a value to be set. | A mode has an input nobody filled in, such as Battle with no clan picked. Set it on the game page.  Nothing is being read. |
 | Could not reach the data. | A network or transport problem reaching the source. Waiting is the remedy; it isn't RoRoRo's fault. |
-| Nothing matched what was entered. | The source says the name you typed matches nothing. Waiting won't fix it — check the spelling on that recipe's page. |
-| Nothing to read right now. | Normal, not an error. The source itself says there is nothing on; for a recipe that reads a period, this is the usual state between periods. |
-| The response was not a shape Ur Score understands. | The source answered with something the recipe doesn't describe. Use **Copy diagnostics** — the detail names the keys actually present. |
+| Nothing matched what was entered. | The source says the name you typed matches nothing. Waiting won't fix it — check the spelling on the game page. |
+| Nothing to read right now. | Normal, not an error. The source itself says there is nothing on; for a battle, this is the usual state between periods. |
+| The response was not a shape Ur Score understands. | The source answered with something the reader doesn't expect. Use **Copy diagnostics** — the detail names the keys actually present. |
 | None of your accounts are in what came back. | Rows came back, and none matched a saved RoRoRo account. Check the input you set, and that your accounts have resolved Roblox ids. |
 | Reporting to RoRoRo. | Working. At least one account matched and its value was sent. |
 | Reading. No stat is set to send to RoRoRo. | Also working. It's being read, kept and shown; nothing is ticked Send. |
 | RoRoRo is not running. | Reading and keeping continue; every report is held, and none is queued. |
 | RoRoRo refused the report. | A capability — named in the detail, `host.metrics.report` or `host.queries.accounts` — is not granted. RoRoRo's Plugins page has no per-capability re-grant and never re-prompts an existing consent record, so the only way back is **Remove** Ur Score there, then reinstall it, which puts the consent screen in front of you again. |
 | The source asked Ur Score to slow down. | A rate limit. The next read tries again. |
-| The source wants signing in, which recipes cannot do. | The address needs a session, and recipes never have one. Held until the recipe or its inputs change. |
-| A key is needed. | The recipe declares a key that isn't saved, or is saved for a different host. |
+| The source wants signing in, which readers cannot do. | The address needs a session, and readers never have one. Held until the inputs change. |
+| A key is needed. | A reader declares a key that isn't saved, or is saved for a different host. |
 | The source rejected the key. | The saved key was refused. Held until a key changes. |
 
 A source can also read `Switched off.`, `Waiting for its first read.` or `Not started.`, which mean
 what they say.
 
 If none of that explains it, click **Copy diagnostics** on that page and paste the result into
-wherever you're asking for help. It carries each recipe's schedule and which stats it shows and
+wherever you're asking for help. It carries each reader's schedule and which stats it shows and
 sends under which metric ids, each source's inputs and last state, RoRoRo's version (or "not
 connected"), counts from your score book, and the last 40 lines of narration. Every saved key is
 masked; no score book content is included.

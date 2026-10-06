@@ -29,6 +29,7 @@ public static partial class PanelModels
     public static MyAccountsModel MyAccounts(LiveBoard live, ScoreBookReader reader, PanelSettings settings)
     {
         var title = PanelText.Title(PanelType.MyAccounts, null, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new MyAccountsModel(off, "", "", []);
         if (live.FindRecipe(settings.Recipe) is not { } installed) return new MyAccountsModel(StaleSource(live, settings, title), "", "", []);
 
         var recipe = installed.Recipe;
@@ -48,18 +49,22 @@ public static partial class PanelModels
         {
             overdue |= live.IsOverdue(source);
             remembered |= live.IsRemembered(source.Id);
+            // Who is in the clan comes from its members list when it has been read, and from the rows otherwise; the rows are
+            // the numbers either way. A member who hasn't scored this battle (or a clan between battles, with no rows at all)
+            // is in its group with the no-value dash, never under "not found" (backlog V3-S.20).
             var snapshot = live.SnapshotOf(source.Id);
-            if (snapshot?.Rows is not { } rows) continue;
+            var rows = snapshot?.Rows;
+            if (rows is null && live.MembersOf(source.Id) is null) continue;
 
             var mine = live.Accounts
-                .Where(a => a.RobloxUserId != 0 && !assigned.Contains(a.RobloxUserId) && rows.Any(r => r.UserId == a.RobloxUserId))
+                .Where(a => a.RobloxUserId != 0 && !assigned.Contains(a.RobloxUserId) && live.Holds(source.Id, a.RobloxUserId))
                 .ToList();
             if (mine.Count == 0) continue;
 
             // Counted here only for a reading of this session, which holds every row. A remembered one holds your own
             // accounts alone, so InGroup answers it from the book instead (review C1).
-            var ranks = snapshot.RememberedAt is null ? Ranking.Competition(rows, stat.Key) : null;
-            var period = snapshot.Period?.Value;
+            var ranks = rows is not null && snapshot!.RememberedAt is null ? Ranking.Competition(rows, stat.Key) : null;
+            var period = snapshot?.Period?.Value;
             var since = Since(recipe, live.Now);
             var series = mine.ToDictionary(a => a.RobloxUserId, a => reader.Series(source.Id, a.RobloxUserId, stat.Key, period, since));
 
@@ -67,17 +72,17 @@ public static partial class PanelModels
             foreach (var account in mine)
             {
                 assigned.Add(account.RobloxUserId);
-                var value = ValueOf(rows.First(r => r.UserId == account.RobloxUserId), stat.Key);
+                var value = rows?.FirstOrDefault(r => r.UserId == account.RobloxUserId) is { } row ? ValueOf(row, stat.Key) : null;
                 var others = series.Where(kv => kv.Key != account.RobloxUserId).Select(kv => kv.Value);
                 // Sent by this source's last read, of this stat. The session's remembered sends outlive the read that made
                 // them, so reading those kept a dot lit through reads with RoRoRo closed or Send off (backlog S1-F.5).
-                var sent = snapshot.SentThisRead.Contains((account.AccountId, stat.Key));
+                var sent = snapshot?.SentThisRead.Contains((account.AccountId, stat.Key)) == true;
 
                 lines.Add((value, new AccountLineModel(
                     account.RobloxUserId,
                     account.DisplayName,
                     PanelText.Value(value, stat.Format, zone),
-                    InGroup(snapshot, ranks, account.RobloxUserId, stat.Key, value),
+                    snapshot is null ? Dash : InGroup(snapshot, ranks, account.RobloxUserId, stat.Key, value),
                     RecentChange(series[account.RobloxUserId], stat.Format),
                     sent,
                     Records.Stalled(series[account.RobloxUserId], others),
@@ -97,17 +102,18 @@ public static partial class PanelModels
         {
             var ofRecipe = live.Sources.Where(s => s.Enabled && string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal)).ToList();
             // A watched clan's rows are never remembered (A40), so this is what was actually read.
+            // A watched clan's members list places an account there too (V3-S.20).
             var inWatched = ofRecipe
                 .Where(s => s.Role == SourceRole.Watch)
-                .SelectMany(s => live.LiveOf(s.Id)?.Rows ?? [])
-                .Select(r => r.UserId)
+                .SelectMany(s => (live.LiveOf(s.Id)?.Rows ?? []).Select(r => r.UserId).Concat(live.MembersOf(s.Id) ?? Enumerable.Empty<long>()))
                 .ToHashSet();
             var groupsWord = RecipeWords.GroupsLower(recipe);
             // Idle is asked of this session's reading alone: a remembered one is no read, between periods or otherwise.
             var notFound = PanelText.NotFound(
                 recipe.Inputs.Count > 0 ? $"Not in a watched {group}" : "Not in the last read", group, groupsWord, RecipeWords.Period(recipe),
-                inHand: ofRecipe.Count(s => live.SnapshotOf(s.Id)?.Rows is not null),
-                readNow: ofRecipe.Count(s => live.LiveOf(s.Id)?.Rows is not null),
+                // A clan whose members list was read is as good as read now for "not in": the list is everyone in it.
+                inHand: ofRecipe.Count(s => live.SnapshotOf(s.Id)?.Rows is not null || live.MembersOf(s.Id) is not null),
+                readNow: ofRecipe.Count(s => live.LiveOf(s.Id)?.Rows is not null || live.MembersOf(s.Id) is not null),
                 idleNow: ofRecipe.Count(s => PanelText.ReadIdle(live.LiveOf(s.Id))),
                 sources: ofRecipe.Count);
 

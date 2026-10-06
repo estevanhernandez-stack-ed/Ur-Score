@@ -46,7 +46,7 @@ public class BookImportTests
             BookImport.Said(40, 0, ["CCGP", "K0i2"], []));
 
         Assert.Equal(
-            "Nothing new to import. No recipe here for: pet-sim-99-profile.",
-            BookImport.Said(0, 0, [], ["pet-sim-99-profile"]));
+            "Nothing new to import. Not part of any mode: roblox-followers.",
+            BookImport.Said(0, 0, [], ["roblox-followers"]));
     }
 }

@@ -7,8 +7,8 @@
         <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,14"
                    Text="Every stat you tick is read, kept in your score book for your own accounts, and shown on your board." />
         <StackPanel x:Name="RecipeRow" Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock Text="Recipe" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <ComboBox x:Name="StatsRecipeBox" MinWidth="320" SelectionChanged="OnRecipeChanged" AutomationProperties.Name="Recipe" />
+            <TextBlock Text="Mode" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <ComboBox x:Name="StatsRecipeBox" MinWidth="320" SelectionChanged="OnRecipeChanged" AutomationProperties.Name="Mode" />
         </StackPanel>
         <TextBlock x:Name="StatsGroupListLine" Style="{StaticResource Muted}" Margin="0,0,0,12" Visibility="Collapsed" />
         <StackPanel x:Name="StatsBody">
@@ -19,7 +19,7 @@
             </StackPanel>
         </StackPanel>
         <TextBlock x:Name="StatsEmptyLine" Style="{StaticResource Muted}" Visibility="Collapsed"
-                   Text="No recipe with stats to choose yet. Import one in Recipes." />
+                   Text="Turn on a mode with stats to choose." />
 
         <StackPanel x:Name="FieldSection" Margin="0,28,0,0" Visibility="Collapsed">
             <TextBlock Text="CLAN AND FIELD" Style="{StaticResource SectionLabel}" />

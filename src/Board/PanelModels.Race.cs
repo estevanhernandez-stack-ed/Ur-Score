@@ -37,6 +37,7 @@ public static partial class PanelModels
     {
         var recipe = live.FindRecipe(settings.Recipe)?.Recipe;
         var title = PanelText.Title(PanelType.Race, recipe, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new RaceModel(off, [], [], "");
         if (recipe is null) return new RaceModel(StaleSource(live, settings, title), [], [], "");
 
         // Each problem says what it is (backlog S1-13.6). A recipe with no total read "This panel's clan was removed.", a line
@@ -260,12 +261,12 @@ public static partial class PanelModels
     /// to be told (V3-S.25). A band that STOPPED is a third, and the one the owner hit on 2026-09-24: his list was an old
     /// copy without <c>"groupsAreClans": true</c>, so the band froze at the last read that kept names while his own
     /// clan's line went on, under a note claiming no clans were named at all. When the lines stopped, that is the one
-    /// sentence; the older one is for a list that has never kept a name. Either way, when the copy Ur Score ships would
-    /// keep names, the note says where to update it.
+    /// sentence; the older one is for a list that has never kept a name. The readers come from the app now, so there is no
+    /// older copy to update and no pointer to one (A10).
     /// <para>
     /// "Stopped updating" is said only when <paramref name="rivalsDrawn"/>: it is a sentence about rival lines, and a
     /// line needs two named reads. With one named read before the names stopped there is no band, and the sentence
-    /// described lines nobody could see (0.6.3). The update pointer is about the recipe, not the chart, and stays.
+    /// described lines nobody could see (0.6.3).
     /// </para>
     /// </summary>
     private static string? NamesNote(LiveBoard live, ScoreBookReader reader, string group, string groups, bool rivalsDrawn)
@@ -276,12 +277,9 @@ public static partial class PanelModels
         var (latest, named) = reader.GroupNamesKept(field.Id, live.SnapshotOf(field.Id)?.Period?.Value);
         // "No clans are named here" only while nothing named was ever read this period: beside a band still drawn from
         // named reads it contradicts the chart, which is the very note the owner learned to ignore (review, 2026-09-24).
-        var said = named is { } last && latest > last
-            ? rivalsDrawn ? PanelText.GroupNamesStopped(group, groups, list, last, live.Time.LocalTimeZone, list.GroupsAreClans) : null
-            : list.GroupsAreClans || named is not null ? null : PanelText.GroupNamesNotKept(groups, list);
-        var update = BuiltInRecipes.HasGroupNamesUpdate(installed) ? PanelText.RecipeUpdate(list) : null;
-
-        return said is null ? update : update is null ? said : $"{said} {update}";
+        return named is { } last && latest > last
+            ? rivalsDrawn ? PanelText.GroupNamesStopped(group, groups, live.LabelOf(list), last, live.Time.LocalTimeZone, list.GroupsAreClans) : null
+            : list.GroupsAreClans || named is not null ? null : PanelText.GroupNamesNotKept(groups, live.LabelOf(list));
     }
 
     /// <summary>The switched-on clans list, whose readings carry the board.</summary>

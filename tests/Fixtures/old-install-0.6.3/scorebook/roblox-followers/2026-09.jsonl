@@ -1,0 +1,2 @@
+{"v":1,"kind":"read","t":"2026-09-20T18:00:00.000Z","off":-300,"trigger":"timer","recipe":{"slug":"roblox-followers","hash":"2b8587530a858ddc"},"source":"s-a0000006","role":"mine","inputs":{},"headline":{},"stats":["value"],"accounts":{"900000001":{"v":{"value":120}}}}
+{"v":1,"kind":"read","t":"2026-09-20T18:10:00.000Z","off":-300,"trigger":"timer","recipe":{"slug":"roblox-followers","hash":"2b8587530a858ddc"},"source":"s-a0000006","role":"mine","inputs":{},"headline":{},"stats":["value"],"accounts":{"900000001":{"v":{"value":121}}}}

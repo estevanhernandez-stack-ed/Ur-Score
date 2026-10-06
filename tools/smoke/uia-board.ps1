@@ -1,7 +1,7 @@
 # Board helpers for the stage 2 walks: tabs and their menu, edit mode, panel tools, the gallery, the panel
 # form, pop-outs and boards.json. Dot-source this file; it only defines things.
 # ASCII only on purpose: Windows PowerShell 5.1 reads a BOM-less file as ANSI.
-. (Join-Path $PSScriptRoot 'uia-import.ps1')
+. (Join-Path $PSScriptRoot 'uia.ps1')
 
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -292,14 +292,16 @@ function Stop-UrScoreFromBoard([int]$seconds = 20) {
     Stop-UrScore
 }
 
-# A clean start with the clan fixture imported (Points shown and sent), the main clan, and optionally a clan
-# your accounts are in. Returns the board once its first Clan standing panel has drawn.
+# A clean start on the game page: the main clan picked in Battle's clan search, and optionally a clan your accounts are
+# in. Returns the board once its first Clan standing panel has drawn.
+#
+# The caller's data folder must have been moved aside with -ModesOff 'pet-sim-99/profile' (Move-UrDataAside), which keeps
+# the Battle-only board these walks were written against: a fresh 0.7.0 folder has Profile on and so an Alts tab beside
+# Battle. Battle's built-in readers come with their suggested stats shown and nothing set to send (the old import ticked
+# Points to send; now a walk that needs a send ticks it on Setup > Stats itself).
 function Initialize-ClanBoard([string]$Main, [string]$Alt) {
     Start-UrScore | Out-Null
-    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'SetupButton')
-    Wait-UrWindow '^Setup$' 15 | Out-Null
-    Complete-ClanImport (Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json') @('Points') @('Points') | Out-Null
-    $setup = Wait-UrWindow '^Setup$' 30
+    $setup = Open-GamePage
     Select-SearchName $setup 'Your main clan' $Main
     Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
     if ($Alt) {

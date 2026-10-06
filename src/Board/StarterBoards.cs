@@ -8,12 +8,13 @@ public sealed record PanelSpec(PanelType Type, int Span, PanelSettings Settings)
 
 /// <summary>
 /// Which empty state a board shows. <see cref="BookUnread"/> is the board window's own (the score book couldn't be read, backlog
-/// S1-14.2); no starter board is ever built with it.
+/// S1-14.2); no starter board is ever built with it. <see cref="ModeOff"/> is a starter whose game mode is off: the tab is
+/// still built (never omitted, so saving can't delete it, A2) and says so. <see cref="NoModes"/> is every mode off at once.
 /// </summary>
-public enum BoardEmpty { None, NoRecipes, NoStats, NoSources, NoPanels, BookUnread }
+public enum BoardEmpty { None, NoRecipes, NoStats, NoSources, NoPanels, BookUnread, ModeOff, NoModes }
 
-/// <summary>A starter board's panels, or the empty state it shows instead, and the recipe that empty state names.</summary>
-public sealed record StarterBoard(string Name, BoardEmpty Empty, IReadOnlyList<PanelSpec> Panels, string? RecipeSlug);
+/// <summary>A starter board's panels, or the empty state it shows instead, and the recipe that empty state names. <paramref name="ModeName"/> is the off mode's name when <see cref="BoardEmpty.ModeOff"/>.</summary>
+public sealed record StarterBoard(string Name, BoardEmpty Empty, IReadOnlyList<PanelSpec> Panels, string? RecipeSlug, string? ModeName = null);
 
 /// <summary>
 /// The default tabs (default views design): Battle, the tab you watch on battle day, and Alts, your accounts side by
@@ -31,9 +32,13 @@ public static class StarterBoards
     /// <summary>A starter's name in ids and in <c>boards.json</c>'s <c>follows</c>: "battle", "alts".</summary>
     public static string KeyOf(string name) => name.ToLowerInvariant();
 
-    /// <summary>Every starter as your sources build it now, in tab order. Any of them may be an empty state.</summary>
-    public static IReadOnlyList<StarterBoard> All(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources) =>
-        [.. Names.Select(name => Build(installed, sources, name))];
+    /// <summary>
+    /// Every starter as your sources build it now, in tab order. Any of them may be an empty state.
+    /// <paramref name="offModeName"/> takes a starter's key and returns the name of its mode when that mode is off, else null;
+    /// an off starter is still built, with no panels and <see cref="BoardEmpty.ModeOff"/>, never left out.
+    /// </summary>
+    public static IReadOnlyList<StarterBoard> All(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, Func<string, string?>? offModeName = null) =>
+        [.. Names.Select(name => Build(installed, sources, name, offModeName))];
 
     /// <summary>The starter a key names ("alts", in any letter case), or null.</summary>
     public static StarterBoard? Named(IReadOnlyList<StarterBoard> starters, string? key) =>
@@ -41,11 +46,13 @@ public static class StarterBoards
 
     /// <summary>
     /// The empty state shown when no starter has a panel (D4): import a recipe first, then choose the source a starter
-    /// needs, else the first starter's own.
+    /// needs, else the first starter that is not off, whose problem is the real one (an off mode says only "off"). When every starter is off,
+    /// the first one answers and <c>BoardText.EmptyFor</c> reports <see cref="BoardEmpty.NoModes"/> instead.
     /// </summary>
     public static StarterBoard EmptyState(IReadOnlyList<StarterBoard> starters) =>
         starters.FirstOrDefault(s => s.Empty == BoardEmpty.NoRecipes)
         ?? starters.FirstOrDefault(s => s.Empty == BoardEmpty.NoSources)
+        ?? starters.FirstOrDefault(s => s.Empty != BoardEmpty.ModeOff)
         ?? starters[0];
 
     /// <summary>
@@ -53,11 +60,12 @@ public static class StarterBoards
     /// starter whose kind of recipe has no ticked stat is empty. <paramref name="name"/> is a starter's name or its key
     /// in any letter case ("Alts", "alts", as <c>follows</c> holds it); any other name throws.
     /// </summary>
-    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string name = Battle)
+    public static StarterBoard Build(IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, string name = Battle, Func<string, string?>? offModeName = null)
     {
         var named = Names.FirstOrDefault(n => string.Equals(n, name?.Trim(), StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"No starter is named '{name}'.", nameof(name));
         var alts = named == Alts;
+        if (offModeName?.Invoke(KeyOf(named)) is { } modeName) return new StarterBoard(named, BoardEmpty.ModeOff, [], null, modeName);
         if (installed.Count == 0) return new StarterBoard(named, BoardEmpty.NoRecipes, [], null);
 
         var ticked = installed.Where(i => !i.Recipe.IsGroupList && i.State.TrackedStats(i.Recipe).Count > 0).ToList();

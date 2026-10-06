@@ -89,6 +89,14 @@ public static class RecipeStats
     public static IReadOnlyList<RecipeValue> Suggested(Recipe recipe) =>
         recipe.IsGroupList ? [] : [.. recipe.LastStep.Values.Where(v => v.Show)];
 
+    /// <summary>
+    /// A first import's starting ticks (D11): Show on each value the recipe suggests, under its suggested name, and never
+    /// Send. Lives here so the composition layer seeds a state without calling UI code.
+    /// </summary>
+    public static IReadOnlyDictionary<string, StatChoice> SuggestedChoices(Recipe recipe) =>
+        Suggested(recipe)
+            .ToDictionary(v => v.Id, v => new StatChoice(Show: true, MetricId: v.MetricId), StringComparer.Ordinal);
+
     /// <summary>Names containing the query, ignoring case, in the order the source gave them, skipping ones already picked.</summary>
     public static IReadOnlyList<string> MatchCounterNames(IReadOnlyList<string> names, string query, IEnumerable<string> pickedKeys)
     {

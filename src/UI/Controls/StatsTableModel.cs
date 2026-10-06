@@ -157,11 +157,15 @@ public static class StatsTableModel
     /// A first import's starting ticks (D11): Show on each value the recipe suggests, under its suggested name, and never
     /// Send. An update and Setup › Stats start from your saved choices instead, so a tick you made is never changed.
     /// </summary>
-    public static IReadOnlyDictionary<string, StatChoice> Suggested(Recipe recipe) =>
-        RecipeStats.Suggested(recipe)
-            .ToDictionary(v => v.Id, v => new StatChoice(Show: true, MetricId: v.MetricId), StringComparer.Ordinal);
+    public static IReadOnlyDictionary<string, StatChoice> Suggested(Recipe recipe) => RecipeStats.SuggestedChoices(recipe);
 
     /// <summary>Rows whose label contains the query, ignoring case, plus every ticked row. A blank query shows all.</summary>
+    /// <summary>
+    /// A search box over a handful of rows is an unlabelled box with nothing to find (owner's pass, 2026-10-05: Battle
+    /// offers one stat). It shows once there are more rows than fit in a glance.
+    /// </summary>
+    public static bool ShowsSearch(int rowCount) => rowCount > 8;
+
     public static IReadOnlyList<StatRow> Visible(IReadOnlyList<StatRow> rows, string? query)
     {
         var trimmed = query?.Trim() ?? "";

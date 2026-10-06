@@ -2,14 +2,15 @@ using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using Labs626.UrScore.Board;
+using Labs626.UrScore.Games;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
 
 namespace Labs626.UrScore.Core;
 
-public enum SetupKind { Recipe, Clan, Board, Key, Stats }
+public enum SetupKind { Recipe, Clan, Board, Key, Stats, Mode }
 
-public enum SetupOutcome { Add, Update, Same, Replace, Kept, EnterAgain }
+public enum SetupOutcome { Add, Update, Same, Replace, Kept, EnterAgain, Skipped }
 
 /// <summary>
 /// One line of the preview: what kind of thing, its name, what importing would do to it and why, whether it starts
@@ -22,12 +23,13 @@ public sealed record SetupItem(
 
 /// <summary>
 /// This machine's setup, as the plan needs it. <see cref="Settings"/> is THIS PC's whole settings record — the
-/// settings step lays the file's two over it rather than writing the file's record, so <c>StartOnOpen</c>, which
-/// never travels, stays what this machine chose.
+/// settings step lays the file's setting and ticked mode switches over it rather than writing the file's record, so
+/// <c>StartOnOpen</c>, which never travels, stays what this machine chose. <see cref="Catalog"/> says which readers
+/// belong to a mode (null: the built-in one); a reader no mode names is skipped, not merged.
 /// </summary>
 public sealed record SetupHere(
     IReadOnlyList<InstalledRecipe> Installed, IReadOnlyList<Source> Sources, IReadOnlyList<BoardDef> SavedBoards, IReadOnlyList<HostAccount> Accounts,
-    Settings Settings);
+    Settings Settings, GameCatalog? Catalog = null);
 
 public sealed record SetupMergePlan(IReadOnlyList<SetupItem> Items, SetupPack File)
 {
@@ -51,7 +53,8 @@ public interface ISetupWriter
 
     SetupHere Here { get; }
 
-    void SaveRecipe(Recipe recipe, string text, RecipeState state);
+    /// <summary>One reader's choices (A7): the reader's text is the app's own and is never written by an import.</summary>
+    void SaveState(string slug, RecipeState state);
 
     void SaveSources(IReadOnlyList<Source> sources);
 
@@ -59,22 +62,22 @@ public interface ISetupWriter
     void SaveImportedBoards(IReadOnlyList<BoardDef> saved);
 
     void SaveSettings(Settings settings);
-
-    void ReloadRecipes();
 }
 
 /// <summary>
-/// What Apply did, for the line the page says. <see cref="FailedStep"/> names the step that threw, or null.
-/// <see cref="SkippedRecipes"/> names a recipe that parsed on the sending PC but not here (a version gap), so it
-/// was counted by not counting it (spec §4.2) — null when nothing was skipped. <see cref="FailureType"/> is for
+/// What Apply did, for the line the page says. <see cref="Recipes"/> counts the readers whose ticks were written and
+/// <see cref="Modes"/> the modes those readers belong to, which is what the line counts (review round 2).
+/// <see cref="FailedStep"/> names the step that threw, or null.
+/// <see cref="SkippedItems"/> counts the items left out because no mode reads their reader (A7), and
+/// <see cref="ModesApplied"/> says the file's mode switches were applied. <see cref="FailureType"/> is for
 /// the trail; <see cref="FailureMessage"/> is what the failure said, redacted, for the screen (spec §4).
 /// </summary>
 public sealed record SetupApplied(
     int Recipes, int Clans, int Boards, int KeptClans, int Keys, int DroppedExclusions, string? AsideFolder, string? FailedStep, string? FailureType,
-    IReadOnlyList<string>? SkippedRecipes = null, string? FailureMessage = null);
+    int SkippedItems = 0, string? FailureMessage = null, bool ModesApplied = false, int Modes = 0);
 
 /// <summary>
-/// Importing a setup: the plan, pure (spec §2), and the apply (spec §4, Task 6). Identity: a recipe by slug, a clan by
+/// Importing a setup: the plan, pure (spec §2), and the apply (spec §4, Task 6). Identity: a reader by slug, a clan by
 /// recipe and clan name (case and spaces aside, as the book import matches), a board by name. The file wins where
 /// both have a thing and it differs; a clan keeps THIS machine's id; sends arrive off.
 /// </summary>
@@ -85,35 +88,33 @@ public static class SetupMerge
         var items = new List<SetupItem>();
         var installedHere = here.Installed.ToDictionary(i => i.Recipe.Slug, StringComparer.Ordinal);
 
-        var fileRecipeSlugs = new HashSet<string>(StringComparer.Ordinal);
+        var catalog = here.Catalog ?? GameCatalog.BuiltIn;
+
+        // A reader's ticks merge by STATE, never by text (A7): both PCs carry the same embedded text, so text says
+        // nothing, and the file's text (an old export's) is not even read. A reader no mode names is skipped.
+        var userIdOf = here.Accounts.Where(a => a.RobloxUserId != 0).ToDictionary(a => a.AccountId, a => a.RobloxUserId);
         foreach (var recipe in file.Recipes)
         {
-            fileRecipeSlugs.Add(recipe.Slug);
             var key = "recipe:" + recipe.Slug;
-            if (installedHere.TryGetValue(recipe.Slug, out var local))
+            var name = ReaderNames.For(recipe.Slug, catalog, here.Installed);
+            if (catalog.ModeOf(recipe.Slug) is not { } mode || !installedHere.TryGetValue(recipe.Slug, out var local))
             {
-                var differs = !string.Equals(local.Text, recipe.Text, StringComparison.Ordinal);
-                items.Add(differs
-                    ? new SetupItem(SetupKind.Recipe, key, recipe.Name, SetupOutcome.Update, "the file's copy differs; its ticks come with it, sends off", Ticked: true)
-                    : new SetupItem(SetupKind.Recipe, key, recipe.Name, SetupOutcome.Same, "same as here", Ticked: false));
+                items.Add(new SetupItem(SetupKind.Recipe, key, name, SetupOutcome.Skipped, NotInAMode, Ticked: false));
+                continue;
             }
-            else
-            {
-                items.Add(new SetupItem(SetupKind.Recipe, key, recipe.Name, SetupOutcome.Add, "sends off until you tick them", Ticked: true));
-            }
+
+            var theirs = SetupPack.Canonical(RecipeStates.Effective(local.Recipe, recipe.State with { CounterNames = null }, Readers.ShowsFor(mode, recipe.Slug)));
+            var mine = SetupPack.Canonical(local.State with { CounterNames = null, ExcludedAccountIds = null });
+            var sameExcluded = local.State.Excluded.Where(userIdOf.ContainsKey).Select(id => userIdOf[id]).Order().SequenceEqual(recipe.ExcludedUserIds.Order());
+            items.Add(string.Equals(theirs, mine, StringComparison.Ordinal) && sameExcluded
+                ? new SetupItem(SetupKind.Recipe, key, name, SetupOutcome.Same, "same as here", Ticked: false)
+                : new SetupItem(SetupKind.Recipe, key, name, SetupOutcome.Update, "the file's ticks differ from here; they come with it, sends off", Ticked: true));
         }
 
-        // A recipe the file doesn't carry is still an account of this machine's setup (spec §2: anything only here is
-        // Kept, listed). First-wins is moot here — installedHere is already keyed by slug, one entry per recipe.
-        foreach (var installed in here.Installed.Where(i => !fileRecipeSlugs.Contains(i.Recipe.Slug)))
-        {
-            items.Add(new SetupItem(SetupKind.Recipe, "recipe:" + installed.Recipe.Slug, installed.Recipe.Name, SetupOutcome.Kept, "only this PC has it", Ticked: false));
-        }
-
-        // A clan with no inputs (a profile, a clans list) is named by its recipe: the file's name first, then this PC's.
+        // Which readers a ticked state could name: a clan is named by its reader's mode when it has no input.
         var recipeNames = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var recipe in file.Recipes) recipeNames.TryAdd(recipe.Slug, recipe.Name);
-        foreach (var installed in here.Installed) recipeNames.TryAdd(installed.Recipe.Slug, installed.Recipe.Name);
+        foreach (var recipe in file.Recipes) recipeNames.TryAdd(recipe.Slug, ReaderNames.For(recipe.Slug, catalog, here.Installed));
+        foreach (var installed in here.Installed) recipeNames.TryAdd(installed.Recipe.Slug, ReaderNames.For(installed.Recipe.Slug, catalog, here.Installed));
 
         var fileNames = file.Sources.Select(s => s.Recipe + "|" + s.InputsKey).ToHashSet(StringComparer.Ordinal);
         foreach (var source in file.Sources)
@@ -121,7 +122,12 @@ public static class SetupMerge
             var identity = source.Recipe + "|" + source.InputsKey;
             var name = ClanName(source, recipeNames);
             var local = here.Sources.FirstOrDefault(s => string.Equals(s.Recipe + "|" + s.InputsKey, identity, StringComparison.Ordinal));
-            if (local is null)
+            if (catalog.ModeOf(source.Recipe) is null)
+            {
+                // Skipped with its reader: a clan of a reader no mode names has nothing here to read it.
+                items.Add(new SetupItem(SetupKind.Clan, "clan:" + identity, name, SetupOutcome.Skipped, NotInAMode, Ticked: false, FileId: source.Id));
+            }
+            else if (local is null)
             {
                 items.Add(new SetupItem(SetupKind.Clan, "clan:" + identity, name, SetupOutcome.Add, RoleWord(source), Ticked: true, DependsOnRecipe: source.Recipe, FileId: source.Id));
             }
@@ -173,7 +179,18 @@ public static class SetupMerge
         foreach (var key in file.Keys)
         {
             items.Add(new SetupItem(SetupKind.Key, $"key:{key.RecipeSlug}|{key.Id}", key.Label, SetupOutcome.EnterAgain,
-                $"{key.RecipeName}. Keys never leave the PC that saved them; Setup › Recipes asks for it.", Ticked: false));
+                $"{ReaderNames.For(key.RecipeSlug, catalog, here.Installed)}. Keys never leave the PC that saved them.", Ticked: false));
+        }
+
+        if (file.ModesUnreadable)
+        {
+            items.Add(new SetupItem(SetupKind.Mode, "modes", "Mode switches", SetupOutcome.Skipped, "the file's mode switches could not be read", Ticked: false));
+        }
+        else if (ModeChanges(file.Settings.Modes, here.Settings.Modes, catalog) is { } changes)
+        {
+            items.Add(changes.Count == 0
+                ? new SetupItem(SetupKind.Mode, "modes", "Mode switches", SetupOutcome.Same, "same as here", Ticked: false)
+                : new SetupItem(SetupKind.Mode, "modes", "Mode switches", SetupOutcome.Update, "the file sets " + string.Join(", ", changes), Ticked: true));
         }
 
         items.Add(new SetupItem(SetupKind.Stats, "stats", StatsName(readings, finals), SetupOutcome.Add, "what is already here is skipped", Ticked: true));
@@ -181,9 +198,37 @@ public static class SetupMerge
         return new SetupMergePlan(items, file) { RecipeInstalled = installedHere.Keys.ToHashSet(StringComparer.Ordinal) };
     }
 
+    private const string NotInAMode = "not part of any mode";
+
     /// <summary>
-    /// Applies the ticked items in dependency order (spec §4): the aside copy first, then recipes, clans, a reload,
-    /// boards, settings. Each step is atomic on its own file; a step that throws ends the apply with its name and
+    /// What the file's mode switches would change here, as "Battle off" words: only the keys the catalog knows, and
+    /// only where the EFFECTIVE value here differs (an explicit true over a default true changes nothing). Null when the
+    /// file carries no switches at all, so no item is offered.
+    /// </summary>
+    private static List<string>? ModeChanges(IReadOnlyDictionary<string, bool>? file, IReadOnlyDictionary<string, bool>? here, GameCatalog catalog)
+    {
+        if (file is not { Count: > 0 }) return null;
+
+        var switches = new ModeSwitches(catalog, here);
+        var changes = new List<string>();
+        foreach (var (key, on) in file.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            if (catalog.Find(key) is { } mode)
+            {
+                if (switches.IsModeSet(key) != on) changes.Add($"{mode.Name} {(on ? "on" : "off")}");
+            }
+            else if (catalog.Games.FirstOrDefault(g => string.Equals(g.Id, key, StringComparison.Ordinal)) is { } game && switches.IsGameOn(key) != on)
+            {
+                changes.Add($"{game.Name} {(on ? "on" : "off")}");
+            }
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// Applies the ticked items in dependency order (spec §4): the aside copy first, then reader ticks, clans,
+    /// boards, settings (and the mode switches with them, live). Each step is atomic on its own file; a step that throws ends the apply with its name and
     /// the exception's TYPE, and the steps before it stand. No roll-back: the aside folder is the recovery.
     /// <para>
     /// The catch takes anything but a cancellation, rather than a list of types: the call graph here runs through
@@ -200,7 +245,11 @@ public static class SetupMerge
         var clans = 0;
         var boards = 0;
         var dropped = 0;
-        var skippedRecipes = new List<string>();
+        // Only the skips the line explains ("not part of any mode"); an unreadable modes file is its own item with its own words.
+        var skipped = plan.Items.Count(i => i.Outcome == SetupOutcome.Skipped && i.Note == NotInAMode);
+        var modesApplied = false;
+        var modesTouched = new HashSet<string>(StringComparer.Ordinal);
+        var catalog = here.Catalog ?? GameCatalog.BuiltIn;
         string? aside = null;
         var step = "aside";
         try
@@ -213,16 +262,12 @@ public static class SetupMerge
             foreach (var item in ticked.Where(i => i.Kind == SetupKind.Recipe))
             {
                 var recipe = fileRecipes[item.Key["recipe:".Length..]];
-                var parsed = RecipeParser.Parse(recipe.Text);
-                if (parsed.Recipe is null)
-                {
-                    skippedRecipes.Add(recipe.Slug);   // parsed there, not here: a version gap, counted by not counting it
-                    continue;
-                }
-
+                var local = here.Installed.First(i => i.Recipe.Slug == recipe.Slug);
                 var state = Arriving(recipe.State, recipe.ExcludedUserIds, here.Accounts, out var droppedHere);
                 dropped += droppedHere;
-                writer.SaveRecipe(parsed.Recipe, recipe.Text, state);
+                // Counter names are what the last read saw on THIS PC, not a choice, so the file's absence keeps them.
+                writer.SaveState(recipe.Slug, state with { CounterNames = state.CounterNames ?? local.State.CounterNames });
+                if (catalog.ModeOf(recipe.Slug) is { } mode) modesTouched.Add(mode.Key);
                 recipes++;
             }
 
@@ -261,11 +306,6 @@ public static class SetupMerge
 
             if (clans > 0) writer.SaveSources(sources);
 
-            // Its own step: the reload reads every recipe file back and re-applies the sources, which is not the
-            // clans step and must not be named as it.
-            step = "reload";
-            writer.ReloadRecipes();
-
             step = "boards";
             var tickedBoards = ticked.Where(i => i.Kind == SetupKind.Board).Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
             if (tickedBoards.Count > 0)
@@ -284,23 +324,33 @@ public static class SetupMerge
             }
 
             step = "settings";
-            // Exactly the two that travel, laid over this PC's own record. The file's record is NOT written:
-            // SetupPack.FromFolder rebuilds it as new Settings(ResolveNames, ActiveRecipe), so StartOnOpen there
-            // is the record default, and saving it would turn this machine's choice off on every import.
-            writer.SaveSettings(here.Settings with
+            // The one setting that travels, and the mode switches when their item is ticked, laid over this PC's own
+            // record. The file's record is NOT written: SetupPack.FromFolder rebuilds it with StartOnOpen at the record
+            // default, and saving it would turn this machine's choice off on every import. ActiveRecipe is never
+            // written any more (A7). SaveSettings applies the switches live.
+            var modes = here.Settings.Modes;
+            if (ticked.Any(i => i.Kind == SetupKind.Mode) && plan.File.Settings.Modes is { } fileModes)
             {
-                ResolveNames = plan.File.Settings.ResolveNames,
-                ActiveRecipe = plan.File.Settings.ActiveRecipe,
-            });
+                var merged = new Dictionary<string, bool>(modes ?? new Dictionary<string, bool>(), StringComparer.Ordinal);
+                foreach (var (key, on) in fileModes)
+                {
+                    if (catalog.Find(key) is not null || catalog.Games.Any(g => string.Equals(g.Id, key, StringComparison.Ordinal))) merged[key] = on;
+                }
+
+                modes = merged;
+                modesApplied = true;
+            }
+
+            writer.SaveSettings(here.Settings with { ResolveNames = plan.File.Settings.ResolveNames, Modes = modes });
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, step, ex.GetType().Name,
-                skippedRecipes.Count == 0 ? null : skippedRecipes, Redact(ex.Message, writer.DataRoot));
+                skipped, Redact(ex.Message, writer.DataRoot), modesApplied, modesTouched.Count);
         }
 
         return new SetupApplied(recipes, clans, boards, KeptClans(plan), plan.File.Keys.Count, dropped, aside, null, null,
-            skippedRecipes.Count == 0 ? null : skippedRecipes);
+            skipped, ModesApplied: modesApplied, Modes: modesTouched.Count);
     }
 
     /// <summary>

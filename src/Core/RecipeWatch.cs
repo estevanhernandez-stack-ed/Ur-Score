@@ -27,6 +27,9 @@ public sealed record RecipeSnapshot(
 {
     public IReadOnlyDictionary<long, string> Unavailable { get; init; } = new Dictionary<long, string>();
 
+    /// <summary>Why each <see cref="Unavailable"/> account is, typed (<see cref="RecipeReading.UnavailableReasons"/>).</summary>
+    public IReadOnlyDictionary<long, UnavailableReason> UnavailableReasons { get; init; } = new Dictionary<long, UnavailableReason>();
+
     public IReadOnlyDictionary<string, string> StatMisses { get; init; } = new Dictionary<string, string>();
 
     public IReadOnlyDictionary<long, string> ClaimConflicts { get; init; } = new Dictionary<long, string>();
@@ -136,9 +139,9 @@ public sealed class RecipeWatch(
     Func<IReadOnlyList<string>>? myGroups = null,
     Func<FieldMetric, string, bool>? writeLabel = null)
 {
-    internal const string RecipeChangedDetail = "The recipe changed while it was being read, so nothing was sent this time.";
+    internal const string RecipeChangedDetail = "The reader changed while it was being read, so nothing was sent this time.";
 
-    internal const string RecipeChangedMidSendDetail = "The recipe changed while this reading was being sent, so the rest of it was not sent.";
+    internal const string RecipeChangedMidSendDetail = "The reader changed while this reading was being sent, so the rest of it was not sent.";
 
     internal const string WatchOnlyDetail = "Watching only: nothing is sent, and no account is kept.";
 
@@ -148,7 +151,7 @@ public sealed class RecipeWatch(
     /// Your accounts were in this read, and another source of the recipe read them first, so that one keeps them (ruling R6).
     /// Saying none were here named a cause that wasn't the cause (backlog S1-6.8).
     /// </summary>
-    internal const string NotRecordingKeptElsewhere = "Your accounts in this read are kept by another source of this recipe, which read them first.";
+    internal const string NotRecordingKeptElsewhere = "Your accounts in this read are kept by another source of this mode, which read them first.";
 
     internal const string NotRecordingEnded = "It has ended, and its final result is saved.";
 
@@ -157,7 +160,7 @@ public sealed class RecipeWatch(
 
     internal const string NotRecordingNothingRead = "Nothing was read this time.";
 
-    internal const string NotRecordingNoText = "The recipe text isn't known, so nothing is kept.";
+    internal const string NotRecordingNoText = "The reader's definition isn't known, so nothing is kept.";
 
     /// <summary>
     /// Said on the board whenever a threat number is held back. Names the cause, because the rules file is the
@@ -441,8 +444,11 @@ public sealed class RecipeWatch(
             // reading line — nothing was read — so the snapshot's "not recording" reason stands.
             if (reading.Outcome == ReadingOutcome.Idle && reading.Past.Count > 0)
             {
+                // A9: the same stop as above, again, because a backfill writes as surely as a reading does and a mode
+                // switched off after the fetch must leave no line behind it.
+                cancellationToken.ThrowIfCancellationRequested();
                 Backfill(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading,
-                    OwnedMap(readRecipe, readSource, reading, map));
+                    OwnedMap(readRecipe, readSource, reading, map), cancellationToken);
             }
 
             return snapshot;
@@ -463,7 +469,7 @@ public sealed class RecipeWatch(
         {
             // The field's own numbers are kept (FieldSummary): no clan is named and no account is matched. What
             // goes out is the clan-and-field numbers the user ticked, each with no subject at all (FieldMetrics).
-            var (fieldRecorded, fieldReason) = RecordField(readRecipe, readInputs, readText, readSource, trigger, reading);
+            var (fieldRecorded, fieldReason) = RecordField(readRecipe, readInputs, readText, readSource, trigger, reading, cancellationToken);
 
             var field = $"Read {reading.Groups.Count} groups.";
             try
@@ -488,7 +494,7 @@ public sealed class RecipeWatch(
         var conflicts = new Dictionary<long, string>();
         var owned = OwnedMap(readRecipe, readSource, reading, map, conflicts);
 
-        var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, map, owned);
+        var (recorded, notRecording) = Record(readRecipe, readInputs, readText, readTracked, readSource, trigger, reading, map, owned, cancellationToken);
 
         // What this cycle sends, filled as each send goes, so every snapshot below names only this read's sends (S1-F.5).
         var sentNow = new HashSet<(Guid AccountId, string Stat)>();
@@ -515,7 +521,7 @@ public sealed class RecipeWatch(
         if (mine.Count == 0)
         {
             var none = conflicts.Count > 0
-                ? $"Read {seen} row(s); your accounts in this read were already claimed by another source of this recipe."
+                ? $"Read {seen} row(s); your accounts in this read were already claimed by another source of this mode."
                 : $"Read {seen} row(s); none of them are your accounts.";
             if (reading.Detail is not null) none += " " + reading.Detail;
             return Kept(Snapshot(readRecipe, readSource, WatchState.NoMatches, none, seen, unresolved, reading, map));
@@ -844,7 +850,8 @@ public sealed class RecipeWatch(
     }
 
     private (bool Recorded, string? Reason) RecordField(
-        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, Source? readSource, string trigger, RecipeReading reading)
+        Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, Source? readSource, string trigger, RecipeReading reading,
+        CancellationToken cancellationToken)
     {
         if (book is null || readSource is null) return (false, null);
         if (string.IsNullOrWhiteSpace(readText)) return (false, NotRecordingNoText);
@@ -854,13 +861,15 @@ public sealed class RecipeWatch(
             MineAsSet(myGroups?.Invoke()));
         if (line is null) return (false, NotRecordingNoField);
 
+        // A9: immediately before the write, since asking which clans are yours above runs code that isn't this watch's.
+        cancellationToken.ThrowIfCancellationRequested();
         book.Append(line, readText);
         return (true, null);
     }
 
     private (bool Recorded, string? Reason) Record(
         Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, IReadOnlySet<string> readTracked, Source? readSource, string trigger,
-        RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlyDictionary<long, Guid> owned)
+        RecipeReading reading, IReadOnlyDictionary<long, Guid> map, IReadOnlyDictionary<long, Guid> owned, CancellationToken cancellationToken)
     {
         if (book is null || readSource is null) return (false, null);
 
@@ -870,7 +879,7 @@ public sealed class RecipeWatch(
 
         var context = ContextFor(readRecipe, readInputs, readText, readSource, trigger);
 
-        KeepFinals(context, reading, readTracked, owned, readText);
+        KeepFinals(context, reading, readTracked, owned, readText, cancellationToken);
 
         lock (_gate)
         {
@@ -890,6 +899,9 @@ public sealed class RecipeWatch(
             return (false, keptElsewhere ? NotRecordingKeptElsewhere : NotRecordingNoAccounts);
         }
 
+        // A9: a source switched off (its mode, or itself) while this line was being built is not recorded. The S1-8.3
+        // check after the fetch can't see a stop that lands between it and here; the line is the effect that matters.
+        cancellationToken.ThrowIfCancellationRequested();
         book.Append(line, readText);
         return (true, null);
     }
@@ -901,7 +913,7 @@ public sealed class RecipeWatch(
     /// </summary>
     private void Backfill(
         Recipe readRecipe, IReadOnlyDictionary<string, string> readInputs, string readText, IReadOnlySet<string> readTracked,
-        Source? readSource, string trigger, RecipeReading reading, IReadOnlyDictionary<long, Guid> owned)
+        Source? readSource, string trigger, RecipeReading reading, IReadOnlyDictionary<long, Guid> owned, CancellationToken cancellationToken)
     {
         if (book is null || finals is null || readSource is null || string.IsNullOrWhiteSpace(readText)) return;
 
@@ -912,7 +924,7 @@ public sealed class RecipeWatch(
             if (RecipeChanged(readRecipe, readInputs)) return;
         }
 
-        KeepFinals(ContextFor(readRecipe, readInputs, readText, readSource, trigger), reading, readTracked, owned, readText);
+        KeepFinals(ContextFor(readRecipe, readInputs, readText, readSource, trigger), reading, readTracked, owned, readText, cancellationToken);
     }
 
     /// <summary>
@@ -929,7 +941,8 @@ public sealed class RecipeWatch(
 
     /// <summary>Score book spec §6: every final this read makes due, written once and remembered in the index.</summary>
     private void KeepFinals(
-        ReadContext context, RecipeReading reading, IReadOnlySet<string> readTracked, IReadOnlyDictionary<long, Guid> owned, string readText)
+        ReadContext context, RecipeReading reading, IReadOnlySet<string> readTracked, IReadOnlyDictionary<long, Guid> owned, string readText,
+        CancellationToken cancellationToken)
     {
         if (finals is null || book is null) return;
 
@@ -938,6 +951,8 @@ public sealed class RecipeWatch(
 
         foreach (var final in FinalsPlanner.Plan(context, reading, owned, readTracked, finals, previous))
         {
+            // A9: before the index learns of it too, so a final not written is not one the index thinks it has.
+            cancellationToken.ThrowIfCancellationRequested();
             finals.Add(final);
             book.Append(final, readText);
         }
@@ -999,6 +1014,7 @@ public sealed class RecipeWatch(
         return new(state, detail, lines, unresolved, seen, reading?.Context ?? context, reading?.Rows, reading?.Headline)
         {
             Unavailable = reading?.Unavailable ?? new Dictionary<long, string>(),
+            UnavailableReasons = reading?.UnavailableReasons ?? new Dictionary<long, UnavailableReason>(),
             StatMisses = reading?.StatMisses ?? new Dictionary<string, string>(),
             CellMisses = reading is null || map is null
                 ? new Dictionary<(long UserId, string Stat), string>()

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using Labs626.UrScore.Composition;
+using Labs626.UrScore.Games;
 
 namespace Labs626.UrScore.UI;
 
@@ -20,8 +21,12 @@ public partial class DiagnosticsPage : UserControl, ISetupPage
     public void Refresh()
     {
         _rows = DiagnosticsModel.Sources(_services.Installed, _services.Sources, _services.Latest, _services.LastReadAt,
-            _services.Running, _services.KnownAccounts, DateTimeOffset.UtcNow, _services.Redactor);
+            _services.Running, _services.KnownAccounts, DateTimeOffset.UtcNow, _services.Redactor,
+            slug => ReaderNames.For(slug, _services.Catalog, _services.Installed), _services.OffModeOf);
         SourcesDiagnostics.ItemsSource = _rows;
+        var kept = DiagnosticsModel.NotInAModeLines(_services.Orphans, _services.RecipeProblems);
+        NotInAModeList.ItemsSource = kept;
+        NotInAModeSection.Visibility = kept.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         DiagnosticsEmptyLine.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 

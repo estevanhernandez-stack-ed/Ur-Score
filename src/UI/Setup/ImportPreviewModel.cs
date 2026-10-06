@@ -24,13 +24,14 @@ public sealed class ImportPreviewRow(SetupItem item) : INotifyPropertyChanged
 
     public string Name => Item.Name;
 
-    public string Text => !CanTick ? "needs its recipe" : Item.Outcome switch
+    public string Text => !CanTick ? "needs its mode" : Item.Outcome switch
     {
         SetupOutcome.Add => "Add — " + Item.Note,
         SetupOutcome.Update => "Update — " + Item.Note,
         SetupOutcome.Replace => "Replace — " + Item.Note,
         SetupOutcome.Same => "Same as here",
         SetupOutcome.Kept => "Kept — " + Item.Note,
+        SetupOutcome.Skipped => "Skipped — " + Item.Note,
         _ => Item.Note,
     };
 
@@ -51,9 +52,9 @@ public static class ImportPreviewModel
     /// (<c>SetupMerge.Apply</c>'s settings step always runs). Said out loud, because a preview whose every line has
     /// a tick implies that everything importing does has one.
     /// </summary>
-    public const string SettingsNote = "Resolve names and the active recipe come with the file, whatever you tick.";
+    public const string SettingsNote = "Resolve names comes with the file, whatever you tick.";
 
-    public const string AsideNote = "Your clans, recipes, boards and settings here are copied aside first, dated, in case.";
+    public const string AsideNote = "Your clans, ticks, boards and settings here are copied aside first, dated, in case.";
 
     public static IReadOnlyList<ImportPreviewGroup> Groups(SetupMergePlan plan)
     {
@@ -61,7 +62,7 @@ public static class ImportPreviewModel
         Regrey(rows, plan);
         (SetupKind Kind, string Heading)[] order =
         [
-            (SetupKind.Recipe, "RECIPES"), (SetupKind.Clan, "CLANS"), (SetupKind.Board, "BOARDS"),
+            (SetupKind.Recipe, "MODES"), (SetupKind.Clan, "CLANS"), (SetupKind.Board, "BOARDS"), (SetupKind.Mode, "MODE SWITCHES"),
             (SetupKind.Key, "KEYS TO ENTER AGAIN"), (SetupKind.Stats, "STATS"),
         ];
         return [.. order.Select(o => new ImportPreviewGroup(o.Heading, rows.Where(r => r.Item.Kind == o.Kind).ToList())).Where(g => g.Rows.Count > 0)];
@@ -89,7 +90,7 @@ public static class ImportPreviewModel
         var aside = applied.AsideFolder is { } folder ? $" Your previous setup is in {System.IO.Path.GetFileName(folder)}." : "";
         if (applied.FailedStep is { } step)
         {
-            var done = Parts(applied.Recipes, applied.Clans, applied.Boards);
+            var done = Parts(applied.Modes, applied.Clans, applied.Boards);
             // Spec §4: the redacted message on screen, the exception's type to the trail. Its own full stop comes
             // off, because a sentence carries on after it here.
             var why = applied.FailureMessage?.TrimEnd().TrimEnd('.') is { Length: > 0 } message
@@ -100,26 +101,21 @@ public static class ImportPreviewModel
                 : $"Imported {Join(done)}, then the {step} could not be written{why}; what was imported before that stands.{aside}";
         }
 
-        var changed = Parts(applied.Recipes, applied.Clans, applied.Boards);
+        var changed = Parts(applied.Modes, applied.Clans, applied.Boards);
         var parts = new List<string> { changed.Count == 0 ? "Nothing new in the setup" : "Imported " + Join(changed) };
         if (applied.KeptClans > 0) parts.Add(applied.KeptClans == 1 ? "1 clan kept as it was" : $"{applied.KeptClans} clans kept as they were");
-        if (applied.SkippedRecipes is { Count: > 0 } skipped)
-        {
-            parts.Add(skipped.Count == 1
-                ? $"1 recipe skipped as it did not parse here ({skipped[0]})"
-                : $"{skipped.Count} recipes skipped as they did not parse here ({string.Join(", ", skipped)})");
-        }
-
-        if (applied.Keys > 0) parts.Add(applied.Keys == 1 ? "1 key to enter in Setup › Recipes" : $"{applied.Keys} keys to enter in Setup › Recipes");
+        if (applied.ModesApplied) parts.Add("mode switches applied");
+        if (applied.SkippedItems > 0) parts.Add($"{applied.SkippedItems} {(applied.SkippedItems == 1 ? "item" : "items")} skipped: not part of any mode");
+        if (applied.Keys > 0) parts.Add(applied.Keys == 1 ? "1 key to enter" : $"{applied.Keys} keys to enter");
         var line = string.Join("; ", parts) + ".";
         if (stats.Message.Length > 0) line += " Then " + char.ToLowerInvariant(stats.Message[0]) + stats.Message[1..];
         return line + aside;
     }
 
-    private static List<string> Parts(int recipes, int clans, int boards)
+    private static List<string> Parts(int modes, int clans, int boards)
     {
         var parts = new List<string>();
-        if (recipes > 0) parts.Add(recipes == 1 ? "1 recipe" : $"{recipes} recipes");
+        if (modes > 0) parts.Add(modes == 1 ? "1 mode" : $"{modes} modes");
         if (clans > 0) parts.Add(clans == 1 ? "1 clan" : $"{clans} clans");
         if (boards > 0) parts.Add(boards == 1 ? "1 board" : $"{boards} boards");
         return parts;

@@ -35,7 +35,7 @@ public static class DiagnosticsModel
         WatchState.HostDown => "RoRoRo is not running.",
         WatchState.Rejected => "RoRoRo refused the report.",
         WatchState.RateLimited => "The source asked Ur Score to slow down.",
-        WatchState.SignInRequired => "The source wants signing in, which recipes cannot do.",
+        WatchState.SignInRequired => "The source wants signing in, which Ur Score cannot do.",
         WatchState.KeyMissing => "A key is needed.",
         WatchState.KeyRejected => "The source rejected the key.",
         WatchState.Showing => "Reading. No stat is set to send to RoRoRo.",
@@ -60,7 +60,8 @@ public static class DiagnosticsModel
 
     public static IReadOnlyList<SourceDiagnostic> Sources(
         IReadOnlyList<InstalledRecipe> installed, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest,
-        Func<string, DateTimeOffset?> lastRead, bool running, IReadOnlyList<HostAccount> accounts, DateTimeOffset now, Redactor redactor)
+        Func<string, DateTimeOffset?> lastRead, bool running, IReadOnlyList<HostAccount> accounts, DateTimeOffset now, Redactor redactor,
+        Func<string, string>? readerName = null, Func<string, string?>? offModeName = null)
     {
         var rows = new List<SourceDiagnostic>();
 
@@ -70,9 +71,11 @@ public static class DiagnosticsModel
             var snapshot = latest.GetValueOrDefault(source.Id);
             var last = lastRead(source.Id);
             var conflicts = snapshot?.RecipeSlug == source.Recipe
-                ? redactor.Redact(ClaimConflictText(recipe, snapshot, sources, accounts)) : "";
+                ? redactor.Redact(ClaimConflictText(recipe, snapshot, sources, accounts, readerName)) : "";
 
+            var offMode = offModeName?.Invoke(source.Recipe);
             var state = !source.Enabled ? "Switched off."
+                : offMode is not null ? $"{offMode} is off, so it isn't read."
                 : snapshot is null ? (running ? "Waiting for its first read." : "Not started.")
                 : snapshot.State == WatchState.NoMatches && conflicts.Length > 0
                     ? (running ? "Your accounts were claimed by another source in the last read." : "Stopped. Last read: your accounts were claimed by another source.")
@@ -91,7 +94,7 @@ public static class DiagnosticsModel
 
             rows.Add(new SourceDiagnostic(
                 source.Id,
-                recipe is null ? $"{source.Recipe} (not installed)" : ScoreBookModel.SourceLabel(recipe, source),
+                recipe is null ? $"{source.Recipe} (not installed)" : ScoreBookModel.SourceLabel(recipe, source, readerName?.Invoke(recipe.Slug)),
                 state,
                 redactor.Redact(snapshot?.Detail),
                 last is null ? "never" : $"{StatText.Span(now - last.Value)} ago",
@@ -106,7 +109,7 @@ public static class DiagnosticsModel
     }
 
     public static string ClaimConflictText(Recipe? recipe, RecipeSnapshot? snapshot, IReadOnlyList<Source> sources,
-        IReadOnlyList<HostAccount> accounts)
+        IReadOnlyList<HostAccount> accounts, Func<string, string>? readerName = null)
     {
         if (snapshot is null) return "";
 
@@ -116,12 +119,22 @@ public static class DiagnosticsModel
             if (!snapshot.ClaimConflicts.TryGetValue(account.RobloxUserId, out var ownerId)) continue;
             var owner = sources.FirstOrDefault(source => source.Id == ownerId && source.Recipe == snapshot.RecipeSlug);
             var name = owner is not null && recipe is not null
-                ? ScoreBookModel.SourceLabel(recipe, owner) : "a source no longer configured";
+                ? ScoreBookModel.SourceLabel(recipe, owner, readerName?.Invoke(recipe.Slug)) : "a source no longer configured";
             parts.Add($"Last read: {account.DisplayName} was skipped for recording and sending here because {name} held the account's claim. This does not confirm a successful send or current membership.");
         }
 
         return string.Join(Environment.NewLine, parts);
     }
+
+    /// <summary>The section for what no mode reads: readers Ur Score kept in the data folder, and files it could not read.</summary>
+    public const string NotInAMode = "Not part of any mode (kept, not read)";
+
+    /// <summary>
+    /// One line per orphan, by name and slug (the slug is what the file is called, so the line can be matched to a file), then
+    /// one per problem as "Couldn't read: ...". Empty when there is nothing to say, and then the section is not drawn.
+    /// </summary>
+    public static IReadOnlyList<string> NotInAModeLines(IReadOnlyList<InstalledRecipe> orphans, IReadOnlyList<string> problems) =>
+        [.. orphans.Select(o => $"{o.Recipe.Name} ({o.Recipe.Slug})"), .. problems.Select(p => $"Couldn't read: {p}")];
 
     /// <summary>Stat-wide misses, then each of your accounts' cell misses by display name. Another row's id is never named.</summary>
     public static string Misses(Recipe? recipe, RecipeSnapshot? snapshot, IReadOnlyList<HostAccount> accounts)

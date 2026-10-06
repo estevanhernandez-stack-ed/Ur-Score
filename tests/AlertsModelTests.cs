@@ -42,6 +42,25 @@ public class AlertsModelTests
         Assert.Equal(new PolicyItem("Pet Sim 99 profile", expected, "Sent 3, dropped 1 this session."), item);
     }
 
+    /// <summary>
+    /// Review round 2: an off mode's reader has no watch, so whatever its ticks say it sends nothing, and the card says
+    /// that with the mode's name. The decoy is a reader ticked to send that would otherwise get the full policy sentence.
+    /// </summary>
+    [Fact]
+    public void AnOffModesReaderSaysItsModeIsOffAndSendsNothing()
+    {
+        var state = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["diamonds"] = new(Send: true, MetricId: "ps99.diamonds") });
+        var installed = new InstalledRecipe(Profile, "", state);
+
+        var off = Assert.Single(AlertsModel.Policies([installed], [Main, Alt], [], resolveNames: false, _ => (0, 0, 0),
+            offModeName: slug => slug == Profile.Slug ? "Profile" : null));
+        var on = Assert.Single(AlertsModel.Policies([installed], [Main, Alt], [], resolveNames: false, _ => (0, 0, 0),
+            offModeName: _ => null));
+
+        Assert.Equal("Profile is off, so nothing is sent.", off.Line);
+        Assert.NotEqual(off.Line, on.Line);
+    }
+
     [Fact]
     public void ARecipeYouOnlyWatchSaysItSendsNothing()
     {
@@ -136,7 +155,10 @@ public class AlertsModelTests
 
         var item = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main, Alt], [], resolveNames: false, _ => (7, 0, 0)));
 
-        Assert.Equal("Pet Sim 99 top clans", item.RecipeName);
+        Assert.Equal("Pet Sim 99 top clans", item.ModeName);
+
+        var named = Assert.Single(AlertsModel.Policies([new InstalledRecipe(clans, "", state)], [Main, Alt], [], resolveNames: false, _ => (7, 0, 0), readerName: _ => "Battle · clans list"));
+        Assert.Equal("Battle · clans list", named.ModeName);
         Assert.Contains("clan.standing.place", item.Line, StringComparison.Ordinal);
         Assert.Contains("clan.standing.pace-needed", item.Line, StringComparison.Ordinal);
         Assert.Contains("with no account attached", item.Line, StringComparison.Ordinal);

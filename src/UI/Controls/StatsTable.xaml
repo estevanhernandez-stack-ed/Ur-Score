@@ -19,7 +19,11 @@
     <StackPanel>
         <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
                    Text="Show puts a stat on your board and in your score book. Send also reports it to RoRoRo, where alerts still need a rule." />
-        <TextBox x:Name="StatsSearchBox" TextChanged="OnSearchChanged" AutomationProperties.Name="Search stats" />
+        <Grid x:Name="StatsSearchArea">
+            <TextBox x:Name="StatsSearchBox" TextChanged="OnSearchChanged" AutomationProperties.Name="Search stats" />
+            <TextBlock x:Name="StatsSearchHint" Style="{StaticResource Muted}" Text="Search stats" IsHitTestVisible="False"
+                       VerticalAlignment="Center" Margin="10,0,0,0" AutomationProperties.Name="" />
+        </Grid>
         <TextBlock x:Name="ShowingLine" Style="{StaticResource Muted}" Margin="0,4,0,0" Visibility="Collapsed" />
 
         <Grid Margin="8,10,8,4">
@@ -46,7 +50,7 @@
                  ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                  KeyboardNavigation.TabNavigation="Continue"
-                 AutomationProperties.Name="Stats this recipe offers">
+                 AutomationProperties.Name="Stats this mode offers">
             <ListBox.ItemContainerStyle>
                 <Style TargetType="ListBoxItem">
                     <!-- Each row is named for UI Automation by its stat's label; without this a screen reader read the

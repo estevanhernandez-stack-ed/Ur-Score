@@ -223,8 +223,8 @@ function Start-UrScore([int]$seconds = 60) {
     if (-not $board) { throw 'the board window never appeared' }
     # Start is enabled once the score book has been read.
     Wait-Until { $start = Find-ByAutomationId (Get-BoardWindow) 'StartStopButton'; $start -and $start.Current.IsEnabled } $seconds | Out-Null
-    # Every walk's first move from here is Setup, directly or through Open-SetupPage / Complete-ClanImport /
-    # Initialize-ClanBoard: wait until it is actually in the tree before handing the window back, so an early
+    # Every walk's first move from here is Setup, directly or through Open-SetupPage / Initialize-ClanBoard:
+    # wait until it is actually in the tree before handing the window back, so an early
     # caller can't race a window UI Automation can't see the children of yet (the bug behind
     # walk-starter-board.ps1's one-off "element not found" before its first check).
     $hasSetup = Wait-Until { [bool](Find-ByAutomationId (Get-BoardWindow) 'SetupButton') } $seconds
@@ -298,6 +298,80 @@ function Select-FirstSearchMatch($root, [string]$searchLabel, [string]$query, [s
     throw "no search match for '$query' under '$searchLabel'"
 }
 
+# The file picker, the data folder's sources and the Setup pages every walk needs. (The first two lived in uia-import.ps1
+# until 0.7.0 retired the import window; the picker is still used by Score book's export and import.)
+if (-not ('UrWin32Msg' -as [type])) {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class UrWin32Msg {
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+}
+"@
+}
+
+# Types a path into the Windows file picker that is open under this title (Open or Save alike) and presses its
+# main button. The common dialog's classic controls surface only as panes to this UIA client, so it is driven by
+# handle: the file name text (WM_SETTEXT into the Edit - 1148 in an Open dialog, 1001 in a Save dialog, probed
+# 2026-09-22), then the button (BM_CLICK on button 1, Open or Save).
+function Complete-FileDialog([string]$titlePattern, [string]$path) {
+    $dlg = Wait-UrWindow $titlePattern 20
+    if (-not $dlg) { throw "the file picker '$titlePattern' did not open" }
+    Start-Sleep -Milliseconds 800
+    $all = $dlg.FindAll($TS::Descendants, $Cond::TrueCondition)
+    $edit = $all | Where-Object { $_.Current.AutomationId -in @('1148', '1001') -and $_.Current.ClassName -eq 'Edit' } | Select-Object -First 1
+    $open = $all | Where-Object { $_.Current.AutomationId -eq '1' -and $_.Current.ClassName -eq 'Button' } | Select-Object -First 1
+    if (-not $edit -or -not $open) { throw 'file picker controls not found' }
+    [UrWin32Msg]::SendMessage([IntPtr]$edit.Current.NativeWindowHandle, 0x000C, [IntPtr]::Zero, $path) | Out-Null
+    Start-Sleep -Milliseconds 300
+    [UrWin32Msg]::PostMessage([IntPtr]$open.Current.NativeWindowHandle, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+    Start-Sleep -Seconds 2
+}
+
+# ConvertFrom-Json's return value is not reliably enumerable as an array on every PowerShell version when
+# the JSON is an array of exactly one element -- foreach always yields one object per element either way,
+# in Windows PowerShell 5.1 and in PowerShell 7, so this never depends on that.
+function Read-Sources {
+    $file = Join-Path $UrData 'sources.json'
+    if (-not (Test-Path $file)) { return @() }
+    $text = Get-Content $file -Raw
+    if (-not $text.Trim()) { return @() }
+    $parsed = $text | ConvertFrom-Json
+    foreach ($s in $parsed) { $s }
+}
+
+function Get-RoleText($source) { "$($source.role)".ToLowerInvariant() }
+
+# The game page, Setup's first: the game switch, the mode switches, each mode's reads line and Battle's clans.
+function Open-GamePage { Open-SetupPage 'Pet Sim 99' }
+
+# Whether a check box or toggle is on. False for a missing element, so a Check on it fails rather than throws.
+function Test-Toggled($el) {
+    if (-not $el) { return $false }
+    return ($el.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On)
+}
+
+# The title of the page Setup is showing, from the selected item of its left list; '(none)' when nothing is selected.
+function Get-SetupPageTitle($setup) {
+    $nav = Find-ByAutomationId $setup 'SetupNav'
+    if (-not $nav) { return '(none)' }
+    $isItem = New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, $CT::ListItem)
+    $selected = @($nav.FindAll($TS::Children, $isItem)) |
+        Where-Object { $_.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected } |
+        Select-Object -First 1
+    if ($selected) { $selected.Current.Name } else { '(none)' }
+}
+
+# Presses Test now and waits for the read to END: the button is disabled for exactly as long as its read runs, so wait for
+# off, then for on (a state-line check right after the press would match the in-flight "Reading every source once...").
+# True when the button came back.
+function Wait-UrReadOnce([int]$seconds = 240) {
+    Invoke-Element (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton')
+    $null = Wait-Until { -not (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } 10
+    return (Wait-Until { (Find-ByAutomationId (Get-BoardWindow) 'TestNowButton').Current.IsEnabled } $seconds)
+}
+
 # Moves your data folder aside so a walk starts clean. Returns the backup path, or $null when you had none.
 # Seed a control data folder into the live path with every outbound path switched off, and PROVE it before the
 # app is allowed to start.
@@ -324,7 +398,9 @@ function Copy-UrControlData([string]$control) {
     if (Test-Path $settingsPath) {
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
         $settings | Add-Member -NotePropertyName 'startOnOpen' -NotePropertyValue $false -Force
-        $settings | Add-Member -NotePropertyName 'settingsVersion' -NotePropertyValue 2 -Force
+        # 3 marks the modes decision as made (0.7.0): a lower version runs the upgrade map, which turns a mode on only
+        # when a recipe file of its readers sits in the folder, so a seeded folder at 2 would open with every mode off.
+        $settings | Add-Member -NotePropertyName 'settingsVersion' -NotePropertyValue 3 -Force
         $settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath -Encoding UTF8
     } else {
         # A control folder with no settings.json of its own still needs one seeded off, same as a fresh folder.
@@ -354,7 +430,7 @@ function Assert-UrDataSendsNothing {
     if (Test-Path $settingsPath) {
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
         if ($settings.startOnOpen) { $problems += 'settings.json still has startOnOpen true' }
-        if (-not $settings.settingsVersion -or $settings.settingsVersion -lt 2) { $problems += 'settings.json has no settingsVersion 2, so opening would switch startOnOpen on' }
+        if (-not $settings.settingsVersion -or $settings.settingsVersion -lt 3) { $problems += 'settings.json has no settingsVersion 3, so opening would run the upgrade and set startOnOpen and the modes by its rules' }
     } else {
         $problems += 'no settings.json, so opening would write one with startOnOpen on'
     }
@@ -376,13 +452,19 @@ function Assert-UrDataSendsNothing {
     }
 }
 
-# 0.6 reads on open by default and migrates any settings file without a version to on (BC1). Any walk that hands
-# Start-UrScore a folder of its own (fresh from New-Item, not seeded by Copy-UrControlData) must write this exact
+# 0.6 reads on open by default and migrates any settings file without a version to on (BC1); 0.7.0 adds the modes upgrade,
+# which runs for any file below settingsVersion 3 and would turn every mode off for a folder with no recipe files. Any walk
+# that hands Start-UrScore a folder of its own (fresh from New-Item, not seeded by Copy-UrControlData) must write this exact
 # line first, or a bare Settings.Load sees no file, writes its defaults, and startOnOpen comes back true under it.
 # One function so every caller writes the identical line rather than each keeping its own copy to drift out of
 # sync (2026-09-23 review: walk-score-book.ps1 built a second $UrData by hand and skipped this).
-function Initialize-UrSettingsOff {
-    Set-Content (Join-Path $UrData 'settings.json') -Encoding UTF8 -Value '{ "resolveNames": true, "activeRecipe": null, "startOnOpen": false, "settingsVersion": 2 }'
+#
+# -ModesOff names mode switches to write off ('pet-sim-99/profile'): how a walk keeps the Battle-only board the older walks
+# were written against, since a fresh 0.7.0 folder has Profile on and so an Alts tab beside Battle.
+function Initialize-UrSettingsOff([string[]]$ModesOff = @()) {
+    $modes = ''
+    if ($ModesOff.Count -gt 0) { $modes = ', "modes": { ' + ((@($ModesOff) | ForEach-Object { '"' + $_ + '": false' }) -join ', ') + ' }' }
+    Set-Content (Join-Path $UrData 'settings.json') -Encoding UTF8 -Value ('{ "resolveNames": true, "startOnOpen": false, "settingsVersion": 3' + $modes + ' }')
 }
 
 # The .smoke-backup-* folders beside the data folder, oldest first: a walk that was killed mid-run leaves one
@@ -393,7 +475,7 @@ function Get-UrLeftoverBackups {
     return @(Get-ChildItem -Path $parent -Directory -Filter "$leaf.smoke-backup-*" -ErrorAction SilentlyContinue | Sort-Object Name)
 }
 
-function Move-UrDataAside {
+function Move-UrDataAside([string[]]$ModesOff = @()) {
     Stop-UrScore
     # A leftover backup means the last walk never put your data back (S1-16.1). Moving aside again would bury it
     # under a second backup and run the walk on the last walk's scratch, so this stops and says what to do instead.
@@ -411,7 +493,7 @@ function Move-UrDataAside {
     try {
         New-Item -ItemType Directory -Force $UrData | Out-Null
         # A walk decides when reading starts, so its folder is born with start-on-open off and already migrated.
-        Initialize-UrSettingsOff
+        Initialize-UrSettingsOff -ModesOff $ModesOff
     } catch {
         if ($backup) { Rename-Item $backup (Split-Path $UrData -Leaf) }
         throw

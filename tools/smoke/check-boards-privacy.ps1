@@ -9,7 +9,7 @@ if (-not (Test-Path $boardsFile)) { "No boards.json in $DataFolder yet."; exit 2
 if (-not (Test-Path $accountsFile)) { "No accounts.json in $DataFolder, so there is nothing to check. Start RoRoRo while Ur Score runs, then check again."; exit 2 }
 
 # Windows PowerShell 5.1 writes a parsed JSON array down the pipeline as one object; foreach over the parenthesized
-# read unrolls it (see Read-Sources in uia-import.ps1), so every id is its own string and not one joined string.
+# read unrolls it (see Read-Sources in uia.ps1), so every id is its own string and not one joined string.
 $mine = @(foreach ($account in (Get-Content $accountsFile -Raw | ConvertFrom-Json)) {
     if ($account -and $account.robloxUserId -and [string]$account.robloxUserId -ne '0') { [string]$account.robloxUserId }
 })

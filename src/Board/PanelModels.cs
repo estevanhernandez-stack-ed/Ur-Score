@@ -23,8 +23,11 @@ public sealed record PanelSettings(
 /// </summary>
 public sealed record PanelHead(
     string Title, string Subtitle = "", SourceRole? ChipRole = null, bool Overdue = false, string? Stale = null, string Note = "",
-    bool Remembered = false)
+    bool Remembered = false, string? TurnOnMode = null)
 {
+    /// <summary>A panel of an off mode carries that mode's key, so its Turn on button knows which switch to flip.</summary>
+    public bool HasTurnOn => TurnOnMode is not null && Stale is not null;
+
     public string Chip => ChipRole is { } role ? PanelText.Chip(role) : "";
 
     public bool HasBody => Stale is null;
@@ -38,6 +41,9 @@ public sealed record PanelHead(
     public bool HasNote => Note.Length > 0 && Stale is null;
 }
 
+/// <summary>A reader that can't show right now: <paramref name="ModeKey"/> is its off mode's switch key, or null for a reader no mode names.</summary>
+public sealed record ReaderOff(string? ModeKey, string ModeName = "");
+
 /// <summary>Everything live a panel may use. Other players' rows live here in memory only.</summary>
 public sealed record LiveBoard(
     IReadOnlyList<Source> Sources,
@@ -49,8 +55,31 @@ public sealed record LiveBoard(
     bool Running,
     IReadOnlyDictionary<long, string>? Avatars = null,
     IReadOnlyDictionary<string, RecipeSnapshot>? Remembered = null,
-    IReadOnlyDictionary<string, string>? Icons = null)
+    IReadOnlyDictionary<string, string>? Icons = null,
+    IReadOnlyDictionary<string, ReaderOff>? Offs = null,
+    IReadOnlyDictionary<string, string>? Labels = null,
+    IReadOnlyDictionary<string, IReadOnlySet<long>>? Members = null)
 {
+    /// <summary>What a reader is called to a person: its mode's name (<see cref="Games.ReaderNames"/>), else the recipe's own name where the app gave no labels.</summary>
+    public string LabelOf(Recipe recipe) => Labels?.GetValueOrDefault(recipe.Slug) ?? recipe.Name;
+
+    /// <summary>
+    /// Why a panel of these settings can't show: its reader's mode is off ("Battle is off." with a Turn on button), or its
+    /// reader is part of no mode ("Not part of any mode.", no button). Null when the panel's reader is on. The reader is the
+    /// settings' recipe, else its source's recipe, else the first race line's.
+    /// </summary>
+    public PanelHead? OffHead(PanelSettings settings, string title)
+    {
+        if (Offs is not { Count: > 0 }) return null;
+
+        var slug = settings.Recipe.Length > 0
+            ? settings.Recipe
+            : FindSource(settings.SourceId ?? settings.SourceIds?.FirstOrDefault())?.Recipe;
+        if (slug is null || !Offs.TryGetValue(slug, out var off)) return null;
+
+        return new PanelHead(title, Stale: off.ModeKey is null ? PanelText.NoMode : PanelText.ModeIsOff(off.ModeName), TurnOnMode: off.ModeKey);
+    }
+
     public DateTimeOffset Now => Time.GetUtcNow();
 
     /// <summary>
@@ -106,19 +135,38 @@ public sealed record LiveBoard(
     public RecipeSnapshot? LiveOf(string sourceId) => Snapshots.GetValueOrDefault(sourceId);
 
     /// <summary>
-    /// The role a panel's chip wears for a source. A clan added under "your accounts are in" is called yours only while the
-    /// read in hand doesn't contradict it: when this session's reading has members and none of them is one of your
-    /// accounts, it is a clan you are watching, and the chip says so rather than "yours" above "Your accounts 0 of 57". With
-    /// no members read (not yet read, or between battles) there is no evidence either way, so it keeps what you chose.
-    /// Only a live reading can prove "none of yours": a remembered one holds your own accounts alone (plan A40). Deciding
-    /// membership from the clan's roster, which is there between battles too, is the larger change in the backlog.
+    /// Which of your accounts <paramref name="sourceId"/>'s members list held at its last read, or null while it hasn't been
+    /// read (backlog V3-S.20). Null is "unknown", never "none": a caller falls back to battle contributions then.
     /// </summary>
-    public SourceRole ChipRole(Source source) =>
-        source.Role == SourceRole.Mine
-        && LiveOf(source.Id)?.Rows is { Count: > 0 } rows
-        && !rows.Any(r => MyUserIds.Contains(r.UserId))
-            ? SourceRole.Watch
-            : source.Role;
+    public IReadOnlySet<long>? MembersOf(string sourceId) => Members?.GetValueOrDefault(sourceId);
+
+    /// <summary>
+    /// Whether one of your accounts is in <paramref name="sourceId"/>: on its members list, or among the rows a read brought
+    /// (<see cref="SnapshotOf"/>, so a remembered reading counts). The list is the answer to "who is in this clan"; the rows
+    /// stay a second witness, because an account that scored this battle was in the clan whatever a later list says.
+    /// </summary>
+    public bool Holds(string sourceId, long userId) =>
+        userId != 0
+        && (MembersOf(sourceId)?.Contains(userId) == true || SnapshotOf(sourceId)?.Rows?.Any(r => r.UserId == userId) == true);
+
+    /// <summary>
+    /// The role a panel's chip wears for a source. A clan added under "your accounts are in" is called yours only while the
+    /// evidence doesn't contradict it (V3-S.19). Its members list is that evidence when it has been read (V3-S.20): none of
+    /// your accounts on it, and none of them scoring for it this session, makes it a clan you are watching, battle or not.
+    /// With no list read, the battle read decides as before: this session's reading has members and none of them is yours.
+    /// With neither (not yet read, or between battles) there is no evidence, so it keeps what you chose. Only a live
+    /// reading can prove "none of yours": a remembered one holds your own accounts alone (plan A40).
+    /// </summary>
+    public SourceRole ChipRole(Source source)
+    {
+        if (source.Role != SourceRole.Mine) return source.Role;
+
+        var rows = LiveOf(source.Id)?.Rows;
+        var scoring = rows?.Any(r => MyUserIds.Contains(r.UserId)) == true;
+        if (MembersOf(source.Id) is { } members) return scoring || members.Any(MyUserIds.Contains) ? SourceRole.Mine : SourceRole.Watch;
+
+        return rows is { Count: > 0 } && !scoring ? SourceRole.Watch : SourceRole.Mine;
+    }
 
     /// <summary>
     /// Whether a reading came back with numbers at all. A read that failed carries its state and its reason and

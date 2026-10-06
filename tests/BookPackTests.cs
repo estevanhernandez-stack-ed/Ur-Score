@@ -24,7 +24,7 @@ public class BookPackTests
         var manifest = BookPack.Write(book, file, "0.5.4", Now);
         var opened = BookPack.Open(file);
 
-        Assert.Equal((BookPack.Version, "0.5.4", Now), (manifest.V, manifest.App, manifest.TakenAt));
+        Assert.Equal((BookPack.StatsOnlyVersion, "0.5.4", Now), (manifest.V, manifest.App, manifest.TakenAt));   // no setup: the shape 0.6.3 still reads
         Assert.Equal(written.Lines - written.Finals, manifest.Readings);
         Assert.Equal(written.Finals, manifest.Finals);
         Assert.Equal("", opened.Problem);
@@ -76,7 +76,7 @@ public class BookPackTests
         var newer = Path.Combine(dir.Path, "newer.zip");
         using (var zip = ZipFile.Open(newer, ZipArchiveMode.Create))
         {
-            WriteEntry(zip, BookPack.ManifestName, """{"v":3,"takenAt":"2026-09-22T12:00:00+00:00","app":"9.0.0","readings":0,"finals":0}""");
+            WriteEntry(zip, BookPack.ManifestName, """{"v":4,"takenAt":"2026-09-22T12:00:00+00:00","app":"9.0.0","readings":0,"finals":0}""");
         }
 
         var first = BookPack.Open(noManifest);
@@ -140,7 +140,8 @@ public class BookPackTests
         var opened = BookPack.Open(withSetup);
         var openedPlain = BookPack.Open(without);
 
-        Assert.Equal((2, true), (manifest.V, manifest.Setup));
+        Assert.Equal((3, true), (manifest.V, manifest.Setup));   // a setup now says v3: 0.6.3 refuses it as newer (A7)
+        Assert.Equal((2, false), (plain.V, plain.Setup));
         Assert.False(plain.Setup);
         Assert.NotNull(opened.Setup);
         var back = Assert.Single(opened.Setup!.Sources);
@@ -150,6 +151,26 @@ public class BookPackTests
         Assert.Null(openedPlain.Setup);
         BookPack.Discard(opened);
         BookPack.Discard(openedPlain);
+    }
+
+    /// <summary>
+    /// 0.6.3 refuses anything above v:2 ("exported by a newer Ur Score"), which is how a setup without reader text
+    /// keeps the old version from misreading it. Pinned against the old reader's own rule, not just our constant.
+    /// </summary>
+    [Fact]
+    public void AFileWithASetupIsNewerThanWhatTheLastReleaseReads()
+    {
+        using var dir = TempDir.Create("urscore-pack");
+        var book = Path.Combine(dir.Path, "scorebook");
+        BookGenerator.Write(book, clanSources: 1, days: 1);
+        var file = Path.Combine(dir.Path, "with.zip");
+        BookPack.Write(book, file, "0.7.0", Now, new SetupPack([], [BoardFixtures.MainClan], [], Labs626.UrScore.Core.Settings.Defaults, []));
+
+        const int lastReleaseReads = 2;
+        var opened = BookPack.Open(file);
+
+        Assert.True(opened.Manifest!.V > lastReleaseReads);
+        BookPack.Discard(opened);
     }
 
     [Fact]

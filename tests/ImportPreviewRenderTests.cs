@@ -45,7 +45,7 @@ public class ImportPreviewRenderTests
             var names = all.Select(p => p.GetName()).ToList();
             Assert.Contains("Import CCGP", names);
             Assert.Contains("Import K0i2", names);
-            Assert.Contains("RECIPES", names);
+            Assert.Contains("MODES", names);
             Assert.Contains("CLANS", names);
             Assert.Contains("KEYS TO ENTER AGAIN", names);
             Assert.Contains("STATS", names);
@@ -100,15 +100,15 @@ public class ImportPreviewRenderTests
     });
 
     /// <summary>
-    /// <see cref="PlanWithARecipeAndItsClan"/>-shaped (one Add recipe, one Add clan under it) plus a Replace clan
-    /// (a role difference on K0i2), a Kept clan (Z9, only here), a clan greyed because its recipe (a profile,
-    /// GhostRun) is in neither the file's recipes nor installed here, a key to enter again, and the stats row.
+    /// <see cref="PlanWithARecipeAndItsClan"/>-shaped (one Update reader, one Add clan under it) plus a Replace clan
+    /// (a role difference on K0i2), a Kept clan (Z9, only here), a clan greyed because its reader (a profile,
+    /// GhostRun) is in neither the file's readers nor installed here, a key to enter again, and the stats row.
     /// </summary>
     private static SetupMergePlan ThePlan()
     {
         var text = RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json");
         var file = new SetupPack(
-            [new SetupRecipe(Clan.Slug, Clan.Name, text, new RecipeState(), [])],
+            [new SetupRecipe(Clan.Slug, Clan.Slug, null, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: true, MetricId: "clan.battle.points") }), [])],
             [
                 new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main),
                 new Source("s-file0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Mine),
@@ -117,7 +117,7 @@ public class ImportPreviewRenderTests
             [], Settings.Defaults, [new SetupKey("ps99", "PS99 key", Profile.Slug, Profile.Name)]);
 
         var here = new SetupHere(
-            [],
+            [new InstalledRecipe(Clan, text, new RecipeState())],
             [
                 new Source("s-local0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Watch),
                 new Source("s-local0003", Clan.Slug, new Dictionary<string, string> { ["clan"] = "Z9" }, SourceRole.Mine),

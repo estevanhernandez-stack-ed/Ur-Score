@@ -1,0 +1,50 @@
+[
+  {
+    "id": "s-a0000001",
+    "recipe": "pet-sim-99-clan-battle-points",
+    "inputs": {
+      "clan": "TestClan"
+    },
+    "role": "main",
+    "enabled": true
+  },
+  {
+    "id": "s-a0000002",
+    "recipe": "pet-sim-99-clan-battle-points",
+    "inputs": {
+      "clan": "TestClanAlts"
+    },
+    "role": "mine",
+    "enabled": true
+  },
+  {
+    "id": "s-a0000003",
+    "recipe": "pet-sim-99-clan-battle-points",
+    "inputs": {
+      "clan": "TestRivals"
+    },
+    "role": "watch",
+    "enabled": true
+  },
+  {
+    "id": "s-a0000004",
+    "recipe": "pet-sim-99-top-clans",
+    "inputs": {},
+    "role": "watch",
+    "enabled": true
+  },
+  {
+    "id": "s-a0000005",
+    "recipe": "pet-sim-99-profile",
+    "inputs": {},
+    "role": "mine",
+    "enabled": true
+  },
+  {
+    "id": "s-a0000006",
+    "recipe": "roblox-followers",
+    "inputs": {},
+    "role": "mine",
+    "enabled": true
+  }
+]

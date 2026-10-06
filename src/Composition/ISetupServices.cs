@@ -18,14 +18,31 @@ public interface ISetupServices
     /// <summary>Installed recipes as last loaded, in file order.</summary>
     IReadOnlyList<InstalledRecipe> Installed { get; }
 
-    /// <summary>Recipe files that could not be read, already redacted.</summary>
+    /// <summary>Game manifest and reader problems, already redacted (in the trail too; the Recipes page that listed them is gone).</summary>
     IReadOnlyList<string> RecipeProblems { get; }
 
     IReadOnlyList<Source> Sources { get; }
 
-    RecipeStore Store { get; }
+    /// <summary>The games and modes this version knows (spec "Games").</summary>
+    Games.GameCatalog Catalog { get; }
 
-    IKeyStore Keys { get; }
+    /// <summary>Which modes are on, derived from <see cref="Settings"/>.</summary>
+    Games.ModeSwitches Switches { get; }
+
+    /// <summary>The sources whose mode is on: the only ones read, and the only ones a request count is about (A3).</summary>
+    IReadOnlyList<Source> ActiveSources { get; }
+
+    /// <summary>
+    /// The readers whose mode is on: the only ones a history budget or a request count is about, since an off mode reads
+    /// and sends nothing (review round 2).
+    /// </summary>
+    IReadOnlyList<InstalledRecipe> ActiveReaders { get; }
+
+    /// <summary>The name of the mode a reader belongs to when that mode is off, else null (an orphan is not in a mode).</summary>
+    string? OffModeOf(string slug);
+
+    /// <summary>Data-folder recipes no mode names: kept, listed in Diagnostics, never read.</summary>
+    IReadOnlyList<InstalledRecipe> Orphans { get; }
 
     Redactor Redactor { get; }
 
@@ -73,12 +90,6 @@ public interface ISetupServices
     /// <summary>Reports sent and dropped this session, summed over a recipe's sources.</summary>
     (int Sent, int Dropped, int Held) PolicyCounts(string recipeSlug);
 
-    /// <summary>
-    /// The picture for a recipe's row: its own main clan's, once a read has named one (or last session's is in the cache), else
-    /// null. Never another clan's (backlog V3-S.7).
-    /// </summary>
-    string? IconFileFor(string recipeSlug);
-
     /// <summary>The cached picture for one of your own accounts, once it has been fetched, else null. Never another player's.</summary>
     string? AvatarFileFor(long userId);
 
@@ -108,19 +119,35 @@ public interface ISetupServices
     /// </summary>
     void SaveSettings(Settings settings);
 
-    /// <summary>Reloads recipes from disk, migrates sources for any new recipe, applies, and raises <see cref="Changed"/>.</summary>
-    void ReloadRecipes();
+    /// <summary>Turns a game (its id) or a mode (its key) on or off: saved, applied to reading at once, redrawn.</summary>
+    void SetSwitch(string key, bool on);
 
     /// <summary>Saves one recipe's state (stats, Send per account, counter names) and updates its watches.</summary>
     void SaveRecipeState(Recipe recipe, RecipeState state);
-
-    /// <summary>Removes a recipe file and its sources. Never touches its score book.</summary>
-    void RemoveRecipe(string slug);
 
     /// <summary>Reads one source once, right now, and records it like any read. Null when that source has no watch yet.</summary>
     Task<RecipeSnapshot?> ReadOnceAsync(string sourceId, CancellationToken cancellationToken);
 
     Task<SearchListResult> SearchListAsync(RecipeSearch search, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Which of your accounts the <paramref name="value"/> of the reader's main input (a clan) lists as members: one read of
+    /// its <c>members</c> list, your ids only, every other member compared and dropped (name your clan once, 0.7.0). Null when
+    /// the reader declares no members list.
+    /// </summary>
+    Task<MembersResult?> FindOwnMembersAsync(Recipe recipe, string value, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Saves the accounts Setup stops asking about (<see cref="RecipeState.SettledAccountIds"/>). Not a change of ticks: a
+    /// seeded state is written without its stats, as a read's counter names are.
+    /// </summary>
+    void SaveSettledAccounts(Recipe recipe, IReadOnlyList<string> accountIds);
+
+    /// <summary>Which of your accounts each clan's members list held, per source id; a clan not in it hasn't been read (backlog V3-S.20).</summary>
+    IReadOnlyDictionary<string, IReadOnlySet<long>> Members { get; }
+
+    /// <summary>Reads each active clan's members list; with <paramref name="onlyDue"/>, only those not read in the last half hour.</summary>
+    Task RefreshMembershipAsync(bool onlyDue, CancellationToken cancellationToken);
 
     /// <summary>One read with every recipe value asked for, so the response can offer its counter names. Sends nothing.</summary>
     Task<CounterLookup> ReadCounterNamesAsync(Recipe recipe, CancellationToken cancellationToken);

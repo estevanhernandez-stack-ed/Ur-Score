@@ -1,5 +1,6 @@
 using Labs626.UrScore.Board;
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Games;
 using Labs626.UrScore.Host;
 using Labs626.UrScore.Recipes;
 using static UrScore.Tests.BoardFixtures;
@@ -17,8 +18,13 @@ public class SetupMergeTests
     private static readonly string ProfileText = RecipeParserTests.Fixture("petsim99-profile.recipe.json");
     private static readonly HostAccount AltOne = new(Guid.Parse("22222222-2222-2222-2222-222222222222"), 201, "AshAlt");
 
-    private static SetupRecipe FileRecipe(Recipe recipe, string text, RecipeState? state = null, params long[] excluded) =>
-        new(recipe.Slug, recipe.Name, text, state ?? new RecipeState(), excluded);
+    /// <summary>A reader's state as the file carries it: no text (A7), and named by its slug, as FromFolder names it.</summary>
+    private static SetupRecipe FileRecipe(Recipe recipe, RecipeState? state = null, params long[] excluded) =>
+        new(recipe.Slug, recipe.Slug, null, state ?? new RecipeState(), excluded);
+
+    /// <summary>The state a reader here runs with when nothing was ticked: the seed, as <c>Readers.Compose</c> resolves it.</summary>
+    private static InstalledRecipe Seeded(Recipe recipe, string text) =>
+        new(recipe, text, RecipeStates.Effective(recipe, null, Readers.ShowsFor(GameCatalog.BuiltIn.ModeOf(recipe.Slug)!, recipe.Slug)));
 
     private static SetupHere Here(IReadOnlyList<InstalledRecipe>? installed = null, IReadOnlyList<Source>? sources = null, IReadOnlyList<BoardDef>? boards = null) =>
         new(installed ?? [], sources ?? [], boards ?? [], [Main, AltOne], Settings.Defaults);
@@ -28,42 +34,152 @@ public class SetupMergeTests
 
     private static SetupItem Item(SetupMergePlan plan, SetupKind kind, string name) => Assert.Single(plan.Items, i => i.Kind == kind && i.Name == name);
 
-    /// <summary>A clan with no inputs (a profile, a clans list) is named by its recipe, not its slug; one whose recipe is nowhere keeps the slug.</summary>
+    /// <summary>A clan with no inputs (a profile, a clans list) is named by its mode, not its slug; one whose reader is nowhere keeps the slug.</summary>
     [Fact]
     public void AClanWithNoInputsIsNamedByItsRecipe()
     {
         var inputless = new Source("s-file0003", Profile.Slug, new Dictionary<string, string>(), SourceRole.Mine);
         var orphan = new Source("s-local009", "gone-recipe", new Dictionary<string, string>(), SourceRole.Watch);
 
-        var plan = SetupMerge.Plan(Pack([FileRecipe(Profile, ProfileText)], [inputless]), Here(sources: [orphan]), 0, 0);
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Profile)], [inputless]), Here(sources: [orphan]), 0, 0);
 
-        Assert.Equal(SetupOutcome.Add, Item(plan, SetupKind.Clan, Profile.Name).Outcome);
+        Assert.Equal(SetupOutcome.Add, Item(plan, SetupKind.Clan, "Profile").Outcome);   // named by its mode, not its recipe
         Assert.Equal(SetupOutcome.Kept, Item(plan, SetupKind.Clan, "gone-recipe").Outcome);
     }
 
+    /// <summary>
+    /// Both PCs carry the same embedded text now, so text can say nothing: a reader's ticks merge by serialized STATE
+    /// (A7), compared in a canonical order and with Send set aside (sends arrive off). Labelled by mode name.
+    /// </summary>
     [Fact]
-    public void ARecipeIsAddedUpdatedOrSameBySlugAndText()
+    public void AReaderIsUpdatedOrSameByStateAndNamedByItsMode()
     {
-        var here = Here([new InstalledRecipe(Clan, ClanText, new RecipeState())]);
-        var file = Pack([FileRecipe(Clan, ClanText + "\n"), FileRecipe(Profile, ProfileText)]);
+        var here = Here([Seeded(Clan, ClanText), Seeded(Profile, ProfileText)]);
+        var ticked = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: false, MetricId: "clan.battle.points"), ["rank"] = new(Show: true, Send: false, MetricId: "clan.battle.rank") });
+        var file = Pack([FileRecipe(Clan, ticked), FileRecipe(Profile)]);
 
         var plan = SetupMerge.Plan(file, here, 0, 0);
 
-        Assert.Equal(SetupOutcome.Update, Item(plan, SetupKind.Recipe, Clan.Name).Outcome);       // text differs: file wins
-        Assert.Equal(SetupOutcome.Add, Item(plan, SetupKind.Recipe, Profile.Name).Outcome);
-        var same = SetupMerge.Plan(Pack([FileRecipe(Clan, ClanText)]), here, 0, 0);
-        Assert.Equal(SetupOutcome.Same, Item(same, SetupKind.Recipe, Clan.Name).Outcome);
-        Assert.False(Item(same, SetupKind.Recipe, Clan.Name).Ticked);
-        Assert.True(Item(plan, SetupKind.Recipe, Clan.Name).Ticked);
+        Assert.Equal(SetupOutcome.Update, Item(plan, SetupKind.Recipe, "Battle").Outcome);      // the ticks differ: file wins
+        Assert.True(Item(plan, SetupKind.Recipe, "Battle").Ticked);
+        // The file's Profile has no stats at all, and a state with none seeds like no state: the same as here.
+        var same = Item(plan, SetupKind.Recipe, "Profile");
+        Assert.Equal((SetupOutcome.Same, false), (same.Outcome, same.Ticked));
+    }
+
+    /// <summary>Dictionary order and Send are not differences: the same ticks written in another order, sent or not, are the same.</summary>
+    [Fact]
+    public void TheSameTicksInAnotherOrderOrWithSendOnAreTheSame()
+    {
+        var mine = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(true, false, "clan.battle.points"), ["rank"] = new(true, false, "clan.battle.rank") });
+        var theirs = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["rank"] = new(true, true, "clan.battle.rank"), ["value"] = new(true, false, "clan.battle.points") });
+
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Clan, theirs)]), Here([new InstalledRecipe(Clan, ClanText, mine)]), 0, 0);
+
+        Assert.Equal(SetupOutcome.Same, Item(plan, SetupKind.Recipe, "Battle").Outcome);
+    }
+
+    /// <summary>A reader no mode names is skipped with its clans, and Apply counts them.</summary>
+    [Fact]
+    public void AReaderNoModeNamesIsSkippedWithItsClans()
+    {
+        var orphanClan = new Source("s-file0009", "roblox-followers", new Dictionary<string, string> { ["user"] = "Builderman" }, SourceRole.Watch);
+        var file = Pack(
+            [new SetupRecipe("roblox-followers", "roblox-followers", null, new RecipeState(), [])],
+            [orphanClan]);
+        var here = Here([Seeded(Clan, ClanText)]);
+
+        var plan = SetupMerge.Plan(file, here, 0, 0);
+
+        var recipe = Item(plan, SetupKind.Recipe, "roblox-followers");
+        var clan = Item(plan, SetupKind.Clan, "Builderman");
+        Assert.All([recipe, clan], i => Assert.Equal((SetupOutcome.Skipped, false), (i.Outcome, i.Ticked)));
+
+        using var dir = TempDir.Create("urscore-apply-skip");
+        var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
+        var writer = new FakeSetupWriter(data, here);
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+
+        Assert.Null(applied.FailedStep);
+        Assert.Equal((2, 0, 0), (applied.SkippedItems, applied.Recipes, applied.Clans));
+        Assert.Empty(writer.Recipes);
+        Assert.Null(writer.Sources);
+    }
+
+    /// <summary>
+    /// Review round 2: Recipes counts the readers whose ticks were written, and the after-line counts what it says, modes.
+    /// The two Battle readers (the clan battle and its clans list) both arrive: two readers, one mode. Before, Recipes held
+    /// the mode count, so a caller reading it as readers was told 1.
+    /// </summary>
+    [Fact]
+    public void TheApplyCountsReadersAndTheLineCountsModes()
+    {
+        var top = BuiltInRecipes.BySlug["pet-sim-99-top-clans"];
+        var here = Here([Seeded(Clan, ClanText), Seeded(top, BuiltInRecipes.Find(top.Slug)!.Text)]);
+        var ticked = new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(Show: true, Send: false, MetricId: "clan.battle.points"), ["rank"] = new(Show: true, Send: false, MetricId: "clan.battle.rank") });
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Clan, ticked), FileRecipe(top, null, AltOne.RobloxUserId)]), here, 0, 0);
+        Assert.All(plan.Items.Where(i => i.Kind == SetupKind.Recipe), i => Assert.Equal(SetupOutcome.Update, i.Outcome));
+
+        using var dir = TempDir.Create("urscore-apply-count");
+        var writer = new FakeSetupWriter(Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName, here);
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+
+        Assert.Equal((2, 1), (applied.Recipes, applied.Modes));
+        Assert.StartsWith("Imported 1 mode.", Labs626.UrScore.UI.ImportPreviewModel.AfterLine(applied, new Labs626.UrScore.Book.BookImportOutcome(0, "")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Review round 2: a pack whose modes.json is broken still imports everything else. The switches are one skipped item
+    /// that says why, not counted among the "not part of any mode" skips, and nothing about the modes is written.
+    /// </summary>
+    [Fact]
+    public void ABrokenModesFileIsOneSkippedItemNotAFailedImport()
+    {
+        using var dir = TempDir.Create("urscore-setup-modes");
+        new SetupPack([], [], [], new Settings(Modes: new Dictionary<string, bool> { ["pet-sim-99/battle"] = false }), []).ToFolder(dir.Path);
+        File.WriteAllText(Path.Combine(dir.Path, SetupPack.Folder, "modes.json"), "{ broken");
+
+        var back = SetupPack.FromFolder(dir.Path)!;
+        var plan = SetupMerge.Plan(back, Here(), 0, 0);
+
+        Assert.True(back.ModesUnreadable);
+        Assert.Null(back.Settings.Modes);
+        var modes = Item(plan, SetupKind.Mode, "Mode switches");
+        Assert.Equal((SetupOutcome.Skipped, false, "the file's mode switches could not be read"), (modes.Outcome, modes.Ticked, modes.Note));
+
+        using var data = TempDir.Create("urscore-apply-modes");
+        var writer = new FakeSetupWriter(Directory.CreateDirectory(Path.Combine(data.Path, "626labs.ur-score")).FullName, Here());
+        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
+        Assert.Null(applied.FailedStep);
+        Assert.Equal((0, false), (applied.SkippedItems, applied.ModesApplied));
+        Assert.Null(writer.Settings!.Modes);
+    }
+
+    /// <summary>The file's mode switches are one item: same when each already holds here, an update that names what it sets when not.</summary>
+    [Fact]
+    public void ModeSwitchesAreOneItemSameOrUpdate()
+    {
+        var offBattle = new Settings(Modes: new Dictionary<string, bool> { ["pet-sim-99/battle"] = false, ["pet-sim-99/profile"] = true });
+
+        var update = SetupMerge.Plan(new SetupPack([], [], [], offBattle, []), Here(), 0, 0);
+        var same = SetupMerge.Plan(new SetupPack([], [], [], new Settings(Modes: new Dictionary<string, bool> { ["pet-sim-99/profile"] = true }), []), Here(), 0, 0);
+        var none = SetupMerge.Plan(new SetupPack([], [], [], Settings.Defaults, []), Here(), 0, 0);
+
+        var item = Item(update, SetupKind.Mode, "Mode switches");
+        Assert.Equal((SetupOutcome.Update, true), (item.Outcome, item.Ticked));
+        Assert.Contains("Battle off", item.Note, StringComparison.Ordinal);
+        Assert.DoesNotContain("Profile", item.Note, StringComparison.Ordinal);                  // an explicit default changes nothing
+        Assert.Equal(SetupOutcome.Same, Item(same, SetupKind.Mode, "Mode switches").Outcome);
+        Assert.DoesNotContain(none.Items, i => i.Kind == SetupKind.Mode);
     }
 
     [Fact]
     public void AClanIsMatchedByRecipeAndNameWhateverTheCaseAndSpacing()
     {
         var mine = new Source("s-local001", Clan.Slug, new Dictionary<string, string> { ["clan"] = " k0i2 " }, SourceRole.Mine);
-        var here = Here([new InstalledRecipe(Clan, ClanText, new RecipeState())], [mine, Rival]);
+        var here = Here([Seeded(Clan, ClanText)], [mine, Rival]);
         var file = Pack(
-            [FileRecipe(Clan, ClanText)],
+            [FileRecipe(Clan)],
             [new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main),   // same clan, other role
              new Source("s-file0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "NovaForge" }, SourceRole.Watch), // same as Rival
              new Source("s-file0003", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main)]);   // only in the file
@@ -83,24 +199,24 @@ public class SetupMergeTests
     [Fact]
     public void AClanOnlyHereIsKeptAndListed()
     {
-        var here = Here([new InstalledRecipe(Clan, ClanText, new RecipeState())], [Rival]);
+        var here = Here([Seeded(Clan, ClanText)], [Rival]);
 
-        var plan = SetupMerge.Plan(Pack([FileRecipe(Clan, ClanText)]), here, 0, 0);
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Clan)]), here, 0, 0);
 
         var kept = Item(plan, SetupKind.Clan, "NovaForge");
         Assert.Equal((SetupOutcome.Kept, false), (kept.Outcome, kept.Ticked));
     }
 
     [Fact]
-    public void ARecipeOrBoardOnlyHereIsKeptAndListed()
+    public void ABoardOnlyHereIsKeptAndListedButAReaderAbsentFromTheFileIsNot()
     {
         var onlyHereBoard = new BoardDef("b-1", "OnlyHere", []);
-        var here = Here([new InstalledRecipe(Clan, ClanText, new RecipeState())], boards: [onlyHereBoard]);
+        var here = Here([Seeded(Clan, ClanText)], boards: [onlyHereBoard]);
 
-        var plan = SetupMerge.Plan(Pack([FileRecipe(Profile, ProfileText)]), here, 0, 0);
+        var plan = SetupMerge.Plan(Pack([FileRecipe(Profile)]), here, 0, 0);
 
-        var keptRecipe = Item(plan, SetupKind.Recipe, Clan.Name);
-        Assert.Equal((SetupOutcome.Kept, false), (keptRecipe.Outcome, keptRecipe.Ticked));
+        // The file lists only readers whose ticks changed, so a reader missing from it is unchanged there: not "only here".
+        Assert.DoesNotContain(plan.Items, i => i.Kind == SetupKind.Recipe && i.Outcome == SetupOutcome.Kept);
         var keptBoard = Item(plan, SetupKind.Board, "OnlyHere");
         Assert.Equal((SetupOutcome.Kept, false), (keptBoard.Outcome, keptBoard.Ticked));
     }
@@ -148,7 +264,7 @@ public class SetupMergeTests
     [Fact]
     public void AClanCannotBeTickedWithoutItsRecipe()
     {
-        var file = Pack([FileRecipe(Clan, ClanText)], [new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main)]);
+        var file = Pack([FileRecipe(Clan)], [new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Main)]);
         var plan = SetupMerge.Plan(file, Here(), 0, 0);
         var clan = Item(plan, SetupKind.Clan, "CCGP");
 
@@ -157,7 +273,7 @@ public class SetupMergeTests
         Assert.Empty(plan.Ticked(new HashSet<string> { clan.Key }));                         // ticked, but its recipe is not
         Assert.Contains(clan, plan.Ticked(new HashSet<string> { clan.Key, "recipe:" + Clan.Slug }));
 
-        var installedHere = SetupMerge.Plan(file, Here([new InstalledRecipe(Clan, ClanText, new RecipeState())]), 0, 0);
+        var installedHere = SetupMerge.Plan(file, Here([Seeded(Clan, ClanText)]), 0, 0);
         Assert.True(installedHere.CanTick(Item(installedHere, SetupKind.Clan, "CCGP"), new HashSet<string>()));
     }
 
@@ -203,15 +319,13 @@ public class SetupMergeTests
         public IReadOnlyList<Source>? Sources { get; private set; }
         public IReadOnlyList<BoardDef>? Boards { get; private set; }
         public Settings? Settings { get; private set; }
-        public int Reloads { get; private set; }
         public List<string> Calls { get; } = [];
         public string? ThrowAt { get; init; }
         public string? ThrowMessage { get; init; }
-        public void SaveRecipe(Recipe recipe, string text, RecipeState state) { if (ThrowAt == "recipes") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("SaveRecipe"); Recipes.Add((recipe.Slug, state)); }
+        public void SaveState(string slug, RecipeState state) { if (ThrowAt == "recipes") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("SaveState"); Recipes.Add((slug, state)); }
         public void SaveSources(IReadOnlyList<Source> sources) { if (ThrowAt == "clans") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("SaveSources"); Sources = sources; }
         public void SaveImportedBoards(IReadOnlyList<BoardDef> saved) { if (ThrowAt == "boards") throw new UnauthorizedAccessException(ThrowMessage ?? "denied"); Calls.Add("SaveImportedBoards"); Boards = saved; }
         public void SaveSettings(Settings settings) { if (ThrowAt == "settings") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("SaveSettings"); Settings = settings; }
-        public void ReloadRecipes() { if (ThrowAt == "reload") throw new IOException(ThrowMessage ?? "disk"); Calls.Add("ReloadRecipes"); Reloads++; }
     }
 
     /// <summary>
@@ -228,7 +342,7 @@ public class SetupMergeTests
         Directory.CreateDirectory(Path.Combine(data, "recipes"));
         File.WriteAllText(Path.Combine(data, "recipes", "old.recipe.json"), "{}");
         var local = new Source("s-local001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Watch);
-        var here = new SetupHere([], [local, Rival], [new BoardDef("b-1", "Battle", [])], [Main, AltOne], Settings.Defaults);
+        var here = new SetupHere([Seeded(Clan, ClanText)], [local, Rival], [new BoardDef("b-1", "Battle", [])], [Main, AltOne], Settings.Defaults);
         var fileMain = new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main);
         var fileNew = new Source("s-file0002", Clan.Slug, new Dictionary<string, string> { ["clan"] = "CCGP" }, SourceRole.Mine);
         var fileBoard = new BoardDef("b-9", "Battle", [
@@ -240,8 +354,8 @@ public class SetupMergeTests
         var fileRivals = new BoardDef("b-10", "Rivals", [
             new PanelDef("p-5", PanelType.Standing, new PanelSize(6), new PanelSettings(Clan.Slug, SourceId: "s-file0002")),
         ]);
-        var file = new SetupPack([FileRecipe(Clan, ClanText, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(true, true, "clan.battle.points") }), 201, 999)],
-            [fileMain, fileNew], [fileBoard, fileRivals], new Settings(ResolveNames: false, ActiveRecipe: Clan.Slug), []);
+        var file = new SetupPack([FileRecipe(Clan, new RecipeState(Stats: new Dictionary<string, StatChoice> { ["value"] = new(true, true, "clan.battle.points") }), 201, 999)],
+            [fileMain, fileNew], [fileBoard, fileRivals], new Settings(ResolveNames: false, ActiveRecipe: Clan.Slug), []);   // the file's ActiveRecipe is an old export's: never applied
         var plan = SetupMerge.Plan(file, here, 0, 0);
         return (plan, new FakeSetupWriter(data, here) { ThrowAt = throwAt }, dir);
     }
@@ -274,9 +388,8 @@ public class SetupMergeTests
             Assert.Equal(("s-local001", ccgp.Id), (board.Panels[3].Settings.SourceId, board.Panels[3].Settings.ToSourceId));
             var rivals = Assert.Single(writer.Boards!, b => b.Name == "Rivals");                   // the Add branch: only the file had it
             Assert.Equal(ccgp.Id, rivals.Panels[0].Settings.SourceId);
-            Assert.Equal(1, writer.Reloads);
-            Assert.Equal((false, Clan.Slug), (writer.Settings!.ResolveNames, writer.Settings.ActiveRecipe));
-            Assert.Equal(["SaveRecipe", "SaveSources", "ReloadRecipes", "SaveImportedBoards", "SaveSettings"], writer.Calls);
+            Assert.Equal((false, null), (writer.Settings!.ResolveNames, writer.Settings.ActiveRecipe));   // ActiveRecipe is not written any more (A7)
+            Assert.Equal(["SaveState", "SaveSources", "SaveImportedBoards", "SaveSettings"], writer.Calls);
             var aside = Directory.GetDirectories(dir.Path, "626labs.ur-score.before-import-*").Single();
             Assert.Equal(aside, applied.AsideFolder);
             Assert.True(File.Exists(Path.Combine(aside, "sources.json")));
@@ -319,26 +432,6 @@ public class SetupMergeTests
         }
     }
 
-    /// <summary>
-    /// The reload is its own step, not the tail of the clans one: it reads every recipe file back off disk and
-    /// re-applies the sources, so a failure there is nothing to do with saving clans and must not be reported as
-    /// "the clans could not be written" — the aside a person is told to reach for would be the wrong one.
-    /// </summary>
-    [Fact]
-    public void AReloadFailureNamesTheReloadAndNotTheClansStep()
-    {
-        var (plan, writer, dir) = Scenario(throwAt: "reload");
-        using (dir)
-        {
-            var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
-
-            Assert.Equal(("reload", nameof(IOException)), (applied.FailedStep, applied.FailureType));
-            Assert.NotNull(writer.Sources);   // the clans step itself finished
-            Assert.Null(writer.Boards);
-            Assert.Null(writer.Settings);
-        }
-    }
-
     [Fact]
     public void ASettingsFailureNamesItsStepWithRecipesClansAndBoardsAlreadyStanding()
     {
@@ -356,13 +449,13 @@ public class SetupMergeTests
     }
 
     /// <summary>
-    /// Spec §1/§7: the file carries exactly two settings, and <c>StartOnOpen</c> is this machine's own. The settings
-    /// step must therefore write THIS PC's record with the file's two laid over it — never the file's whole record,
+    /// Spec §1/§7: the file carries one setting plus the mode switches, and <c>StartOnOpen</c> is this machine's own. The settings
+    /// step must therefore write THIS PC's record with the file's laid over it — never the file's whole record,
     /// which <see cref="SetupPack.FromFolder"/> rebuilds with <c>StartOnOpen</c> at the record default, so every
     /// import would quietly turn "Start reading when Ur Score opens" back off (final review, 2026-09-22).
     /// </summary>
     [Fact]
-    public void TheSettingsStepTakesTheFilesTwoAndKeepsThisPcsStartOnOpen()
+    public void TheSettingsStepTakesTheFilesSettingAndKeepsThisPcsStartOnOpenAndActiveRecipe()
     {
         using var dir = TempDir.Create("urscore-apply-settings");
         var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
@@ -374,7 +467,7 @@ public class SetupMergeTests
         var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
 
         Assert.Null(applied.FailedStep);
-        Assert.Equal((false, Clan.Slug, true), (writer.Settings!.ResolveNames, writer.Settings.ActiveRecipe, writer.Settings.StartOnOpen));
+        Assert.Equal((false, "something-else", true), (writer.Settings!.ResolveNames, writer.Settings.ActiveRecipe, writer.Settings.StartOnOpen));
     }
 
     /// <summary>
@@ -407,9 +500,9 @@ public class SetupMergeTests
         using var dir = TempDir.Create("urscore-apply-main");
         var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
         var y = new Source("s-local-y", Clan.Slug, new Dictionary<string, string> { ["clan"] = "Y" }, SourceRole.Main);
-        var here = new SetupHere([new InstalledRecipe(Clan, ClanText, new RecipeState())], [y], [], [Main, AltOne], Settings.Defaults);
+        var here = new SetupHere([Seeded(Clan, ClanText)], [y], [], [Main, AltOne], Settings.Defaults);
         var fileX = new Source("s-filex001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "X" }, SourceRole.Main);
-        var file = new SetupPack([FileRecipe(Clan, ClanText)], [fileX], [], Settings.Defaults, []);
+        var file = new SetupPack([FileRecipe(Clan)], [fileX], [], Settings.Defaults, []);
         var plan = SetupMerge.Plan(file, here, 0, 0);
         var writer = new FakeSetupWriter(data, here);
 
@@ -430,7 +523,7 @@ public class SetupMergeTests
         var local = new Source("s-local001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Watch);
         var hereForPlan = new SetupHere([], [local], [], [Main, AltOne], Settings.Defaults);
         var fileMain = new Source("s-file0001", Clan.Slug, new Dictionary<string, string> { ["clan"] = "K0i2" }, SourceRole.Main);
-        var file = new SetupPack([FileRecipe(Clan, ClanText)], [fileMain], [], Settings.Defaults, []);
+        var file = new SetupPack([FileRecipe(Clan)], [fileMain], [], Settings.Defaults, []);
         var plan = SetupMerge.Plan(file, hereForPlan, 0, 0);
 
         using var dir = TempDir.Create("urscore-apply-gone");
@@ -444,24 +537,26 @@ public class SetupMergeTests
         Assert.Null(writer.Sources);
     }
 
+    /// <summary>The mode switches apply through the settings step, over this PC's own record, only when their item is ticked.</summary>
     [Fact]
-    public void ARecipeThatDoesNotParseHereIsSkippedAndNamedWhileEverythingElseStillApplies()
+    public void TickedModeSwitchesApplyOverThisPcsOwnAndUntickedOnesDoNot()
     {
-        using var dir = TempDir.Create("urscore-apply-badrecipe");
+        using var dir = TempDir.Create("urscore-apply-modes");
         var data = Directory.CreateDirectory(Path.Combine(dir.Path, "626labs.ur-score")).FullName;
-        var here = new SetupHere([], [], [], [Main, AltOne], Settings.Defaults);
-        var badRecipe = new SetupRecipe(Profile.Slug, Profile.Name, "not a recipe", new RecipeState(), []);
-        var file = new SetupPack([badRecipe], [], [], Settings.Defaults, []);
+        var here = new SetupHere([], [], [], [Main, AltOne], new Settings(StartOnOpen: true, Modes: new Dictionary<string, bool> { ["pet-sim-99/profile"] = false }));
+        var file = new SetupPack([], [], [], new Settings(Modes: new Dictionary<string, bool> { ["pet-sim-99/battle"] = false, ["pet-sim-99"] = true, ["not/known"] = true }), []);
         var plan = SetupMerge.Plan(file, here, 0, 0);
+
         var writer = new FakeSetupWriter(data, here);
+        var applied = SetupMerge.Apply(plan, new HashSet<string> { "modes" }, writer, DateTimeOffset.UtcNow);
+        var unticked = new FakeSetupWriter(data, here);
+        var notApplied = SetupMerge.Apply(plan, new HashSet<string>(), unticked, DateTimeOffset.UtcNow);
 
-        var applied = SetupMerge.Apply(plan, plan.Items.Select(i => i.Key).ToHashSet(StringComparer.Ordinal), writer, DateTimeOffset.UtcNow);
-
-        Assert.Null(applied.FailedStep);
-        Assert.Equal(0, applied.Recipes);
-        Assert.Equal([Profile.Slug], applied.SkippedRecipes);
-        Assert.Empty(writer.Recipes);
-        Assert.NotNull(writer.Settings);   // the rest of Apply still ran past the skip
+        Assert.True(applied.ModesApplied);
+        Assert.Equal(new Dictionary<string, bool> { ["pet-sim-99/profile"] = false, ["pet-sim-99/battle"] = false, ["pet-sim-99"] = true }, writer.Settings!.Modes);   // local kept, the file's known keys over it
+        Assert.True(writer.Settings.StartOnOpen);
+        Assert.False(notApplied.ModesApplied);
+        Assert.Equal(here.Settings.Modes, unticked.Settings!.Modes);
     }
 
     [Fact]

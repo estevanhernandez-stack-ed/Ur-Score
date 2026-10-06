@@ -80,7 +80,7 @@ public class HistoryBudgetTests
 
         Assert.True(check.Allowed);
         Assert.Equal(40, check.Count);
-        Assert.Equal("40 of RoRoRo's 256 history slots: accounts with Send on times stats with Send on, plus each clan number sent, across your installed recipes.", check.Line);
+        Assert.Equal("40 of RoRoRo's 256 history slots: accounts with Send on times stats with Send on, plus each clan number sent, across the modes you have on.", check.Line);
     }
 
     [Fact]

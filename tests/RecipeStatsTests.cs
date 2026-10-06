@@ -43,7 +43,6 @@ public class RecipeStatsTests
         Assert.True(marked.IsGroupList);
         Assert.Empty(RecipeStats.Suggested(marked));
         Assert.Empty(Labs626.UrScore.UI.StatsTableModel.Suggested(marked));
-        Assert.Equal("", Labs626.UrScore.UI.ImportText.SuggestedNote(marked));
     }
 
     [Theory]

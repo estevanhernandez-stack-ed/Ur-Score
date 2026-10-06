@@ -1,0 +1,2 @@
+# The old-install fixture holds byte-exact recipe text: the book hashes it, so no line-ending conversion.
+tests/Fixtures/old-install-0.6.3/** -text

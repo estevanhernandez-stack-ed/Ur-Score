@@ -3,9 +3,8 @@
 # Needs a clan battle the source reports (activeClanBattle names one); an idle source writes nothing.
 param([string]$Main = 'CCGP')
 
-. (Join-Path $PSScriptRoot 'uia-board.ps1')   # a superset of uia-import.ps1; the setup-import steps need Stop-UrScoreFromBoard
+. (Join-Path $PSScriptRoot 'uia-board.ps1')   # the setup-import steps need Stop-UrScoreFromBoard
 $ErrorActionPreference = 'Stop'
-$clanFixture = Join-Path $UrFixtures 'petsim99-clan-battle.recipe.json'
 $backup = $null
 # The owner's own import asides, taken before anything here imports, so cleanup removes only the walk's (4c2, 4f).
 $ownersAsides = Get-UrBeforeImportFolders
@@ -14,8 +13,8 @@ try {
     $backup = Move-UrDataAside
     Note-RoRoRo 'before'
     Start-UrScore | Out-Null
-    $setup = Complete-ClanImport $clanFixture @('Points') @()
-    $setup = Wait-UrWindow '^Setup$' 30
+    # The Pet Sim 99 readers are built in, so there is no recipe to import first: Setup opens on the game page.
+    $setup = Open-GamePage
     Select-SearchName $setup 'Your main clan' $Main
     Wait-Line $setup 'MainFoundLine' '^(Found |None of your accounts|Read |Added )' 120 | Out-Null
 
@@ -36,8 +35,8 @@ try {
     Check '1 The page names the book folder' ($folder -like '*626labs.ur-score\scorebook') $folder
 
     $recipes = @(Get-AllTexts (Find-ByAutomationId $setup 'BookRecipesList'))
-    Check '2 Per recipe: readings, first reading, finals and size' (
-        ($recipes -contains 'Pet Sim 99 clan battle points') -and (@($recipes -match '^\d[\d,]* readings? kept .+ (bytes|KB|MB)$').Count -eq 1)) ($recipes -join ' | ')
+    Check '2 Per mode: readings, first reading, finals and size' (
+        ($recipes -contains 'Battle') -and (@($recipes -match '^\d[\d,]* readings? kept .+ (bytes|KB|MB)$').Count -ge 1)) ($recipes -join ' | ')
 
     # This walk never presses Start or Pause/Resume, only Test now (line 21), so the board has never started this
     # session (AppServices.EverStarted is false): "Not started. ...", not "Paused. ..." (2026-09-23 review).
@@ -64,7 +63,7 @@ try {
         Invoke-Element (Get-Button $setup 'Export stats to a file for another PC')
         Complete-FileDialog '^Export stats to a file$' $exportFile
         $exported = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^Exported ' 30
-        Check '4b Export stats writes one file and says what went into it' ((Test-Path $exportFile) -and $exported -match '^Exported \d[\d,]* readings? and \d[\d,]* finished battles?, with \d+ recipes?, \d+ clans? and \d+ boards?, to ur-score-stats-smoke\.zip') "exists=$(Test-Path $exportFile); '$exported'"
+        Check '4b Export stats writes one file and says what went into it' ((Test-Path $exportFile) -and $exported -match '^Exported \d[\d,]* readings? and \d[\d,]* finished battles?, with \d+ modes?, \d+ clans? and \d+ boards?, to ur-score-stats-smoke\.zip') "exists=$(Test-Path $exportFile); '$exported'"
 
         $setup = Get-SetupWindow
         Invoke-Element (Get-Button $setup 'Import stats from another PC''s file')
@@ -76,10 +75,10 @@ try {
         Check '4c2 Every row is Same, so nothing new in the setup, and every reading is already here' ($imported -match '^Nothing new in the setup\. Then nothing new to import\. \d[\d,]* were already here\. Your previous setup is in 626labs\.ur-score\.before-import-\d{8}-\d{4}(-\d+)?\.$') "'$imported'"
         & (Join-Path $PSScriptRoot 'shot.ps1') -Title 'Setup' -OutPath (Join-Path $UrShots 'score-book-export-import.png') | Out-Null
 
-        # 4d/4e/4f/4g/4h. The setup travels (V3-S.46): export from this folder (it has a recipe and one clan),
+        # 4d/4e/4f/4g/4h. The setup travels (V3-S.46): export from this folder (it has a clan),
         # start over on a fresh folder, import the file, read the preview's rows by name, untick the clan, Import
-        # ticked. The recipe arrives and the clan does not; the after-line says so; the aside folder exists;
-        # nothing is set to send.
+        # ticked. The clan does not arrive (a fresh folder already has the same built-in modes, so there is no recipe row to
+        # tick any more); the after-line says so; the aside folder exists; nothing is set to send.
         $setup = Get-SetupWindow
         Invoke-Element (Get-Button $setup 'Export stats to a file for another PC')
         $setupFile = Join-Path $exportDir 'ur-score-everything-smoke.zip'
@@ -87,7 +86,7 @@ try {
         # 'with 1 recipe' alone would risk matching the FIRST export's line (4b), still on screen until this
         # second export's own line lands; wait for a line that names this export's own file instead.
         $exportedAll = Wait-Line (Get-SetupWindow) 'StatsTransferLine' 'ur-score-everything-smoke\.zip' 30
-        Check '4d Export stats counts the setup in its line' ($exportedAll -match 'with 1 recipe, 1 clan and \d+ boards?, to ur-score-everything-smoke\.zip') "'$exportedAll'"
+        Check '4d Export stats counts the setup in its line' ($exportedAll -match 'with \d+ modes?, \d+ clans? and \d+ boards?, to ur-score-everything-smoke\.zip') "'$exportedAll'"
 
         Stop-UrScoreFromBoard
         # S1-16.1: Move-UrDataAside refuses a second aside while the first backup exists, so the second, fresh
@@ -107,19 +106,22 @@ try {
             Invoke-Element (Get-Button $setup 'Import stats from another PC''s file')
             Complete-FileDialog '^Import stats from another PC$' $setupFile
             $preview = Wait-UrWindow '^Import from another PC$' 20
-            Check '4e The preview opens and names the recipe and the clan' ([bool]$preview -and [bool](Get-Check $preview 'Import Pet Sim 99 clan battle points') -and [bool](Get-Check $preview "Import $Main")) "preview=$([bool]$preview)"
+            # Removed: the 'Import Pet Sim 99 clan battle points' row. A fresh folder has the same built-in modes, so no mode row is offered to tick.
+            Check '4e The preview opens and names the clan' ([bool]$preview -and [bool](Get-Check $preview "Import $Main")) "preview=$([bool]$preview)"
             Set-Tick (Get-Check $preview "Import $Main") $false
             Invoke-Element (Get-Button $preview 'Import ticked')
-            $after = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^Imported 1 recipe' 60
-            Check '4f The recipe arrives, the stats follow, and the line says where the old setup is' ($after -match '^Imported 1 recipe\. Then [a-z].*\. Your previous setup is in 626labs\.ur-score\.before-import-\d{8}-\d{4}(-\d+)?\.$') "'$after'"
+            $after = Wait-Line (Get-SetupWindow) 'StatsTransferLine' '^(Imported |Nothing new in the setup)' 60
+            Check '4f The stats follow, and the line says where the old setup is' ($after -match '^(Imported [^.]+|Nothing new in the setup)[.;].* Your previous setup is in 626labs\.ur-score\.before-import-\d{8}-\d{4}(-\d+)?\.$') "'$after'"
             $sourcesPath = Join-Path $UrData 'sources.json'
             $sourcesOk = (-not (Test-Path $sourcesPath)) -or ((Get-Content $sourcesPath -Raw) -notmatch $Main)
             Check '4g The unticked clan never reaches sources.json' $sourcesOk "exists=$(Test-Path $sourcesPath)"
-            $recipeState = Get-Content (Join-Path $UrData 'recipes\pet-sim-99-clan-battle-points.state.json') -Raw
+            # Every state file there is (a seeded one is not written until a choice changes, so there may be none): the read
+            # is over all of them rather than naming one that may not exist.
+            $recipeState = (@(Get-ChildItem (Join-Path $UrData 'recipes') -Filter '*.state.json' -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n")
             # BOTH send lists: the per-stat "send" tick, and sentFieldMetrics - a clans list's clan-and-field
             # numbers, which go out under fixed ids whatever the clan's role (final review, 2026-09-22).
             $sendOff = ($recipeState -notmatch '"send":\s*true') -and ($recipeState -notmatch '"sentFieldMetrics":\s*\[\s*"')
-            Check '4h Nothing arrived set to send, on either send list' $sendOff 'state file read'
+            Check '4h Nothing arrived set to send, on either send list' $sendOff 'state files read'
             & (Join-Path $PSScriptRoot 'shot.ps1') -Title 'Setup' -OutPath (Join-Path $UrShots 'score-book-setup-import.png') | Out-Null
         }
         finally {

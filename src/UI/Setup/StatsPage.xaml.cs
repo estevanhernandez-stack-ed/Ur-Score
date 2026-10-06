@@ -2,18 +2,19 @@ using System.Windows;
 using System.Windows.Controls;
 using Labs626.UrScore.Composition;
 using Labs626.UrScore.Core;
+using Labs626.UrScore.Games;
 using Labs626.UrScore.Recipes;
 using static Labs626.UrScore.UI.TextLines;
 
 namespace Labs626.UrScore.UI;
 
-/// <summary>A recipe in the Stats page's list. Its text is its name.</summary>
+/// <summary>A reader (labelled by its mode) in the Stats page's Mode list. Its text is its name.</summary>
 public sealed record RecipeChoice(string Slug, string Name)
 {
     public override string ToString() => Name;
 }
 
-/// <summary>Setup › Stats (spec §7.3): one Stats table per recipe, saved to the recipe's state and applied to its watches.</summary>
+/// <summary>Setup › Stats (spec §7.3): one Stats table per reader, saved to the reader's state and applied to its watches.</summary>
 public partial class StatsPage : UserControl, ISetupPage
 {
     private readonly ISetupServices _services;
@@ -34,20 +35,34 @@ public partial class StatsPage : UserControl, ISetupPage
         Refresh();
     }
 
+    /// <summary>
+    /// Why a clans list has no rows here, in plain words: it reads other clans, not your accounts (owner's pass,
+    /// 2026-10-05, after the old line read as jargon). Empty when no clans list is on.
+    /// </summary>
+    public static string GroupListLine(IReadOnlyList<string> groupLists) => groupLists.Count switch
+    {
+        0 => "",
+        1 => $"{groupLists[0]} reads other clans, not your accounts, so it has no stats to tick here. "
+             + "What it can send is under Clan and field, below.",
+        _ => $"{string.Join(", ", groupLists.Take(groupLists.Count - 1))} and {groupLists[^1]} read other clans, not your "
+             + "accounts, so they have no stats to tick here. What they can send is under Clan and field, below.",
+    };
+
     public void Refresh()
     {
-        var groupLists = _services.Installed.Where(i => i.Recipe.IsGroupList).Select(i => i.Recipe.Name).ToList();
-        ShowLine(StatsGroupListLine, groupLists.Count == 0 ? ""
-            : $"{string.Join(", ", groupLists)} {(groupLists.Count == 1 ? "has" : "have")} no account stats to tick — its rows are "
-              + "other people's clans. What it can send is in Clan and field, below.");
+        // Only the readers of modes that are on: an off mode reads nothing, so it has nothing to tick here.
+        var active = _services.ActiveReaders;
+        var groupLists = active.Where(i => i.Recipe.IsGroupList)
+            .Select(i => ReaderNames.For(i.Recipe.Slug, _services.Catalog, _services.Installed)).ToList();
+        ShowLine(StatsGroupListLine, GroupListLine(groupLists));
 
         // Outside the early return below: the clan-and-field section stands on its own, and it has to show even
         // when a clans list is the only recipe installed and the Stats table has nothing to draw.
         LoadField();
 
-        var choices = _services.Installed
+        var choices = active
             .Where(i => !i.Recipe.IsGroupList)
-            .Select(i => new RecipeChoice(i.Recipe.Slug, i.Recipe.Name))
+            .Select(i => new RecipeChoice(i.Recipe.Slug, ReaderNames.For(i.Recipe.Slug, _services.Catalog, _services.Installed)))
             .ToList();
 
         // Rebuilt only when the recipe list changes, so a snapshot arriving never resets ticks being made.
@@ -86,7 +101,7 @@ public partial class StatsPage : UserControl, ISetupPage
         var recipe = installed.Recipe;
         var rules = RulesFile.Read(_services.RulesPath);
         StatsTable.Load(
-            recipe, installed.State, _services.Installed,
+            recipe, installed.State, _services.ActiveReaders,
             () => [.. _services.KnownAccounts.Select(a => a.AccountId)],
             metricId => AlertCards.StatLine(rules, metricId),
             recipe.LastStep.Counters is null ? null : ct => _services.ReadCounterNamesAsync(recipe, ct),
@@ -107,7 +122,7 @@ public partial class StatsPage : UserControl, ISetupPage
 
     /// <summary>The clans list this section is about, or null when none is installed and the section stays hidden.</summary>
     private InstalledRecipe? ClansList =>
-        FieldMetricsModel.ListFor(_services.Installed);
+        FieldMetricsModel.ListFor(_services.ActiveReaders);
 
     /// <summary>The recipes whose counter names this page has already asked for unprompted this session (S1-12.6).</summary>
     private readonly HashSet<string> _namesAskedFor = new(StringComparer.Ordinal);
@@ -121,7 +136,7 @@ public partial class StatsPage : UserControl, ISetupPage
         }
 
         FieldSection.Visibility = Visibility.Visible;
-        FieldLine.Text = FieldMetricsModel.Line(list, _services.Sources, _services.Installed);
+        FieldLine.Text = FieldMetricsModel.Line(ReaderNames.For(list.Recipe.Slug, _services.Catalog, _services.Installed), _services.Sources, _services.Installed);
         FieldNumbers.ItemsSource = FieldMetricsModel.Items(list.State);
         ShowLine(FieldSavedLine, "");
     }
@@ -136,7 +151,7 @@ public partial class StatsPage : UserControl, ISetupPage
 
             // The same refusal a stat tick meets, so a clan number cannot take the setup past RoRoRo's ceiling
             // from the one screen that exists to warn about that (V3-S.28).
-            var budget = FieldMetricsModel.Budget(list.Recipe, list.State, _services.Installed, [.. _services.KnownAccounts.Select(a => a.AccountId)], ticked);
+            var budget = FieldMetricsModel.Budget(list.Recipe, list.State, _services.ActiveReaders, [.. _services.KnownAccounts.Select(a => a.AccountId)], ticked);
             if (!budget.Allowed)
             {
                 ShowLine(FieldSavedLine, budget.Line);

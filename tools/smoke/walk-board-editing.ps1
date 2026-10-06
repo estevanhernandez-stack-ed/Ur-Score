@@ -14,7 +14,7 @@ $backup = $null
 function Get-SavedPanels([int]$index = 0) { @(@(Read-Boards)[$index].panels) }
 
 try {
-    $backup = Move-UrDataAside
+    $backup = Move-UrDataAside -ModesOff 'pet-sim-99/profile'
     Note-RoRoRo 'before'
     $board = Initialize-ClanBoard $Main $Alt
 
@@ -61,8 +61,8 @@ try {
     Check '2g Esc on the status card leaves arranging on' ($arranging -eq $true) "CancelArrangeButton enabled=$arranging"
     Complete-EditMode (Get-BoardWindow)
 
-    # Reading started above sends Points; pause it so the rest of the walk sends nothing live and step 10's
-    # Stop-UrScoreFromBoard doesn't meet the close prompt that reading raises (it doesn't answer one).
+    # Pause what was started above so step 10's
+    # Stop-UrScoreFromBoard doesn't meet a close prompt a running read could raise (it doesn't answer one).
     $paused = Invoke-PauseResume
     Check '2h Pause from the card' ($paused -eq 'Resume reading') "button='$paused'"
     [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
@@ -106,7 +106,7 @@ try {
     Check '6 The gallery added a live leaderboard' ([bool](Find-ByAutomationId (Get-BoardWindow) 'LiveLeaderboardPanel1')) 'LiveLeaderboardPanel1'
 
     # 7. A removed clan's panel says so; Choose another fixes it (spec 9.4).
-    $setup = Open-SetupPage 'Clans'
+    $setup = Open-GamePage
     # Removing a clan has never asked, so nothing opens here; the wait for a box that never came is gone.
     Invoke-Element (Get-Button $setup "Remove $Alt")
     Start-Sleep -Seconds 1

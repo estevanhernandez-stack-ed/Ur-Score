@@ -7,7 +7,7 @@ namespace Labs626.UrScore.UI;
 /// The one way a page says a line, or says nothing: an empty line takes no space. Eight files each carried their
 /// own copy of these three lines (S1-10.1); they now take this one with <c>using static</c>, so a call reads
 /// <c>ShowLine(line, text)</c> and there is one place the rule lives. Not <c>Show</c>: a window's own
-/// <c>Show()</c> hides a static import of that name, and <c>ImportWindow</c> is a window.
+/// <c>Show()</c> hides a static import of that name, and a page may sit in a window.
 /// </summary>
 internal static class TextLines
 {

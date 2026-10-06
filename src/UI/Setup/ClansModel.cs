@@ -28,7 +28,7 @@ public sealed record SourceChange(IReadOnlyList<Source> Sources, string SourceId
 public sealed record HostRequests(string Host, int PerHour);
 
 /// <summary>
-/// Setup › Clans' decisions (spec §7.1, §14), kept out of the page so they are testable. Changes are
+/// The clan section's decisions (spec §7.1, §14; it was Setup › Clans), kept out of the page so they are testable. Changes are
 /// returned as new source lists; the page saves them through <c>ISetupServices.SaveSources</c>.
 /// </summary>
 public static class ClansModel
@@ -53,21 +53,45 @@ public static class ClansModel
             .Distinct(StringComparer.Ordinal)];
     }
 
-    public static string Who(Recipe recipe, Source source, RecipeSnapshot? snapshot, IReadOnlyList<HostAccount> accounts)
+    public static string Who(Recipe recipe, Source source, RecipeSnapshot? snapshot, IReadOnlyList<HostAccount> accounts, IReadOnlySet<long>? members = null)
     {
         if (source.Role == SourceRole.Watch) return $"{RecipeWords.Group(recipe)}-level numbers only";
+
+        // The members list is who is in the clan (backlog V3-S.20); who scored this battle is a detail after it. The row said only
+        // the scorers, so a clan holding five of the owner's accounts read "CCGP · ELeonDog, CECPapa" mid-battle.
+        if (members is not null)
+        {
+            var inIt = Listed(accounts).Where(a => members.Contains(a.RobloxUserId)).Select(a => a.DisplayName).Distinct(StringComparer.Ordinal).ToList();
+            var scoring = snapshot?.Rows is null ? ""
+                : FoundAccounts(snapshot, accounts).Count is var n and > 0 ? $" · {n} scoring this {RecipeWords.Period(recipe)}"
+                : $" · none scoring this {RecipeWords.Period(recipe)}";
+            return inIt.Count == 0
+                ? "None of your accounts are members" + scoring
+                : $"{Count(inIt.Count, "account")}: {Shortened(inIt)}{scoring}";
+        }
+
         if (snapshot?.Rows is null) return "Not read yet";
 
         var found = FoundAccounts(snapshot, accounts);
         return found.Count == 0 ? "None of your accounts found in the last read" : string.Join(", ", found);
     }
 
+    /// <summary>The most names a clan row lists before it says how many more: a row is one line, and eight names don't fit one.</summary>
+    public const int RowNames = 5;
+
+    /// <summary>Every name up to <see cref="RowNames"/>; past that, the first few and "and N more".</summary>
+    private static string Shortened(IReadOnlyList<string> names) =>
+        names.Count <= RowNames
+            ? string.Join(", ", names)
+            : $"{string.Join(", ", names.Take(RowNames - 1))} and {names.Count - (RowNames - 1)} more";
+
     /// <summary>The main source, the sources your accounts are in (main first), and the watched ones.</summary>
     public static ClanLists Lists(
-        Recipe recipe, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest, IReadOnlyList<HostAccount> accounts)
+        Recipe recipe, IReadOnlyList<Source> sources, IReadOnlyDictionary<string, RecipeSnapshot> latest, IReadOnlyList<HostAccount> accounts,
+        IReadOnlyDictionary<string, IReadOnlySet<long>>? members = null)
     {
         var own = sources.Where(s => string.Equals(s.Recipe, recipe.Slug, StringComparison.Ordinal)).ToList();
-        ClanRow Row(Source s) => new(s.Id, NameOf(recipe, s), s.Role, Who(recipe, s, latest.GetValueOrDefault(s.Id), accounts));
+        ClanRow Row(Source s) => new(s.Id, NameOf(recipe, s), s.Role, Who(recipe, s, latest.GetValueOrDefault(s.Id), accounts, members?.GetValueOrDefault(s.Id)));
 
         var main = own.FirstOrDefault(s => s.Role == SourceRole.Main);
         return new ClanLists(
@@ -96,6 +120,65 @@ public static class ClansModel
             ? new ClanProbe($"Found {JoinWithAnd(found)} in {name}.", false)
             : new ClanProbe($"None of your accounts are in {name} yet. You can still watch it.", true);
     }
+
+    /// <summary>Your accounts a members read can place: those RoRoRo has given a Roblox id, once each.</summary>
+    public static IReadOnlyList<HostAccount> Listed(IReadOnlyList<HostAccount> accounts) =>
+        [.. accounts.Where(a => a.RobloxUserId != 0).DistinctBy(a => a.AccountId)];
+
+    /// <summary>Which of <paramref name="accounts"/> a members read found, in their own order.</summary>
+    public static IReadOnlyList<HostAccount> InClan(IReadOnlyList<HostAccount> accounts, MembersResult members) =>
+        [.. Listed(accounts).Where(a => members.Found.Contains(a.RobloxUserId))];
+
+    /// <summary>
+    /// The sentence after a pick when the recipe lists members (name your clan once, 0.7.0): how many of your accounts the
+    /// clan's roster holds, by name, or the offer to watch it when none. A list that couldn't be read says what the battle
+    /// read said instead (<see cref="Probe"/>), so a pick never ends on nothing. The opening words are the ones the smoke
+    /// walks wait for ("Found ", "None of your accounts", "Read ").
+    /// </summary>
+    public static ClanProbe Placed(string name, MembersResult members, IReadOnlyList<HostAccount> accounts, RecipeSnapshot? snapshot)
+    {
+        var listed = Listed(accounts);
+        if (listed.Count == 0)
+        {
+            return new ClanProbe($"Read {name}. RoRoRo hasn't listed your accounts yet, so Ur Score can't say which of them are in it.", false);
+        }
+
+        if (members.Problem is not null) return Probe(name, snapshot, accounts);
+
+        var found = InClan(listed, members);
+        return found.Count == 0
+            ? new ClanProbe($"None of your accounts are in {name} yet. You can still watch it.", true)
+            : new ClanProbe($"Found {found.Count} of your {Count(listed.Count, "account")} in {name}: {Names(found)}.", false);
+    }
+
+    /// <summary>What another clan's roster holds of the accounts still unplaced, or the watch offer when none of them.</summary>
+    public static ClanProbe PlacedOther(string name, IReadOnlyList<HostAccount> found) =>
+        found.Count == 0
+            ? new ClanProbe($"None of the rest are in {name}. You can still watch it.", true)
+            : new ClanProbe($"{name} has {found.Count} of them: {Names(found)}.", false);
+
+    /// <summary>Your listed accounts no members read has placed and <b>That's all</b> has not settled.</summary>
+    public static IReadOnlyList<HostAccount> Remaining(IReadOnlyList<HostAccount> accounts, IReadOnlySet<Guid> placed, RecipeState state)
+    {
+        var settled = state.Settled;
+        return [.. Listed(accounts).Where(a => !placed.Contains(a.AccountId) && !settled.Contains(a.AccountId))];
+    }
+
+    /// <summary>
+    /// The question over the other-clan search, naming every one of your <paramref name="clans"/> placed so far, or null when
+    /// nothing remains (the question is gone).
+    /// </summary>
+    public static string? RemainingLine(int remaining, IReadOnlyList<string> clans, string group) =>
+        remaining <= 0 ? null
+        : remaining == 1 ? $"1 of your accounts isn't in {Or(clans, group)} yet. Is it in another {group}?"
+        : $"{remaining} of your accounts aren't in {Or(clans, group)} yet. Are they in another {group}?";
+
+    /// <summary>
+    /// The settled set after <b>That's all</b>, or after every account is placed: what was settled before, every account listed
+    /// now, and every one placed. An account with no Roblox id yet is left out, so it is asked about once it has one.
+    /// </summary>
+    public static IReadOnlyList<string> Settle(IReadOnlyList<HostAccount> accounts, IEnumerable<Guid> placed, RecipeState state) =>
+        [.. state.Settled.Concat(Listed(accounts).Select(a => a.AccountId)).Concat(placed).Distinct().Select(id => id.ToString())];
 
     /// <summary>
     /// Adds a picked name with a role, or reuses the source that already has it (names match ignoring case,
@@ -137,6 +220,13 @@ public static class ClansModel
             : new SourceChange(added, id, null);
     }
 
+    /// <summary>
+    /// The button names the clan it would watch: under the "is it in another clan?" question it sits beside a line
+    /// about a different clan, and a bare "it" read as the question's clan (owner's pass, 2026-10-05).
+    /// </summary>
+    public static string WatchInsteadText(string? clan) =>
+        string.IsNullOrWhiteSpace(clan) ? "Watch it instead" : $"Watch {clan.Trim()} instead";
+
     public static IReadOnlyList<Source> WatchInstead(IReadOnlyList<Source> sources, string sourceId) =>
         [.. sources.Select(s => s.Id == sourceId ? s with { Role = SourceRole.Watch } : s)];
 
@@ -156,7 +246,7 @@ public static class ClansModel
     public static bool NeedsConfirmation(IReadOnlyList<Source> sources, string recipeSlug) =>
         sources.Count(s => s.Enabled && string.Equals(s.Recipe, recipeSlug, StringComparison.Ordinal)) >= ConfirmAbove;
 
-    /// <summary>Requests an hour per host: every step once a cycle, a per-account step once per account.</summary>
+    /// <summary>Requests an hour per host: every step once a cycle, a per-account step once per account, and each clan's members list.</summary>
     public static IReadOnlyList<HostRequests> RequestsPerHour(IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, int accountCount)
     {
         var perHost = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -172,16 +262,30 @@ public static class ClansModel
                 perHost.TryGetValue(host, out var sofar);
                 perHost[host] = sofar + cycles * (step.PerAccount ? accountCount : 1);
             }
+
+            // Its members list, once per Membership.Every (backlog V3-S.20), and only with accounts to look for: with none
+            // listed, nothing is asked.
+            if (accountCount > 0 && RecipeWords.MainInput(recipe)?.Members is { } members)
+            {
+                var host = RecipeHosts.HostOf(members.Url);
+                perHost.TryGetValue(host, out var sofar);
+                perHost[host] = sofar + 3600.0 / Membership.Every.TotalSeconds;
+            }
         }
 
         return [.. perHost.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => new HostRequests(kv.Key, (int)Math.Round(kv.Value)))];
     }
 
-    public static string RequestsLine(IReadOnlyList<HostRequests> requests) =>
-        string.Join(" ", requests.Select(r => $"Your PC asks {r.Host} about {r.PerHour.ToString("N0", CultureInfo.InvariantCulture)} times an hour."));
+    /// <summary>
+    /// What the PC asks, per host. A host that works out to none an hour (a per-account read with no account yet) is left out rather
+    /// than said as "about 0 times an hour", and a mode that is off says so (<paramref name="offMode"/> names it) because it reads nothing.
+    /// </summary>
+    public static string RequestsLine(IReadOnlyList<HostRequests> requests, string? offMode = null) =>
+        offMode is not null ? $"{offMode} is off, so nothing is read."
+        : string.Join(" ", requests.Where(r => r.PerHour > 0).Select(r => $"Your PC asks {r.Host} about {r.PerHour.ToString("N0", CultureInfo.InvariantCulture)} times an hour."));
 
     public static string ConfirmText(Recipe recipe, IReadOnlyList<HostRequests> after) =>
-        $"That makes more than {ConfirmAbove} {RecipeWords.GroupsLower(recipe)} for {recipe.Name}. {RequestsLine(after)} Add it anyway?"
+        $"That makes more than {ConfirmAbove} {RecipeWords.GroupsLower(recipe)}. {RequestsLine(after)} Add it anyway?"
             .Replace("  ", " ", StringComparison.Ordinal);
 
     /// <summary>
@@ -202,6 +306,17 @@ public static class ClansModel
 
     private static IReadOnlyList<Source> Replace(IReadOnlyList<Source> sources, Source updated) =>
         [.. sources.Select(s => s.Id == updated.Id ? updated : s)];
+
+    private static string Names(IReadOnlyList<HostAccount> accounts) => string.Join(", ", accounts.Select(a => a.DisplayName));
+
+    private static string Count(int count, string noun) => count == 1 ? $"{count} {noun}" : $"{count} {noun}s";
+
+    private static string Or(IReadOnlyList<string> items, string group) => items.Count switch
+    {
+        0 => $"your {group}",
+        1 => items[0],
+        _ => $"{string.Join(", ", items.Take(items.Count - 1))} or {items[^1]}",
+    };
 
     private static string JoinWithAnd(IReadOnlyList<string> items) => items.Count switch
     {

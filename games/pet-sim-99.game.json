@@ -1,0 +1,27 @@
+{
+  "game": 1,
+  "id": "pet-sim-99",
+  "name": "Pet Sim 99",
+  "modes": [
+    {
+      "id": "battle",
+      "name": "Battle",
+      "blurb": "Your clan's battle: place, race, pace and the top of the battle.",
+      "reads": ["pet-sim-99-clan-battle-points", "pet-sim-99-top-clans"],
+      "asks": "clan",
+      "shows": ["pet-sim-99-clan-battle-points:value"],
+      "board": "battle",
+      "onByDefault": true
+    },
+    {
+      "id": "profile",
+      "name": "Profile",
+      "blurb": "Rank, diamonds, hatches and playtime for each of your accounts.",
+      "reads": ["pet-sim-99-profile"],
+      "note": "Needs each account linked on db.biggames.io with its Profile view public.",
+      "link": { "text": "Link on db.biggames.io", "url": "https://db.biggames.io" },
+      "board": "alts",
+      "onByDefault": true
+    }
+  ]
+}

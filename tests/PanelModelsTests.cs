@@ -377,7 +377,7 @@ public class PanelModelsTests
         RaceModel Race(string recipe, params string[] ids) => PanelModels.Race(live, Reader(), new PanelSettings(recipe, SourceIds: ids));
 
         // A recipe with no summed total has nothing to race, whichever lines it names.
-        Assert.Equal("This panel's recipe has no total to race.", Race(Profile.Slug, clans[0].Id, clans[1].Id).Head.Stale);
+        Assert.Equal("This mode has no total to race.", Race(Profile.Slug, clans[0].Id, clans[1].Id).Head.Stale);
 
         var oneGone = Race(Clan.Slug, clans[0].Id, "s-gone0000", clans[1].Id);
         Assert.Null(oneGone.Head.Stale);
@@ -1215,6 +1215,29 @@ public class PanelModelsTests
         Assert.Equal("Profile is private.", model.Rows[2].Note);
         Assert.True(model.Rows[3].Missing);
         Assert.Equal(StatText.Dash, model.Rows[3].Value);
+    }
+
+    /// <summary>
+    /// An account that isn't linked on the PS99 site is a row that says so in the reader's words, not an error: the snapshot's
+    /// Unavailable message is the row's note, and the linked account beside it keeps its number.
+    /// </summary>
+    [Fact]
+    public void AnUnlinkedAccountsRowSaysNotLinkedAndTheOthersKeepTheirNumbers()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id, [Row(AltOne.RobloxUserId, 5, "diamonds")]) with
+        {
+            Unavailable = new Dictionary<long, string> { [Main.RobloxUserId] = "Not linked on db.biggames.io." },
+            UnavailableReasons = new Dictionary<long, UnavailableReason> { [Main.RobloxUserId] = UnavailableReason.NotFound },
+        };
+        var live = Live([profile], [Installed(Profile, "diamonds")], Snaps(snapshot));
+
+        var model = PanelModels.ProfileStat(live, Reader(), new PanelSettings(Profile.Slug, SourceId: profile.Id, Stat: "diamonds"));
+
+        var unlinked = model.Rows.Single(r => r.Name == Main.DisplayName);
+        Assert.Equal(("Not linked on db.biggames.io.", StatText.Dash, true), (unlinked.Note, unlinked.Value, unlinked.Missing));
+        Assert.Equal("5", model.Rows.Single(r => r.Name == AltOne.DisplayName).Value);
+        Assert.Equal("", model.Head.Stale ?? "");
     }
 
     /// <summary>

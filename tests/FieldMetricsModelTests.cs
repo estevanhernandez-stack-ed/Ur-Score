@@ -68,7 +68,7 @@ public class FieldMetricsModelTests
     public void WithoutAClanOfYoursNamedTheSectionSaysWhatToDo()
     {
         var clans = Clans();
-        var line = FieldMetricsModel.Line(clans, [SourceFor(clans, null, "s-00000009")], [clans]);
+        var line = FieldMetricsModel.Line("Battle · clans list", [SourceFor(clans, null, "s-00000009")], [clans]);
 
         Assert.Contains(FieldMetricsModel.NoClanSet, line, StringComparison.Ordinal);
     }
@@ -80,9 +80,9 @@ public class FieldMetricsModelTests
         var clan = Clan();
         var sources = new[] { SourceFor(clans, null, "s-00000009"), SourceFor(clan, "K0i2", "s-00000001") };
 
-        var line = FieldMetricsModel.Line(clans, sources, [clan, clans]);
+        var line = FieldMetricsModel.Line("Battle · clans list", sources, [clan, clans]);
 
-        Assert.Contains("about K0i2", line, StringComparison.Ordinal);
+        Assert.StartsWith("From Battle · clans list, about K0i2", line, StringComparison.Ordinal);
         Assert.DoesNotContain("K0i2,", line, StringComparison.Ordinal);
         Assert.Contains("no account attached", line, StringComparison.Ordinal);
         Assert.DoesNotContain(FieldMetricsModel.NoClanSet, line, StringComparison.Ordinal);
@@ -107,7 +107,7 @@ public class FieldMetricsModelTests
         };
 
         Assert.Equal(["K0i2"], SourceRules.MyClanNames(sources, [clan, clans]));
-        Assert.DoesNotContain("DarkLegion", FieldMetricsModel.Line(clans, sources, [clan, clans]), StringComparison.Ordinal);
+        Assert.DoesNotContain("DarkLegion", FieldMetricsModel.Line("Battle · clans list", sources, [clan, clans]), StringComparison.Ordinal);
     }
 
     /// <summary>A switched-off source is not read, so its clan is not one the numbers can be about either.</summary>
@@ -149,6 +149,6 @@ public class FieldMetricsModelTests
             SourceFor(clan, "CCGP", "s-00000002"),
         };
 
-        Assert.Contains("the best placed of K0i2 and CCGP.", FieldMetricsModel.Line(clans, sources, [clan, clans]), StringComparison.Ordinal);
+        Assert.Contains("the best placed of K0i2 and CCGP.", FieldMetricsModel.Line("Battle · clans list", sources, [clan, clans]), StringComparison.Ordinal);
     }
 }

@@ -24,8 +24,28 @@ public partial class App : Application
     /// </summary>
     private Composition.AppServices? _shown;
 
+    /// <summary>
+    /// Set by the test harness before it builds its one <c>App</c> (tests/TestProcess.cs, tests/UiThread.cs), so the app's
+    /// start never runs in a test process. WPF's <c>Application</c> constructor queues <see cref="OnStartup"/> onto the
+    /// dispatcher, and the harness runs that dispatcher, so without this every suite run started Ur Score for real: the
+    /// single-instance mutex, AppServices over the user's REAL data folder, the board. With a real copy running, the mutex
+    /// made that start shut the test application down. Ported from K0ii Score (fe8d103). Never set by the app.
+    /// </summary>
+    internal static bool HostedByTests { get; set; }
+
+    /// <summary>How many times <see cref="OnStartup"/>'s body has run in this process: the app's own start, once; never in a test.</summary>
+    private static int _startupsRun;
+
+    internal static int StartupsRun => Volatile.Read(ref _startupsRun);
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Before anything, the --try branch and the mutex included: a test process gets the resources App.xaml gives and
+        // nothing else. The try-out itself is tested by starting the built exe (TryCommandTests), never through this.
+        if (HostedByTests) return;
+
+        Interlocked.Increment(ref _startupsRun);
+
         // The --try branch comes first, before the single-instance mutex: a try-out runs no window, no RoRoRo,
         // no state, no book and no mutex (spec §10).
         if (Cli.TryCommand.Wants(e.Args))

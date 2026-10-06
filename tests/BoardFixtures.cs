@@ -92,9 +92,9 @@ internal static class BoardFixtures
     public static LiveBoard Live(
         IReadOnlyList<Source> sources, IReadOnlyList<InstalledRecipe> installed, IReadOnlyDictionary<string, RecipeSnapshot> snapshots,
         bool running = false, IReadOnlyDictionary<string, DateTimeOffset>? lastRead = null, IReadOnlyList<HostAccount>? accounts = null,
-        IReadOnlyDictionary<string, RecipeSnapshot>? remembered = null) =>
+        IReadOnlyDictionary<string, RecipeSnapshot>? remembered = null, IReadOnlyDictionary<string, IReadOnlySet<long>>? members = null) =>
         new(sources, installed, snapshots, lastRead ?? new Dictionary<string, DateTimeOffset>(), accounts ?? Accounts, new FixedTime(Now), running,
-            Remembered: remembered);
+            Remembered: remembered, Members: members);
 
     public static ScoreBookReader Reader(params BookLine[] lines)
     {

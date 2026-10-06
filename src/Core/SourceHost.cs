@@ -195,6 +195,22 @@ public sealed class SourceHost(Func<Source, RecipeWatch?> createWatch, Func<Sour
     }
 
     /// <summary>
+    /// One source read once, by hand (Setup's read-once), under its entry's token as well as the caller's, so a source
+    /// removed or switched off while the read is in flight has it cancelled before anything is kept or sent, as
+    /// <see cref="RunAllNowAsync"/>'s reads are (review round 2: this read ran under the caller's token alone). Nothing is
+    /// published: the caller has the snapshot. Null when the source has no watch; a cancellation throws.
+    /// </summary>
+    public async Task<RecipeSnapshot?> ReadNowAsync(string sourceId, string trigger, CancellationToken cancellationToken)
+    {
+        Entry? entry;
+        lock (_gate) _entries.TryGetValue(sourceId, out entry);
+        if (entry is null) return null;
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, entry.Stop.Token);
+        return await entry.Watch.RunOnceAsync(linked.Token, trigger).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// How long exit waits for reads already in flight before cancelling them. Long enough for a read that has
     /// fetched to record and send; short enough that closing the window never feels stuck. A read that is still
     /// waiting on the network after this is cancelled and its lines are lost, which is the bargain exit makes

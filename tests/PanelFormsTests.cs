@@ -339,10 +339,10 @@ public class PanelFormsTests
         Assert.Equal("This panel's clan was removed. Choose another.", PanelForms.Problem(PanelType.Standing, Clans("s-gone0000"), live));
         Assert.Equal("Choose 1 to 5 clans.", PanelForms.Problem(PanelType.Race, Clans(race: []), live));
         Assert.Null(PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id]), live));
-        Assert.Equal("Every line in a race comes from the same recipe.", PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id, TopSource.Id]), live));
+        Assert.Equal("Every line in a race comes from the same mode.", PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id, TopSource.Id]), live));
         Assert.Null(PanelForms.Problem(PanelType.Race, Clans(race: [MainClan.Id, Rival.Id]), live));
         Assert.Equal("Choose a clan your accounts are in.", PanelForms.Problem(PanelType.PromotionCheck, Clans(Rival.Id, MainClan.Id, "value"), live));
-        Assert.Equal("Choose a different clan of the same recipe to compare with.", PanelForms.Problem(PanelType.PromotionCheck, Clans(AltClan.Id, AltClan.Id, "value"), live));
+        Assert.Equal("Choose a different clan of the same mode to compare with.", PanelForms.Problem(PanelType.PromotionCheck, Clans(AltClan.Id, AltClan.Id, "value"), live));
         Assert.Equal("Choose a stat.", PanelForms.Problem(PanelType.PromotionCheck, Clans(AltClan.Id, MainClan.Id), live));
         Assert.Equal("This panel's stat was removed. Choose another.", PanelForms.Problem(PanelType.MyAccounts, Clans(stat: "gone-stat"), live));
         Assert.Equal("Choose one of your accounts.", PanelForms.Problem(PanelType.AccountCard, Clans(stat: "value", user: 987654321), live));

@@ -11,7 +11,7 @@ $backup = $null
 function Chip { (Find-ByAutomationId (Get-BoardWindow) 'StartStopButton').Current.Name }
 
 try {
-    $backup = Move-UrDataAside
+    $backup = Move-UrDataAside -ModesOff 'pet-sim-99/profile'
     Note-RoRoRo 'before'
     $board = Initialize-ClanBoard $Main
 
@@ -75,7 +75,7 @@ try {
 
     # 9. Start on open reads by itself (BC1): tick it the way a player would, then open again.
     Start-UrScore | Out-Null
-    $setup = Open-SetupPage 'Recipes'
+    $setup = Open-GamePage
     Set-Tick (Get-Check $setup 'Start reading when Ur Score opens') $true
     Close-UrWindow (Get-SetupWindow)
     Stop-UrScoreFromBoard
@@ -83,7 +83,7 @@ try {
     $auto = Wait-Until { (Chip) -match '^Reading (is on|has a problem)' } 90
     Check '9 Start on open reads without a press' $auto (Chip)
 
-    # This board is now actively reading and sending, so closing it raises the close question (constraints.md:
+    # This board is now actively reading, and closing it may raise the close question (constraints.md; this seeded folder sends nothing, so it may not ask. Answer it if it does:
     # "while something is being read and sent ... a paused board closes silencing nothing" -- this one is not
     # paused). Stop-UrScoreFromBoard does not answer that question itself; left alone it would just wait out its
     # own timeout and fall back to a hard kill, which is not "closes cleanly". So the walk answers it here.

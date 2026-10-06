@@ -67,7 +67,7 @@ public sealed record Recipe(
     }
 }
 
-public sealed record RecipeInput(string Id, string Label, RecipeSearch? Search, string? Plural = null)
+public sealed record RecipeInput(string Id, string Label, RecipeSearch? Search, string? Plural = null, RecipeMembers? Members = null)
 {
     /// <summary>The word for several of these, for Setup and panel titles: the recipe's own, else from the label.</summary>
     public string PluralLabel => Plural ?? DefaultPlural(Label);
@@ -84,6 +84,14 @@ public sealed record RecipeInput(string Id, string Label, RecipeSearch? Search, 
 }
 
 public sealed record RecipeSearch(string Url, string List);
+
+/// <summary>
+/// Where the members of one value of an input are listed (name your clan once, 0.7.0): <see cref="Url"/> with the input's
+/// placeholder, the list at <see cref="List"/>, each member's Roblox id at <see cref="UserId"/> inside a list item, and an
+/// optional <see cref="Owner"/> id outside the list (the PS99 clan API leaves its owner out of <c>Members</c>). It describes
+/// data only: what is DONE with a list is Ur Score's rule, and that rule keeps only your own ids (<see cref="MemberLists"/>).
+/// </summary>
+public sealed record RecipeMembers(string Url, string List, string UserId, string? Owner);
 
 public enum KeyPlacement { Header, Query }
 
@@ -109,7 +117,8 @@ public sealed record RecipeStep(
     string? AbsentMessage = null,
     string? GroupName = null,
     string? Rank = null,
-    RecipeAsOf? AsOf = null);
+    RecipeAsOf? AsOf = null,
+    RecipeNotFound? NotFound = null);
 
 /// <summary>
 /// One stat the user can tick. <see cref="MetricId"/> is only a suggestion: the name RoRoRo gets is
@@ -150,6 +159,17 @@ public sealed record RecipeUnavailable(string Path, JsonValueKind IsKind, string
                                 && number == expected,
         _ => false,
     };
+}
+
+/// <summary>
+/// What a 404 for one account means, in the source's words: the PS99 API answers an account that isn't linked on its site
+/// with a 404, which is a different fix from a private Profile (<see cref="RecipeUnavailable"/>). <see cref="Status"/> is
+/// always 404, the only answer that says an account isn't there (spec §3.2); it is written out so the recipe reads as what
+/// it handles. Describes the data only, like <c>unavailable</c>.
+/// </summary>
+public sealed record RecipeNotFound(int Status, string Message)
+{
+    public const int Only = 404;
 }
 
 /// <summary><see cref="Id"/> is how the score book keeps this value; the parser always fills it.</summary>

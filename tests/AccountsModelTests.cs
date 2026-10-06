@@ -191,6 +191,16 @@ public class AccountsModelTests
     }
 
     [Fact]
+    public void ASendTickIsNamedByItsModeWhenTheLabelsSayWhich()
+    {
+        var labels = new Dictionary<string, string> { [Profile.Slug] = "Profile" };
+
+        var rows = AccountsModel.Rows([Main], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>(), labels: labels);
+
+        Assert.Equal("Send BirchMain for Profile", rows[0].Sends.Single().Name);
+    }
+
+    [Fact]
     public void EachSetupRowCarriesItsOwnAccountsPicture()
     {
         var rows = AccountsModel.Rows([Main, Alt], [Sending(Profile)], [], new Dictionary<string, RecipeSnapshot>(),

@@ -17,8 +17,37 @@ public sealed record AppPaths(string Root)
 {
     public const string FolderName = "626labs.ur-score";
 
-    /// <summary>A sibling of RoRoRo's own folder under Local AppData, never inside it.</summary>
-    public static AppPaths Default { get; } = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName));
+    private static readonly Lazy<AppPaths> Real =
+        new(() => new AppPaths(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName)));
+
+    private static int _refused;
+
+    /// <summary>
+    /// A sibling of RoRoRo's own folder under Local AppData, never inside it: the user's real data folder. Throws once
+    /// <see cref="RefuseDefault"/> has been called, which the test assembly does before any test runs, so nothing in a test
+    /// process can resolve it: every store's default path and the app's own composition read it here.
+    /// </summary>
+    public static AppPaths Default
+    {
+        get
+        {
+            ThrowIfRefused();
+            return Real.Value;
+        }
+    }
+
+    /// <summary>
+    /// Latches <see cref="Default"/> shut for the rest of the process; it can't be undone. Called by the test assembly's module
+    /// initializer (port of K0ii Score's fe8d103: its harness had started the app for real inside every suite run). Never by the app.
+    /// </summary>
+    internal static void RefuseDefault() => Interlocked.Exchange(ref _refused, 1);
+
+    /// <summary>Throws the refusal when the latch is set: the same gate <see cref="Default"/> uses, for other real paths (RoRoRo's rules file).</summary>
+    internal static void ThrowIfRefused()
+    {
+        if (Volatile.Read(ref _refused) == 1)
+            throw new InvalidOperationException("The real data folder is refused in a test process: compose over new AppPaths(<a folder of the test's own>).");
+    }
 
     public string Keys => Path.Combine(Root, "keys.dat");
 
@@ -31,6 +60,9 @@ public sealed record AppPaths(string Root)
     public string Sources => Path.Combine(Root, "sources.json");
 
     public string Boards => Path.Combine(Root, "boards.json");
+
+    /// <summary>Which of your own accounts each clan's members list held (backlog V3-S.20). Your ids only, never another member's.</summary>
+    public string Membership => Path.Combine(Root, "membership.json");
 
     public string Book => Path.Combine(Root, "scorebook");
 

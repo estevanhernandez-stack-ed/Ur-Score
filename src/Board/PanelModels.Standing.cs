@@ -42,6 +42,7 @@ public static partial class PanelModels
     {
         var recipe = live.FindRecipe(settings.Recipe)?.Recipe;
         var title = PanelText.Title(PanelType.Standing, recipe, live.Installed);
+        if (live.OffHead(settings, title) is { } off) return new StandingModel(off, Dash, "", "", Dash, "", false, "", "", 0, false, "", "");
 
         if (recipe is null || live.FindSource(settings.SourceId) is not { } source)
         {

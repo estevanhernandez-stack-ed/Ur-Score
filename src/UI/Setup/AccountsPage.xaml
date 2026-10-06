@@ -34,7 +34,7 @@
             </ui:RowList>
         </Grid>
 
-        <ui:RowList x:Name="AccountsTable" AutomationProperties.Name="Your accounts, where each was found, and Send for each recipe">
+        <ui:RowList x:Name="AccountsTable" AutomationProperties.Name="Your accounts, where each was found, and Send for each mode">
             <ui:RowList.ItemTemplate>
                 <DataTemplate>
                     <Border Style="{StaticResource Card}" Padding="10,7" Margin="0,0,0,6">

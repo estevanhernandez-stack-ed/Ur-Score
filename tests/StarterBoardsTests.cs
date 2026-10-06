@@ -167,6 +167,19 @@ public class StarterBoardsTests
     }
 
     [Fact]
+    public void TheEmptyStateSkipsAnOffModeForAnOnModesRealProblem()
+    {
+        // Battle off, Alts on but with no stat ticked: the user needs to hear about Alts, not that Battle is off.
+        var starters = StarterBoards.All([Installed(Profile)], [], key => key == "battle" ? "Battle" : null);
+        Assert.Equal((BoardEmpty.ModeOff, BoardEmpty.NoStats), (starters[0].Empty, starters[1].Empty));
+        Assert.Equal(StarterBoards.Alts, StarterBoards.EmptyState(starters).Name);
+
+        // Every mode off: the first starter still answers, and BoardText turns that into NoModes.
+        var allOff = StarterBoards.All([Installed(Profile)], [], _ => "Any");
+        Assert.Equal(BoardEmpty.ModeOff, StarterBoards.EmptyState(allOff).Empty);
+    }
+
+    [Fact]
     public void AStarterIsBuiltByItsNameOrItsKeyInAnyLetterCaseAndNoOtherName()
     {
         var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);

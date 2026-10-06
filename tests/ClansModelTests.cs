@@ -180,6 +180,13 @@ public class ClansModelTests
     }
 
     [Fact]
+    public void WatchInsteadNamesTheClanItWouldWatch()
+    {
+        Assert.Equal("Watch NovaForge instead", ClansModel.WatchInsteadText(" NovaForge "));
+        Assert.Equal("Watch it instead", ClansModel.WatchInsteadText("  "));
+    }
+
+    [Fact]
     public void WatchInsteadAndTheSwitchChangeOnlyTheirSource()
     {
         Source[] sources = [ClanSource("s-00000001", "CCGP", SourceRole.Main), ClanSource("s-00000002", "K0i2", SourceRole.Mine)];
@@ -207,6 +214,8 @@ public class ClansModelTests
         var expected = (int)Math.Round(2 * Clan.Steps.Count * 3600.0 / Clan.EffectiveEverySeconds);
         Assert.Equal(new HostRequests("ps99.biggamesapi.io", expected), Assert.Single(requests));
         Assert.Equal($"Your PC asks ps99.biggamesapi.io about {expected} times an hour.", ClansModel.RequestsLine(requests));
+        Assert.Equal("Battle is off, so nothing is read.", ClansModel.RequestsLine(requests, "Battle"));
+        Assert.Equal("", ClansModel.RequestsLine([new HostRequests("db.biggames.io", 0)]));
     }
 
     [Fact]
@@ -217,7 +226,7 @@ public class ClansModelTests
 
         Assert.True(ClansModel.NeedsConfirmation(five, Clan.Slug));
         Assert.False(ClansModel.NeedsConfirmation(fourAndOneOff, Clan.Slug));
-        Assert.StartsWith("That makes more than 5 clans for Pet Sim 99 clan battle points.", ClansModel.ConfirmText(Clan, []));
+        Assert.StartsWith("That makes more than 5 clans. ", ClansModel.ConfirmText(Clan, []));
     }
 
     /// <summary>
@@ -252,5 +261,112 @@ public class ClansModelTests
         Assert.Null(ClansModel.GroupListSource([ClanSource("s-00000001", "CCGP", SourceRole.Main)], installed, top.Slug));
         // And asked from a page that is not a list, there is no switch to show.
         Assert.Null(ClansModel.GroupListSource([ClanSource("s-00000001", "CCGP", SourceRole.Main), topSource], installed, Clan.Slug));
+    }
+
+    // Name your clan once (0.7.0): the member list places your accounts, and only the rest are asked about.
+
+    private static readonly HostAccount Third = new(Guid.Parse("44444444-4444-4444-4444-444444444444"), 301, "CedarThird");
+    private static readonly HostAccount Fourth = new(Guid.Parse("55555555-5555-5555-5555-555555555555"), 401, "DuneFourth");
+
+    private static MembersResult Members(params long[] found) => new(found.ToHashSet(), null);
+
+    [Fact]
+    public void TheFoundLineCountsYourListedAccountsAndNamesThoseInTheClan()
+    {
+        Assert.Equal(new ClanProbe("Found 2 of your 4 accounts in K0i2: BirchMain, AshAlt.", false),
+            ClansModel.Placed("K0i2", Members(101, 201), [Main, Alt, Third, Fourth, Waiting], null));
+        Assert.Equal(new ClanProbe("Found 1 of your 2 accounts in K0i2: AshAlt.", false),
+            ClansModel.Placed("K0i2", Members(201), [Main, Alt], null));
+        Assert.Equal(new ClanProbe("Found 1 of your 1 account in K0i2: BirchMain.", false),
+            ClansModel.Placed("K0i2", Members(101), [Main], null));
+    }
+
+    [Fact]
+    public void NoneFoundStillOffersToWatchItInstead() =>
+        Assert.Equal(new ClanProbe("None of your accounts are in NovaForge yet. You can still watch it.", true),
+            ClansModel.Placed("NovaForge", Members(), [Main, Alt], null));
+
+    [Fact]
+    public void BeforeRoRoRoListsAccountsThePlacementCannotSayEither()
+    {
+        var expected = new ClanProbe("Read CCGP. RoRoRo hasn't listed your accounts yet, so Ur Score can't say which of them are in it.", false);
+
+        Assert.Equal(expected, ClansModel.Placed("CCGP", Members(), [], null));
+        Assert.Equal(expected, ClansModel.Placed("CCGP", Members(), [Waiting], null));
+    }
+
+    /// <summary>A members list that couldn't be read falls back to what the battle read said, the probe of before 0.7.0.</summary>
+    [Fact]
+    public void AMembersListThatCouldNotBeReadFallsBackToTheBattleRead() =>
+        Assert.Equal(ClansModel.Probe("CCGP", Read(101), [Main, Alt]),
+            ClansModel.Placed("CCGP", new MembersResult(new HashSet<long>(), "example.test answered 503."), [Main, Alt], Read(101)));
+
+    [Fact]
+    public void TheRemainingLineIsGoodEnglishForOneOrManyAndForEveryClanPlacedSoFar()
+    {
+        Assert.Equal("5 of your accounts aren't in K0i2 yet. Are they in another clan?", ClansModel.RemainingLine(5, ["K0i2"], "clan"));
+        Assert.Equal("1 of your accounts isn't in K0i2 yet. Is it in another clan?", ClansModel.RemainingLine(1, ["K0i2"], "clan"));
+        Assert.Equal("2 of your accounts aren't in K0i2 or K0i3 yet. Are they in another clan?", ClansModel.RemainingLine(2, ["K0i2", "K0i3"], "clan"));
+        Assert.Equal("2 of your accounts aren't in K0i2, K0i3 or CCGP yet. Are they in another clan?",
+            ClansModel.RemainingLine(2, ["K0i2", "K0i3", "CCGP"], "clan"));
+        Assert.Null(ClansModel.RemainingLine(0, ["K0i2"], "clan"));
+    }
+
+    [Fact]
+    public void AnotherClansLineSaysHowManyOfTheRestItHas()
+    {
+        Assert.Equal(new ClanProbe("K0i3 has 2 of them: CedarThird, DuneFourth.", false), ClansModel.PlacedOther("K0i3", [Third, Fourth]));
+        Assert.Equal(new ClanProbe("K0i3 has 1 of them: CedarThird.", false), ClansModel.PlacedOther("K0i3", [Third]));
+        Assert.Equal(new ClanProbe("None of the rest are in K0i3. You can still watch it.", true), ClansModel.PlacedOther("K0i3", []));
+    }
+
+    /// <summary>The whole of step 3: the main places two, another clan one, a third the last, and the question is gone.</summary>
+    [Fact]
+    public void PlacementOverSeveralClansCountsTheRemainderEachTime()
+    {
+        IReadOnlyList<HostAccount> accounts = [Main, Alt, Third, Fourth, Waiting];
+        var placed = new HashSet<Guid>();
+        var state = new RecipeState();
+
+        placed.UnionWith(ClansModel.InClan(accounts, Members(101, 201)).Select(a => a.AccountId));
+        var rest = ClansModel.Remaining(accounts, placed, state);
+        Assert.Equal(new[] { "CedarThird", "DuneFourth" }, rest.Select(a => a.DisplayName).ToArray());
+
+        // Another clan is asked about the rest only: an account already placed is not "one of them".
+        var inK0i3 = ClansModel.InClan(rest, Members(101, 301));
+        Assert.Equal(new[] { "CedarThird" }, inK0i3.Select(a => a.DisplayName).ToArray());
+        placed.UnionWith(inK0i3.Select(a => a.AccountId));
+        Assert.Equal(new[] { "DuneFourth" }, ClansModel.Remaining(accounts, placed, state).Select(a => a.DisplayName).ToArray());
+
+        placed.UnionWith(ClansModel.InClan(ClansModel.Remaining(accounts, placed, state), Members(401)).Select(a => a.AccountId));
+        Assert.Empty(ClansModel.Remaining(accounts, placed, state));
+    }
+
+    /// <summary>
+    /// "That's all" keeps every account listed at the time as settled, so the question doesn't come back on the next Setup;
+    /// an account RoRoRo lists later isn't in that set, so the question comes back for it alone (the re-arm rule).
+    /// </summary>
+    [Fact]
+    public void ThatsAllSettlesEveryListedAccountAndANewOneReArmsTheQuestion()
+    {
+        var settled = new RecipeState(SettledAccountIds: ClansModel.Settle([Main, Alt, Waiting], [], new RecipeState()));
+
+        Assert.Empty(ClansModel.Remaining([Main, Alt], new HashSet<Guid>(), settled));
+        Assert.Equal(new[] { Third }, ClansModel.Remaining([Main, Alt, Third], new HashSet<Guid>(), settled).ToArray());
+
+        // Settling again keeps what was settled and adds the newcomer, and a placed account counts as settled too.
+        var again = ClansModel.Settle([Main, Alt, Third], [Fourth.AccountId], settled);
+        Assert.Equal(new[] { Main.AccountId, Alt.AccountId, Third.AccountId, Fourth.AccountId }.Select(g => g.ToString()).Order(),
+            again.Order());
+    }
+
+    [Fact]
+    public void TheSettledAccountsRoundTripThroughTheStateFileInCamelCase()
+    {
+        var json = RecipeStore.SerializeState(new RecipeState(SettledAccountIds: [Main.AccountId.ToString()]));
+
+        Assert.Contains("\"settledAccountIds\"", json);
+        Assert.Equal(new[] { Main.AccountId.ToString() }, RecipeStore.ParseState(json).SettledAccountIds!.ToArray());
+        Assert.Null(RecipeStore.ParseState("{}").SettledAccountIds);
     }
 }

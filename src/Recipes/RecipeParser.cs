@@ -229,7 +229,17 @@ public static class RecipeParser
                 if (url is not null && list is not null) search = new RecipeSearch(url, list);
             }
 
-            if (id is not null && label is not null) inputs.Add(new RecipeInput(id, label, search, OptionalString(item, "plural")));
+            RecipeMembers? members = null;
+            if (JsonNav.TryGet(item, "members", out var m) && m.ValueKind == JsonValueKind.Object)
+            {
+                var url = RequiredString(m, "url", $"{where}'s members", problems);
+                var list = RequiredString(m, "list", $"{where}'s members", problems);
+                var userId = RequiredString(m, "userId", $"{where}'s members", problems);
+                if (url is not null) RequireHttps(url, $"{where}'s members url", problems);
+                if (url is not null && list is not null && userId is not null) members = new RecipeMembers(url, list, userId, OptionalString(m, "owner"));
+            }
+
+            if (id is not null && label is not null) inputs.Add(new RecipeInput(id, label, search, OptionalString(item, "plural"), members));
         }
 
         return inputs;
@@ -353,7 +363,8 @@ public static class RecipeParser
                     ParseAbsentMessage(item, where, problems),
                     OptionalString(item, "groupName"),
                     OptionalString(item, "rank"),
-                    ParseAsOf(item, where, problems)));
+                    ParseAsOf(item, where, problems),
+                    ParseNotFound(item, where, problems)));
             }
         }
 
@@ -461,6 +472,28 @@ public static class RecipeParser
         return path is not null && message is not null && isText is not null
             ? new RecipeUnavailable(path, isKind, isText, message)
             : null;
+    }
+
+    private static RecipeNotFound? ParseNotFound(JsonElement step, string where, List<string> problems)
+    {
+        if (!Present(step, "notFound", out var notFound)) return null;
+
+        if (notFound.ValueKind != JsonValueKind.Object)
+        {
+            problems.Add($"{Capitalize(where)}'s 'notFound' must be an object with a status and a message.");
+            return null;
+        }
+
+        var message = RequiredString(notFound, "message", $"{where}'s notFound", problems);
+        var statusOk = JsonNav.TryGet(notFound, "status", out var status)
+                       && status.ValueKind == JsonValueKind.Number
+                       && status.TryGetInt32(out var number) && number == RecipeNotFound.Only;
+        if (!statusOk)
+        {
+            problems.Add($"{Capitalize(where)}'s notFound 'status' must be {RecipeNotFound.Only}, the only answer that means an account isn't there.");
+        }
+
+        return statusOk && message is not null ? new RecipeNotFound(RecipeNotFound.Only, message) : null;
     }
 
     private static string? ParseAbsentMessage(JsonElement step, string where, List<string> problems)
@@ -614,6 +647,11 @@ public static class RecipeParser
                 problems.Add($"{Capitalize(where)} has 'unavailable', but only a perAccount step can.");
             }
 
+            if (step.NotFound is not null && !step.PerAccount)
+            {
+                problems.Add($"{Capitalize(where)} has 'notFound', but only a perAccount step can.");
+            }
+
             if (step.AsOf is not null && !isLast)
             {
                 problems.Add($"{Capitalize(where)} has 'asOf', but only the last step can.");
@@ -724,6 +762,38 @@ public static class RecipeParser
             foreach (var name in Placeholders.Names(input.Search!.Url).Concat(Placeholders.Names(input.Search.List)))
             {
                 problems.Add($"Input '{input.Id}' searches with a placeholder {{{name}}}. A search list's address must be fixed.");
+            }
+        }
+
+        // A members list is asked once for the whole clan with the value you entered: never with your accounts' ids, and its
+        // paths read every member alike, so they name nothing taken and no particular player.
+        foreach (var input in inputs.Where(i => i.Members is not null))
+        {
+            var members = input.Members!;
+            foreach (var name in Placeholders.Names(members.Url))
+            {
+                if (name == Placeholders.UserId)
+                {
+                    problems.Add($"Input '{input.Id}''s members url cannot use {{userId}}. A members list is asked once, not per account.");
+                }
+                else if (!inputIds.Contains(name))
+                {
+                    problems.Add($"Unknown placeholder {{{name}}} in input '{input.Id}''s members url.");
+                }
+            }
+
+            foreach (var (label, path) in new[] { ("list", members.List), ("userId", members.UserId), ("owner", members.Owner) })
+            {
+                if (path is null) continue;
+                foreach (var name in Placeholders.Names(path))
+                {
+                    problems.Add($"Input '{input.Id}''s members paths can't use placeholders, and {label} uses {{{name}}}.");
+                }
+
+                if (PathRules.HasLiteralNumber(path))
+                {
+                    problems.Add($"Input '{input.Id}''s members: '{path}' names a number. Recipes can't point at a particular player; use a placeholder instead.");
+                }
             }
         }
 

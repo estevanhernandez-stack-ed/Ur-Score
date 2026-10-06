@@ -16,6 +16,32 @@ public class RecipeStoreTests : IDisposable
     private static Recipe PetSim => RecipeParser.Parse(PetSimText).Recipe!;
 
     [Fact]
+    public void TryLoadStateIsNullForAMissingFileSoAFreshInstallIsSeeded()
+    {
+        var store = new RecipeStore(_dir);
+        Directory.CreateDirectory(_dir);
+        var recipe = RecipeParser.Parse(BuiltInRecipes.Find("pet-sim-99-clan-battle-points")!.Text).Recipe!;
+
+        Assert.Null(store.TryLoadState(recipe));
+        var effective = RecipeStates.Effective(recipe, store.TryLoadState(recipe), ["value"]);
+
+        Assert.True(Assert.Single(effective.StatChoices).Value.Show);
+    }
+
+    [Fact]
+    public void TryLoadStateIsNullForAnUnreadableFileAndANonNullOneOtherwise()
+    {
+        var store = new RecipeStore(_dir);
+        Directory.CreateDirectory(_dir);
+        var recipe = RecipeParser.Parse(BuiltInRecipes.Find("pet-sim-99-clan-battle-points")!.Text).Recipe!;
+        File.WriteAllText(Path.Combine(_dir, recipe.Slug + ".state.json"), "{ not json");
+        Assert.Null(store.TryLoadState(recipe));
+
+        File.WriteAllText(Path.Combine(_dir, recipe.Slug + ".state.json"), "{\"inputs\":{\"clan\":\"X\"}}");
+        Assert.Equal("X", store.TryLoadState(recipe)!.InputValues["clan"]);
+    }
+
+    [Fact]
     public void ASavedRecipeComesBackWithItsTextAndState()
     {
         var store = new RecipeStore(_dir);

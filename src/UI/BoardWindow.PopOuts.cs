@@ -115,6 +115,7 @@ public partial class BoardWindow
             areas ??= WorkAreas();
             var window = new PanelPopOutWindow(id, view, PopOutPlacement.Clamp(rect, areas));
             window.ShowTitle(PanelGallery.TitleOf(def, live));
+            window.AddHandler(PanelFrame.ToolEvent, new EventHandler<PanelToolEventArgs>(OnTurnOnModeTool));
             window.Moved += OnPopOutMoved;
             window.Closed += OnPopOutClosed;
             HookAccounts(window);

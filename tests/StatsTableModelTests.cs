@@ -210,4 +210,12 @@ public class StatsTableModelTests
         var clan = RecipeParser.Parse(RecipeParserTests.Fixture("petsim99-clan-battle.recipe.json")).Recipe!;
         Assert.Equal("", StatsTableModel.NamesLine(clan, 0));
     }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(8, false)]
+    [InlineData(9, true)]
+    [InlineData(16, true)]
+    public void TheSearchShowsOnlyWhenThereAreEnoughStatsToSearch(int rows, bool expected) =>
+        Assert.Equal(expected, StatsTableModel.ShowsSearch(rows));
 }

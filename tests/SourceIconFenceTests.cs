@@ -10,14 +10,13 @@ namespace UrScore.Tests;
 public class SourceIconFenceTests
 {
     /// <summary>
-    /// Both places a clan's picture is drawn: the Standing panel (its own clan's) and a recipe's row in Setup (its main clan's).
-    /// Each draws through the shared decoder, which never locks the cache file a later fetch replaces, and is named for whose
-    /// picture it is.
+    /// Where a clan's picture is drawn in a panel: the Standing panel (its own clan's). It draws through the shared decoder,
+    /// which never locks the cache file a later fetch replaces, and is named for whose picture it is. (Setup's Recipes page drew
+    /// its main clan's too; the game page that replaced it has no picture slot.)
     /// </summary>
     public static TheoryData<string, string, string> Slots => new()
     {
         { Path.Combine("Panels", "StandingPanel.xaml"), "<Image x:Name=\"StandingIcon\"", "Icon" },
-        { Path.Combine("Setup", "RecipesPage.xaml"), "<Image x:Name=\"RecipeIcon\"", "IconFile" },
     };
 
     [Theory]
@@ -126,8 +125,10 @@ public class SourceIconFenceTests
         var app = File.ReadAllText(Path.Combine(RepoRoot(), "src", "Composition", "AppServices.cs"));
 
         Assert.Contains("_sourceIcons.Restore(IconHostsFor);", app, StringComparison.Ordinal);
-        Assert.Contains("_sourceIcons.Keep(IconChoice.SourcesWithIcons(Sources, Installed));", app, StringComparison.Ordinal);
-        Assert.Contains("_avatars.Files, _remembered, _sourceIcons.Files);", app, StringComparison.Ordinal);
+        // Over ALL sources, never ActiveSources (games-and-modes A3: a mode toggle must not forget its clans' pictures), and
+        // the orphans' recipes beside the installed ones (an orphan is kept, not removed).
+        Assert.Contains("_sourceIcons.Keep(IconChoice.SourcesWithIcons(Sources, [.. Installed, .. Orphans]));", app, StringComparison.Ordinal);
+        Assert.Contains("_avatars.Files, _remembered, _sourceIcons.Files, OffReaders(), ReaderLabels(), _membership.Ids);", app, StringComparison.Ordinal);
 
         // Restored in the constructor, which runs before BoardWindow reads WindowIcon at open.
         var constructor = Between(app, "public AppServices(Dispatcher ui)", "// ---- ISetupServices ----", "the AppServices constructor");

@@ -280,6 +280,64 @@ public class RecipeParserTests
         Assert.Contains("Input 'clan' searches with a placeholder {clan}. A search list's address must be fixed.", Problems(With(OneListStep, extra)));
     }
 
+    /// <summary>An input with a members declaration, its fields swapped in by each test.</summary>
+    private static string Members(string members) =>
+        With(OneListStep, $$""", "inputs": [{ "id": "clan", "label": "Your clan", "members": {{members}} }]""");
+
+    [Fact]
+    public void AnInputCanDeclareWhereItsMembersAre()
+    {
+        var result = RecipeParser.Parse(Members(
+            """{ "url": "https://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID", "owner": "data.Owner" }"""));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        var members = result.Recipe!.Inputs[0].Members!;
+        Assert.Equal("https://example.com/clan/{clan}", members.Url);
+        Assert.Equal("data.Members", members.List);
+        Assert.Equal("UserID", members.UserId);
+        Assert.Equal("data.Owner", members.Owner);
+    }
+
+    [Fact]
+    public void AMembersOwnerIsOptional() =>
+        Assert.Null(RecipeParser.Parse(Members("""{ "url": "https://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID" }"""))
+            .Recipe!.Inputs[0].Members!.Owner);
+
+    [Fact]
+    public void AMembersDeclarationNeedsItsUrlListAndUserId()
+    {
+        var problems = Problems(Members("{}"));
+
+        Assert.Contains("Input 1's members has no 'url'.", problems);
+        Assert.Contains("Input 1's members has no 'list'.", problems);
+        Assert.Contains("Input 1's members has no 'userId'.", problems);
+    }
+
+    [Fact]
+    public void AMembersUrlMustBeHttps() =>
+        Assert.Contains("Input 1's members url must start with https://.",
+            Problems(Members("""{ "url": "http://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID" }""")));
+
+    [Fact]
+    public void AMembersUrlsPlaceholdersMustNameAnInput()
+    {
+        Assert.Contains("Unknown placeholder {guild} in input 'clan''s members url.",
+            Problems(Members("""{ "url": "https://example.com/clan/{guild}", "list": "data.Members", "userId": "UserID" }""")));
+
+        // Your accounts' ids never go to a members address: it is asked once for the whole clan.
+        Assert.Contains("Input 'clan''s members url cannot use {userId}. A members list is asked once, not per account.",
+            Problems(Members("""{ "url": "https://example.com/clan/{clan}/{userId}", "list": "data.Members", "userId": "UserID" }""")));
+    }
+
+    [Fact]
+    public void AMembersPathCannotPointAtAPlayerOrUseAPlaceholder()
+    {
+        Assert.Contains("Input 'clan''s members: 'data.12345' names a number. Recipes can't point at a particular player; use a placeholder instead.",
+            Problems(Members("""{ "url": "https://example.com/clan/{clan}", "list": "data.12345", "userId": "UserID" }""")));
+        Assert.Contains("Input 'clan''s members paths can't use placeholders, and owner uses {clan}.",
+            Problems(Members("""{ "url": "https://example.com/clan/{clan}", "list": "data.Members", "userId": "UserID", "owner": "data.{clan}" }""")));
+    }
+
     [Fact]
     public void AnInputCannotBeCalledUserId()
     {
@@ -380,6 +438,47 @@ public class RecipeParserTests
         Assert.Contains("Step 1's unavailable has no 'path'.", problems);
         Assert.Contains("Step 1's unavailable has no 'message'.", problems);
         Assert.Contains("Step 1's unavailable has no 'is'. It must be true, false, a number or text.", problems);
+    }
+
+    [Fact]
+    public void NotFoundOnAPerAccountStepParsesItsStatusAndMessage()
+    {
+        var steps = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": { "status": 404, "message": "Not linked." } }]""";
+        var result = RecipeParser.Parse(With(steps));
+
+        Assert.True(result.Ok, string.Join(" | ", result.Problems));
+        Assert.Equal(new RecipeNotFound(404, "Not linked."), result.Recipe!.LastStep.NotFound);
+    }
+
+    [Fact]
+    public void NotFoundOnAListStepIsRefused()
+    {
+        var steps = """[{ "url": "https://example.com/rows", "rows": "data", "userId": "id", "value": "score", "notFound": { "status": 404, "message": "Gone." } }]""";
+        Assert.Contains("Step 1 has 'notFound', but only a perAccount step can.", Problems(With(steps)));
+    }
+
+    /// <summary>
+    /// Only a 404 says "this account isn't there" (spec §3.2, fix round 1): a 400 keeps the host's own text, so a recipe
+    /// can't rename one, and any other status is not an account's problem at all.
+    /// </summary>
+    [Theory]
+    [InlineData("400")]
+    [InlineData("500")]
+    [InlineData("\"404\"")]
+    public void NotFoundOnlyDescribesA404(string status)
+    {
+        var steps = $$"""[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": { "status": {{status}}, "message": "Gone." } }]""";
+        Assert.Contains("Step 1's notFound 'status' must be 404, the only answer that means an account isn't there.", Problems(With(steps)));
+    }
+
+    [Fact]
+    public void NotFoundNeedsAnObjectWithAMessage()
+    {
+        var noMessage = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": { "status": 404 } }]""";
+        var notObject = """[{ "url": "https://example.com/u/{userId}", "perAccount": true, "value": "count", "notFound": "Gone." }]""";
+
+        Assert.Contains("Step 1's notFound has no 'message'.", Problems(With(noMessage)));
+        Assert.Contains("Step 1's 'notFound' must be an object with a status and a message.", Problems(With(notObject)));
     }
 
     [Fact]

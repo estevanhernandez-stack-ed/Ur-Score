@@ -37,17 +37,6 @@ public class ConfirmsTests
     private static IReadOnlyList<InstalledRecipe> Installed(Recipe recipe) => [new InstalledRecipe(recipe, "", new RecipeState())];
 
     [Fact]
-    public void RemovingARecipeAsksInThatRecipesName()
-    {
-        var question = RecipesModel.RemoveQuestion(Profile);
-
-        Assert.Equal("Remove recipe", question.Title);
-        Assert.Equal(RecipesModel.ConfirmRemove(Profile), question.Question);
-        Assert.Equal("Remove", question.DoText);
-        Assert.Equal("Remove Pet Sim 99 profile", question.DoName);
-    }
-
-    [Fact]
     public void TheAnswerThatDoesNothingIsTheOneKeyboardLandsOn() => Assert.Equal("Cancel", Confirm.CancelText);
 
     /// <summary>
@@ -75,7 +64,7 @@ public class ConfirmsTests
 
         Assert.NotNull(question);
         Assert.Equal("Add another clan", question.Title);
-        Assert.StartsWith("That makes more than 5 clans for Pet Sim 99 clan battle points.", question.Question);
+        Assert.StartsWith("That makes more than 5 clans. ", question.Question);
         Assert.Contains("Your PC asks ps99.biggamesapi.io about", question.Question);
         Assert.EndsWith("Add it anyway?", question.Question);
         Assert.Equal("Add anyway", question.DoText);
@@ -125,7 +114,7 @@ public class ConfirmsTests
 
         Assert.NotNull(question);
         Assert.Equal("Add another squad", question.Title);
-        Assert.StartsWith("That makes more than 5 squads for Squad points.", question.Question);
+        Assert.StartsWith("That makes more than 5 squads. ", question.Question);
     }
 
     /// <summary>
@@ -139,8 +128,6 @@ public class ConfirmsTests
         var change = new SourceChange([.. five, ClanSource("s-00000006", "Clan6")], "s-00000006", null);
         Confirm[] asked =
         [
-            RecipesModel.RemoveQuestion(Clan),
-            RecipesModel.RemoveQuestion(Profile),
             BoardText.DeleteBoardQuestion(new BoardDef("b-00000002", "Rivals copy", [])),
             BoardText.CancelArrangeQuestion(new BoardDef("b-00000002", "Rivals copy", [])),
             ClansModel.AddQuestion(five, change, Clan, Installed(Clan), accountCount: 2, "Clan6")!,

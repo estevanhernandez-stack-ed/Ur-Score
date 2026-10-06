@@ -492,13 +492,15 @@ public sealed class RulesFileTests : IDisposable
         var roRoRo = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ROROROblox", "metric-rules.json");
         var scratch = Path.Combine(_dir.Path, "metric-rules.json");
 
-        Assert.Equal(roRoRo, RulesFile.DefaultPath);
-        Assert.Equal(roRoRo, RulesFile.ResolvePath(null));
-        Assert.Equal(roRoRo, RulesFile.ResolvePath("   "));
-        Assert.Equal(roRoRo, RulesFile.ResolvePath("metric-rules.json"));
+        // The real default is fenced in a test process (RuntimeFenceTests), so the computation is checked through its pure forms.
+        Assert.Equal(roRoRo, RulesFile.DefaultPathUnder(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)));
+        Assert.Equal(roRoRo, RulesFile.ResolvePath(null, roRoRo));
+        Assert.Equal(roRoRo, RulesFile.ResolvePath("   ", roRoRo));
+        Assert.Equal(roRoRo, RulesFile.ResolvePath("metric-rules.json", roRoRo));
         Assert.Equal(scratch, RulesFile.ResolvePath($"  {scratch} "));
-        Assert.Equal(roRoRo, RulesFile.ResolvePath(Path.GetPathRoot(scratch)));
-        Assert.Equal(roRoRo, RulesFile.ResolvePath(_dir.Path + Path.DirectorySeparatorChar));
+        Assert.Equal(scratch, RulesFile.ResolvePath($"  {scratch} ", roRoRo));
+        Assert.Equal(roRoRo, RulesFile.ResolvePath(Path.GetPathRoot(scratch), roRoRo));
+        Assert.Equal(roRoRo, RulesFile.ResolvePath(_dir.Path + Path.DirectorySeparatorChar, roRoRo));
         Assert.Equal("UR_SCORE_RULES_FILE", RulesFile.PathVariable);
     }
 
