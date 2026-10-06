@@ -124,6 +124,31 @@ public class RecipeWatchTests
         new(engine, host, keys ?? new FakeKeys(), new ReportPolicy(sent ?? [PointsStat], new HashSet<Guid>(allowed ?? [Mine])),
             PetSim, Clan, tracked ?? ValueOnly, time: time);
 
+    /// <summary>
+    /// An account that isn't linked on the PS99 site answers 404 (probed live 2026-10-05): through the real engine and the
+    /// shipped profile reader, the snapshot carries that account's own message and a typed reason, and the linked account
+    /// still reads. That is what the board's rows and the game page's link line are drawn from.
+    /// </summary>
+    [Fact]
+    public async Task AnUnlinkedAccountReachesTheSnapshotAsNotFoundWhileTheOtherReads()
+    {
+        var second = new HostAccount(Guid.Parse("3c1f0a2e-5b7d-4e8a-9f60-2d4b8c1e7a93"), 112, "Alt Two");
+        var host = new FakeHost(true, [MyAccount, second]);
+        var profile = RecipeParser.Parse(BuiltInRecipes.Find("pet-sim-99-profile")!.Text).Recipe!;
+        var transport = new FakeTransport()
+            .On("https://ps99.biggamesapi.io/v1/players/111?", 404, """{ "status": "error", "error": { "code": "player_not_found" } }""")
+            .On("https://ps99.biggamesapi.io/v1/players/112?", 200,
+                """{ "status": "ok", "data": { "views": { "profile": { "available": true, "data": { "Rank": 12 } } } } }""");
+        var watch = new RecipeWatch(new RecipeEngine(transport, new FakeKeys()), host, new FakeKeys(),
+            new ReportPolicy([], new HashSet<Guid>()), profile, new Dictionary<string, string>(), new HashSet<string> { "rank" });
+
+        var snapshot = await watch.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("Not linked on db.biggames.io.", snapshot.Unavailable[111]);
+        Assert.Equal(UnavailableReason.NotFound, Assert.Single(snapshot.UnavailableReasons).Value);
+        Assert.Equal(112, Assert.Single(snapshot.Rows!).UserId);
+    }
+
     [Fact]
     public async Task NeedsInputIsItsOwnStateAndSendsNothing()
     {

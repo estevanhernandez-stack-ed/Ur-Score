@@ -1218,6 +1218,29 @@ public class PanelModelsTests
     }
 
     /// <summary>
+    /// An account that isn't linked on the PS99 site is a row that says so in the reader's words, not an error: the snapshot's
+    /// Unavailable message is the row's note, and the linked account beside it keeps its number.
+    /// </summary>
+    [Fact]
+    public void AnUnlinkedAccountsRowSaysNotLinkedAndTheOthersKeepTheirNumbers()
+    {
+        var profile = SourceOf("s-00000009", Profile, null, SourceRole.Mine);
+        var snapshot = Snapshot(profile.Id, [Row(AltOne.RobloxUserId, 5, "diamonds")]) with
+        {
+            Unavailable = new Dictionary<long, string> { [Main.RobloxUserId] = "Not linked on db.biggames.io." },
+            UnavailableReasons = new Dictionary<long, UnavailableReason> { [Main.RobloxUserId] = UnavailableReason.NotFound },
+        };
+        var live = Live([profile], [Installed(Profile, "diamonds")], Snaps(snapshot));
+
+        var model = PanelModels.ProfileStat(live, Reader(), new PanelSettings(Profile.Slug, SourceId: profile.Id, Stat: "diamonds"));
+
+        var unlinked = model.Rows.Single(r => r.Name == Main.DisplayName);
+        Assert.Equal(("Not linked on db.biggames.io.", StatText.Dash, true), (unlinked.Note, unlinked.Value, unlinked.Missing));
+        Assert.Equal("5", model.Rows.Single(r => r.Name == AltOne.DisplayName).Value);
+        Assert.Equal("", model.Head.Stale ?? "");
+    }
+
+    /// <summary>
     /// Backlog S1-13.7. A Profile stat pinned to a source that was removed quietly drew another source's numbers under the
     /// settings you chose, and a row whose value missed said "can't read", which names no cause. A pin that's gone says it's
     /// gone, a row carries the read's own miss, and a source that's off says it's off rather than leaving dashes unexplained.
